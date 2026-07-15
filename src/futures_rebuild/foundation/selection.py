@@ -16,6 +16,25 @@ from ..release import AtomicPublisher, ReleaseManifest, VerifiedReleaseReceipt
 from .snapshot import PublishedSourceSnapshot, SnapshotFile
 
 
+AUTHORITATIVE_COVERAGE_DISPOSITIONS = frozenset(
+    {
+        "AUTHORITATIVE_INTERVAL",
+        "AUTHORITATIVE_INTERVAL_WITH_EXACT_REDUNDANT_CROSSCHECK",
+        "QUARANTINED_PENDING_REVALIDATION",
+        "QUARANTINED_PENDING_REVALIDATION_WITH_EXACT_REDUNDANT_CROSSCHECK",
+    }
+)
+REDUNDANT_COVERAGE_DISPOSITIONS = frozenset(
+    {
+        "REDUNDANT_EXACT_CROSSCHECK_ONLY",
+        "QUARANTINED_REDUNDANT_EXACT_CROSSCHECK_ONLY",
+    }
+)
+ALLOWED_COVERAGE_DISPOSITIONS = (
+    AUTHORITATIVE_COVERAGE_DISPOSITIONS | REDUNDANT_COVERAGE_DISPOSITIONS
+)
+
+
 SELECTION_RELEASE_KIND = "futures_dbn_source_selection"
 SELECTION_SCHEMA_VERSION = "1.0.0"
 
@@ -257,6 +276,7 @@ def _selected_family_file(
             "statistics": "dbn_statistics",
             "status": "dbn_status",
         }[schema]
+        or disposition not in ALLOWED_COVERAGE_DISPOSITIONS
     ):
         raise IntegrityError("source selection family/schema/coverage is invalid")
     return SelectedFamilyFile(
@@ -285,7 +305,7 @@ def resolve_foundation_selection(
         assert isinstance(raw, dict)
         selected = _selected_family_file(raw, snapshot=snapshot)
         all_selected.append(selected)
-        if "REDUNDANT" in selected.coverage_disposition:
+        if selected.coverage_disposition in REDUNDANT_COVERAGE_DISPOSITIONS:
             continue
         authoritative.append(selected)
 
@@ -385,7 +405,7 @@ def resolve_foundation_selection(
             for item in all_selected
             if item.market == market
             and item.year == year
-            and "REDUNDANT" in item.coverage_disposition
+            and item.coverage_disposition in REDUNDANT_COVERAGE_DISPOSITIONS
         ]
         coverage_matrix.append(
             {

@@ -372,6 +372,35 @@ def test_exact_quarantined_redundant_overlap_is_not_treated_as_authoritative(
     assert len(resolved.statistics_files) == 1
 
 
+def test_authoritative_overlap_with_redundant_crosscheck_remains_present(
+    tmp_path,
+) -> None:
+    selection, snapshot = _selection_fixture(tmp_path, overlap=True)
+    statistics = [
+        item for item in selection["files"] if item["schema"] == "statistics"
+    ]
+    statistics[0]["coverage_disposition"] = (
+        "AUTHORITATIVE_INTERVAL_WITH_EXACT_REDUNDANT_CROSSCHECK"
+    )
+    statistics[1]["coverage_disposition"] = "REDUNDANT_EXACT_CROSSCHECK_ONLY"
+    core = {
+        key: value for key, value in selection.items() if key != "selection_manifest_id"
+    }
+    selection["selection_manifest_id"] = sha256_json(core)
+    resolved = resolve_foundation_selection(selection, snapshot=snapshot)
+    assert len(resolved.statistics_files) == 1
+    assert resolved.statistics_files[0].coverage_disposition == (
+        "AUTHORITATIVE_INTERVAL_WITH_EXACT_REDUNDANT_CROSSCHECK"
+    )
+    row = next(
+        item
+        for item in resolved.coverage_matrix
+        if item["market"] == "ES" and item["year"] == 2024
+    )
+    assert row["statistics_file_count"] == 1
+    assert row["redundant_crosscheck_file_count"] == 1
+
+
 def test_tracked_coverage_policy_has_nonzero_and_source_gates() -> None:
     policy = FoundationCoveragePolicy.from_file(
         REPO / "configs" / "foundation_coverage_policy.json"
