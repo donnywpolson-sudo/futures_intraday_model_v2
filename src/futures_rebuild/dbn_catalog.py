@@ -32,13 +32,14 @@ from .boundary import RepoBoundary
 from .errors import ContractError, IntegrityError
 from .migration import verify_published_source_snapshot
 from .release import VerifiedReleaseReceipt
-from .source_symbology import require_allowed_query_symbology
+from .source_symbology import build_query_contract, require_allowed_query_symbology
 
 
 SUPPORTED_DATABENTO_VERSION = "0.78.0"
 SUPPORTED_DATABENTO_DBN_VERSION = "0.58.0"
 FULL_SCAN_CHUNK_RECORDS = 100_000
 DATASET = "GLBX.MDP3"
+CATALOG_CONTRACT_VERSION = "2.0.0"
 SUPPORTED_SCHEMAS = {
     "definition",
     "ohlcv-1d",
@@ -275,6 +276,10 @@ def _apply_overlap_resolution(
         or redundant["sha256"] != resolution["redundant_file_sha256"]
     ):
         raise IntegrityError("DBN overlap file bytes differ from the resolution contract")
+    if authoritative.get("query_mode_id") != redundant.get("query_mode_id"):
+        raise IntegrityError(
+            "DBN overlap resolution crosses query modes without an equivalence contract"
+        )
     auth_start = date.fromisoformat(str(authoritative["start"]))
     auth_end = date.fromisoformat(str(authoritative["end"]))
     red_start = date.fromisoformat(str(redundant["start"]))
@@ -393,6 +398,7 @@ def _decode_summary(
         raise ContractError("sample_records must be between one and ten")
     store = databento.DBNStore.from_file(path)
     metadata = store.metadata
+    encoded_metadata = metadata.encode()
     metadata_schema = _normalize_schema(metadata.schema)
     store_schema = _normalize_schema(store.schema)
     if metadata_schema != store_schema:
@@ -448,6 +454,13 @@ def _decode_summary(
         "symbols": list(metadata.symbols),
         "ts_out": metadata.ts_out,
         "limit": metadata.limit,
+        "metadata_header_sha256": hashlib.sha256(encoded_metadata).hexdigest(),
+        "metadata_version": metadata.version,
+        "not_found_count": len(metadata.not_found),
+        "not_found_sha256": sha256_json(list(metadata.not_found)),
+        "partial_count": len(metadata.partial),
+        "partial_sha256": sha256_json(list(metadata.partial)),
+        "symbol_cstr_len": metadata.symbol_cstr_len,
     }
 
 
@@ -528,6 +541,12 @@ def validate_dbn_pair(
         or decoded["symbols"] != list(query_symbols)
         or decoded["ts_out"] is not False
         or decoded["limit"] is not None
+        or type(decoded["metadata_version"]) is not int
+        or not 1 <= int(decoded["metadata_version"]) <= 3
+        or type(decoded["symbol_cstr_len"]) is not int
+        or int(decoded["symbol_cstr_len"]) <= 0
+        or decoded["partial_count"] != 0
+        or decoded["not_found_count"] != 0
     ):
         raise IntegrityError(
             f"decoded metadata disagrees with sidecar for {relative.as_posix()}"
@@ -565,6 +584,14 @@ def validate_dbn_pair(
             f"{relative.as_posix()}"
         )
     sidecar_hash = sha256_file(sidecar)
+    query_contract = build_query_contract(
+        schema=expected_schema,
+        market=market,
+        start=match.group("start"),
+        end=match.group("end"),
+        stype_in=query_stype_in,
+        symbols=query_symbols,
+    )
     core = {
         "actual_identity_authority": "DATASET_PUBLISHER_INSTRUMENT_INSTRUMENT_ID_DATE_UTC_EXCHANGE_SESSION_DATE_PLUS_AS_OF_DEFINITION",
         "continuous_selection_rule": "V_PREVIOUS_DAY_VOLUME_RANK_0",
@@ -576,6 +603,9 @@ def validate_dbn_pair(
         "end": match.group("end"),
         "market": market,
         "path": declared_path,
+        "query_contract": query_contract,
+        "query_contract_id": query_contract["query_contract_id"],
+        "query_mode_id": query_contract["query_mode_id"],
         "query_stype_in": query_stype_in,
         "query_symbols": list(query_symbols),
         "role": role,
@@ -800,6 +830,7 @@ def build_source_selection_manifest(
         "actual_identity_authority": "DATASET_PUBLISHER_INSTRUMENT_INSTRUMENT_ID_DATE_UTC_EXCHANGE_SESSION_DATE_PLUS_AS_OF_DEFINITION",
         "continuous_contract_policy": continuous_policy,
         "continuous_metadata_mapping_policy": "RECONCILIATION_ONLY_NEVER_CAUSAL_FEATURE_OR_ELIGIBILITY",
+        "catalog_contract_version": CATALOG_CONTRACT_VERSION,
         "dataset": DATASET,
         "decoder_version": databento.__version__,
         "families": family_summaries,

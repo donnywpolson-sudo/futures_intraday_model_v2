@@ -30,7 +30,7 @@ from .selection import ResolvedFoundationSelection, SelectedFamilyFile
 
 
 MARKET_STATE_RELEASE_KIND = "futures_status_statistics_foundation"
-MARKET_STATE_SCHEMA_VERSION = "1.0.0"
+MARKET_STATE_SCHEMA_VERSION = "2.0.0"
 STATUS_ELIGIBILITY_RELEASE_KIND = "futures_status_asof_eligibility"
 STATUS_ELIGIBILITY_SCHEMA_VERSION = "1.0.0"
 
@@ -582,7 +582,10 @@ def publish_market_state_foundation(
         count = 0
         with target.open("xb") as handle:
             for record in iter_statuses(
-                item.binding, market=item.market, batch_rows=batch_rows
+                item.binding,
+                market=item.market,
+                expected_query_contract=item.query_contract,
+                batch_rows=batch_rows,
             ):
                 handle.write(canonical_bytes(record.as_dict()) + b"\n")
                 count += 1
@@ -611,7 +614,10 @@ def publish_market_state_foundation(
         count = 0
         with target.open("xb") as handle, ledger_target.open("xb") as ledger_handle:
             for record in iter_statistics(
-                item.binding, market=item.market, batch_rows=batch_rows
+                item.binding,
+                market=item.market,
+                expected_query_contract=item.query_contract,
+                batch_rows=batch_rows,
             ):
                 handle.write(canonical_bytes(record.as_dict()) + b"\n")
                 ledger_handle.write(
@@ -648,6 +654,8 @@ def publish_market_state_foundation(
         "coverage_policy_hash": coverage_policy.policy_hash,
         "feature_eligible_statistic_types": [],
         "required_market_year_count": denominator,
+        "query_manifest_id": selection.query_manifest_id,
+        "query_mode_census": list(selection.query_mode_census),
         "schema_version": MARKET_STATE_SCHEMA_VERSION,
         "selected_file_count": selection.selected_file_count,
         "source_selection_receipt_id": source_selection_receipt.receipt_id,
@@ -678,6 +686,7 @@ def publish_market_state_foundation(
         metadata={
             "coverage_matrix_id": selection.coverage_matrix_id,
             "market_state_foundation_id": contract["market_state_foundation_id"],
+            "query_manifest_id": selection.query_manifest_id,
             "statistics_ledger_rows": total_statistics_rows,
             "statistics_rows": total_statistics_rows,
             "status_rows": total_status_rows,
@@ -798,6 +807,7 @@ def load_market_state_foundation(
         != {
             "coverage_matrix_id",
             "market_state_foundation_id",
+            "query_manifest_id",
             "statistics_ledger_rows",
             "statistics_rows",
             "status_rows",
@@ -887,6 +897,8 @@ def load_market_state_foundation(
             "feature_eligible_statistic_types",
             "market_state_foundation_id",
             "required_market_year_count",
+            "query_manifest_id",
+            "query_mode_census",
             "schema_version",
             "selected_file_count",
             "source_selection_receipt_id",
@@ -906,6 +918,10 @@ def load_market_state_foundation(
         or contract["market_state_foundation_id"]
         != manifest.metadata["market_state_foundation_id"]
         or contract["coverage_matrix_id"] != expected_selection.coverage_matrix_id
+        or contract["query_manifest_id"] != expected_selection.query_manifest_id
+        or contract["query_mode_census"] != list(expected_selection.query_mode_census)
+        or manifest.metadata["query_manifest_id"]
+        != expected_selection.query_manifest_id
         or contract["coverage_policy"] != expected_coverage_policy.as_dict()
         or contract["coverage_policy_hash"] != expected_coverage_policy.policy_hash
         or contract["statistics_role_policy"] != expected_statistics_roles.as_dict()

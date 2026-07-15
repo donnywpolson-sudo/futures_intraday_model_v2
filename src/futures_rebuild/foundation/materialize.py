@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -11,6 +12,7 @@ from ..boundary import RepoBoundary
 from ..canonical import canonical_bytes, sha256_file, sha256_json
 from ..errors import ContractError, IntegrityError
 from ..release import AtomicPublisher, ReleaseManifest, VerifiedReleaseReceipt
+from ..source_symbology import require_query_contract
 from .parquet import (
     CAUSAL_BAR_SCHEMA,
     DEFINITION_SCHEMA,
@@ -25,7 +27,7 @@ from .support import VerifiedFoundationPolicies
 
 
 RAW_RELEASE_KIND = "futures_phase1b_actual_raw_interval"
-RAW_SCHEMA_VERSION = "1.0.0"
+RAW_SCHEMA_VERSION = "2.0.0"
 CAUSAL_RELEASE_KIND = "futures_phase2_causal_interval"
 CAUSAL_SCHEMA_VERSION = "1.0.0"
 
@@ -67,6 +69,8 @@ def materialize_raw_interval(
     *,
     definition_binding: SnapshotFile,
     bar_binding: SnapshotFile,
+    definition_query_contract: Mapping[str, object],
+    bar_query_contract: Mapping[str, object],
     market: str,
     year: int,
     filename: str,
@@ -76,12 +80,20 @@ def materialize_raw_interval(
 ) -> VerifiedReleaseReceipt:
     if re.fullmatch(r"[0-9a-f]{64}", source_selection_release_id) is None:
         raise ContractError("source selection release ID is invalid")
+    definition_query = require_query_contract(definition_query_contract)
+    bar_query = require_query_contract(bar_query_contract)
     if (
         definition_binding.source_snapshot_id != bar_binding.source_snapshot_id
         or definition_binding.migration_manifest_sha256
         != bar_binding.migration_manifest_sha256
         or Path(definition_binding.relative_path).name != filename
         or Path(bar_binding.relative_path).name != filename
+        or definition_query["schema"] != "definition"
+        or bar_query["schema"] != "ohlcv-1m"
+        or definition_query["market"] != market
+        or bar_query["market"] != market
+        or definition_query["start"] != bar_query["start"]
+        or definition_query["end"] != bar_query["end"]
     ):
         raise IntegrityError("definition/bar interval bindings do not share one source snapshot")
     logical_root = _relative_root(market, year, filename)
@@ -91,12 +103,14 @@ def materialize_raw_interval(
     bar_count, instrument_ids = write_raw_bars(
         bar_binding,
         market=market,
+        expected_query_contract=bar_query,
         output=bars_path,
         batch_rows=batch_rows,
     )
     scanned, selected = write_relevant_definitions(
         definition_binding,
         market=market,
+        expected_query_contract=definition_query,
         required_instrument_ids=instrument_ids,
         output=definitions_path,
         batch_rows=batch_rows,
@@ -107,6 +121,8 @@ def materialize_raw_interval(
         "bars_schema": RAW_BAR_SCHEMA.metadata[b"schema_id"].decode("ascii"),
         "definition_rows_scanned": scanned,
         "definition_rows_selected": selected,
+        "definition_query_contract": definition_query,
+        "definition_query_contract_id": definition_query["query_contract_id"],
         "definitions_parquet_sha256": sha256_file(definitions_path),
         "definitions_schema": DEFINITION_SCHEMA.metadata[b"schema_id"].decode("ascii"),
         "foundation_transforms": [
@@ -118,6 +134,8 @@ def materialize_raw_interval(
         "learned_or_outcome_informed_transform_count": 0,
         "logical_root": logical_root,
         "market": market,
+        "bar_query_contract": bar_query,
+        "bar_query_contract_id": bar_query["query_contract_id"],
         "source_bar_file_path": bar_binding.relative_path,
         "source_bar_file_sha256": bar_binding.sha256,
         "source_definition_file_path": definition_binding.relative_path,
@@ -195,6 +213,28 @@ def load_raw_interval(
         or payload.get("year") != year
     ):
         raise IntegrityError("raw interval receipt content address is invalid")
+    try:
+        definition_query = require_query_contract(payload.get("definition_query_contract"))
+        bar_query = require_query_contract(payload.get("bar_query_contract"))
+    except (ContractError, IntegrityError) as exc:
+        raise IntegrityError("raw interval query contracts are invalid") from exc
+    if (
+        payload.get("definition_query_contract_id")
+        != definition_query["query_contract_id"]
+        or payload.get("bar_query_contract_id") != bar_query["query_contract_id"]
+        or definition_query["schema"] != "definition"
+        or bar_query["schema"] != "ohlcv-1m"
+        or definition_query["market"] != market
+        or bar_query["market"] != market
+        or definition_query["start"] != bar_query["start"]
+        or definition_query["end"] != bar_query["end"]
+        or set(manifest.source_release_ids)
+        != {
+            payload.get("source_snapshot_id"),
+            payload.get("source_selection_release_id"),
+        }
+    ):
+        raise IntegrityError("raw interval query/dependency binding is invalid")
     payload["interval_id"] = interval_id
     bars = root / logical_root / "bars.parquet"
     definitions = root / logical_root / "definitions.parquet"

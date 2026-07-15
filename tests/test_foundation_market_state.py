@@ -28,6 +28,7 @@ from futures_rebuild.foundation.selection import (
 )
 from futures_rebuild.foundation.snapshot import PublishedSourceSnapshot, SnapshotFile
 from futures_rebuild.release import AtomicPublisher
+from futures_rebuild.source_symbology import build_query_contract
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -285,30 +286,46 @@ def _selection_fixture(tmp_path: Path, *, overlap: bool = False):
         relative = f"dbn/{directory}/{market}/{year}/{start}_{end}.dbn.zst"
         binding = _snapshot_file(root, relative, relative.encode("ascii"))
         files[relative] = binding
+        sidecar_relative = f"{relative}.manifest.json"
+        sidecar = _snapshot_file(root, sidecar_relative, b"{}\n")
+        files[sidecar_relative] = sidecar
         family = {
             "definition": "dbn_definition",
             "ohlcv-1m": "dbn_ohlcv_1m",
             "statistics": "dbn_statistics",
             "status": "dbn_status",
         }[schema]
-        entries.append(
-            {
+        stype_in = "parent" if schema == "definition" else "continuous"
+        symbols = [f"{market}.FUT" if schema == "definition" else f"{market}.v.0"]
+        query = build_query_contract(
+            schema=schema,
+            market=market,
+            start=start,
+            end=end,
+            stype_in=stype_in,
+            symbols=symbols,
+        )
+        entry = {
                 "coverage_disposition": "AUTHORITATIVE_INTERVAL",
                 "end": end,
                 "family": family,
                 "market": market,
                 "path": f"data/{relative}",
-                "query_stype_in": "parent" if schema == "definition" else "continuous",
-                "query_symbols": [
-                    f"{market}.FUT" if schema == "definition" else f"{market}.v.0"
-                ],
+                "query_contract": query,
+                "query_contract_id": query["query_contract_id"],
+                "query_mode_id": query["query_mode_id"],
+                "query_stype_in": stype_in,
+                "query_symbols": symbols,
                 "schema": schema,
                 "sha256": binding.sha256,
+                "sidecar_path": f"data/{sidecar_relative}",
+                "sidecar_sha256": sidecar.sha256,
+                "sidecar_size": sidecar.size,
                 "size": binding.size,
                 "start": start,
                 "year": year,
             }
-        )
+        entries.append({**entry, "validation_sha256": sha256_json(entry)})
 
     add("definition", "ES", 2024, "2024-01-01", "2025-01-01")
     add("ohlcv-1m", "ES", 2024, "2024-01-01", "2025-01-01")
@@ -322,6 +339,7 @@ def _selection_fixture(tmp_path: Path, *, overlap: bool = False):
         files=MappingProxyType(files),
     )
     core = {
+        "catalog_contract_version": "2.0.0",
         "dataset": "GLBX.MDP3",
         "families": [
             {"family": name}
@@ -352,6 +370,17 @@ def test_coverage_matrix_preserves_missing_status_and_extra_family(tmp_path) -> 
     assert resolved.coverage_matrix_id == sha256_json(list(resolved.coverage_matrix))
 
 
+def test_rehashed_selection_cannot_bless_stale_file_validation_hash(tmp_path) -> None:
+    selection, snapshot = _selection_fixture(tmp_path)
+    selection["files"][0]["query_symbols"] = ["NQ.FUT"]
+    core = {
+        key: value for key, value in selection.items() if key != "selection_manifest_id"
+    }
+    selection["selection_manifest_id"] = sha256_json(core)
+    with pytest.raises(IntegrityError, match="file validation hash"):
+        resolve_foundation_selection(selection, snapshot=snapshot)
+
+
 def test_unresolved_authoritative_overlap_fails_closed(tmp_path) -> None:
     selection, snapshot = _selection_fixture(tmp_path, overlap=True)
     with pytest.raises(IntegrityError, match="overlapping statistics"):
@@ -367,6 +396,9 @@ def test_exact_quarantined_redundant_overlap_is_not_treated_as_authoritative(
     ]
     statistics[-1]["coverage_disposition"] = (
         "QUARANTINED_REDUNDANT_EXACT_CROSSCHECK_ONLY"
+    )
+    statistics[-1]["validation_sha256"] = sha256_json(
+        {key: value for key, value in statistics[-1].items() if key != "validation_sha256"}
     )
     core = {
         key: value for key, value in selection.items() if key != "selection_manifest_id"
@@ -387,6 +419,10 @@ def test_authoritative_overlap_with_redundant_crosscheck_remains_present(
         "AUTHORITATIVE_INTERVAL_WITH_EXACT_REDUNDANT_CROSSCHECK"
     )
     statistics[1]["coverage_disposition"] = "REDUNDANT_EXACT_CROSSCHECK_ONLY"
+    for item in statistics:
+        item["validation_sha256"] = sha256_json(
+            {key: value for key, value in item.items() if key != "validation_sha256"}
+        )
     core = {
         key: value for key, value in selection.items() if key != "selection_manifest_id"
     }

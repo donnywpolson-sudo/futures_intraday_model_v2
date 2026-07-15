@@ -1,5 +1,5 @@
 {
-  "capability_version": "1.0.0",
+  "capability_version": "2.0.0",
   "project": "futures_intraday_model_v2",
   "status": "IMPLEMENTED_EXECUTION_DISABLED",
   "authority": {
@@ -12,6 +12,9 @@
   "foundation_contract": {
     "labels_materialized_at_readiness": false,
     "outcome_source_inputs_required": true,
+    "query_manifest_content_addressed_required": true,
+    "query_symbology_role": "PROVENANCE_ONLY_NEVER_FEATURE",
+    "mixed_status_statistics_query_epochs_explicit": true,
     "status_gated_features_required": true,
     "statistics_as_features": false,
     "verified_actual_contract_economics_required": true
@@ -39,6 +42,7 @@
     "romano_wolf_adjusted_p_maximum": "0.05"
   },
   "required_components": {
+    "futures_rebuild.foundation.selection": ["resolve_foundation_selection"],
     "futures_rebuild.foundation.orchestrator": ["load_foundation_set"],
     "futures_rebuild.historical_builder": ["build_synthetic_research_run"],
     "futures_rebuild.historical_evaluator": ["evaluate_frozen_research_run"],
@@ -50,6 +54,7 @@
     "futures_rebuild.research.hac": ["newey_west_mean"],
     "futures_rebuild.research.multiple_testing": ["romano_wolf_from_differentials"],
     "futures_rebuild.research.power": ["training_only_mde"],
+    "futures_rebuild.source_symbology": ["require_query_contract"],
     "futures_rebuild.trial": ["TrialEventLedger", "TrialRegistry"]
   },
   "hard_pauses": [

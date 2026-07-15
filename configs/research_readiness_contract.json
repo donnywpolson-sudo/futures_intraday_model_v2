@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "contract_version": "1.0.0-design",
+  "contract_version": "2.0.0-controlled-rebuild",
   "project": "futures_intraday_model_v2",
   "contract_status": "IMPLEMENTED_SYNTHETICALLY_VALIDATED_DATA_FOUNDATION_ABSENT",
   "independence": {
@@ -68,6 +68,9 @@
     "legacy_causally_gated_normalized": "comparison_only",
     "comparison_sources_may_be_promoted": false,
     "immutable_successor_releases_only": true,
+    "query_manifest_required": true,
+    "query_symbology_role": "PROVENANCE_ONLY_NEVER_FEATURE",
+    "mixed_status_statistics_query_epochs_explicit": true,
     "paid_download_implied_or_authorized_by_readiness": false
   },
   "trial_ledger": {

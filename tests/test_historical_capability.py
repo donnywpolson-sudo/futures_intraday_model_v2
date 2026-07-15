@@ -8,6 +8,7 @@ import pytest
 from futures_rebuild.errors import UnauthorizedOperation
 from futures_rebuild.historical_capability import (
     DerivedGatePolicy,
+    _historical_authorization_scope,
     derive_gate_evidence_from_returns,
     load_historical_capability_config,
     verify_production_capability_closure,
@@ -62,6 +63,25 @@ def test_capability_closure_is_exact_and_non_authorizing() -> None:
     assert closure["execution_authorized"] is False
     assert closure["alpha_evidence"] is False
     assert closure["candidate_eligible"] is False
+    assert any(
+        item["path"] == "src/futures_rebuild/source_symbology.py"
+        for item in closure["component_files"]
+    )
+
+
+def test_real_history_scope_binds_blueprint_and_query_manifest() -> None:
+    scope = _historical_authorization_scope(
+        foundation_release_id="a" * 64,
+        foundation_research_blueprint_id="b" * 64,
+        query_manifest_id="c" * 64,
+        trial_charter_id="d" * 64,
+    )
+    assert scope == {
+        "foundation_release_id": "a" * 64,
+        "foundation_research_blueprint_id": "b" * 64,
+        "query_manifest_id": "c" * 64,
+        "trial_charter_id": "d" * 64,
+    }
 
 
 def test_gate_evidence_is_derived_from_return_rows_and_never_claims_alpha() -> None:

@@ -27,6 +27,7 @@ from futures_rebuild.producer_bridge import (
     load_versioned_session_policy,
 )
 from futures_rebuild.release import AtomicPublisher, VerifiedReleaseReceipt
+from futures_rebuild.source_symbology import build_query_contract
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -233,7 +234,9 @@ def _snapshot(boundary) -> PublishedSourceSnapshot:
     return PublishedSourceSnapshot.open(root, boundary=boundary)
 
 
-def _selection_receipt(boundary, operation_factory, snapshot):
+def _selection_receipt(
+    boundary, operation_factory, snapshot, *, false_continuous_status: bool = False
+):
     publisher = AtomicPublisher(
         boundary.active_root
         / "data"
@@ -265,25 +268,43 @@ def _selection_receipt(boundary, operation_factory, snapshot):
         ("dbn_statistics", "statistics", statistics),
         ("dbn_status", "status", status),
     ):
-        files.append(
-            {
+        parent = schema in {"definition", "statistics", "status"}
+        if schema == "status" and false_continuous_status:
+            parent = False
+        stype_in = "parent" if parent else "continuous"
+        symbols = ["ES.FUT" if parent else "ES.v.0"]
+        query = build_query_contract(
+            schema=schema,
+            market="ES",
+            start="2024-01-01",
+            end="2025-01-01",
+            stype_in=stype_in,
+            symbols=symbols,
+        )
+        sidecar = snapshot.file(f"{binding.relative_path}.manifest.json")
+        entry = {
                 "coverage_disposition": "AUTHORITATIVE_INTERVAL",
                 "end": "2025-01-01",
                 "family": family,
                 "market": "ES",
                 "path": f"data/{binding.relative_path}",
-                "query_stype_in": "parent" if schema == "definition" else "continuous",
-                "query_symbols": [
-                    "ES.FUT" if schema == "definition" else "ES.v.0"
-                ],
+                "query_contract": query,
+                "query_contract_id": query["query_contract_id"],
+                "query_mode_id": query["query_mode_id"],
+                "query_stype_in": stype_in,
+                "query_symbols": symbols,
                 "schema": schema,
                 "sha256": binding.sha256,
+                "sidecar_path": f"data/{sidecar.relative_path}",
+                "sidecar_sha256": sidecar.sha256,
+                "sidecar_size": sidecar.size,
                 "size": binding.size,
                 "start": "2024-01-01",
                 "year": 2024,
             }
-        )
+        files.append({**entry, "validation_sha256": sha256_json(entry)})
     core = {
+        "catalog_contract_version": "2.0.0",
         "dataset": "GLBX.MDP3",
         "families": [
             {"family": name}
@@ -324,6 +345,30 @@ def _orchestrator(boundary, operation_factory) -> FoundationOrchestrator:
         operation_receipt=operation_factory("PUBLISH_RELEASE"),
         batch_rows=1,
     )
+
+
+def test_selected_query_contract_must_match_exact_dbn_header(
+    boundary, operation_factory
+) -> None:
+    _copy_configs(boundary)
+    snapshot = _snapshot(boundary)
+    selection_receipt = _selection_receipt(
+        boundary,
+        operation_factory,
+        snapshot,
+        false_continuous_status=True,
+    )
+    spec = CausalFeatureSpec(
+        ("bar_body_fraction", "bar_return", "intrabar_range_fraction", "volume"),
+        60,
+        300,
+    )
+    with pytest.raises(IntegrityError, match="exact foundation contract"):
+        _orchestrator(boundary, operation_factory).run(
+            source_snapshot_root=snapshot.root,
+            source_selection_receipt=selection_receipt,
+            feature_spec=spec,
+        )
 
 
 def test_foundation_run_resumes_after_durable_phase_and_is_idempotent(

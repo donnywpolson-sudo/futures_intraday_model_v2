@@ -58,6 +58,8 @@ HISTORICAL_READY_RELEASE_KIND = "futures_historical_research_ready"
 _SHA_RE = re.compile(r"[0-9a-f]{40,64}")
 
 ENGINE_SEED_MODULES = (
+    "futures_rebuild.dbn_catalog",
+    "futures_rebuild.foundation.selection",
     "futures_rebuild.historical_builder",
     "futures_rebuild.historical_capability",
     "futures_rebuild.historical_engine_contracts",
@@ -65,6 +67,7 @@ ENGINE_SEED_MODULES = (
     "futures_rebuild.historical_splitter",
     "futures_rebuild.producer_bridge",
     "futures_rebuild.readiness",
+    "futures_rebuild.source_symbology",
 )
 ENGINE_CONFIG_PATHS = (
     "configs/dependency_lock_receipt.json",
@@ -74,7 +77,10 @@ ENGINE_CONFIG_PATHS = (
     "configs/synthetic_research_engine.json",
 )
 ENGINE_TEST_PATHS = (
+    "tests/test_dbn_catalog.py",
     "tests/test_dependency_lock.py",
+    "tests/test_foundation_dbn_causality.py",
+    "tests/test_foundation_market_state.py",
     "tests/test_foundation_orchestrator.py",
     "tests/test_historical_capability.py",
     "tests/test_historical_engine.py",
@@ -87,6 +93,7 @@ ENGINE_TEST_PATHS = (
     "tests/test_research_futures_economics_abstention.py",
     "tests/test_research_governance_contract.py",
     "tests/test_research_hac_bootstrap_rw.py",
+    "tests/test_source_symbology.py",
     "tests/test_trial_bundle_inference.py",
 )
 SYNTHETIC_TEST_COMMAND = "python -m pytest -q " + " ".join(ENGINE_TEST_PATHS)
@@ -929,9 +936,18 @@ def _safety_contract(boundary: RepoBoundary) -> dict[str, object]:
     )
     if (
         readiness.get("project") != PROJECT
+        or readiness.get("contract_version") != "2.0.0-controlled-rebuild"
         or readiness.get("readiness", {}).get("readiness_is_execution_authority")
         is not False
         or set(research_pauses or ()) != REQUIRED_HARD_PAUSES
+        or readiness.get("source_roles", {}).get("query_manifest_required")
+        is not True
+        or readiness.get("source_roles", {}).get("query_symbology_role")
+        != "PROVENANCE_ONLY_NEVER_FEATURE"
+        or readiness.get("source_roles", {}).get(
+            "mixed_status_statistics_query_epochs_explicit"
+        )
+        is not True
     ):
         raise IntegrityError("research readiness contract weakens hard pauses")
     return {
@@ -1087,6 +1103,9 @@ def publish_readiness_states(
     assert isolation_evidence_receipt is not None
     assert legacy_census_release_receipt is not None
     engine = load_engine_registration(engine_registration_receipt, boundary=boundary)
+    blueprint = build_foundation_research_blueprint(
+        foundation_set_receipt, boundary=boundary
+    )
     test_receipt = _receipt_from(engine["synthetic_test_evidence_receipt"])
     safety = _safety_contract(boundary)
     git_closure = committed_git_closure(boundary.active_root)
@@ -1094,6 +1113,8 @@ def publish_readiness_states(
     rebuild_core = {
         **_common_state_fields(safety, git_closure),
         "foundation_set_receipt": foundation_set_receipt.as_dict(),
+        "foundation_research_blueprint_id": blueprint.blueprint_id,
+        "query_manifest_id": blueprint.query_manifest_id,
         "isolation_evidence_receipt": isolation_evidence_receipt.as_dict(),
         "state": "REBUILD_COMPLETE",
         "status": "PASS_MECHANICAL_REBUILD_COMPLETE",
@@ -1131,6 +1152,8 @@ def publish_readiness_states(
         **_common_state_fields(safety, git_closure),
         "engine_registration_receipt": engine_registration_receipt.as_dict(),
         "foundation_set_receipt": foundation_set_receipt.as_dict(),
+        "foundation_research_blueprint_id": blueprint.blueprint_id,
+        "query_manifest_id": blueprint.query_manifest_id,
         "historical_capability_closure": dict(capability),
         "historical_capability_closure_id": capability["capability_closure_id"],
         "isolation_evidence_receipt": isolation_evidence_receipt.as_dict(),
@@ -1236,10 +1259,12 @@ def load_rebuild_complete(
         "candidate_claim",
         "execution_authority_granted",
         "foundation_set_receipt",
+        "foundation_research_blueprint_id",
         "git_closure",
         "isolation_evidence_receipt",
         "live_trading_ready",
         "project",
+        "query_manifest_id",
         "real_history_execution_authorized",
         "readiness_is_execution_authority",
         "readiness_receipt_id",
@@ -1253,12 +1278,14 @@ def load_rebuild_complete(
     foundation = _receipt_from(payload["foundation_set_receipt"])
     isolation = _receipt_from(payload["isolation_evidence_receipt"])
     test_evidence = _receipt_from(payload["synthetic_test_evidence_receipt"])
-    load_foundation_set(foundation, boundary=boundary)
+    blueprint = build_foundation_research_blueprint(foundation, boundary=boundary)
     isolation_payload = load_project_isolation_evidence(isolation, boundary=boundary)
     load_synthetic_test_evidence(test_evidence, boundary=boundary)
     if (
         _receipt_from(isolation_payload["synthetic_test_evidence_receipt"])
         != test_evidence
+        or payload["foundation_research_blueprint_id"] != blueprint.blueprint_id
+        or payload["query_manifest_id"] != blueprint.query_manifest_id
         or manifest.source_release_ids
         != tuple(
             sorted(
@@ -1290,6 +1317,7 @@ def load_historical_research_ready(
         "engine_registration_receipt",
         "execution_authority_granted",
         "foundation_set_receipt",
+        "foundation_research_blueprint_id",
         "git_closure",
         "historical_capability_closure",
         "historical_capability_closure_id",
@@ -1300,6 +1328,7 @@ def load_historical_research_ready(
         "live_trading_ready",
         "mechanical_readiness_scope",
         "project",
+        "query_manifest_id",
         "real_history_execution_authorized",
         "real_history_trust_gate",
         "readiness_is_execution_authority",
@@ -1320,7 +1349,7 @@ def load_historical_research_ready(
     test_evidence = _receipt_from(payload["synthetic_test_evidence_receipt"])
     rebuild_payload = load_rebuild_complete(rebuild, boundary=boundary)
     engine_payload = load_engine_registration(engine, boundary=boundary)
-    load_foundation_set(foundation, boundary=boundary)
+    blueprint = build_foundation_research_blueprint(foundation, boundary=boundary)
     isolation_payload = load_project_isolation_evidence(
         isolation, boundary=boundary
     )
@@ -1335,6 +1364,8 @@ def load_historical_research_ready(
         != capability["capability_closure_id"]
         or payload["legacy_census"] != census_payload
         or payload["legacy_census_receipt_id"] != census.receipt_id
+        or payload["foundation_research_blueprint_id"] != blueprint.blueprint_id
+        or payload["query_manifest_id"] != blueprint.query_manifest_id
         or payload["mechanical_readiness_scope"]
         != "NO_ALPHA_CLAIM_NO_REAL_HISTORY_AUTHORITY_NO_TRUST_GATE"
         or payload["real_history_trust_gate"]
@@ -1344,6 +1375,9 @@ def load_historical_research_ready(
             "trusted": False,
         }
         or _receipt_from(rebuild_payload["foundation_set_receipt"]) != foundation
+        or rebuild_payload["foundation_research_blueprint_id"]
+        != blueprint.blueprint_id
+        or rebuild_payload["query_manifest_id"] != blueprint.query_manifest_id
         or _receipt_from(rebuild_payload["isolation_evidence_receipt"])
         != isolation
         or _receipt_from(rebuild_payload["synthetic_test_evidence_receipt"])

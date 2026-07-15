@@ -35,11 +35,24 @@ from futures_rebuild.foundation.support import (
     publish_foundation_policies,
 )
 from futures_rebuild.release import AtomicPublisher
+from futures_rebuild.source_symbology import build_query_contract
 
 
 REPO = Path(__file__).resolve().parents[1]
 START_NS = 1_704_067_200_000_000_000
 END_NS = 1_735_689_600_000_000_000
+
+
+def _query(schema: str) -> dict[str, object]:
+    parent = schema == "definition"
+    return build_query_contract(
+        schema=schema,
+        market="ES",
+        start="2024-01-01",
+        end="2025-01-01",
+        stype_in="parent" if parent else "continuous",
+        symbols=["ES.FUT" if parent else "ES.v.0"],
+    )
 
 
 class TestSessionPolicy:
@@ -165,8 +178,22 @@ def _bindings(snapshot: PublishedSourceSnapshot):
 def test_offline_dbn_decode_retains_exact_nanoseconds_and_provenance(tmp_path: Path):
     snapshot, _ = _snapshot(tmp_path)
     definition_binding, bar_binding = _bindings(snapshot)
-    definitions = list(iter_definitions(definition_binding, market="ES", batch_rows=1))
-    bars = list(iter_bars(bar_binding, market="ES", batch_rows=1))
+    definitions = list(
+        iter_definitions(
+            definition_binding,
+            market="ES",
+            expected_query_contract=_query("definition"),
+            batch_rows=1,
+        )
+    )
+    bars = list(
+        iter_bars(
+            bar_binding,
+            market="ES",
+            expected_query_contract=_query("ohlcv-1m"),
+            batch_rows=1,
+        )
+    )
 
     assert len(definitions) == len(bars) == 1
     assert definitions[0].ts_recv_ns == START_NS + 1
@@ -180,8 +207,22 @@ def test_offline_dbn_decode_retains_exact_nanoseconds_and_provenance(tmp_path: P
 def test_causal_bar_uses_actual_instrument_economics_and_exact_availability(tmp_path: Path):
     snapshot, _ = _snapshot(tmp_path)
     definition_binding, bar_binding = _bindings(snapshot)
-    definitions = list(iter_definitions(definition_binding, market="ES", batch_rows=1))
-    bar = next(iter_bars(bar_binding, market="ES", batch_rows=1))
+    definitions = list(
+        iter_definitions(
+            definition_binding,
+            market="ES",
+            expected_query_contract=_query("definition"),
+            batch_rows=1,
+        )
+    )
+    bar = next(
+        iter_bars(
+            bar_binding,
+            market="ES",
+            expected_query_contract=_query("ohlcv-1m"),
+            batch_rows=1,
+        )
+    )
     policy = FoundationPolicy.from_file(REPO / "configs" / "foundation_policy.json")
     anomalies = KnownAnomalyPolicy.from_file(
         REPO / "configs" / "known_anomalies.json",
@@ -228,7 +269,14 @@ def test_snapshot_and_decoder_fail_closed_on_mutation_or_metadata_drift(tmp_path
     original = bar_binding.path.read_bytes()
     bar_binding.path.write_bytes(original + b"x")
     with pytest.raises(IntegrityError, match="accepted index"):
-        list(iter_bars(bar_binding, market="ES", batch_rows=1))
+        list(
+            iter_bars(
+                bar_binding,
+                market="ES",
+                expected_query_contract=_query("ohlcv-1m"),
+                batch_rows=1,
+            )
+        )
 
 
 def test_economics_rulebook_rejects_string_disguised_as_source_list(tmp_path: Path):
@@ -303,6 +351,8 @@ def test_phase1b_materialization_is_release_bound_and_reproducible(tmp_path: Pat
     kwargs = {
         "definition_binding": definition_binding,
         "bar_binding": bar_binding,
+        "definition_query_contract": _query("definition"),
+        "bar_query_contract": _query("ohlcv-1m"),
         "market": "ES",
         "year": 2024,
         "filename": "2024-01-01_2025-01-01.dbn.zst",
@@ -357,6 +407,8 @@ def test_phase2_causal_release_consumes_only_verified_raw_and_policy_releases(tm
     raw_receipt = materialize_raw_interval(
         definition_binding=definition_binding,
         bar_binding=bar_binding,
+        definition_query_contract=_query("definition"),
+        bar_query_contract=_query("ohlcv-1m"),
         market="ES",
         year=2024,
         filename="2024-01-01_2025-01-01.dbn.zst",

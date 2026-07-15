@@ -52,6 +52,54 @@ def test_repository_overlap_contract_has_exact_sha256_fields() -> None:
     assert len(resolutions) == 12
 
 
+def test_overlap_resolution_cannot_silently_cross_query_modes(tmp_path) -> None:
+    import futures_rebuild.dbn_catalog as module
+
+    authoritative = {
+        "coverage_disposition": "AUTHORITATIVE_INTERVAL",
+        "end": "2026-01-03",
+        "market": "ES",
+        "path": "data/dbn/ohlcv_1m/ES/2026/2026-01-01_2026-01-03.dbn.zst",
+        "query_mode_id": "a" * 64,
+        "schema": "ohlcv-1m",
+        "sha256": "1" * 64,
+        "start": "2026-01-01",
+    }
+    redundant = {
+        "coverage_disposition": "AUTHORITATIVE_INTERVAL",
+        "end": "2026-01-03",
+        "market": "ES",
+        "path": "data/dbn/ohlcv_1m/ES/2026/2026-01-02_2026-01-03.dbn.zst",
+        "query_mode_id": "b" * 64,
+        "schema": "ohlcv-1m",
+        "sha256": "2" * 64,
+        "start": "2026-01-02",
+    }
+    resolution = {
+        "authoritative_file_sha256": "1" * 64,
+        "authoritative_path": authoritative["path"],
+        "family": "dbn_ohlcv_1m",
+        "market": "ES",
+        "overlap_end": "2026-01-03",
+        "overlap_start": "2026-01-02",
+        "record_count": 1,
+        "record_subset_sha256": "3" * 64,
+        "redundant_file_sha256": "2" * 64,
+        "redundant_path": redundant["path"],
+        "resolution_id": "4" * 64,
+        "schema": "ohlcv-1m",
+        "timestamp_field": "ts_event",
+    }
+    with pytest.raises(IntegrityError, match="crosses query modes"):
+        module._apply_overlap_resolution(
+            family_id="dbn_ohlcv_1m",
+            prior=authoritative,
+            current=redundant,
+            resolutions=(resolution,),
+            dbn_root=tmp_path,
+        )
+
+
 def _write_pair(repository: Path) -> Path:
     folder = repository / "data" / "dbn" / "ohlcv_1m" / "ES" / "2026"
     folder.mkdir(parents=True, exist_ok=True)

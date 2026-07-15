@@ -14,6 +14,7 @@ from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
 from futures_rebuild.boundary import RepoBoundary
 from futures_rebuild.errors import IntegrityError
 from futures_rebuild.legacy_trial_census import publish_legacy_trial_census
+from futures_rebuild.historical_capability import build_foundation_research_blueprint
 from futures_rebuild.readiness import (
     CLOSED_RESEARCH_LINES,
     ENGINE_CONFIG_PATHS,
@@ -227,6 +228,7 @@ def test_readiness_publishes_exact_non_authorizing_states_idempotently(
     historical = load_historical_research_ready(
         first.historical_research_ready_receipt, boundary=boundary
     )
+    blueprint = build_foundation_research_blueprint(foundation, boundary=boundary)
     for payload in (rebuild, historical):
         assert payload["alpha_claim"] is False
         assert payload["candidate_claim"] is False
@@ -234,6 +236,8 @@ def test_readiness_publishes_exact_non_authorizing_states_idempotently(
         assert payload["live_trading_ready"] is False
         assert payload["real_history_execution_authorized"] is False
         assert payload["readiness_is_execution_authority"] is False
+        assert payload["foundation_research_blueprint_id"] == blueprint.blueprint_id
+        assert payload["query_manifest_id"] == blueprint.query_manifest_id
         safety = payload["safety_contract"]
         assert safety["hard_pauses"] == sorted(REQUIRED_HARD_PAUSES)
         assert safety["closed_research_lines"] == [

@@ -82,9 +82,9 @@ from .support import (
 )
 
 
-CHECKPOINT_VERSION = "1.0.0"
+CHECKPOINT_VERSION = "2.0.0"
 FOUNDATION_SET_RELEASE_KIND = "futures_mechanical_foundation_set"
-FOUNDATION_SET_SCHEMA_VERSION = "1.0.0"
+FOUNDATION_SET_SCHEMA_VERSION = "2.0.0"
 OUTCOME_SOURCE_RELEASE_KIND = "futures_outcome_source_input"
 OUTCOME_SOURCE_SCHEMA_VERSION = "1.0.0"
 OUTCOME_SOURCE_ROLE = "LABELABLE_VERIFIED_CAUSAL_BARS_ONLY"
@@ -384,11 +384,15 @@ class FoundationOrchestrator:
         for interval in intervals:
             selected.append(
                 {
-                    "bar_path": interval.bars.relative_path,
-                    "bar_sha256": interval.bars.sha256,
+                    "bar_path": interval.bars.binding.relative_path,
+                    "bar_query_contract_id": interval.bars.query_contract_id,
+                    "bar_query_mode_id": interval.bars.query_mode_id,
+                    "bar_sha256": interval.bars.binding.sha256,
                     "coverage_disposition": interval.coverage_disposition,
-                    "definition_path": interval.definition.relative_path,
-                    "definition_sha256": interval.definition.sha256,
+                    "definition_path": interval.definition.binding.relative_path,
+                    "definition_query_contract_id": interval.definition.query_contract_id,
+                    "definition_query_mode_id": interval.definition.query_mode_id,
+                    "definition_sha256": interval.definition.binding.sha256,
                     "end": interval.end,
                     "interval_key": _interval_key(
                         interval.market, interval.year, interval.start, interval.end
@@ -396,18 +400,22 @@ class FoundationOrchestrator:
                     "market": interval.market,
                     "statistics_source_files": [
                         {
-                            "path": binding.relative_path,
-                            "sha256": binding.sha256,
+                            "path": item.binding.relative_path,
+                            "query_contract_id": item.query_contract_id,
+                            "query_mode_id": item.query_mode_id,
+                            "sha256": item.binding.sha256,
                         }
-                        for binding in interval.statistics
+                        for item in interval.statistics
                     ],
                     "start": interval.start,
                     "status_source_files": [
                         {
-                            "path": binding.relative_path,
-                            "sha256": binding.sha256,
+                            "path": item.binding.relative_path,
+                            "query_contract_id": item.query_contract_id,
+                            "query_mode_id": item.query_mode_id,
+                            "sha256": item.binding.sha256,
                         }
-                        for binding in interval.status
+                        for item in interval.status
                     ],
                     "year": interval.year,
                 }
@@ -432,6 +440,9 @@ class FoundationOrchestrator:
             "implementation_closure": _implementation_closure(),
             "coverage_matrix": list(resolved_selection.coverage_matrix),
             "coverage_matrix_id": resolved_selection.coverage_matrix_id,
+            "query_manifest": list(resolved_selection.query_manifest),
+            "query_manifest_id": resolved_selection.query_manifest_id,
+            "query_mode_census": list(resolved_selection.query_mode_census),
             "interval_count": len(selected),
             "intervals": selected,
             "repository_id": self.boundary.repository_id,
@@ -739,6 +750,7 @@ class FoundationOrchestrator:
         total_status_unresolved_rows = 0
         total_feature_ready_rows = 0
         total_status_gated_feature_ready_rows = 0
+        status_epoch_gates: list[dict[str, object]] = []
         for interval in intervals:
             key = _interval_key(
                 interval.market, interval.year, interval.start, interval.end
@@ -838,6 +850,60 @@ class FoundationOrchestrator:
             status_gated_feature_ready_rows = len(
                 feature_ready_keys & eligible_decision_keys
             )
+            interval_bar_rows = int(status_contract["total_rows"])
+            interval_feature_ready_rows = len(loaded_features.rows)
+            interval_status_resolved_fraction = (
+                Decimal(int(status_contract["resolved_status_rows"]))
+                / Decimal(interval_bar_rows)
+                if interval_bar_rows
+                else Decimal(0)
+            )
+            interval_status_gated_feature_fraction = (
+                Decimal(status_gated_feature_ready_rows)
+                / Decimal(interval_feature_ready_rows)
+                if interval_feature_ready_rows
+                else Decimal(0)
+            )
+            research_eligible = (
+                interval_status_resolved_fraction
+                >= coverage_policy.minimum_status_resolved_decision_fraction
+                and interval_status_gated_feature_fraction
+                >= coverage_policy.minimum_status_gated_feature_ready_fraction
+            )
+            status_epoch_gate_core: dict[str, object] = {
+                "bar_rows": interval_bar_rows,
+                "feature_ready_rows": interval_feature_ready_rows,
+                "interval_key": key,
+                "research_disposition": (
+                    "ELIGIBLE"
+                    if research_eligible
+                    else "ABSTAIN_STATUS_COVERAGE"
+                ),
+                "status_gated_feature_ready_fraction": str(
+                    interval_status_gated_feature_fraction
+                ),
+                "status_gated_feature_ready_rows": status_gated_feature_ready_rows,
+                "status_eligible_rows": int(status_contract["eligible_rows"]),
+                "status_query_contract_ids": sorted(
+                    item.query_contract_id for item in interval.status
+                ),
+                "status_query_mode_ids": sorted(
+                    {item.query_mode_id for item in interval.status}
+                ),
+                "status_resolved_decision_fraction": str(
+                    interval_status_resolved_fraction
+                ),
+                "status_resolved_rows": int(status_contract["resolved_status_rows"]),
+                "status_source_present": bool(interval.status),
+                "status_unresolved_rows": int(
+                    status_contract["unresolved_status_rows"]
+                ),
+            }
+            status_epoch_gate = {
+                **status_epoch_gate_core,
+                "status_epoch_gate_id": sha256_json(status_epoch_gate_core),
+            }
+            status_epoch_gates.append(status_epoch_gate)
             outcome_input_receipt = self._ensure_outcome_source_input(
                 state,
                 causal_receipt=causal_receipt,
@@ -852,14 +918,15 @@ class FoundationOrchestrator:
             )
             # Rehash the exact consumed provider inputs immediately before the
             # aggregate can become accepted, catching mutation during a long run.
-            for binding in (
+            for item in (
                 interval.definition,
                 interval.bars,
                 *interval.status,
                 *interval.statistics,
             ):
+                binding = item.binding
                 binding.verify()
-                snapshot.file(f"{binding.relative_path}.manifest.json").verify()
+                item.sidecar_binding.verify()
 
             total_bar_rows += int(status_contract["total_rows"])
             total_status_eligible_rows += int(status_contract["eligible_rows"])
@@ -874,13 +941,17 @@ class FoundationOrchestrator:
 
             verified_intervals.append(
                 {
-                    "bar_source_path": interval.bars.relative_path,
-                    "bar_source_sha256": interval.bars.sha256,
+                    "bar_query_contract_id": interval.bars.query_contract_id,
+                    "bar_query_mode_id": interval.bars.query_mode_id,
+                    "bar_source_path": interval.bars.binding.relative_path,
+                    "bar_source_sha256": interval.bars.binding.sha256,
                     "causal_release_receipt": causal_receipt.as_dict(),
                     "coverage_disposition": interval.coverage_disposition,
                     "definition_release_receipt": definitions.receipt.as_dict(),
-                    "definition_source_path": interval.definition.relative_path,
-                    "definition_source_sha256": interval.definition.sha256,
+                    "definition_query_contract_id": interval.definition.query_contract_id,
+                    "definition_query_mode_id": interval.definition.query_mode_id,
+                    "definition_source_path": interval.definition.binding.relative_path,
+                    "definition_source_sha256": interval.definition.binding.sha256,
                     "economics_release_receipt": economics.release_receipt.as_dict(),
                     "end": interval.end,
                     "feature_input_release_receipt": feature_receipt.as_dict(),
@@ -894,6 +965,7 @@ class FoundationOrchestrator:
                     "status_eligibility_release_receipt": (
                         status_eligibility_receipt.as_dict()
                     ),
+                    "status_epoch_gate": status_epoch_gate,
                     "status_eligible_rows": status_contract["eligible_rows"],
                     "status_gated_feature_ready_rows": (
                         status_gated_feature_ready_rows
@@ -933,6 +1005,10 @@ class FoundationOrchestrator:
             < coverage_policy.minimum_status_resolved_decision_fraction
             or status_gated_feature_ready_fraction
             < coverage_policy.minimum_status_gated_feature_ready_fraction
+            or not any(
+                gate["research_disposition"] == "ELIGIBLE"
+                for gate in status_epoch_gates
+            )
         ):
             raise IntegrityError(
                 "foundation nonzero/status coverage gates are not satisfied"
@@ -949,6 +1025,16 @@ class FoundationOrchestrator:
                 "statistics_source_market_year_fraction"
             ],
             "status_eligible_rows": total_status_eligible_rows,
+            "status_epoch_gates": status_epoch_gates,
+            "status_epoch_gates_id": sha256_json(status_epoch_gates),
+            "research_eligible_interval_count": sum(
+                gate["research_disposition"] == "ELIGIBLE"
+                for gate in status_epoch_gates
+            ),
+            "research_abstained_interval_count": sum(
+                gate["research_disposition"] == "ABSTAIN_STATUS_COVERAGE"
+                for gate in status_epoch_gates
+            ),
             "status_gated_feature_ready_rows": (
                 total_status_gated_feature_ready_rows
             ),
@@ -979,6 +1065,9 @@ class FoundationOrchestrator:
             "learned_or_outcome_informed_transform_count": 0,
             "model_fit_count": 0,
             "market_state_release_receipt": market_state_receipt.as_dict(),
+            "query_manifest": list(resolved_selection.query_manifest),
+            "query_manifest_id": resolved_selection.query_manifest_id,
+            "query_mode_census": list(resolved_selection.query_mode_census),
             "feature_role_contract": {
                 "eligibility_authority": "STATUS_AS_OF_ELIGIBILITY_RELEASE",
                 "mechanical_feature_values_are_not_standalone_research_eligibility": True,
@@ -1044,6 +1133,7 @@ class FoundationOrchestrator:
                     "feature_spec_hash": feature_spec.spec_hash,
                     "foundation_set_id": foundation_set["foundation_set_id"],
                     "interval_count": len(verified_intervals),
+                    "query_manifest_id": resolved_selection.query_manifest_id,
                     "run_id": core["run_id"],
                     "source_snapshot_id": snapshot.source_snapshot_id,
                 },
@@ -1098,11 +1188,13 @@ class FoundationOrchestrator:
             if state:
                 raise IntegrityError("foundation interval skips raw phase")
             receipt = materialize_raw_interval(
-                definition_binding=interval.definition,
-                bar_binding=interval.bars,
+                definition_binding=interval.definition.binding,
+                bar_binding=interval.bars.binding,
+                definition_query_contract=interval.definition.query_contract,
+                bar_query_contract=interval.bars.query_contract,
                 market=interval.market,
                 year=interval.year,
-                filename=Path(interval.bars.relative_path).name,
+                filename=Path(interval.bars.binding.relative_path).name,
                 source_selection_release_id=selection_receipt.release_id,
                 publisher=self.publisher,
                 batch_rows=self.batch_rows,
@@ -1119,10 +1211,15 @@ class FoundationOrchestrator:
         if (
             report.get("market") != interval.market
             or report.get("year") != interval.year
-            or report.get("source_snapshot_id") != interval.bars.source_snapshot_id
+            or report.get("source_snapshot_id")
+            != interval.bars.binding.source_snapshot_id
             or report.get("source_selection_release_id") != selection_receipt.release_id
-            or report.get("source_definition_file_sha256") != interval.definition.sha256
-            or report.get("source_bar_file_sha256") != interval.bars.sha256
+            or report.get("source_definition_file_sha256")
+            != interval.definition.binding.sha256
+            or report.get("source_bar_file_sha256") != interval.bars.binding.sha256
+            or report.get("definition_query_contract_id")
+            != interval.definition.query_contract_id
+            or report.get("bar_query_contract_id") != interval.bars.query_contract_id
         ):
             raise IntegrityError("raw checkpoint release has wrong exact upstream IDs")
         return receipt
@@ -1508,6 +1605,7 @@ def load_foundation_set(
             "coverage_matrix_id",
             "foundation_set_id",
             "interval_count",
+            "query_manifest_id",
             "run_id",
             "source_snapshot_id",
         }
@@ -1533,6 +1631,9 @@ def load_foundation_set(
         "learned_or_outcome_informed_transform_count",
         "model_fit_count",
         "market_state_release_receipt",
+        "query_manifest",
+        "query_manifest_id",
+        "query_mode_census",
         "outcome_contract",
         "provider_call_count",
         "run_contract",
@@ -1552,6 +1653,11 @@ def load_foundation_set(
         or payload.get("run_id") != manifest.metadata["run_id"]
         or payload.get("feature_spec_hash") != manifest.metadata["feature_spec_hash"]
         or payload.get("coverage_matrix_id") != manifest.metadata["coverage_matrix_id"]
+        or payload.get("query_manifest_id") != manifest.metadata["query_manifest_id"]
+        or not isinstance(payload.get("query_manifest"), list)
+        or payload.get("query_manifest_id")
+        != sha256_json(payload.get("query_manifest"))
+        or not isinstance(payload.get("query_mode_census"), list)
         or payload.get("source_snapshot_id")
         != manifest.metadata["source_snapshot_id"]
         or payload.get("interval_count") != manifest.metadata["interval_count"]
@@ -1588,6 +1694,12 @@ def load_foundation_set(
         or re.fullmatch(r"[0-9a-f]{64}", str(payload.get("run_id"))) is None
         or not isinstance(payload.get("run_contract"), dict)
         or sha256_json(payload.get("run_contract")) != payload.get("run_id")
+        or payload["run_contract"].get("query_manifest")
+        != payload.get("query_manifest")
+        or payload["run_contract"].get("query_manifest_id")
+        != payload.get("query_manifest_id")
+        or payload["run_contract"].get("query_mode_census")
+        != payload.get("query_mode_census")
         or re.fullmatch(
             r"[0-9a-f]{64}", str(payload.get("source_snapshot_id"))
         )
@@ -1623,6 +1735,25 @@ def load_foundation_set(
         if dependency.release_kind != expected_kind:
             raise IntegrityError("foundation-set top-level dependency kind is invalid")
         dependency_ids.add(dependency.release_id)
+    selection_manifest = top_receipts[0].verify(boundary)
+    market_state_manifest = top_receipts[3].verify(boundary)
+    market_state_contract = _read_canonical_object(
+        boundary.active_root
+        / top_receipts[3].relative_root
+        / "market_state_contract.json",
+        description="foundation-set market-state contract",
+    )
+    if (
+        selection_manifest.metadata.get("query_manifest_id")
+        != payload.get("query_manifest_id")
+        or market_state_manifest.metadata.get("query_manifest_id")
+        != payload.get("query_manifest_id")
+        or market_state_contract.get("query_manifest_id")
+        != payload.get("query_manifest_id")
+        or market_state_contract.get("query_mode_census")
+        != payload.get("query_mode_census")
+    ):
+        raise IntegrityError("foundation-set query dependency closure is invalid")
     raw_intervals = payload.get("intervals")
     if (
         not isinstance(raw_intervals, list)
@@ -1655,15 +1786,30 @@ def load_foundation_set(
     aggregate_status_gated_feature_ready_rows = 0
     aggregate_status_resolved_rows = 0
     aggregate_status_unresolved_rows = 0
+    observed_status_epoch_gates: list[dict[str, object]] = []
+    run_contract_intervals = payload["run_contract"].get("intervals")
+    if not isinstance(run_contract_intervals, list):
+        raise IntegrityError("foundation-set run query intervals are invalid")
+    run_interval_by_key = {
+        str(item.get("interval_key")): item
+        for item in run_contract_intervals
+        if isinstance(item, dict)
+    }
+    if len(run_interval_by_key) != len(run_contract_intervals):
+        raise IntegrityError("foundation-set run query intervals are not unique")
     for raw_interval in raw_intervals:
         if not isinstance(raw_interval, dict) or set(raw_interval) != {
             "bar_source_path",
             "bar_source_sha256",
+            "bar_query_contract_id",
+            "bar_query_mode_id",
             "causal_release_receipt",
             "coverage_disposition",
             "definition_release_receipt",
             "definition_source_path",
             "definition_source_sha256",
+            "definition_query_contract_id",
+            "definition_query_mode_id",
             "economics_release_receipt",
             "end",
             "feature_input_release_receipt",
@@ -1673,6 +1819,7 @@ def load_foundation_set(
             "outcome_source_input_release_receipt",
             "raw_release_receipt",
             "status_eligibility_release_receipt",
+            "status_epoch_gate",
             "status_eligible_rows",
             "status_gated_feature_ready_rows",
             "status_resolved_rows",
@@ -1695,7 +1842,14 @@ def load_foundation_set(
             or key != _interval_key(market, year, start, end)
             or any(
                 re.fullmatch(r"[0-9a-f]{64}", str(raw_interval.get(name))) is None
-                for name in ("bar_source_sha256", "definition_source_sha256")
+                for name in (
+                    "bar_query_contract_id",
+                    "bar_query_mode_id",
+                    "bar_source_sha256",
+                    "definition_query_contract_id",
+                    "definition_query_mode_id",
+                    "definition_source_sha256",
+                )
             )
             or type(raw_interval.get("bar_source_path")) is not str
             or type(raw_interval.get("definition_source_path")) is not str
@@ -1713,6 +1867,44 @@ def load_foundation_set(
             )
         ):
             raise IntegrityError("foundation-set interval key is invalid")
+        status_epoch_gate = raw_interval.get("status_epoch_gate")
+        expected_gate_keys = {
+            "bar_rows",
+            "feature_ready_rows",
+            "interval_key",
+            "research_disposition",
+            "status_epoch_gate_id",
+            "status_gated_feature_ready_fraction",
+            "status_gated_feature_ready_rows",
+            "status_eligible_rows",
+            "status_query_contract_ids",
+            "status_query_mode_ids",
+            "status_resolved_decision_fraction",
+            "status_resolved_rows",
+            "status_source_present",
+            "status_unresolved_rows",
+        }
+        if (
+            not isinstance(status_epoch_gate, dict)
+            or set(status_epoch_gate) != expected_gate_keys
+        ):
+            raise IntegrityError("foundation-set status epoch gate schema is invalid")
+        gate_core = {
+            name: value
+            for name, value in status_epoch_gate.items()
+            if name != "status_epoch_gate_id"
+        }
+        if (
+            status_epoch_gate["status_epoch_gate_id"] != sha256_json(gate_core)
+            or status_epoch_gate["interval_key"] != key
+            or status_epoch_gate["research_disposition"]
+            not in {"ELIGIBLE", "ABSTAIN_STATUS_COVERAGE"}
+            or type(status_epoch_gate["status_source_present"]) is not bool
+            or not isinstance(status_epoch_gate["status_query_contract_ids"], list)
+            or not isinstance(status_epoch_gate["status_query_mode_ids"], list)
+        ):
+            raise IntegrityError("foundation-set status epoch gate is invalid")
+        observed_status_epoch_gates.append(status_epoch_gate)
         interval_keys.append(key)
         parsed_receipts: dict[str, VerifiedReleaseReceipt] = {}
         for name in receipt_fields:
@@ -1724,6 +1916,24 @@ def load_foundation_set(
                 )
             parsed_receipts[name] = parsed
             dependency_ids.add(parsed.release_id)
+        loaded_raw = load_raw_interval(
+            parsed_receipts["raw_release_receipt"], boundary=boundary
+        ).interval_receipt
+        if (
+            loaded_raw.get("bar_query_contract_id")
+            != raw_interval["bar_query_contract_id"]
+            or loaded_raw.get("definition_query_contract_id")
+            != raw_interval["definition_query_contract_id"]
+            or loaded_raw.get("source_bar_file_sha256")
+            != raw_interval["bar_source_sha256"]
+            or loaded_raw.get("source_definition_file_sha256")
+            != raw_interval["definition_source_sha256"]
+            or loaded_raw.get("source_bar_file_path")
+            != raw_interval["bar_source_path"]
+            or loaded_raw.get("source_definition_file_path")
+            != raw_interval["definition_source_path"]
+        ):
+            raise IntegrityError("foundation-set raw query provenance is invalid")
         outcome_payload = load_outcome_source_input(
             parsed_receipts["outcome_source_input_release_receipt"],
             boundary=boundary,
@@ -1783,6 +1993,69 @@ def load_foundation_set(
             "feature_ready_rows"
         ):
             raise IntegrityError("foundation-set feature-ready census is invalid")
+        run_interval = run_interval_by_key.get(str(key))
+        status_sources = (
+            run_interval.get("status_source_files")
+            if isinstance(run_interval, dict)
+            else None
+        )
+        if not isinstance(status_sources, list):
+            raise IntegrityError("foundation-set status query sources are invalid")
+        expected_query_contract_ids = sorted(
+            str(item.get("query_contract_id"))
+            for item in status_sources
+            if isinstance(item, dict)
+        )
+        expected_query_mode_ids = sorted(
+            {
+                str(item.get("query_mode_id"))
+                for item in status_sources
+                if isinstance(item, dict)
+            }
+        )
+        interval_bar_rows = int(status_contract["total_rows"])
+        interval_feature_rows = int(raw_interval["feature_ready_rows"])
+        interval_resolved_fraction = (
+            Decimal(int(status_contract["resolved_status_rows"]))
+            / Decimal(interval_bar_rows)
+            if interval_bar_rows
+            else Decimal(0)
+        )
+        interval_gated_fraction = (
+            Decimal(observed_status_gated_features) / Decimal(interval_feature_rows)
+            if interval_feature_rows
+            else Decimal(0)
+        )
+        expected_disposition = (
+            "ELIGIBLE"
+            if interval_resolved_fraction
+            >= coverage_policy.minimum_status_resolved_decision_fraction
+            and interval_gated_fraction
+            >= coverage_policy.minimum_status_gated_feature_ready_fraction
+            else "ABSTAIN_STATUS_COVERAGE"
+        )
+        if (
+            status_epoch_gate["bar_rows"] != interval_bar_rows
+            or status_epoch_gate["feature_ready_rows"] != interval_feature_rows
+            or status_epoch_gate["status_gated_feature_ready_rows"]
+            != observed_status_gated_features
+            or status_epoch_gate["status_eligible_rows"]
+            != status_contract["eligible_rows"]
+            or status_epoch_gate["status_resolved_rows"]
+            != status_contract["resolved_status_rows"]
+            or status_epoch_gate["status_unresolved_rows"]
+            != status_contract["unresolved_status_rows"]
+            or status_epoch_gate["status_resolved_decision_fraction"]
+            != str(interval_resolved_fraction)
+            or status_epoch_gate["status_gated_feature_ready_fraction"]
+            != str(interval_gated_fraction)
+            or status_epoch_gate["research_disposition"] != expected_disposition
+            or status_epoch_gate["status_source_present"] != bool(status_sources)
+            or status_epoch_gate["status_query_contract_ids"]
+            != expected_query_contract_ids
+            or status_epoch_gate["status_query_mode_ids"] != expected_query_mode_ids
+        ):
+            raise IntegrityError("foundation-set per-epoch status gate is invalid")
         aggregate_bar_rows += int(status_contract["total_rows"])
         aggregate_feature_ready_rows += int(raw_interval["feature_ready_rows"])
         aggregate_status_eligible_rows += int(raw_interval["status_eligible_rows"])
@@ -1810,6 +2083,24 @@ def load_foundation_set(
         or coverage_gate.get("feature_ready_rows") != aggregate_feature_ready_rows
         or coverage_gate.get("status_eligible_rows")
         != aggregate_status_eligible_rows
+        or coverage_gate.get("status_epoch_gates") != observed_status_epoch_gates
+        or coverage_gate.get("status_epoch_gates_id")
+        != sha256_json(observed_status_epoch_gates)
+        or coverage_gate.get("research_eligible_interval_count")
+        != sum(
+            gate["research_disposition"] == "ELIGIBLE"
+            for gate in observed_status_epoch_gates
+        )
+        or coverage_gate.get("research_abstained_interval_count")
+        != sum(
+            gate["research_disposition"] == "ABSTAIN_STATUS_COVERAGE"
+            for gate in observed_status_epoch_gates
+        )
+        or len(observed_status_epoch_gates) != len(raw_intervals)
+        or not any(
+            gate["research_disposition"] == "ELIGIBLE"
+            for gate in observed_status_epoch_gates
+        )
         or coverage_gate.get("status_gated_feature_ready_rows")
         != aggregate_status_gated_feature_ready_rows
         or coverage_gate.get("status_resolved_rows")

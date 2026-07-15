@@ -13,6 +13,7 @@ import json
 import math
 import re
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from types import MappingProxyType
 from typing import Mapping
@@ -50,6 +51,7 @@ REAL_HISTORY_OPERATION = "RUN_HISTORICAL_HYPOTHESIS_WFA"
 REAL_HISTORY_CLASSIFICATION = OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION
 _SHA = re.compile(r"[0-9a-f]{64}")
 REQUIRED_COMPONENTS = {
+    "futures_rebuild.foundation.selection": ["resolve_foundation_selection"],
     "futures_rebuild.foundation.orchestrator": ["load_foundation_set"],
     "futures_rebuild.historical_builder": ["build_synthetic_research_run"],
     "futures_rebuild.historical_evaluator": ["evaluate_frozen_research_run"],
@@ -67,6 +69,7 @@ REQUIRED_COMPONENTS = {
         "romano_wolf_from_differentials"
     ],
     "futures_rebuild.research.power": ["training_only_mde"],
+    "futures_rebuild.source_symbology": ["require_query_contract"],
     "futures_rebuild.trial": ["TrialEventLedger", "TrialRegistry"],
 }
 REQUIRED_DERIVED_GATES = [
@@ -115,7 +118,7 @@ def load_historical_capability_config(root: Path) -> dict[str, object]:
     }
     if (
         set(payload) != expected
-        or payload.get("capability_version") != "1.0.0"
+        or payload.get("capability_version") != "2.0.0"
         or payload.get("project") != PROJECT
         or payload.get("status") != "IMPLEMENTED_EXECUTION_DISABLED"
         or payload.get("authority")
@@ -132,6 +135,9 @@ def load_historical_capability_config(root: Path) -> dict[str, object]:
         != {
             "labels_materialized_at_readiness": False,
             "outcome_source_inputs_required": True,
+            "query_manifest_content_addressed_required": True,
+            "query_symbology_role": "PROVENANCE_ONLY_NEVER_FEATURE",
+            "mixed_status_statistics_query_epochs_explicit": True,
             "statistics_as_features": False,
             "status_gated_features_required": True,
             "verified_actual_contract_economics_required": True,
@@ -242,6 +248,14 @@ class FoundationResearchBlueprint:
     foundation_receipt_id: str
     foundation_set_id: str
     run_id: str
+    source_snapshot_id: str
+    source_selection_release_id: str
+    source_selection_receipt_id: str
+    selection_manifest_id: str
+    query_manifest_id: str
+    query_manifest_file_count: int
+    query_mode_census: tuple[dict[str, object], ...]
+    foundation_interval_count: int
     interval_count: int
     bar_rows: int
     status_eligible_rows: int
@@ -261,9 +275,17 @@ class FoundationResearchBlueprint:
             "foundation_receipt_id": self.foundation_receipt_id,
             "foundation_release_id": self.foundation_release_id,
             "foundation_set_id": self.foundation_set_id,
+            "foundation_interval_count": self.foundation_interval_count,
             "interval_count": self.interval_count,
             "outcome_source_release_ids": list(self.outcome_source_release_ids),
             "run_id": self.run_id,
+            "source_snapshot_id": self.source_snapshot_id,
+            "source_selection_release_id": self.source_selection_release_id,
+            "source_selection_receipt_id": self.source_selection_receipt_id,
+            "selection_manifest_id": self.selection_manifest_id,
+            "query_manifest_id": self.query_manifest_id,
+            "query_manifest_file_count": self.query_manifest_file_count,
+            "query_mode_census": list(self.query_mode_census),
             "status_eligible_rows": self.status_eligible_rows,
             "status_gated_feature_ready_rows": (
                 self.status_gated_feature_ready_rows
@@ -280,24 +302,54 @@ def build_foundation_research_blueprint(
     foundation = load_foundation_set(receipt, boundary=boundary)
     coverage = foundation.get("coverage_gate")
     intervals = foundation.get("intervals")
-    if not isinstance(coverage, dict) or not isinstance(intervals, list):
+    query_manifest = foundation.get("query_manifest")
+    query_mode_census = foundation.get("query_mode_census")
+    run_contract = foundation.get("run_contract")
+    selection_receipt = foundation.get("source_selection_receipt")
+    if (
+        not isinstance(coverage, dict)
+        or not isinstance(intervals, list)
+        or not isinstance(query_manifest, list)
+        or not isinstance(query_mode_census, list)
+        or not isinstance(run_contract, dict)
+        or not isinstance(selection_receipt, dict)
+    ):
         raise IntegrityError("foundation cannot produce a historical blueprint")
     policy = FoundationCoveragePolicy.from_dict(coverage.get("coverage_policy"))
+    eligible_intervals = [
+        item
+        for item in intervals
+        if isinstance(item, dict)
+        and isinstance(item.get("status_epoch_gate"), dict)
+        and item["status_epoch_gate"].get("research_disposition") == "ELIGIBLE"
+    ]
+    if (
+        not eligible_intervals
+        or len(eligible_intervals)
+        != coverage.get("research_eligible_interval_count")
+        or len(intervals) - len(eligible_intervals)
+        != coverage.get("research_abstained_interval_count")
+    ):
+        raise IntegrityError("foundation research epoch eligibility is invalid")
+    gates = [item["status_epoch_gate"] for item in eligible_intervals]
     fields = (
         "bar_rows",
         "status_eligible_rows",
         "status_gated_feature_ready_rows",
+        "status_resolved_rows",
     )
-    if any(type(coverage.get(field)) is not int for field in fields):
-        raise IntegrityError("foundation blueprint coverage counts are invalid")
-    bar_rows = int(coverage["bar_rows"])
-    eligible = int(coverage["status_eligible_rows"])
-    ready = int(coverage["status_gated_feature_ready_rows"])
-    resolved = str(coverage.get("status_resolved_decision_fraction"))
-    try:
-        resolved_value = float(resolved)
-    except ValueError as exc:
-        raise IntegrityError("foundation status resolution fraction is invalid") from exc
+    if any(
+        type(gate.get(field)) is not int
+        for gate in gates
+        for field in fields
+    ):
+        raise IntegrityError("foundation blueprint epoch counts are invalid")
+    bar_rows = sum(int(gate["bar_rows"]) for gate in gates)
+    eligible = sum(int(gate["status_eligible_rows"]) for gate in gates)
+    ready = sum(int(gate["status_gated_feature_ready_rows"]) for gate in gates)
+    resolved_rows = sum(int(gate["status_resolved_rows"]) for gate in gates)
+    resolved = str(Decimal(resolved_rows) / Decimal(bar_rows)) if bar_rows else "0"
+    resolved_value = float(resolved)
     if (
         bar_rows < policy.minimum_bar_rows
         or eligible < policy.minimum_status_eligible_rows
@@ -311,7 +363,7 @@ def build_foundation_research_blueprint(
     feature_ids: list[str] = []
     outcome_ids: list[str] = []
     economics_ids: list[str] = []
-    for interval in intervals:
+    for interval in eligible_intervals:
         if not isinstance(interval, dict):
             raise IntegrityError("foundation interval blueprint is invalid")
         try:
@@ -323,11 +375,31 @@ def build_foundation_research_blueprint(
     collections = (feature_ids, outcome_ids, economics_ids)
     if any(
         not values
-        or len(values) != len(intervals)
+        or len(values) != len(eligible_intervals)
         or any(_SHA.fullmatch(value) is None for value in values)
         for values in collections
     ):
         raise IntegrityError("foundation research dependency IDs are invalid")
+    query_manifest_id = str(foundation.get("query_manifest_id"))
+    source_snapshot_id = str(foundation.get("source_snapshot_id"))
+    selection_manifest_id = str(run_contract.get("selection_manifest_id"))
+    source_selection_release_id = str(selection_receipt.get("release_id"))
+    source_selection_receipt_id = str(selection_receipt.get("receipt_id"))
+    if (
+        query_manifest_id != sha256_json(query_manifest)
+        or any(
+            _SHA.fullmatch(value) is None
+            for value in (
+                query_manifest_id,
+                source_snapshot_id,
+                selection_manifest_id,
+                source_selection_release_id,
+                source_selection_receipt_id,
+            )
+        )
+        or not query_mode_census
+    ):
+        raise IntegrityError("foundation query provenance is invalid")
     core = {
         "bar_rows": bar_rows,
         "economics_release_ids": sorted(economics_ids),
@@ -335,9 +407,17 @@ def build_foundation_research_blueprint(
         "foundation_receipt_id": receipt.receipt_id,
         "foundation_release_id": receipt.release_id,
         "foundation_set_id": foundation["foundation_set_id"],
-        "interval_count": len(intervals),
+        "foundation_interval_count": len(intervals),
+        "interval_count": len(eligible_intervals),
         "outcome_source_release_ids": sorted(outcome_ids),
         "run_id": foundation["run_id"],
+        "source_snapshot_id": source_snapshot_id,
+        "source_selection_release_id": source_selection_release_id,
+        "source_selection_receipt_id": source_selection_receipt_id,
+        "selection_manifest_id": selection_manifest_id,
+        "query_manifest_id": query_manifest_id,
+        "query_manifest_file_count": len(query_manifest),
+        "query_mode_census": query_mode_census,
         "status_eligible_rows": eligible,
         "status_gated_feature_ready_rows": ready,
         "status_resolved_decision_fraction": resolved,
@@ -347,7 +427,15 @@ def build_foundation_research_blueprint(
         foundation_receipt_id=receipt.receipt_id,
         foundation_set_id=str(foundation["foundation_set_id"]),
         run_id=str(foundation["run_id"]),
-        interval_count=len(intervals),
+        source_snapshot_id=source_snapshot_id,
+        source_selection_release_id=source_selection_release_id,
+        source_selection_receipt_id=source_selection_receipt_id,
+        selection_manifest_id=selection_manifest_id,
+        query_manifest_id=query_manifest_id,
+        query_manifest_file_count=len(query_manifest),
+        query_mode_census=tuple(query_mode_census),
+        foundation_interval_count=len(intervals),
+        interval_count=len(eligible_intervals),
         bar_rows=bar_rows,
         status_eligible_rows=eligible,
         status_gated_feature_ready_rows=ready,
@@ -363,19 +451,43 @@ def build_foundation_research_blueprint(
 class AuthorizedHistoricalRun:
     receipt: OperationReceipt
     foundation_release_id: str
+    foundation_research_blueprint_id: str
+    query_manifest_id: str
     trial_charter_id: str
 
     def verify(self, boundary: RepoBoundary) -> None:
-        scope = {
-            "foundation_release_id": self.foundation_release_id,
-            "trial_charter_id": self.trial_charter_id,
-        }
+        scope = _historical_authorization_scope(
+            foundation_release_id=self.foundation_release_id,
+            foundation_research_blueprint_id=(
+                self.foundation_research_blueprint_id
+            ),
+            query_manifest_id=self.query_manifest_id,
+            trial_charter_id=self.trial_charter_id,
+        )
         self.receipt.assert_consumed(
             boundary,
             operation=REAL_HISTORY_OPERATION,
             classification=REAL_HISTORY_CLASSIFICATION,
             required_scope=scope,
         )
+
+
+def _historical_authorization_scope(
+    *,
+    foundation_release_id: str,
+    foundation_research_blueprint_id: str,
+    query_manifest_id: str,
+    trial_charter_id: str,
+) -> dict[str, str]:
+    scope = {
+        "foundation_release_id": foundation_release_id,
+        "foundation_research_blueprint_id": foundation_research_blueprint_id,
+        "query_manifest_id": query_manifest_id,
+        "trial_charter_id": trial_charter_id,
+    }
+    if any(_SHA.fullmatch(value) is None for value in scope.values()):
+        raise ContractError("historical authorization scope is invalid")
+    return scope
 
 
 def open_authorized_historical_run(
@@ -387,10 +499,12 @@ def open_authorized_historical_run(
 ) -> AuthorizedHistoricalRun:
     if _SHA.fullmatch(trial_charter_id) is None:
         raise ContractError("historical run trial charter ID is invalid")
-    scope = {
-        "foundation_release_id": blueprint.foundation_release_id,
-        "trial_charter_id": trial_charter_id,
-    }
+    scope = _historical_authorization_scope(
+        foundation_release_id=blueprint.foundation_release_id,
+        foundation_research_blueprint_id=blueprint.blueprint_id,
+        query_manifest_id=blueprint.query_manifest_id,
+        trial_charter_id=trial_charter_id,
+    )
     receipt.consume(
         boundary,
         operation=REAL_HISTORY_OPERATION,
@@ -398,7 +512,11 @@ def open_authorized_historical_run(
         required_scope=scope,
     )
     result = AuthorizedHistoricalRun(
-        receipt, blueprint.foundation_release_id, trial_charter_id
+        receipt,
+        blueprint.foundation_release_id,
+        blueprint.blueprint_id,
+        blueprint.query_manifest_id,
+        trial_charter_id,
     )
     result.verify(boundary)
     return result

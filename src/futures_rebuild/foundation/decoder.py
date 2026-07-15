@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import gc
 import hashlib
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
@@ -14,7 +15,7 @@ import numpy as np
 
 from ..canonical import sha256_json
 from ..errors import ContractError, IntegrityError
-from ..source_symbology import require_allowed_query_symbology
+from ..source_symbology import build_query_contract, require_query_contract
 from .records import (
     ProviderBar,
     ProviderDefinition,
@@ -142,6 +143,7 @@ def _validate_metadata(
     *,
     schema: str,
     market: str,
+    expected_query_contract: Mapping[str, object],
 ) -> None:
     if databento.__version__ != SUPPORTED_DATABENTO_VERSION:
         raise ContractError("foundation decoding requires the pinned offline DBN decoder")
@@ -150,9 +152,12 @@ def _validate_metadata(
     if match is None:
         raise IntegrityError("snapshot DBN filename is invalid")
     metadata = store.metadata
-    require_allowed_query_symbology(
+    expected = require_query_contract(expected_query_contract)
+    observed = build_query_contract(
         schema=schema,
         market=market,
+        start=match.group("start"),
+        end=match.group("end"),
         stype_in=str(metadata.stype_in),
         symbols=metadata.symbols,
     )
@@ -162,6 +167,7 @@ def _validate_metadata(
         or str(metadata.stype_out) != "instrument_id"
         or metadata.ts_out is not False
         or metadata.limit is not None
+        or observed != expected
         or metadata.start != _date_boundary_ns(match.group("start"))
         or metadata.end != _date_boundary_ns(match.group("end"))
     ):
@@ -173,6 +179,7 @@ def _chunks(
     *,
     schema: str,
     market: str,
+    expected_query_contract: Mapping[str, object],
     batch_rows: int,
 ) -> Iterator[np.ndarray]:
     if (
@@ -183,7 +190,13 @@ def _chunks(
         raise ContractError("DBN decode batch size is outside its bounded range")
     path = binding.verify()
     store = databento.DBNStore.from_file(path)
-    _validate_metadata(store, binding, schema=schema, market=market)
+    _validate_metadata(
+        store,
+        binding,
+        schema=schema,
+        market=market,
+        expected_query_contract=expected_query_contract,
+    )
     decoded = store.to_ndarray(count=batch_rows)
     chunks = (decoded,) if isinstance(decoded, np.ndarray) else decoded
     expected_dtypes = {
@@ -222,11 +235,16 @@ def iter_definitions(
     binding: SnapshotFile,
     *,
     market: str,
+    expected_query_contract: Mapping[str, object],
     batch_rows: int = 100_000,
 ) -> Iterator[ProviderDefinition]:
     ordinal = 0
     for chunk in _chunks(
-        binding, schema="definition", market=market, batch_rows=batch_rows
+        binding,
+        schema="definition",
+        market=market,
+        expected_query_contract=expected_query_contract,
+        batch_rows=batch_rows,
     ):
         for row in chunk:
             raw_bytes = row.tobytes()
@@ -260,13 +278,20 @@ def iter_bars(
     binding: SnapshotFile,
     *,
     market: str,
+    expected_query_contract: Mapping[str, object],
     schema: str = "ohlcv-1m",
     batch_rows: int = 100_000,
 ) -> Iterator[ProviderBar]:
     if schema != "ohlcv-1m":
         raise ContractError("only ohlcv-1m is canonical foundation research input")
     ordinal = 0
-    for chunk in _chunks(binding, schema=schema, market=market, batch_rows=batch_rows):
+    for chunk in _chunks(
+        binding,
+        schema=schema,
+        market=market,
+        expected_query_contract=expected_query_contract,
+        batch_rows=batch_rows,
+    ):
         for row in chunk:
             raw_bytes = row.tobytes()
             yield ProviderBar(
@@ -293,11 +318,16 @@ def iter_statuses(
     binding: SnapshotFile,
     *,
     market: str,
+    expected_query_contract: Mapping[str, object],
     batch_rows: int = 100_000,
 ) -> Iterator[StatusRecordV1]:
     ordinal = 0
     for chunk in _chunks(
-        binding, schema="status", market=market, batch_rows=batch_rows
+        binding,
+        schema="status",
+        market=market,
+        expected_query_contract=expected_query_contract,
+        batch_rows=batch_rows,
     ):
         for row in chunk:
             raw_bytes = row.tobytes()
@@ -341,11 +371,16 @@ def iter_statistics(
     binding: SnapshotFile,
     *,
     market: str,
+    expected_query_contract: Mapping[str, object],
     batch_rows: int = 100_000,
 ) -> Iterator[StatisticsRecordV1]:
     ordinal = 0
     for chunk in _chunks(
-        binding, schema="statistics", market=market, batch_rows=batch_rows
+        binding,
+        schema="statistics",
+        market=market,
+        expected_query_contract=expected_query_contract,
+        batch_rows=batch_rows,
     ):
         for row in chunk:
             raw_bytes = row.tobytes()

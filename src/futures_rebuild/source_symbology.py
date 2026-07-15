@@ -4,8 +4,15 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
+from datetime import date
+from typing import Mapping
 
+from .canonical import sha256_json
 from .errors import ContractError, IntegrityError
+
+
+DATASET = "GLBX.MDP3"
+QUERY_CONTRACT_VERSION = "1.0.0"
 
 
 _CONTINUOUS_ONLY_SCHEMAS = frozenset(
@@ -57,3 +64,88 @@ def require_allowed_query_symbology(
     if observed not in allowed_query_symbologies(schema, market):
         raise IntegrityError("DBN query symbology differs from its schema/market contract")
     return observed
+
+
+def build_query_contract(
+    *,
+    schema: str,
+    market: str,
+    start: str,
+    end: str,
+    stype_in: object,
+    symbols: object,
+) -> dict[str, object]:
+    """Build one content-addressed, exact acquisition-query contract."""
+
+    normalized_stype, normalized_symbols = require_allowed_query_symbology(
+        schema=schema,
+        market=market,
+        stype_in=stype_in,
+        symbols=symbols,
+    )
+    try:
+        start_date = date.fromisoformat(start)
+        end_date = date.fromisoformat(end)
+    except (TypeError, ValueError) as exc:
+        raise ContractError("DBN query contract interval is invalid") from exc
+    if end_date <= start_date:
+        raise ContractError("DBN query contract interval is empty or reversed")
+    symbol_template = (
+        "{market}.FUT" if normalized_stype == "parent" else "{market}.v.0"
+    )
+    mode_core: dict[str, object] = {
+        "dataset": DATASET,
+        "query_contract_version": QUERY_CONTRACT_VERSION,
+        "schema": schema,
+        "stype_in": normalized_stype,
+        "stype_out": "instrument_id",
+        "symbol_template": symbol_template,
+        "ts_out": False,
+        "limit": None,
+    }
+    mode_id = sha256_json(mode_core)
+    contract_core: dict[str, object] = {
+        **mode_core,
+        "end": end,
+        "market": market,
+        "query_mode_id": mode_id,
+        "symbols": list(normalized_symbols),
+        "start": start,
+    }
+    return {**contract_core, "query_contract_id": sha256_json(contract_core)}
+
+
+def require_query_contract(raw: object) -> dict[str, object]:
+    """Validate an exact query contract and return its canonical reconstruction."""
+
+    if not isinstance(raw, Mapping):
+        raise IntegrityError("DBN query contract is invalid")
+    expected_keys = {
+        "dataset",
+        "end",
+        "limit",
+        "market",
+        "query_contract_id",
+        "query_contract_version",
+        "query_mode_id",
+        "schema",
+        "stype_in",
+        "stype_out",
+        "symbol_template",
+        "symbols",
+        "start",
+        "ts_out",
+    }
+    if set(raw) != expected_keys:
+        raise IntegrityError("DBN query contract fields are not exact")
+    rebuilt = build_query_contract(
+        schema=str(raw.get("schema")),
+        market=str(raw.get("market")),
+        start=str(raw.get("start")),
+        end=str(raw.get("end")),
+        stype_in=raw.get("stype_in"),
+        symbols=raw.get("symbols"),
+    )
+    if dict(raw) != rebuilt:
+        raise IntegrityError("DBN query contract content address is invalid")
+    return rebuilt

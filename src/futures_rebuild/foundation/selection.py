@@ -13,7 +13,7 @@ from ..boundary import OperationClassification, OperationReceipt, RepoBoundary
 from ..canonical import assert_plain_file, canonical_bytes, sha256_file, sha256_json
 from ..errors import ContractError, IntegrityError
 from ..release import AtomicPublisher, ReleaseManifest, VerifiedReleaseReceipt
-from ..source_symbology import require_allowed_query_symbology
+from ..source_symbology import require_query_contract
 from .snapshot import PublishedSourceSnapshot, SnapshotFile
 
 
@@ -37,7 +37,7 @@ ALLOWED_COVERAGE_DISPOSITIONS = (
 
 
 SELECTION_RELEASE_KIND = "futures_dbn_source_selection"
-SELECTION_SCHEMA_VERSION = "1.0.0"
+SELECTION_SCHEMA_VERSION = "2.0.0"
 
 
 @dataclass(frozen=True)
@@ -46,11 +46,11 @@ class SelectedInterval:
     year: int
     start: str
     end: str
-    definition: SnapshotFile
-    bars: SnapshotFile
+    definition: "SelectedFamilyFile"
+    bars: "SelectedFamilyFile"
     coverage_disposition: str
-    statistics: tuple[SnapshotFile, ...] = ()
-    status: tuple[SnapshotFile, ...] = ()
+    statistics: tuple["SelectedFamilyFile", ...] = ()
+    status: tuple["SelectedFamilyFile", ...] = ()
 
 
 @dataclass(frozen=True)
@@ -63,6 +63,10 @@ class SelectedFamilyFile:
     end: str
     coverage_disposition: str
     binding: SnapshotFile
+    sidecar_binding: SnapshotFile
+    query_contract: Mapping[str, object]
+    query_contract_id: str
+    query_mode_id: str
 
     def as_coverage_binding(self) -> dict[str, object]:
         return {
@@ -71,9 +75,15 @@ class SelectedFamilyFile:
             "family": self.family,
             "market": self.market,
             "path": self.binding.relative_path,
+            "query_contract": dict(self.query_contract),
+            "query_contract_id": self.query_contract_id,
+            "query_mode_id": self.query_mode_id,
             "schema": self.schema,
             "sha256": self.binding.sha256,
             "size": self.binding.size,
+            "sidecar_path": self.sidecar_binding.relative_path,
+            "sidecar_sha256": self.sidecar_binding.sha256,
+            "sidecar_size": self.sidecar_binding.size,
             "start": self.start,
             "year": self.year,
         }
@@ -86,6 +96,9 @@ class ResolvedFoundationSelection:
     statistics_files: tuple[SelectedFamilyFile, ...]
     coverage_matrix: tuple[dict[str, object], ...]
     coverage_matrix_id: str
+    query_manifest: tuple[dict[str, object], ...]
+    query_manifest_id: str
+    query_mode_census: tuple[dict[str, object], ...]
     selected_file_count: int
 
     @property
@@ -100,6 +113,8 @@ def publish_source_selection(
     publisher: AtomicPublisher,
 ) -> VerifiedReleaseReceipt:
     if (
+        selection.get("catalog_contract_version") != "2.0.0"
+        or
         selection.get("source_scope") != "VERIFIED_PUBLISHED_SOURCE_SNAPSHOT"
         or selection.get("source_snapshot_id") != snapshot.source_snapshot_id
         or selection.get("dataset") != "GLBX.MDP3"
@@ -126,7 +141,7 @@ def publish_source_selection(
         raise IntegrityError(
             "source selection declares but does not contain every canonical family"
         )
-    _verify_all_selected_bindings(selection, snapshot=snapshot)
+    resolved = resolve_foundation_selection(selection, snapshot=snapshot)
     stage = publisher.create_stage("source_selection")
     (stage / "source_selection.json").write_bytes(canonical_bytes(selection) + b"\n")
     manifest = ReleaseManifest.build(
@@ -137,6 +152,7 @@ def publish_source_selection(
         metadata={
             "selection_manifest_id": selection_id,
             "source_snapshot_id": snapshot.source_snapshot_id,
+            "query_manifest_id": resolved.query_manifest_id,
         },
     )
     release = publisher.publish(stage, manifest)
@@ -189,7 +205,7 @@ def load_source_selection(
         or manifest.schema_version != SELECTION_SCHEMA_VERSION
         or {entry.path for entry in manifest.files} != {"source_selection.json"}
         or set(manifest.metadata)
-        != {"selection_manifest_id", "source_snapshot_id"}
+        != {"query_manifest_id", "selection_manifest_id", "source_snapshot_id"}
         or manifest.metadata["source_snapshot_id"] != snapshot.source_snapshot_id
         or manifest.source_release_ids != (snapshot.source_snapshot_id,)
     ):
@@ -210,6 +226,9 @@ def load_source_selection(
     ):
         raise IntegrityError("source selection release content address is invalid")
     selection["selection_manifest_id"] = selection_id
+    resolved = resolve_foundation_selection(selection, snapshot=snapshot)
+    if resolved.query_manifest_id != manifest.metadata["query_manifest_id"]:
+        raise IntegrityError("source selection query manifest identity is invalid")
     return selection
 
 
@@ -232,6 +251,9 @@ def _verify_all_selected_bindings(
     for raw in raw_files:
         if not isinstance(raw, dict):
             raise IntegrityError("source selection file entry is invalid")
+        raw_core = {key: value for key, value in raw.items() if key != "validation_sha256"}
+        if raw.get("validation_sha256") != sha256_json(raw_core):
+            raise IntegrityError("source selection file validation hash is invalid")
         binding = _binding(snapshot, raw.get("path"))
         if binding.relative_path in seen:
             raise IntegrityError("source selection contains a duplicate file path")
@@ -240,14 +262,16 @@ def _verify_all_selected_bindings(
             raise IntegrityError("source selection file differs from source snapshot")
         binding.verify()
         sidecar_path = raw.get("sidecar_path")
-        if sidecar_path is not None:
-            sidecar = _binding(snapshot, sidecar_path)
-            if (
-                raw.get("sidecar_sha256") != sidecar.sha256
-                or raw.get("sidecar_size") != sidecar.size
-            ):
-                raise IntegrityError("source selection sidecar differs from source snapshot")
-            sidecar.verify()
+        if type(sidecar_path) is not str:
+            raise IntegrityError("source selection lacks an exact DBN sidecar binding")
+        sidecar = _binding(snapshot, sidecar_path)
+        if (
+            sidecar.relative_path != f"{binding.relative_path}.manifest.json"
+            or raw.get("sidecar_sha256") != sidecar.sha256
+            or raw.get("sidecar_size") != sidecar.size
+        ):
+            raise IntegrityError("source selection sidecar differs from source snapshot")
+        sidecar.verify()
 
 
 def _selected_family_file(
@@ -281,14 +305,20 @@ def _selected_family_file(
     ):
         raise IntegrityError("source selection family/schema/coverage is invalid")
     try:
-        require_allowed_query_symbology(
-            schema=schema,
-            market=market,
-            stype_in=raw["query_stype_in"],
-            symbols=raw["query_symbols"],
-        )
+        query_contract = require_query_contract(raw["query_contract"])
     except (KeyError, ContractError, IntegrityError) as exc:
         raise IntegrityError("source selection query symbology is invalid") from exc
+    if (
+        query_contract["schema"] != schema
+        or query_contract["market"] != market
+        or raw.get("query_stype_in") != query_contract["stype_in"]
+        or raw.get("query_symbols") != query_contract["symbols"]
+        or raw.get("query_contract_id") != query_contract["query_contract_id"]
+        or raw.get("query_mode_id") != query_contract["query_mode_id"]
+    ):
+        raise IntegrityError("source selection query contract binding is invalid")
+    binding = _binding(snapshot, raw["path"])
+    sidecar = _binding(snapshot, raw["sidecar_path"])
     return SelectedFamilyFile(
         family=family,
         schema=schema,
@@ -297,7 +327,11 @@ def _selected_family_file(
         start=start,
         end=end,
         coverage_disposition=disposition,
-        binding=_binding(snapshot, raw["path"]),
+        binding=binding,
+        sidecar_binding=sidecar,
+        query_contract=query_contract,
+        query_contract_id=str(query_contract["query_contract_id"]),
+        query_mode_id=str(query_contract["query_mode_id"]),
     )
 
 
@@ -372,11 +406,11 @@ def resolve_foundation_selection(
                 year=bar.year,
                 start=start,
                 end=end,
-                definition=definition.binding,
-                bars=bar.binding,
+                definition=definition,
+                bars=bar,
                 coverage_disposition=bar.coverage_disposition,
-                statistics=tuple(item.binding for item in statistics_by_market_year.get(key, ())),
-                status=tuple(item.binding for item in statuses_by_market_year.get(key, ())),
+                statistics=tuple(statistics_by_market_year.get(key, ())),
+                status=tuple(statuses_by_market_year.get(key, ())),
             )
         )
 
@@ -421,14 +455,48 @@ def resolve_foundation_selection(
             {
                 "bar_file_count": bar_count,
                 "bar_file_sha256s": sorted(item.binding.sha256 for item in bar_files),
+                "bar_query_bindings": sorted(
+                    (
+                        {
+                            "file_sha256": item.binding.sha256,
+                            "query_contract_id": item.query_contract_id,
+                        }
+                        for item in bar_files
+                    ),
+                    key=lambda item: (item["file_sha256"], item["query_contract_id"]),
+                ),
+                "bar_query_mode_ids": sorted({item.query_mode_id for item in bar_files}),
                 "definition_file_count": definition_count,
                 "definition_file_sha256s": sorted(
                     item.binding.sha256 for item in definition_files
+                ),
+                "definition_query_bindings": sorted(
+                    (
+                        {
+                            "file_sha256": item.binding.sha256,
+                            "query_contract_id": item.query_contract_id,
+                        }
+                        for item in definition_files
+                    ),
+                    key=lambda item: (item["file_sha256"], item["query_contract_id"]),
+                ),
+                "definition_query_mode_ids": sorted(
+                    {item.query_mode_id for item in definition_files}
                 ),
                 "market": market,
                 "redundant_crosscheck_file_count": len(redundant_files),
                 "redundant_crosscheck_file_sha256s": sorted(
                     item.binding.sha256 for item in redundant_files
+                ),
+                "redundant_query_bindings": sorted(
+                    (
+                        {
+                            "file_sha256": item.binding.sha256,
+                            "query_contract_id": item.query_contract_id,
+                        }
+                        for item in redundant_files
+                    ),
+                    key=lambda item: (item["file_sha256"], item["query_contract_id"]),
                 ),
                 "required_for_bar_foundation": required,
                 "statistics_disposition": (
@@ -440,6 +508,19 @@ def resolve_foundation_selection(
                 "statistics_file_sha256s": sorted(
                     item.binding.sha256 for item in statistics_files
                 ),
+                "statistics_query_bindings": sorted(
+                    (
+                        {
+                            "file_sha256": item.binding.sha256,
+                            "query_contract_id": item.query_contract_id,
+                        }
+                        for item in statistics_files
+                    ),
+                    key=lambda item: (item["file_sha256"], item["query_contract_id"]),
+                ),
+                "statistics_query_mode_ids": sorted(
+                    {item.query_mode_id for item in statistics_files}
+                ),
                 "status_disposition": (
                     "AVAILABLE_AS_OF_ELIGIBILITY_INPUT"
                     if status_files
@@ -447,16 +528,61 @@ def resolve_foundation_selection(
                 ),
                 "status_file_count": len(status_files),
                 "status_file_sha256s": sorted(item.binding.sha256 for item in status_files),
+                "status_query_bindings": sorted(
+                    (
+                        {
+                            "file_sha256": item.binding.sha256,
+                            "query_contract_id": item.query_contract_id,
+                        }
+                        for item in status_files
+                    ),
+                    key=lambda item: (item["file_sha256"], item["query_contract_id"]),
+                ),
+                "status_query_mode_ids": sorted(
+                    {item.query_mode_id for item in status_files}
+                ),
                 "year": year,
             }
         )
     matrix_id = sha256_json(coverage_matrix)
+    query_manifest = sorted(
+        (
+            {
+                **item.as_coverage_binding(),
+                "validation_sha256": next(
+                    str(raw["validation_sha256"])
+                    for raw in raw_files
+                    if isinstance(raw, dict)
+                    and raw.get("path") == f"data/{item.binding.relative_path}"
+                ),
+            }
+            for item in all_selected
+        ),
+        key=lambda item: str(item["path"]),
+    )
+    query_manifest_id = sha256_json(query_manifest)
+    mode_counts: dict[tuple[str, str, str], int] = {}
+    for item in all_selected:
+        key = (item.schema, str(item.query_contract["stype_in"]), item.query_mode_id)
+        mode_counts[key] = mode_counts.get(key, 0) + 1
+    query_mode_census = [
+        {
+            "file_count": count,
+            "query_mode_id": mode_id,
+            "schema": schema,
+            "stype_in": stype_in,
+        }
+        for (schema, stype_in, mode_id), count in sorted(mode_counts.items())
+    ]
     return ResolvedFoundationSelection(
         intervals=tuple(intervals),
         status_files=tuple(by_schema["status"]),
         statistics_files=tuple(by_schema["statistics"]),
         coverage_matrix=tuple(coverage_matrix),
         coverage_matrix_id=matrix_id,
+        query_manifest=tuple(query_manifest),
+        query_manifest_id=query_manifest_id,
+        query_mode_census=tuple(query_mode_census),
         selected_file_count=len(raw_files),
     )
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Iterator, Sequence
+from typing import Iterator, Mapping, Sequence
 
 import pyarrow as pa
 import pyarrow.parquet as pq
@@ -186,6 +186,7 @@ def write_raw_bars(
     binding: SnapshotFile,
     *,
     market: str,
+    expected_query_contract: Mapping[str, object],
     output: Path,
     batch_rows: int = 100_000,
 ) -> tuple[int, frozenset[int]]:
@@ -194,7 +195,12 @@ def write_raw_bars(
     buffer: list[ProviderBar] = []
     writer = _writer(output, RAW_BAR_SCHEMA)
     try:
-        for row in iter_bars(binding, market=market, batch_rows=batch_rows):
+        for row in iter_bars(
+            binding,
+            market=market,
+            expected_query_contract=expected_query_contract,
+            batch_rows=batch_rows,
+        ):
             buffer.append(row)
             instruments.add(row.instrument_id)
             if len(buffer) >= batch_rows:
@@ -217,6 +223,7 @@ def write_relevant_definitions(
     binding: SnapshotFile,
     *,
     market: str,
+    expected_query_contract: Mapping[str, object],
     required_instrument_ids: frozenset[int],
     output: Path,
     batch_rows: int = 100_000,
@@ -228,7 +235,12 @@ def write_relevant_definitions(
     buffer: list[ProviderDefinition] = []
     writer = _writer(output, DEFINITION_SCHEMA)
     try:
-        for row in iter_definitions(binding, market=market, batch_rows=batch_rows):
+        for row in iter_definitions(
+            binding,
+            market=market,
+            expected_query_contract=expected_query_contract,
+            batch_rows=batch_rows,
+        ):
             scanned += 1
             if row.instrument_id not in required_instrument_ids:
                 continue

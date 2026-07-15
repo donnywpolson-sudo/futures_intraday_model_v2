@@ -46,6 +46,7 @@ from futures_rebuild.release import (
     ReleaseManifest,
     VerifiedReleaseReceipt,
 )
+from futures_rebuild.source_symbology import build_query_contract
 from futures_rebuild.schemas import (
     OutcomeRow,
     OutcomeStatus,
@@ -211,12 +212,32 @@ def _publish_raw_interval(
     _write_parquet(
         definitions_path, DEFINITION_SCHEMA, [asdict(item) for item in definitions]
     )
+    definition_query = build_query_contract(
+        schema="definition",
+        market="ES",
+        start="2024-01-01",
+        end="2025-01-01",
+        stype_in="parent",
+        symbols=["ES.FUT"],
+    )
+    bar_query = build_query_contract(
+        schema="ohlcv-1m",
+        market="ES",
+        start="2024-01-01",
+        end="2025-01-01",
+        stype_in="continuous",
+        symbols=["ES.v.0"],
+    )
     core = {
+        "bar_query_contract": bar_query,
+        "bar_query_contract_id": bar_query["query_contract_id"],
         "bar_rows": len(bars),
         "bars_parquet_sha256": sha256_file(bars_path),
         "bars_schema": RAW_BAR_SCHEMA.metadata[b"schema_id"].decode("ascii"),
         "definition_rows_scanned": len(definitions),
         "definition_rows_selected": len(definitions),
+        "definition_query_contract": definition_query,
+        "definition_query_contract_id": definition_query["query_contract_id"],
         "definitions_parquet_sha256": sha256_file(definitions_path),
         "definitions_schema": DEFINITION_SCHEMA.metadata[b"schema_id"].decode(
             "ascii"
