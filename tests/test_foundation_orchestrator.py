@@ -272,6 +272,10 @@ def _selection_receipt(boundary, operation_factory, snapshot):
                 "family": family,
                 "market": "ES",
                 "path": f"data/{binding.relative_path}",
+                "query_stype_in": "parent" if schema == "definition" else "continuous",
+                "query_symbols": [
+                    "ES.FUT" if schema == "definition" else "ES.v.0"
+                ],
                 "schema": schema,
                 "sha256": binding.sha256,
                 "size": binding.size,

@@ -298,6 +298,10 @@ def _selection_fixture(tmp_path: Path, *, overlap: bool = False):
                 "family": family,
                 "market": market,
                 "path": f"data/{relative}",
+                "query_stype_in": "parent" if schema == "definition" else "continuous",
+                "query_symbols": [
+                    f"{market}.FUT" if schema == "definition" else f"{market}.v.0"
+                ],
                 "schema": schema,
                 "sha256": binding.sha256,
                 "size": binding.size,

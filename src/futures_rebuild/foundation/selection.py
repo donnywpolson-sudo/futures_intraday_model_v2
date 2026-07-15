@@ -13,6 +13,7 @@ from ..boundary import OperationClassification, OperationReceipt, RepoBoundary
 from ..canonical import assert_plain_file, canonical_bytes, sha256_file, sha256_json
 from ..errors import ContractError, IntegrityError
 from ..release import AtomicPublisher, ReleaseManifest, VerifiedReleaseReceipt
+from ..source_symbology import require_allowed_query_symbology
 from .snapshot import PublishedSourceSnapshot, SnapshotFile
 
 
@@ -279,6 +280,15 @@ def _selected_family_file(
         or disposition not in ALLOWED_COVERAGE_DISPOSITIONS
     ):
         raise IntegrityError("source selection family/schema/coverage is invalid")
+    try:
+        require_allowed_query_symbology(
+            schema=schema,
+            market=market,
+            stype_in=raw["query_stype_in"],
+            symbols=raw["query_symbols"],
+        )
+    except (KeyError, ContractError, IntegrityError) as exc:
+        raise IntegrityError("source selection query symbology is invalid") from exc
     return SelectedFamilyFile(
         family=family,
         schema=schema,

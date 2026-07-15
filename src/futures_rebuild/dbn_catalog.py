@@ -32,6 +32,7 @@ from .boundary import RepoBoundary
 from .errors import ContractError, IntegrityError
 from .migration import verify_published_source_snapshot
 from .release import VerifiedReleaseReceipt
+from .source_symbology import require_allowed_query_symbology
 
 
 SUPPORTED_DATABENTO_VERSION = "0.78.0"
@@ -442,6 +443,11 @@ def _decode_summary(
         "metadata_start_ns": _metadata_ns(metadata.start, "start"),
         "record_count": count if scan_to_end else None,
         "schema": metadata_schema,
+        "stype_in": str(metadata.stype_in),
+        "stype_out": str(metadata.stype_out),
+        "symbols": list(metadata.symbols),
+        "ts_out": metadata.ts_out,
+        "limit": metadata.limit,
     }
 
 
@@ -492,6 +498,16 @@ def validate_dbn_pair(
         raise IntegrityError(
             f"schema directory {schema_dir} disagrees with {expected_schema}"
         )
+    query_stype_in, query_symbols = require_allowed_query_symbology(
+        schema=expected_schema,
+        market=market,
+        stype_in=payload.get("stype_in"),
+        symbols=payload.get("symbols_requested"),
+    )
+    if payload.get("stype_out") != "instrument_id":
+        raise IntegrityError(
+            f"sidecar output symbology mismatch for {relative.as_posix()}"
+        )
     for key, value in expected.items():
         if payload.get(key) != value:
             raise IntegrityError(
@@ -504,7 +520,15 @@ def validate_dbn_pair(
     decoded = _decode_summary(
         dbn_path, sample_records=sample_records, scan_to_end=scan_to_end
     )
-    if decoded["dataset"] != DATASET or decoded["schema"] != expected_schema:
+    if (
+        decoded["dataset"] != DATASET
+        or decoded["schema"] != expected_schema
+        or decoded["stype_in"] != query_stype_in
+        or decoded["stype_out"] != "instrument_id"
+        or decoded["symbols"] != list(query_symbols)
+        or decoded["ts_out"] is not False
+        or decoded["limit"] is not None
+    ):
         raise IntegrityError(
             f"decoded metadata disagrees with sidecar for {relative.as_posix()}"
         )
@@ -552,6 +576,8 @@ def validate_dbn_pair(
         "end": match.group("end"),
         "market": market,
         "path": declared_path,
+        "query_stype_in": query_stype_in,
+        "query_symbols": list(query_symbols),
         "role": role,
         "schema": expected_schema,
         "sha256": observed_hash,

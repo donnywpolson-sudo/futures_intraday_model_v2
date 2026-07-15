@@ -121,6 +121,7 @@ _CLOSURE_MODULES = (
     "producer_bridge.py",
     "release.py",
     "session_policy.py",
+    "source_symbology.py",
 )
 _CONFIG_FILES = (
     "contract_economics_rules.json",

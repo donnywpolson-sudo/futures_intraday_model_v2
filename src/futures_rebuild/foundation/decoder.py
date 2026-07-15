@@ -14,6 +14,7 @@ import numpy as np
 
 from ..canonical import sha256_json
 from ..errors import ContractError, IntegrityError
+from ..source_symbology import require_allowed_query_symbology
 from .records import (
     ProviderBar,
     ProviderDefinition,
@@ -149,17 +150,18 @@ def _validate_metadata(
     if match is None:
         raise IntegrityError("snapshot DBN filename is invalid")
     metadata = store.metadata
-    parent_schema = schema in {"definition", "statistics", "status"}
-    expected_symbol = f"{market}.FUT" if parent_schema else f"{market}.v.0"
+    require_allowed_query_symbology(
+        schema=schema,
+        market=market,
+        stype_in=str(metadata.stype_in),
+        symbols=metadata.symbols,
+    )
     if (
         metadata.dataset != DATASET
         or str(metadata.schema) != schema
         or str(metadata.stype_out) != "instrument_id"
         or metadata.ts_out is not False
         or metadata.limit is not None
-        or metadata.symbols != [expected_symbol]
-        or str(metadata.stype_in)
-        != ("parent" if parent_schema else "continuous")
         or metadata.start != _date_boundary_ns(match.group("start"))
         or metadata.end != _date_boundary_ns(match.group("end"))
     ):

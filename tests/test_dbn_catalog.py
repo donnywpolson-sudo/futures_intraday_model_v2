@@ -126,6 +126,7 @@ def _write_custom_pair(
         "dataset": "GLBX.MDP3",
         "schema": "ohlcv-1m",
         "market": market,
+        "symbols_requested": [symbol],
         "start": start,
         "end": end,
         "encoding": "dbn",
@@ -134,6 +135,8 @@ def _write_custom_pair(
         "file_size_bytes": path.stat().st_size,
         "file_sha256": sha256_file(path),
         "request_status": "ok",
+        "stype_in": "continuous",
+        "stype_out": "instrument_id",
     }
     Path(f"{path}.manifest.json").write_text(json.dumps(sidecar), encoding="utf-8")
     return path
@@ -437,6 +440,10 @@ def test_source_selection_includes_exact_files_and_refuses_ambiguous_duplicate(t
     assert "INSTRUMENT_ID_DATE_UTC" in manifest["actual_identity_authority"]
     assert manifest["record_scan_policy"] == "METADATA_PLUS_FIRST_SAMPLE"
     assert manifest["files"][0]["family"] == "dbn_ohlcv_1m"
+    assert manifest["files"][0]["query_stype_in"] == "continuous"
+    assert manifest["files"][0]["query_symbols"] == ["ES.v.0"]
+    assert manifest["files"][0]["decode"]["stype_in"] == "continuous"
+    assert manifest["files"][0]["decode"]["symbols"] == ["ES.v.0"]
     assert manifest["files"][0]["decode"]["record_count"] is None
     _, duplicate_contract, _ = _catalog_context(
         tmp_path, legacy, duplicate=True, active=boundary.active_root
