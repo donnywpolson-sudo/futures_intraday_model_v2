@@ -4,13 +4,13 @@ This repository is the independent, controlled rebuild of the futures research p
 
 Current status: `REBUILD_IN_PROGRESS`.
 
-The pre-copy implementation and its synthetic/adversarial tests are complete. The local source copy, real DBN foundation build, and mechanical readiness publications have not run. There is no alpha, candidate, live-readiness, or trading claim.
+The pre-copy implementation and its synthetic/adversarial tests are complete. The exact 9,122-file, 33,313,291,079-byte inventory was independently reproduced, and its hash-bound copy approval is checked in. The local source copy, real DBN foundation build, and mechanical readiness publications have not run. There is no alpha, candidate, live-readiness, or trading claim.
 
 ## Controlled-rebuild boundary
 
 The controlling user authorization permits hash-verified copying of approved data already stored locally, including the existing Databento DBN archive. It does not authorize a Databento download or any other provider call.
 
-The authorized copy manifest is exact and copy-only: no overwrite, move, link, junction, or symlink is allowed; source stability and destination SHA-256 verification are mandatory. Copy execution still requires the reviewed detailed inventory and exact checked-in approval artifact. That gate has not been crossed and no copy has run.
+The authorized copy manifest is exact and copy-only: no overwrite, move, link, junction, or symlink is allowed; source stability and destination SHA-256 verification are mandatory. The detailed inventory was reproduced byte-for-byte and the exact approval is checked in. No copy has run yet.
 
 Hard pauses remain in force for:
 
@@ -87,11 +87,10 @@ Complete in code and synthetic/adversarial tests:
 
 Still pending on real local inputs:
 
-1. Run and review the exact detailed inventory.
-2. Check in the complete copy approval and execute the local hash-copy.
-3. Publish and reverify the immutable DBN source snapshot.
-4. Build the v2 foundation and pass every production coverage gate.
-5. Publish `REBUILD_COMPLETE` and mechanical `HISTORICAL_RESEARCH_READY` receipts only if their exact closures pass.
+1. Execute the approved local hash-copy.
+2. Publish and reverify the immutable DBN source snapshot.
+3. Build the v2 foundation and pass every production coverage gate.
+4. Publish `REBUILD_COMPLETE` and mechanical `HISTORICAL_RESEARCH_READY` receipts only if their exact closures pass.
 
 These pending steps prevent any premature milestone or readiness claim. They do not authorize downloads, real-history execution, a candidate, a push, or trading.
 

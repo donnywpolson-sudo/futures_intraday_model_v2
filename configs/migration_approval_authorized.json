@@ -1,12 +1,34 @@
 {
   "artifact_version": "1.0.0",
-  "status": "PENDING_DETAILED_INVENTORY_REVIEW",
+  "status": "APPROVED_HASH_COPY",
   "authorized_manifest_path": "configs/migration_manifest_authorized.json",
   "authorized_manifest_sha256": "57bcac635731c0bf85a0c0cad5c810cf9173b68813d501b0a94ce15a6ddacda7",
   "authorized_source_scope_sha256": "6f9c47cb65e9b2198163de8c9f069b25f8b07ca276d9fb07cccdee9dc0c371cb",
   "controlled_rebuild_authorization_id": "4977eb04c13f92045a3c020b9a8c9f691e21df583a81d8cc5040a13104cb8793",
-  "execution_authorized": false,
-  "approval": null,
-  "required_next_step": "RUN_AND_REVIEW_EXACT_AUTHORIZED_DETAILED_INVENTORY_THEN_CHECK_IN_COMPLETE_APPROVAL",
-  "artifact_id": "2aaa1cca003b64aff9c7228864c09b48108104320deaf431866695fee99ce199"
+  "execution_authorized": true,
+  "approval": {
+    "approval_id": "186ee07ee57c578043dfc346a76f6ef4b5ab703958ff9f94e69b00c40b1b7abd",
+    "approval_scope": "CONTROLLED_REBUILD_HASH_COPY_TO_IMMUTABLE_SOURCE_SNAPSHOT",
+    "approved_at": "2026-07-15T16:02:14Z",
+    "inventory_sha256": "1243eacf39007042126237913fe17070d445712cbc4c1147d11fcae4bc598e96",
+    "manifest_sha256": "57bcac635731c0bf85a0c0cad5c810cf9173b68813d501b0a94ce15a6ddacda7",
+    "migration_implementation_manifest": {
+      "configs/controlled_rebuild_authorization.json": "50c866a2e5349efd686d427455f6688901d30a305df7c88e40886c8d536be869",
+      "pyproject.toml": "466f09837b4453c033cd7d182a0a00eb72b589738f94473cae36658a568cd7a3",
+      "requirements.lock": "b036e1b979b50c35dfa7cc8f3962a7badb34d959b63e38ad01a4087b6bb279f1",
+      "requirements.sha256.lock": "0928bc0adfa70e857c2ff4d45348efded0eebbdf9b4a220175d31c3dab597e5b",
+      "src/futures_rebuild/boundary.py": "c3a7dd08508ddcf83ac074d83c821b0cc00d801b94b33c9ceef58a6c22a89e61",
+      "src/futures_rebuild/canonical.py": "2a8a4fa41dbbde146269fc8ff2cf28c1e3ec73038e0e8b5ec75d0351b81a1d2e",
+      "src/futures_rebuild/errors.py": "07c9715c98273c7c936f224edf28b6f9ef450222cb7d79f458d9f3318814a1b8",
+      "src/futures_rebuild/locking.py": "5390e6fed88035082427a87a1133da38efbfcac6fdb49c899df060ee004c453f",
+      "src/futures_rebuild/migration.py": "b4b8eaafc6ac300612fa6c921c5a4ada811181f2ad48355b1913ee0ad73e8392"
+    },
+    "migration_implementation_sha256": "d76bca04d5f3c6881e6e3a30ef3451115139ec1703568988b8691ec2726e730a",
+    "schema_version": 1,
+    "total_bytes": 33313291079,
+    "total_files": 9122,
+    "user_authorization_id": "4977eb04c13f92045a3c020b9a8c9f691e21df583a81d8cc5040a13104cb8793"
+  },
+  "required_next_step": null,
+  "artifact_id": "3ec5584cd3273caa11938321c83fea0da573ae88e1db384154ad199687195584"
 }

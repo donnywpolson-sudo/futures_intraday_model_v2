@@ -59,10 +59,9 @@ No legacy research artifact, comparison parquet, executable, or coordination doc
 
 M1 completion does not imply that any real input was copied or that a milestone receipt may be published.
 
-### M2 - Controlled local source copy (pending)
+### M2 - Controlled local source copy (approved; execution pending)
 
-- Run and review the exact detailed inventory for the authorized manifest.
-- Check in the complete approval bound to both manifest and source-inventory hashes.
+- Preserve the independently reproduced exact inventory and the checked-in approval bound to both manifest and source-inventory hashes.
 - Hash-copy only approved local inputs without overwrite, links, moves, or legacy mutation.
 - Publish an immutable source snapshot and reverify its complete tree, hashes, totals, and receipt.
 - Keep the eight Databento DBN families authoritative; retain legacy Phase 1B/Phase 2 only under comparison paths.

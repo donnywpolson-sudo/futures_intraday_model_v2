@@ -13,14 +13,13 @@ Do not convert code completion into `REBUILD_COMPLETE` or `HISTORICAL_RESEARCH_R
 
 ## Authorization boundary
 
-The controlling authorization permits exact hash-copy of approved data already present locally, including the local Databento DBN archive. Copy remains gated on the reviewed detailed inventory and exact checked-in approval artifact; neither the copy nor a real-archive decode has run.
+The controlling authorization permits exact hash-copy of approved data already present locally, including the local Databento DBN archive. The exact 9,122-file, 33,313,291,079-byte inventory was independently reproduced and its hash-bound approval is checked in. Neither the copy nor a real-archive decode has run.
 
 Allowed before the next gate:
 
 - review repository code, contracts, tests, and local evidence;
 - run synthetic/adversarial tests;
-- prepare and review the exact detailed inventory and approval material;
-- after the exact copy gate is satisfied, perform only the approved local hash-copy and non-alpha validation.
+- perform only the approved local hash-copy and non-alpha validation.
 
 Blocked:
 
@@ -56,12 +55,10 @@ The legacy census remains `INVALID_TRIAL_CENSUS_UNRESOLVED` / `INDETERMINATE`, w
 
 ## Next dependency-ordered work
 
-1. Run and independently review the exact authorized detailed inventory.
-2. Check in the complete approval bound to the manifest and source-inventory hashes.
-3. Execute the restart-safe local hash-copy; publish and reverify the source snapshot.
-4. Catalog the copied DBNs and build v2 Phase 1B, Phase 2, status/statistics, features, and separate outcome sources.
-5. Require every production coverage gate to pass.
-6. Publish `REBUILD_COMPLETE` and mechanical `HISTORICAL_RESEARCH_READY` only if all exact closures pass.
+1. Execute the restart-safe approved local hash-copy; publish and reverify the source snapshot.
+2. Catalog the copied DBNs and build v2 Phase 1B, Phase 2, status/statistics, features, and separate outcome sources.
+3. Require every production coverage gate to pass.
+4. Publish `REBUILD_COMPLETE` and mechanical `HISTORICAL_RESEARCH_READY` only if all exact closures pass.
 7. Stop. Real-history WFA/OOS still requires a separate external authorization and pre-outcome controls.
 
 No download, real-history run, candidate action, push, or trading action belongs to the current gate.

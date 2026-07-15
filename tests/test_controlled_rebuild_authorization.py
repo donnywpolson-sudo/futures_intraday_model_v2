@@ -1,15 +1,14 @@
 import json
 from pathlib import Path
 
-import pytest
-
 from futures_rebuild.canonical import sha256_json
-from futures_rebuild.errors import UnauthorizedOperation
 import futures_rebuild.migration as migration_module
 from futures_rebuild.migration import (
     AUTHORIZED_MIGRATION_MANIFEST_SHA256,
     AUTHORIZED_MIGRATION_SOURCE_SCOPE_SHA256,
-    MIGRATION_APPROVAL_PENDING,
+    CONTROLLED_REBUILD_AUTHORIZATION_ID,
+    MIGRATION_APPROVAL_COMPLETE,
+    migration_implementation_sha256,
     migration_source_scope,
 )
 
@@ -134,21 +133,28 @@ def test_authorized_migration_manifest_and_source_scope_are_exactly_pinned() -> 
     )
 
 
-def test_checked_in_migration_approval_is_canonical_pending_and_fail_closed() -> None:
+def test_checked_in_migration_approval_is_exact_reviewed_hash_copy_only() -> None:
     root = Path(__file__).resolve().parents[1]
     path = root / "configs" / "migration_approval_authorized.json"
     payload = json.loads(path.read_text(encoding="utf-8"))
     artifact_id = payload.pop("artifact_id")
     assert artifact_id == sha256_json(payload) == (
-        "2aaa1cca003b64aff9c7228864c09b48108104320deaf431866695fee99ce199"
+        "3ec5584cd3273caa11938321c83fea0da573ae88e1db384154ad199687195584"
     )
-    assert payload["status"] == MIGRATION_APPROVAL_PENDING
-    assert payload["execution_authorized"] is False
-    assert payload["approval"] is None
-    assert payload["required_next_step"] == (
-        "RUN_AND_REVIEW_EXACT_AUTHORIZED_DETAILED_INVENTORY_THEN_CHECK_IN_COMPLETE_APPROVAL"
+    assert payload["status"] == MIGRATION_APPROVAL_COMPLETE
+    assert payload["execution_authorized"] is True
+    assert payload["required_next_step"] is None
+    approval = migration_module._load_checked_in_migration_approval()
+    assert approval.approval_id == (
+        "186ee07ee57c578043dfc346a76f6ef4b5ab703958ff9f94e69b00c40b1b7abd"
     )
-    with pytest.raises(
-        UnauthorizedOperation, match="pending detailed inventory review"
-    ):
-        migration_module._load_checked_in_migration_approval()
+    assert approval.manifest_sha256 == AUTHORIZED_MIGRATION_MANIFEST_SHA256
+    assert approval.inventory_sha256 == (
+        "1243eacf39007042126237913fe17070d445712cbc4c1147d11fcae4bc598e96"
+    )
+    assert approval.migration_implementation_sha256 == (
+        migration_implementation_sha256()
+    )
+    assert approval.total_files == 9_122
+    assert approval.total_bytes == 33_313_291_079
+    assert approval.user_authorization_id == CONTROLLED_REBUILD_AUTHORIZATION_ID
