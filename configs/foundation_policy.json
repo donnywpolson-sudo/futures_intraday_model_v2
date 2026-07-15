@@ -26,6 +26,6 @@
     "foundation_forbidden": ["GLOBAL_ZSCORE", "GLOBAL_WINSORIZATION", "GLOBAL_IMPUTATION", "GLOBAL_VOLATILITY_SCALING", "OUTCOME_CONDITIONED_FILTER"],
     "learned_transform_location": "INSIDE_EACH_WFA_TRAINING_FOLD_ONLY"
   },
-  "known_anomalies_sha256": "95524b1df69b8a0d702d759f108b5c2749f08dd59cd7dd1a8d8497a2aedfcb09",
+  "known_anomalies_sha256": "eb7c83bf69d1c7a1b57878a66ac86581fc5d1572e252db7f48e6dedc4e49f923",
   "unknown_or_ambiguous_disposition": "FAIL_CLOSED_OR_EXPLICIT_ABSTENTION_IN_COVERAGE_DENOMINATOR"
 }

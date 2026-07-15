@@ -13,7 +13,7 @@
   "links_allowed": false,
   "overlap_resolution_contract": "configs/dbn_overlap_resolutions.json",
   "known_anomalies_contract": "configs/known_anomalies.json",
-  "known_anomalies_sha256": "95524b1df69b8a0d702d759f108b5c2749f08dd59cd7dd1a8d8497a2aedfcb09",
+  "known_anomalies_sha256": "eb7c83bf69d1c7a1b57878a66ac86581fc5d1572e252db7f48e6dedc4e49f923",
   "continuous_contract_policy": {
     "bar_identity_authority": "ACTUAL_INSTRUMENT_ID_FROM_BAR",
     "mapping_interval_end_fields_feature_eligible": false,

@@ -232,8 +232,21 @@ def test_changed_continuous_contract_policy_fails_before_catalog_scan(tmp_path) 
 
 
 def test_exact_known_anomaly_set_is_pinned() -> None:
-    path = Path(__file__).parents[1] / "configs" / "known_anomalies.json"
+    root = Path(__file__).parents[1]
+    path = root / "configs" / "known_anomalies.json"
     payload = json.loads(path.read_text(encoding="utf-8"))
+    source_contract = json.loads(
+        (root / "configs" / "source_contract.json").read_text(encoding="utf-8")
+    )
+    foundation_policy = json.loads(
+        (root / "configs" / "foundation_policy.json").read_text(encoding="utf-8")
+    )
+    observed_hash = sha256_file(path)
+    assert observed_hash == (
+        "eb7c83bf69d1c7a1b57878a66ac86581fc5d1572e252db7f48e6dedc4e49f923"
+    )
+    assert source_contract["known_anomalies_sha256"] == observed_hash
+    assert foundation_policy["known_anomalies_sha256"] == observed_hash
     assert {(item["market"], item["year"]) for item in payload["families"]} == {
         ("KE", 2019), ("KE", 2021), ("KE", 2023), ("KE", 2024),
         ("SR1", 2020), ("SR3", 2020),
