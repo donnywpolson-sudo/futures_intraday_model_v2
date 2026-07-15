@@ -636,7 +636,10 @@ class PredictionLedger:
             self.persistent_head_path, purpose="persistent ledger head"
         )
         temporary = self.persistent_head_path.parent / f".head-{uuid.uuid4().hex}.tmp"
-        descriptor = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        descriptor = os.open(
+            temporary,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0),
+        )
         try:
             os.write(descriptor, canonical_bytes(payload) + b"\n")
             os.fsync(descriptor)
@@ -724,7 +727,10 @@ class PredictionLedger:
         path.parent.mkdir(parents=True, exist_ok=True)
         assert_no_linklike_ancestors(path.parent)
         temporary = path.parent / f".tmp-{uuid.uuid4().hex}"
-        descriptor = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        descriptor = os.open(
+            temporary,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0),
+        )
         try:
             os.write(descriptor, canonical_bytes(payload) + b"\n")
             os.fsync(descriptor)

@@ -451,7 +451,8 @@ def seal_bundle(
             raise IntegrityError("bundle artifact changed during sealing")
         manifest = {**manifest_core, "bundle_id": bundle_id}
         descriptor = os.open(
-            stage / "bundle_manifest.json", os.O_CREAT | os.O_EXCL | os.O_WRONLY
+            stage / "bundle_manifest.json",
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0),
         )
         try:
             os.write(descriptor, canonical_bytes(manifest) + b"\n")

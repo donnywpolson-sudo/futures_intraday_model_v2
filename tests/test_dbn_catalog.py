@@ -497,6 +497,7 @@ def test_all_supported_schema_enums_normalize_exactly() -> None:
 def test_immutable_catalog_output_collision_leaves_no_temp(tmp_path) -> None:
     target = tmp_path / "catalog.json"
     _atomic_write(target, {"id": 1})
+    assert target.read_bytes() == b'{"id":1}\n'
     with pytest.raises(IntegrityError):
         _atomic_write(target, {"id": 2})
     assert not list(tmp_path.glob(".*.tmp"))

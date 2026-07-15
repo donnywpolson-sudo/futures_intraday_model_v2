@@ -844,7 +844,10 @@ def _atomic_write(path: Path, payload: dict[str, object]) -> None:
         raise IntegrityError("source selection manifests are immutable and cannot be overwritten")
     temporary = path.parent / f".{path.name}.{uuid.uuid4().hex}.tmp"
     try:
-        descriptor = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        descriptor = os.open(
+            temporary,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0),
+        )
         try:
             os.write(descriptor, canonical_bytes(payload) + b"\n")
             os.fsync(descriptor)

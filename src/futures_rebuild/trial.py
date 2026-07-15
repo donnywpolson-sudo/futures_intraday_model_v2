@@ -583,7 +583,10 @@ class TrialEventLedger:
         payload = self._head_payload(sequence, event_hash)
         self.head_path.parent.mkdir(parents=True, exist_ok=True)
         temporary = self.head_path.with_name(f".head-{os.urandom(16).hex()}.tmp")
-        descriptor = os.open(temporary, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        descriptor = os.open(
+            temporary,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0),
+        )
         try:
             os.write(descriptor, canonical_bytes(payload) + b"\n")
             os.fsync(descriptor)
@@ -670,7 +673,10 @@ class TrialEventLedger:
         event = {**complete, "event_hash": sha256_json(complete)}
         self.root.mkdir(parents=True, exist_ok=True)
         path = self.root / f"{sequence:020d}_{event['event_hash']}.json"
-        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        descriptor = os.open(
+            path,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0),
+        )
         try:
             os.write(descriptor, canonical_bytes(event) + b"\n")
             os.fsync(descriptor)
@@ -876,7 +882,10 @@ class TrialRegistry:
                 if json.loads(target.read_text(encoding="utf-8")) != payload:
                     raise IntegrityError("registered charter ID collision")
                 return target
-            descriptor = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            descriptor = os.open(
+                target,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0),
+            )
             try:
                 os.write(descriptor, canonical_bytes(payload) + b"\n")
                 os.fsync(descriptor)
