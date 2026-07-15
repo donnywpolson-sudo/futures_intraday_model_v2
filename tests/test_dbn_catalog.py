@@ -436,6 +436,7 @@ def test_source_selection_includes_exact_files_and_refuses_ambiguous_duplicate(t
     assert manifest["selection_policy"] == "EXACT_CONTRACT_ALL_FILES_NO_RECURSIVE_NEWEST"
     assert "INSTRUMENT_ID_DATE_UTC" in manifest["actual_identity_authority"]
     assert manifest["record_scan_policy"] == "METADATA_PLUS_FIRST_SAMPLE"
+    assert manifest["files"][0]["family"] == "dbn_ohlcv_1m"
     assert manifest["files"][0]["decode"]["record_count"] is None
     _, duplicate_contract, _ = _catalog_context(
         tmp_path, legacy, duplicate=True, active=boundary.active_root

@@ -707,6 +707,7 @@ def build_source_selection_manifest(
                 sample_records=sample_records,
                 scan_to_end=scan_to_end,
             )
+            validated["family"] = str(family["id"])
             if (str(validated["market"]), int(validated["year"])) in anomaly_families:
                 validated["coverage_disposition"] = "QUARANTINED_PENDING_REVALIDATION"
                 core_without_validation = {
