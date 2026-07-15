@@ -1,14 +1,15 @@
 import json
 import hashlib
 import socket
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import databento_dbn as dbn
 import pytest
 import zstandard
 
-from futures_rebuild.canonical import sha256_file
+from futures_rebuild.canonical import sha256_file, sha256_json
 from futures_rebuild.boundary import (
     OperationClassification,
     OperationReceipt,
@@ -18,12 +19,15 @@ from futures_rebuild.dbn_catalog import (
     CONTINUOUS_CONTRACT_POLICY_CORE,
     CONTINUOUS_CONTRACT_POLICY_HASH,
     FULL_SCAN_CHUNK_RECORDS,
+    SYMBOL_CSTR_LEN_BY_METADATA_VERSION,
     _atomic_write,
+    _canonical_metadata_mappings,
     _validated_catalog_output,
     _decode_summary,
     _iter_arrays,
     _load_overlap_resolutions,
     _normalize_schema,
+    _symbology_resolution_disposition,
     build_source_selection_manifest,
     assert_m2b_source_eligible,
     validate_dbn_pair,
@@ -100,7 +104,13 @@ def test_overlap_resolution_cannot_silently_cross_query_modes(tmp_path) -> None:
         )
 
 
-def _write_pair(repository: Path) -> Path:
+def _write_pair(
+    repository: Path,
+    *,
+    partial: list[str] | None = None,
+    not_found: list[str] | None = None,
+    mappings: list[object] | None = None,
+) -> Path:
     folder = repository / "data" / "dbn" / "ohlcv_1m" / "ES" / "2026"
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / "2026-01-01_2026-01-02.dbn.zst"
@@ -111,6 +121,9 @@ def _write_pair(repository: Path) -> Path:
         dbn.SType.INSTRUMENT_ID,
         dbn.Schema.OHLCV_1M,
         symbols=["ES.v.0"],
+        partial=partial,
+        not_found=not_found,
+        mappings=mappings,
         end=END_NS,
     )
     records = [
@@ -253,6 +266,120 @@ def test_offline_pair_validates_hash_metadata_and_first_last_records(tmp_path) -
     assert result["decode"]["first_records"][0]["instrument_id"] == 100
     assert result["decode"]["last_records"][0]["instrument_id"] == 101
     assert result["continuous_selection_rule"] == "V_PREVIOUS_DAY_VOLUME_RANK_0"
+    assert result["symbology_resolution_disposition"] == "COMPLETE"
+    assert result["decode"]["not_found_symbols"] == []
+    assert result["decode"]["partial_symbols"] == []
+    assert result["decode"]["symbol_cstr_len"] == SYMBOL_CSTR_LEN_BY_METADATA_VERSION[
+        result["decode"]["metadata_version"]
+    ]
+
+
+def test_parent_partial_child_mappings_are_recorded_but_never_used_as_coverage() -> None:
+    assert _symbology_resolution_disposition(
+        query_stype_in="parent",
+        query_symbols=["ES.FUT"],
+        partial_symbols=["ESM6-ESU6", "ESM6"],
+        not_found_symbols=[],
+        mapping_symbols=["ESM6", "ESM6-ESU6", "ESU6"],
+    ) == "PARENT_CHILD_PARTIAL_RECORDED_RECONCILIATION_ONLY"
+
+
+@pytest.mark.parametrize(
+    ("query_stype_in", "partial", "not_found", "mappings", "message"),
+    [
+        ("continuous", ["ES.v.0"], [], ["ES.v.0"], "non-parent"),
+        ("parent", ["ES.FUT"], [], ["ES.FUT"], "query symbol"),
+        ("parent", ["ESM6"], [], ["ESU6"], "absent from mappings"),
+        ("parent", [], ["ES.FUT"], ["ES.FUT"], "not_found"),
+        ("parent", ["ESM6", "ESM6"], [], ["ESM6"], "duplicate"),
+    ],
+)
+def test_incomplete_or_malformed_symbology_resolution_fails_closed(
+    query_stype_in, partial, not_found, mappings, message
+) -> None:
+    with pytest.raises(IntegrityError, match=message):
+        _symbology_resolution_disposition(
+            query_stype_in=query_stype_in,
+            query_symbols=["ES.FUT"],
+            partial_symbols=partial,
+            not_found_symbols=not_found,
+            mapping_symbols=mappings,
+        )
+
+
+def test_mapping_hash_is_order_stable_and_dates_are_canonical() -> None:
+    first = {
+        "ESU6": [
+            {
+                "start_date": date(2026, 3, 15),
+                "end_date": date(2026, 6, 21),
+                "symbol": "200",
+            }
+        ],
+        "ESM6": [
+            {
+                "start_date": date(2026, 1, 1),
+                "end_date": date(2026, 3, 15),
+                "symbol": "100",
+            }
+        ],
+    }
+    second = {key: first[key] for key in reversed(first)}
+    symbols_first, canonical_first = _canonical_metadata_mappings(first)
+    symbols_second, canonical_second = _canonical_metadata_mappings(second)
+    assert symbols_first == symbols_second == ["ESM6", "ESU6"]
+    assert canonical_first == canonical_second
+    assert sha256_json(canonical_first) == sha256_json(canonical_second)
+    assert canonical_first[0]["intervals"][0]["start_date"] == "2026-01-01"
+
+
+def test_continuous_partial_metadata_fails_at_pair_validation(tmp_path) -> None:
+    path = _write_pair(
+        tmp_path,
+        partial=["ES.v.0"],
+        mappings=[
+            SimpleNamespace(
+                raw_symbol="ES.v.0",
+                intervals=[
+                    SimpleNamespace(
+                        start_date=date(2026, 1, 1),
+                        end_date=date(2026, 1, 2),
+                        symbol="100",
+                    )
+                ],
+            )
+        ],
+    )
+    with pytest.raises(IntegrityError, match="non-parent"):
+        validate_dbn_pair(
+            path,
+            dbn_root=tmp_path / "data" / "dbn",
+            expected_schema="ohlcv-1m",
+            role="canonical",
+        )
+
+
+def test_metadata_version_and_symbol_width_pair_must_be_exact(
+    tmp_path, monkeypatch
+) -> None:
+    path = _write_pair(tmp_path)
+    import futures_rebuild.dbn_catalog as module
+
+    original = module._decode_summary
+
+    def mismatched(*args, **kwargs):
+        result = original(*args, **kwargs)
+        result["symbol_cstr_len"] += 1
+        return result
+
+    monkeypatch.setattr(module, "_decode_summary", mismatched)
+    with pytest.raises(IntegrityError, match="version/symbol width"):
+        validate_dbn_pair(
+            path,
+            dbn_root=tmp_path / "data" / "dbn",
+            expected_schema="ohlcv-1m",
+            role="canonical",
+        )
 
 
 def test_checked_in_continuous_contract_policy_is_exact_and_causal() -> None:

@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 import databento
+import databento_dbn as dbn
 
 from .canonical import (
     canonical_bytes,
@@ -40,6 +41,15 @@ SUPPORTED_DATABENTO_DBN_VERSION = "0.58.0"
 FULL_SCAN_CHUNK_RECORDS = 100_000
 DATASET = "GLBX.MDP3"
 CATALOG_CONTRACT_VERSION = "2.0.0"
+SYMBOL_CSTR_LEN_BY_METADATA_VERSION = {
+    1: dbn.SYMBOL_CSTR_LEN_V1,
+    2: dbn.SYMBOL_CSTR_LEN_V2,
+    3: dbn.SYMBOL_CSTR_LEN_V3,
+}
+SYMBOLOGY_RESOLUTION_POLICY = (
+    "NOT_FOUND_FORBIDDEN_CONTINUOUS_PARTIAL_FORBIDDEN_"
+    "PARENT_CHILD_PARTIAL_RECONCILIATION_ONLY"
+)
 SUPPORTED_SCHEMAS = {
     "definition",
     "ohlcv-1d",
@@ -386,6 +396,100 @@ def _date_boundary_ns(value: str) -> int:
     return int(datetime.combine(parsed, time.min, timezone.utc).timestamp()) * 1_000_000_000
 
 
+def _unique_metadata_symbols(value: object, *, name: str) -> list[str]:
+    if isinstance(value, (str, bytes)):
+        raise IntegrityError(f"DBN metadata {name} must be a symbol list")
+    try:
+        symbols = list(value)  # type: ignore[arg-type]
+    except TypeError as exc:
+        raise IntegrityError(f"DBN metadata {name} must be a symbol list") from exc
+    if any(type(symbol) is not str or not symbol for symbol in symbols):
+        raise IntegrityError(f"DBN metadata {name} contains an invalid symbol")
+    if len(set(symbols)) != len(symbols):
+        raise IntegrityError(f"DBN metadata {name} contains duplicate symbols")
+    return sorted(symbols)
+
+
+def _canonical_metadata_mappings(
+    value: object,
+) -> tuple[list[str], list[dict[str, object]]]:
+    if not isinstance(value, dict):
+        raise IntegrityError("DBN metadata mappings must be a mapping")
+    mapping_symbols = _unique_metadata_symbols(value.keys(), name="mapping symbols")
+    canonical: list[dict[str, object]] = []
+    for input_symbol in mapping_symbols:
+        intervals = value[input_symbol]
+        if not isinstance(intervals, list):
+            raise IntegrityError("DBN metadata mapping intervals must be a list")
+        normalized_intervals: list[dict[str, str]] = []
+        for interval in intervals:
+            if not isinstance(interval, dict) or set(interval) != {
+                "end_date",
+                "start_date",
+                "symbol",
+            }:
+                raise IntegrityError("DBN metadata mapping interval has invalid fields")
+            start_date = interval["start_date"]
+            end_date = interval["end_date"]
+            output_symbol = interval["symbol"]
+            if (
+                type(start_date) is not date
+                or type(end_date) is not date
+                or start_date >= end_date
+                or type(output_symbol) is not str
+                or not output_symbol
+            ):
+                raise IntegrityError("DBN metadata mapping interval is invalid")
+            normalized_intervals.append(
+                {
+                    "end_date": end_date.isoformat(),
+                    "start_date": start_date.isoformat(),
+                    "symbol": output_symbol,
+                }
+            )
+        canonical.append(
+            {
+                "input_symbol": input_symbol,
+                "intervals": sorted(
+                    normalized_intervals,
+                    key=lambda item: (
+                        item["start_date"], item["end_date"], item["symbol"]
+                    ),
+                ),
+            }
+        )
+    return mapping_symbols, canonical
+
+
+def _symbology_resolution_disposition(
+    *,
+    query_stype_in: str,
+    query_symbols: Iterable[str],
+    partial_symbols: Iterable[str],
+    not_found_symbols: Iterable[str],
+    mapping_symbols: Iterable[str],
+) -> str:
+    query = set(_unique_metadata_symbols(query_symbols, name="query symbols"))
+    partial = set(_unique_metadata_symbols(partial_symbols, name="partial"))
+    not_found = set(_unique_metadata_symbols(not_found_symbols, name="not_found"))
+    mappings = set(_unique_metadata_symbols(mapping_symbols, name="mapping symbols"))
+    if not_found:
+        raise IntegrityError("DBN metadata contains unresolved not_found symbols")
+    if partial and query_stype_in != "parent":
+        raise IntegrityError(
+            "DBN metadata partial symbols are forbidden for non-parent queries"
+        )
+    if partial & query:
+        raise IntegrityError("requested parent query symbol is only partially resolved")
+    if partial - mappings:
+        raise IntegrityError("DBN metadata partial symbol is absent from mappings")
+    return (
+        "PARENT_CHILD_PARTIAL_RECORDED_RECONCILIATION_ONLY"
+        if partial
+        else "COMPLETE"
+    )
+
+
 def _decode_summary(
     path: Path, *, sample_records: int, scan_to_end: bool
 ) -> dict[str, object]:
@@ -399,6 +503,9 @@ def _decode_summary(
     store = databento.DBNStore.from_file(path)
     metadata = store.metadata
     encoded_metadata = metadata.encode()
+    partial_symbols = _unique_metadata_symbols(metadata.partial, name="partial")
+    not_found_symbols = _unique_metadata_symbols(metadata.not_found, name="not_found")
+    mapping_symbols, canonical_mappings = _canonical_metadata_mappings(metadata.mappings)
     metadata_schema = _normalize_schema(metadata.schema)
     store_schema = _normalize_schema(store.schema)
     if metadata_schema != store_schema:
@@ -456,10 +563,19 @@ def _decode_summary(
         "limit": metadata.limit,
         "metadata_header_sha256": hashlib.sha256(encoded_metadata).hexdigest(),
         "metadata_version": metadata.version,
-        "not_found_count": len(metadata.not_found),
-        "not_found_sha256": sha256_json(list(metadata.not_found)),
-        "partial_count": len(metadata.partial),
-        "partial_sha256": sha256_json(list(metadata.partial)),
+        "mapping_entry_count": sum(
+            len(item["intervals"]) for item in canonical_mappings
+        ),
+        "mapping_sha256": sha256_json(canonical_mappings),
+        "mapping_symbol_count": len(mapping_symbols),
+        "mapping_symbols": mapping_symbols,
+        "mapping_symbols_sha256": sha256_json(mapping_symbols),
+        "not_found_count": len(not_found_symbols),
+        "not_found_sha256": sha256_json(not_found_symbols),
+        "not_found_symbols": not_found_symbols,
+        "partial_count": len(partial_symbols),
+        "partial_sha256": sha256_json(partial_symbols),
+        "partial_symbols": partial_symbols,
         "symbol_cstr_len": metadata.symbol_cstr_len,
     }
 
@@ -541,16 +657,30 @@ def validate_dbn_pair(
         or decoded["symbols"] != list(query_symbols)
         or decoded["ts_out"] is not False
         or decoded["limit"] is not None
-        or type(decoded["metadata_version"]) is not int
-        or not 1 <= int(decoded["metadata_version"]) <= 3
-        or type(decoded["symbol_cstr_len"]) is not int
-        or int(decoded["symbol_cstr_len"]) <= 0
-        or decoded["partial_count"] != 0
-        or decoded["not_found_count"] != 0
     ):
         raise IntegrityError(
-            f"decoded metadata disagrees with sidecar for {relative.as_posix()}"
+            f"decoded DBN query metadata violates the exact source contract for "
+            f"{relative.as_posix()}"
         )
+    metadata_version = decoded["metadata_version"]
+    symbol_cstr_len = decoded["symbol_cstr_len"]
+    if (
+        type(metadata_version) is not int
+        or metadata_version not in SYMBOL_CSTR_LEN_BY_METADATA_VERSION
+        or type(symbol_cstr_len) is not int
+        or symbol_cstr_len != SYMBOL_CSTR_LEN_BY_METADATA_VERSION[metadata_version]
+    ):
+        raise IntegrityError(
+            f"decoded DBN metadata version/symbol width is unsupported for "
+            f"{relative.as_posix()}"
+        )
+    resolution_disposition = _symbology_resolution_disposition(
+        query_stype_in=query_stype_in,
+        query_symbols=query_symbols,
+        partial_symbols=decoded["partial_symbols"],
+        not_found_symbols=decoded["not_found_symbols"],
+        mapping_symbols=decoded["mapping_symbols"],
+    )
     try:
         expected_start_ns = _date_boundary_ns(match.group("start"))
         expected_end_ns = _date_boundary_ns(match.group("end"))
@@ -616,6 +746,8 @@ def validate_dbn_pair(
         "sidecar_size": sidecar.stat().st_size,
         "size": dbn_path.stat().st_size,
         "start": match.group("start"),
+        "symbology_resolution_disposition": resolution_disposition,
+        "symbology_resolution_policy": SYMBOLOGY_RESOLUTION_POLICY,
         "year": int(year),
     }
     return {**core, "validation_sha256": sha256_json(core)}
@@ -843,6 +975,7 @@ def build_source_selection_manifest(
             applied_overlap_resolutions, key=lambda item: str(item["resolution_id"])
         ),
         "selection_policy": "EXACT_CONTRACT_ALL_FILES_NO_RECURSIVE_NEWEST",
+        "symbology_resolution_policy": SYMBOLOGY_RESOLUTION_POLICY,
         "selection_scope": "FILTERED" if family_ids else "ALL_SOURCE_FAMILIES",
         "record_scan_policy": "FULL_STREAM_BOUNDED_MEMORY" if scan_to_end else "METADATA_PLUS_FIRST_SAMPLE",
         "source_scope": source_scope,
