@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools==82.0.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "futures-intraday-model-v2"
+version = "0.1.0"
+description = "Deterministic, causal futures research foundation"
+requires-python = "==3.11.9"
+dependencies = ["numpy==2.4.4"]
+
+[project.optional-dependencies]
+test = ["pytest==9.0.3"]
+vault = ["databento==0.78.0"]
+
+[project.scripts]
+futures-migrate = "futures_rebuild.migration:main"
+futures-dbn-catalog = "futures_rebuild.dbn_catalog:main"
+futures-publish-selection = "futures_rebuild.foundation.selection:main"
+futures-foundation-build = "futures_rebuild.foundation.orchestrator:main"
+futures-legacy-census = "futures_rebuild.legacy_trial_census:main"
+futures-readiness = "futures_rebuild.readiness:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config"
+testpaths = ["tests"]
+pythonpath = ["src"]

@@ -1,0 +1,20 @@
+{
+  "lock_version": "1.1.0",
+  "implementation": "CPython",
+  "python": "3.11.9",
+  "platform": "win32",
+  "architecture": "AMD64",
+  "runtime_dependencies": ["numpy==2.4.4"],
+  "offline_vault_dependencies": ["databento==0.78.0"],
+  "build_dependencies": ["setuptools==82.0.1"],
+  "test_dependencies": ["pytest==9.0.3"],
+  "complete_binary_closure": {
+    "package_count": 32,
+    "requirements_path": "requirements.sha256.lock",
+    "requirements_sha256": "0928bc0adfa70e857c2ff4d45348efded0eebbdf9b4a220175d31c3dab597e5b",
+    "install_policy": "--require-hashes --only-binary=:all:"
+  },
+  "timezone_policy": "UTC_only",
+  "hash_seed_policy": "canonical_sort_never_iteration_order",
+  "numerical_thread_policy": "single_thread_until_explicitly_pinned"
+}

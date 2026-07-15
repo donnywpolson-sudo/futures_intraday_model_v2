@@ -1,0 +1,80 @@
+{
+  "contract_version": "1.0.0",
+  "provider": {
+    "name": "Databento",
+    "dataset": "GLBX.MDP3",
+    "paid_calls_authorized": false,
+    "downloads_authorized": false
+  },
+  "legacy_repository": "C:\\Users\\donny\\Desktop\\futures_intraday_model",
+  "active_repository": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2",
+  "discovery_policy": "manifest_only",
+  "recursive_fallbacks_allowed": false,
+  "links_allowed": false,
+  "overlap_resolution_contract": "configs/dbn_overlap_resolutions.json",
+  "known_anomalies_contract": "configs/known_anomalies.json",
+  "known_anomalies_sha256": "95524b1df69b8a0d702d759f108b5c2749f08dd59cd7dd1a8d8497a2aedfcb09",
+  "continuous_contract_policy": {
+    "bar_identity_authority": "ACTUAL_INSTRUMENT_ID_FROM_BAR",
+    "mapping_interval_end_fields_feature_eligible": false,
+    "price_adjustment": "NONE_ORIGINAL_UNADJUSTED",
+    "provider_documentation_url": "https://databento.com/docs/standards-and-conventions/symbology",
+    "selection_basis": "PREVIOUS_TRADING_DAY_VOLUME",
+    "selection_rule": "V_PREVIOUS_DAY_VOLUME_RANK_0",
+    "policy_hash": "05cd8950c8df742534dcc4e5362facf63f553cddad598c39c3bd30a6b220d1c4"
+  },
+  "vault_expectations": {
+    "dbn_files": 4020,
+    "sidecar_files": 4020,
+    "combined_files": 8040,
+    "combined_bytes": 25007876004
+  },
+  "source_families": [
+    {"id": "dbn_definition", "path": "data/dbn/definition", "role": "immutable_provider_source_and_canonical_research_input", "schema": "definition", "expected_dbn_files": 566},
+    {"id": "dbn_ohlcv_1d", "path": "data/dbn/ohlcv_1d", "role": "immutable_provider_source_cross_check", "schema": "ohlcv-1d", "expected_dbn_files": 561},
+    {"id": "dbn_ohlcv_1h", "path": "data/dbn/ohlcv_1h", "role": "immutable_provider_source_cross_check", "schema": "ohlcv-1h", "expected_dbn_files": 561},
+    {"id": "dbn_ohlcv_1m", "path": "data/dbn/ohlcv_1m", "role": "immutable_provider_source_and_canonical_research_input", "schema": "ohlcv-1m", "expected_dbn_files": 566},
+    {"id": "dbn_ohlcv_1s", "path": "data/dbn/ohlcv_1s", "role": "immutable_provider_source_diagnostic", "schema": "ohlcv-1s", "expected_dbn_files": 566},
+    {"id": "dbn_statistics", "path": "data/dbn/statistics", "role": "immutable_provider_source_and_canonical_research_input", "schema": "statistics", "expected_dbn_files": 568},
+    {"id": "dbn_status", "path": "data/dbn/status", "role": "immutable_provider_source_and_canonical_research_input", "schema": "status", "expected_dbn_files": 565},
+    {"id": "dbn_trades", "path": "data/dbn/trades", "role": "immutable_provider_source_diagnostic", "schema": "trades", "expected_dbn_files": 67},
+    {"id": "phase1b_raw", "path": "data/raw", "role": "comparison_only_regenerate_in_v2", "layout": "{market}/{year}"},
+    {"id": "phase2_causal", "path": "data/causally_gated_normalized", "role": "comparison_only_regenerate_in_v2", "layout": "{market}/{year}"}
+  ],
+  "required_row_fields": [
+    "event_at",
+    "available_at",
+    "availability_basis",
+    "availability_policy_hash",
+    "decision_at",
+    "source_received_at_for_definition_rows",
+    "source_release_retrieved_at",
+    "source_release_id",
+    "publisher_id",
+    "instrument_id",
+    "instrument_id_date_utc",
+    "exchange_session_date",
+    "raw_symbol",
+    "exchange",
+    "definition_release_id",
+    "definition_manifest_sha256",
+    "definition_row_id",
+    "currency",
+    "multiplier",
+    "min_tick",
+    "economics_release_receipt_id",
+    "economics_record_id"
+  ],
+  "ohlcv_availability_policy": {
+    "provider_ts_recv_may_be_invented": false,
+    "historical_basis": "MODELED_INTERVAL_END_PLUS_PINNED_LATENCY",
+    "archive_retrieval_time_is_separate": true
+  },
+  "pnl_economics_gate": {
+    "verified_actual_contract_economics_release_required": true,
+    "required_fields": ["tick_size", "tick_value", "point_value", "currency"],
+    "forbidden_tick_value_authorities": ["min_price_increment_amount"],
+    "ambiguous_or_missing_disposition": "FAIL_CLOSED_OR_ABSTAIN",
+    "rates_require_quote_convention_and_two_independent_sources": true
+  }
+}

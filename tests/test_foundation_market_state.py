@@ -1,0 +1,428 @@
+from __future__ import annotations
+
+import hashlib
+from datetime import datetime, timezone
+from decimal import Decimal
+from pathlib import Path
+from types import MappingProxyType
+
+import pytest
+
+from futures_rebuild.canonical import canonical_bytes, sha256_json
+from futures_rebuild.errors import IntegrityError
+from futures_rebuild.foundation.market_state import (
+    AsOfStatisticsLedger,
+    AsOfStatusLedger,
+    FoundationCoveragePolicy,
+    StatisticsRolePolicy,
+)
+from futures_rebuild.foundation.records import (
+    INT64_NULL,
+    StatisticsRecordV1,
+    StatusRecordV1,
+)
+from futures_rebuild.foundation.selection import (
+    load_source_selection,
+    publish_catalog_selection,
+    resolve_foundation_selection,
+)
+from futures_rebuild.foundation.snapshot import PublishedSourceSnapshot, SnapshotFile
+from futures_rebuild.release import AtomicPublisher
+
+
+REPO = Path(__file__).resolve().parents[1]
+DAY_NS = 86_400_000_000_000
+START_NS = 1_704_067_200_000_000_000
+START_DATE = "2024-01-01"
+
+
+def _status(
+    ordinal: int,
+    *,
+    ts_event_ns: int = START_NS,
+    ts_recv_ns: int | None = None,
+    action: str = "TRADING",
+    is_trading: str = "YES",
+    is_quoting: str = "YES",
+    short_state: str = "NO",
+) -> StatusRecordV1:
+    received = ts_event_ns + 1 if ts_recv_ns is None else ts_recv_ns
+    row_hash = sha256_json({"kind": "status", "ordinal": ordinal})
+    return StatusRecordV1(
+        dataset="GLBX.MDP3",
+        market="ES",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc=datetime.fromtimestamp(
+            ts_event_ns // 1_000_000_000, tz=timezone.utc
+        ).date().isoformat(),
+        ts_event_ns=ts_event_ns,
+        ts_recv_ns=received,
+        action=action,
+        reason="NONE",
+        trading_event="NONE",
+        is_trading=is_trading,
+        is_quoting=is_quoting,
+        is_short_sell_restricted=short_state,
+        source_release_id="a" * 64,
+        source_manifest_sha256="b" * 64,
+        source_file_path="dbn/status/ES/2024/status.dbn.zst",
+        source_file_sha256="c" * 64,
+        row_ordinal=ordinal,
+        row_sha256=row_hash,
+    )
+
+
+def _stat(
+    ordinal: int,
+    *,
+    update_action: str,
+    ts_event_ns: int,
+    ts_recv_ns: int,
+    price_nano: int = 5_000_000_000_000,
+    quantity: int = 100,
+) -> StatisticsRecordV1:
+    return StatisticsRecordV1(
+        dataset="GLBX.MDP3",
+        market="ES",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc=datetime.fromtimestamp(
+            ts_event_ns // 1_000_000_000, tz=timezone.utc
+        ).date().isoformat(),
+        ts_event_ns=ts_event_ns,
+        ts_recv_ns=ts_recv_ns,
+        ts_ref_ns=START_NS,
+        ts_in_delta=1,
+        stat_type="OPEN_INTEREST",
+        update_action=update_action,
+        price_nano=price_nano,
+        quantity=quantity,
+        sequence=ordinal,
+        channel_id=1,
+        flags=0,
+        source_release_id="a" * 64,
+        source_manifest_sha256="b" * 64,
+        source_file_path="dbn/statistics/ES/2024/statistics.dbn.zst",
+        source_file_sha256="d" * 64,
+        row_ordinal=ordinal,
+        row_sha256=sha256_json({"kind": "statistics", "ordinal": ordinal}),
+    )
+
+
+def test_status_asof_is_bitemporal_and_never_backward_fills_poison() -> None:
+    eligible = _status(0)
+    future_halt = _status(
+        1,
+        ts_event_ns=START_NS + 10,
+        ts_recv_ns=START_NS + 1_000,
+        action="HALT",
+        is_trading="NO",
+        is_quoting="NO",
+    )
+    ledger = AsOfStatusLedger((future_halt, eligible))
+    before_future_receive = ledger.as_of(
+        dataset="GLBX.MDP3",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc=START_DATE,
+        decision_at_ns=START_NS + 100,
+    )
+    assert before_future_receive.status_disposition == "STATUS_ELIGIBLE"
+    assert before_future_receive.foundation_eligible is True
+    after_future_receive = ledger.as_of(
+        dataset="GLBX.MDP3",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc=START_DATE,
+        decision_at_ns=START_NS + 1_000,
+    )
+    assert after_future_receive.status_disposition == "STATUS_HALTED"
+    assert after_future_receive.foundation_eligible is False
+    missing = ledger.as_of(
+        dataset="GLBX.MDP3",
+        publisher_id=1,
+        instrument_id=999,
+        instrument_id_date_utc=START_DATE,
+        decision_at_ns=START_NS + 1_000,
+    )
+    assert missing.status_disposition == "STATUS_UNRESOLVED"
+    assert missing.in_coverage_denominator is True
+    reused_next_date = ledger.as_of(
+        dataset="GLBX.MDP3",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc="2024-01-02",
+        decision_at_ns=START_NS + DAY_NS + 1,
+    )
+    assert reused_next_date.status_disposition == "STATUS_UNRESOLVED"
+
+
+@pytest.mark.parametrize(
+    ("action", "trading", "quoting", "expected"),
+    [
+        ("SUSPEND", "NO", "NO", "STATUS_SUSPENDED"),
+        ("PAUSE", "NO", "YES", "STATUS_PAUSED"),
+        ("UNKNOWN_255", "YES", "YES", "STATUS_UNKNOWN"),
+        ("TRADING", "NOT_AVAILABLE", "YES", "STATUS_UNKNOWN"),
+    ],
+)
+def test_status_halt_suspend_unknown_are_explicitly_ineligible(
+    action: str, trading: str, quoting: str, expected: str
+) -> None:
+    decision = AsOfStatusLedger(
+        (_status(0, action=action, is_trading=trading, is_quoting=quoting),)
+    ).as_of(
+        dataset="GLBX.MDP3",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc=START_DATE,
+        decision_at_ns=START_NS + 100,
+    )
+    assert decision.status_disposition == expected
+    assert decision.foundation_eligible is False
+    assert decision.in_coverage_denominator is True
+
+
+def test_futures_short_restriction_not_available_blocks_short_only() -> None:
+    decision = AsOfStatusLedger((_status(0, short_state="NOT_AVAILABLE"),)).as_of(
+        dataset="GLBX.MDP3",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc=START_DATE,
+        decision_at_ns=START_NS + 100,
+    )
+    assert decision.foundation_eligible is True
+    assert decision.long_eligible is True
+    assert decision.short_eligible is False
+
+
+def test_statistics_new_delete_and_unknown_never_become_features() -> None:
+    roles = StatisticsRolePolicy.from_file(
+        REPO / "configs" / "statistics_foundation_roles.json"
+    )
+    new = _stat(
+        0,
+        update_action="NEW",
+        ts_event_ns=START_NS,
+        ts_recv_ns=START_NS + 1,
+    )
+    delete = _stat(
+        1,
+        update_action="DELETE",
+        ts_event_ns=START_NS + 10,
+        ts_recv_ns=START_NS + 100,
+    )
+    ledger = AsOfStatisticsLedger((delete, new), roles=roles)
+    before_delete = ledger.as_of(
+        dataset="GLBX.MDP3",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc=START_DATE,
+        stat_type="OPEN_INTEREST",
+        ts_ref_ns=START_NS,
+        decision_at_ns=START_NS + 50,
+    )
+    assert before_delete.state == "NEW_KNOWN"
+    assert before_delete.feature_eligible is False
+    after_delete = ledger.as_of(
+        dataset="GLBX.MDP3",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc=START_DATE,
+        stat_type="OPEN_INTEREST",
+        ts_ref_ns=START_NS,
+        decision_at_ns=START_NS + 100,
+    )
+    assert after_delete.state == "DELETED"
+    assert after_delete.price_nano is None
+    unknown = AsOfStatisticsLedger(
+        (
+            _stat(
+                2,
+                update_action="NEW",
+                ts_event_ns=START_NS,
+                ts_recv_ns=START_NS + 1,
+                price_nano=INT64_NULL,
+            ),
+        ),
+        roles=roles,
+    ).as_of(
+        dataset="GLBX.MDP3",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc=START_DATE,
+        stat_type="OPEN_INTEREST",
+        ts_ref_ns=START_NS,
+        decision_at_ns=START_NS + 2,
+    )
+    assert unknown.state == "NEW_UNKNOWN_VALUE"
+    assert unknown.feature_eligible is False
+
+
+def _snapshot_file(root: Path, relative: str, content: bytes) -> SnapshotFile:
+    path = root / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    return SnapshotFile(
+        root=root,
+        relative_path=relative,
+        size=len(content),
+        sha256=hashlib.sha256(content).hexdigest(),
+        source_snapshot_id="a" * 64,
+        migration_manifest_sha256="b" * 64,
+        files_index_sha256="c" * 64,
+    )
+
+
+def _selection_fixture(tmp_path: Path, *, overlap: bool = False):
+    root = tmp_path / "snapshot"
+    entries = []
+    files = {}
+
+    def add(schema: str, market: str, year: int, start: str, end: str) -> None:
+        directory = schema.replace("-", "_")
+        relative = f"dbn/{directory}/{market}/{year}/{start}_{end}.dbn.zst"
+        binding = _snapshot_file(root, relative, relative.encode("ascii"))
+        files[relative] = binding
+        family = {
+            "definition": "dbn_definition",
+            "ohlcv-1m": "dbn_ohlcv_1m",
+            "statistics": "dbn_statistics",
+            "status": "dbn_status",
+        }[schema]
+        entries.append(
+            {
+                "coverage_disposition": "AUTHORITATIVE_INTERVAL",
+                "end": end,
+                "family": family,
+                "market": market,
+                "path": f"data/{relative}",
+                "schema": schema,
+                "sha256": binding.sha256,
+                "size": binding.size,
+                "start": start,
+                "year": year,
+            }
+        )
+
+    add("definition", "ES", 2024, "2024-01-01", "2025-01-01")
+    add("ohlcv-1m", "ES", 2024, "2024-01-01", "2025-01-01")
+    add("statistics", "ES", 2024, "2024-01-01", "2025-01-01")
+    add("status", "NQ", 2023, "2023-01-01", "2024-01-01")
+    if overlap:
+        add("statistics", "ES", 2024, "2024-06-01", "2025-01-01")
+    snapshot = PublishedSourceSnapshot(
+        root=root,
+        receipt=MappingProxyType({"source_snapshot_id": "a" * 64}),
+        files=MappingProxyType(files),
+    )
+    core = {
+        "dataset": "GLBX.MDP3",
+        "families": [
+            {"family": name}
+            for name in (
+                "dbn_definition",
+                "dbn_ohlcv_1m",
+                "dbn_statistics",
+                "dbn_status",
+            )
+        ],
+        "files": entries,
+        "selection_policy": "EXACT_CONTRACT_ALL_FILES_NO_RECURSIVE_NEWEST",
+        "selection_scope": "FILTERED",
+        "source_scope": "VERIFIED_PUBLISHED_SOURCE_SNAPSHOT",
+        "source_snapshot_id": "a" * 64,
+    }
+    return {**core, "selection_manifest_id": sha256_json(core)}, snapshot
+
+
+def test_coverage_matrix_preserves_missing_status_and_extra_family(tmp_path) -> None:
+    selection, snapshot = _selection_fixture(tmp_path)
+    resolved = resolve_foundation_selection(selection, snapshot=snapshot)
+    rows = {(row["market"], row["year"]): row for row in resolved.coverage_matrix}
+    assert rows[("ES", 2024)]["status_disposition"] == "STATUS_UNRESOLVED"
+    assert rows[("ES", 2024)]["required_for_bar_foundation"] is True
+    assert rows[("NQ", 2023)]["required_for_bar_foundation"] is False
+    assert rows[("NQ", 2023)]["status_file_count"] == 1
+    assert resolved.coverage_matrix_id == sha256_json(list(resolved.coverage_matrix))
+
+
+def test_unresolved_authoritative_overlap_fails_closed(tmp_path) -> None:
+    selection, snapshot = _selection_fixture(tmp_path, overlap=True)
+    with pytest.raises(IntegrityError, match="overlapping statistics"):
+        resolve_foundation_selection(selection, snapshot=snapshot)
+
+
+def test_exact_quarantined_redundant_overlap_is_not_treated_as_authoritative(
+    tmp_path,
+) -> None:
+    selection, snapshot = _selection_fixture(tmp_path, overlap=True)
+    statistics = [
+        item for item in selection["files"] if item["schema"] == "statistics"
+    ]
+    statistics[-1]["coverage_disposition"] = (
+        "QUARANTINED_REDUNDANT_EXACT_CROSSCHECK_ONLY"
+    )
+    core = {
+        key: value for key, value in selection.items() if key != "selection_manifest_id"
+    }
+    selection["selection_manifest_id"] = sha256_json(core)
+    resolved = resolve_foundation_selection(selection, snapshot=snapshot)
+    assert len(resolved.statistics_files) == 1
+
+
+def test_tracked_coverage_policy_has_nonzero_and_source_gates() -> None:
+    policy = FoundationCoveragePolicy.from_file(
+        REPO / "configs" / "foundation_coverage_policy.json"
+    )
+    assert policy.minimum_bar_rows >= 1_000_000
+    assert policy.minimum_status_gated_feature_ready_fraction >= Decimal("0.95")
+    assert policy.minimum_status_gated_feature_ready_rows >= 100_000
+    assert policy.minimum_status_eligible_rows >= 100_000
+    assert policy.minimum_status_resolved_decision_fraction >= Decimal("0.95")
+    assert policy.minimum_status_source_market_year_fraction >= Decimal("0.99")
+    assert policy.minimum_statistics_source_market_year_fraction == Decimal("1")
+
+
+def test_verified_catalog_has_one_immutable_publication_phase(
+    boundary, operation_factory
+) -> None:
+    selection, synthetic = _selection_fixture(boundary.active_root / "fixture")
+    snapshot = PublishedSourceSnapshot(
+        root=synthetic.root,
+        receipt=synthetic.receipt,
+        files=synthetic.files,
+    )
+    catalog = boundary.active_root / "state" / "source_selection" / "catalog.json"
+    catalog.parent.mkdir(parents=True, exist_ok=True)
+    catalog.write_bytes(canonical_bytes(selection) + b"\n")
+    publisher = AtomicPublisher(
+        boundary.active_root
+        / "data"
+        / "vault"
+        / ".staging"
+        / "releases"
+        / "selection",
+        boundary.active_root / "data" / "vault" / "releases",
+        boundary.active_root / "state" / "locks" / "selection.lock",
+        boundary=boundary,
+        operation_receipt=operation_factory("PUBLISH_RELEASE"),
+    )
+    receipt = publish_catalog_selection(
+        catalog,
+        snapshot=snapshot,
+        boundary=boundary,
+        publisher=publisher,
+    )
+    assert load_source_selection(
+        receipt, snapshot=snapshot, boundary=boundary
+    ) == selection
+    catalog.write_bytes(catalog.read_bytes() + b"poison")
+    with pytest.raises(IntegrityError, match="catalog JSON is invalid"):
+        publish_catalog_selection(
+            catalog,
+            snapshot=snapshot,
+            boundary=boundary,
+            publisher=publisher,
+        )

@@ -1,0 +1,52 @@
+{
+  "receipt_version": "1.1.0",
+  "files": [
+    {"path": "configs/environment.lock.json", "sha256": "e38ad88822e75fa7ab08ded0f0c6ef6e36065838b99abbdb9c52f75a07d82a35"},
+    {"path": "configs/offline_vault_environment.lock.json", "sha256": "b0c5d6114275f111555cf12f1e4823e69a2c91868d4d58f537e7b86347a9ec10"},
+    {"path": "configs/runtime_wheel_lock.json", "sha256": "81f1a418cbf30d70b1dc534a467b7a97b8e86f7ea343651a8044a03d573db38b"},
+    {"path": "pyproject.toml", "sha256": "466f09837b4453c033cd7d182a0a00eb72b589738f94473cae36658a568cd7a3"},
+    {"path": "requirements-runtime.lock", "sha256": "f4ca6ace170462a3d59012b43e78e3b3ddabb334a6e73f8b1022c53d586a0cc8"},
+    {"path": "requirements.lock", "sha256": "b036e1b979b50c35dfa7cc8f3962a7badb34d959b63e38ad01a4087b6bb279f1"},
+    {"path": "requirements.sha256.lock", "sha256": "0928bc0adfa70e857c2ff4d45348efded0eebbdf9b4a220175d31c3dab597e5b"}
+  ],
+  "runtime": {
+    "implementation": "CPython",
+    "platform": "win32",
+    "python": "3.11.9",
+    "packages": {
+      "aiohappyeyeballs": "2.6.1",
+      "aiohttp": "3.13.5",
+      "aiosignal": "1.4.0",
+      "attrs": "26.1.0",
+      "certifi": "2026.4.22",
+      "charset-normalizer": "3.4.7",
+      "colorama": "0.4.6",
+      "databento": "0.78.0",
+      "databento-dbn": "0.58.0",
+      "frozenlist": "1.8.0",
+      "idna": "3.15",
+      "iniconfig": "2.3.0",
+      "multidict": "6.7.1",
+      "numpy": "2.4.4",
+      "packaging": "26.2",
+      "pandas": "3.0.3",
+      "pip": "26.1.2",
+      "pip-system-certs": "5.3",
+      "pluggy": "1.6.0",
+      "propcache": "0.5.2",
+      "pyarrow": "24.0.0",
+      "Pygments": "2.20.0",
+      "pytest": "9.0.3",
+      "python-dateutil": "2.9.0.post0",
+      "requests": "2.34.1",
+      "setuptools": "82.0.1",
+      "six": "1.17.0",
+      "typing-extensions": "4.15.0",
+      "tzdata": "2026.2",
+      "urllib3": "2.7.0",
+      "yarl": "1.23.0",
+      "zstandard": "0.25.0"
+    }
+  },
+  "receipt_id": "bcccac66a7a7821e32955bfb7b5f3a0ddb4ce53c913fb8ed7f7dc8f9de5501b7"
+}

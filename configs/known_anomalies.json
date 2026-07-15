@@ -1,0 +1,14 @@
+{
+  "contract_version": "1.0.0",
+  "default_disposition": "QUARANTINE_FAIL_CLOSED",
+  "waivers_allowed": false,
+  "families": [
+    {"market": "KE", "year": 2019},
+    {"market": "KE", "year": 2021},
+    {"market": "KE", "year": 2023},
+    {"market": "KE", "year": 2024},
+    {"market": "SR1", "year": 2020},
+    {"market": "SR3", "year": 2020}
+  ],
+  "promotion_requirement": "anomaly_specific_source_alignment_and_causal_tests_pass"
+}

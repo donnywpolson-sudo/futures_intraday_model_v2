@@ -1,0 +1,17 @@
+{
+  "config_version": "1.0.0",
+  "active_prediction_requires_verified_actual_contract_economics": true,
+  "actual_contract_segment_boundary_policy": "ABSTAIN_ON_DATASET_PUBLISHER_INSTRUMENT_RAW_SYMBOL_EXCHANGE_CHANGE",
+  "allow_fit_during_inference": false,
+  "allow_legacy_v1_outputs": false,
+  "allow_option_proxy_outputs": false,
+  "continuous_selection_rule": "V_PREVIOUS_DAY_VOLUME_RANK_0",
+  "mapping_interval_end_fields_feature_eligible": false,
+  "output_fields": [
+    "expected_return",
+    "probability_down",
+    "probability_neutral",
+    "probability_up",
+    "uncertainty"
+  ]
+}

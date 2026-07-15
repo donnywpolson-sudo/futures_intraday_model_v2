@@ -1,0 +1,61 @@
+{
+  "capability_version": "1.0.0",
+  "project": "futures_intraday_model_v2",
+  "status": "IMPLEMENTED_EXECUTION_DISABLED",
+  "authority": {
+    "alpha_evidence": false,
+    "candidate_sealing_authorized": false,
+    "real_history_execution_authorized": false,
+    "required_external_classification": "EXTERNAL_REAL_HISTORY_AUTHORIZATION",
+    "required_external_operation": "RUN_HISTORICAL_HYPOTHESIS_WFA"
+  },
+  "foundation_contract": {
+    "labels_materialized_at_readiness": false,
+    "outcome_source_inputs_required": true,
+    "status_gated_features_required": true,
+    "statistics_as_features": false,
+    "verified_actual_contract_economics_required": true
+  },
+  "derived_evaluation_gates": [
+    "SESSION_LEVEL_NET_RETURNS",
+    "HAC_MEAN_AND_STANDARD_ERROR",
+    "STATIONARY_BLOCK_BOOTSTRAP_LOWER_BOUND",
+    "ROMANO_WOLF_MAX_T",
+    "DEFLATED_SHARPE_RATIO",
+    "EXHAUSTIVE_CSCV_PBO",
+    "TRAINING_ONLY_POWER",
+    "COST_MONOTONICITY",
+    "INDEPENDENT_MARKET_DIRECTION_SLEEVES",
+    "NEGATIVE_CONTROLS",
+    "ONE_TIME_FINAL_HOLDOUT"
+  ],
+  "production_policy": {
+    "bootstrap_resamples": 10000,
+    "confidence_level": "0.95",
+    "dsr_probability_minimum": "0.95",
+    "minimum_cscv_blocks": 8,
+    "minimum_comparable_configurations": 10,
+    "pbo_conservative_maximum": "0.2",
+    "romano_wolf_adjusted_p_maximum": "0.05"
+  },
+  "required_components": {
+    "futures_rebuild.foundation.orchestrator": ["load_foundation_set"],
+    "futures_rebuild.historical_builder": ["build_synthetic_research_run"],
+    "futures_rebuild.historical_evaluator": ["evaluate_frozen_research_run"],
+    "futures_rebuild.historical_splitter": ["split_synthetic_research_run"],
+    "futures_rebuild.producer_bridge": ["generate_causal_outcomes", "load_causal_feature_release", "load_causal_outcome_release"],
+    "futures_rebuild.research.bootstrap": ["stationary_bootstrap_index_rows"],
+    "futures_rebuild.research.cscv": ["exhaustive_cscv_pbo"],
+    "futures_rebuild.research.dsr": ["deflated_sharpe_ratio"],
+    "futures_rebuild.research.hac": ["newey_west_mean"],
+    "futures_rebuild.research.multiple_testing": ["romano_wolf_from_differentials"],
+    "futures_rebuild.research.power": ["training_only_mde"],
+    "futures_rebuild.trial": ["TrialEventLedger", "TrialRegistry"]
+  },
+  "hard_pauses": [
+    "CANDIDATE_SEALING",
+    "PAID_DATABENTO_DOWNLOAD",
+    "REAL_HISTORY_HYPOTHESIS_OR_WFA_EXECUTION",
+    "TRADING"
+  ]
+}

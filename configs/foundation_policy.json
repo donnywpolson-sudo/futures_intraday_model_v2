@@ -1,0 +1,31 @@
+{
+  "policy_version": "1.0.0",
+  "dataset": "GLBX.MDP3",
+  "canonical_research_schemas": ["definition", "ohlcv-1m", "statistics", "status"],
+  "ohlcv_1m": {
+    "ts_event_semantics": "INTERVAL_START_UTC",
+    "interval_nanoseconds": 60000000000,
+    "pinned_publication_latency_nanoseconds": 5000000000,
+    "availability_basis": "MODELED_INTERVAL_END_PLUS_PINNED_LATENCY",
+    "provider_ts_recv_may_be_invented": false
+  },
+  "definition": {
+    "effective_time_field": "ts_event",
+    "knowledge_time_field": "ts_recv",
+    "required_order": "ts_event<=bar_event_and_ts_recv<=decision"
+  },
+  "continuous_contract": {
+    "symbol": ".v.0",
+    "actual_identity_authority": "BAR_INSTRUMENT_ID",
+    "retrospective_mapping_interval_end_feature_eligible": false,
+    "selection_rule": "PREVIOUS_TRADING_DAY_VOLUME_RANK_0",
+    "price_adjustment": "NONE_ORIGINAL_UNADJUSTED"
+  },
+  "normalization": {
+    "foundation_allowed": ["NANOUNIT_TO_EXACT_DECIMAL", "UTC_TIMESTAMP", "EXPLICIT_UNIT_AND_SCHEMA_CANONICALIZATION"],
+    "foundation_forbidden": ["GLOBAL_ZSCORE", "GLOBAL_WINSORIZATION", "GLOBAL_IMPUTATION", "GLOBAL_VOLATILITY_SCALING", "OUTCOME_CONDITIONED_FILTER"],
+    "learned_transform_location": "INSIDE_EACH_WFA_TRAINING_FOLD_ONLY"
+  },
+  "known_anomalies_sha256": "95524b1df69b8a0d702d759f108b5c2749f08dd59cd7dd1a8d8497a2aedfcb09",
+  "unknown_or_ambiguous_disposition": "FAIL_CLOSED_OR_EXPLICIT_ABSTENTION_IN_COVERAGE_DENOMINATOR"
+}

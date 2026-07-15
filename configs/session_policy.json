@@ -1,0 +1,11 @@
+{
+  "policy_version": "1.0.0",
+  "rules": [
+    {"exchange": "CBCM", "post_roll_day_offset": 1, "session_roll_local": "17:00:00", "timezone": "America/Chicago"},
+    {"exchange": "NYUM", "post_roll_day_offset": 1, "session_roll_local": "17:00:00", "timezone": "America/Chicago"},
+    {"exchange": "XCBT", "post_roll_day_offset": 1, "session_roll_local": "17:00:00", "timezone": "America/Chicago"},
+    {"exchange": "XCEC", "post_roll_day_offset": 1, "session_roll_local": "17:00:00", "timezone": "America/Chicago"},
+    {"exchange": "XCME", "post_roll_day_offset": 1, "session_roll_local": "17:00:00", "timezone": "America/Chicago"},
+    {"exchange": "XNYM", "post_roll_day_offset": 1, "session_roll_local": "17:00:00", "timezone": "America/Chicago"}
+  ]
+}

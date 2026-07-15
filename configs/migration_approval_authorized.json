@@ -1,0 +1,12 @@
+{
+  "artifact_version": "1.0.0",
+  "status": "PENDING_DETAILED_INVENTORY_REVIEW",
+  "authorized_manifest_path": "configs/migration_manifest_authorized.json",
+  "authorized_manifest_sha256": "57bcac635731c0bf85a0c0cad5c810cf9173b68813d501b0a94ce15a6ddacda7",
+  "authorized_source_scope_sha256": "6f9c47cb65e9b2198163de8c9f069b25f8b07ca276d9fb07cccdee9dc0c371cb",
+  "controlled_rebuild_authorization_id": "4977eb04c13f92045a3c020b9a8c9f691e21df583a81d8cc5040a13104cb8793",
+  "execution_authorized": false,
+  "approval": null,
+  "required_next_step": "RUN_AND_REVIEW_EXACT_AUTHORIZED_DETAILED_INVENTORY_THEN_CHECK_IN_COMPLETE_APPROVAL",
+  "artifact_id": "2aaa1cca003b64aff9c7228864c09b48108104320deaf431866695fee99ce199"
+}
