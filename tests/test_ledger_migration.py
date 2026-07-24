@@ -13,6 +13,7 @@ from futures_rebuild.clock import SyntheticClock
 from futures_rebuild.data_layout import MANIFEST_ROOT, PhasePublisher
 from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 from futures_rebuild.ledger import LedgerHeadContract, PredictionLedger
+import futures_rebuild.migration as migration_module
 from futures_rebuild.migration import (
     MigrationApproval,
     approval_payload_for_review,
@@ -280,7 +281,14 @@ def test_prediction_ledger_parser_rejects_boolean_integer_alias(
         _prediction_from_payload(payload)
 
 
-def test_migration_inventory_hashes_allowlisted_files_and_copy_is_blocked(tmp_path) -> None:
+def test_migration_inventory_hashes_allowlisted_files_and_copy_is_blocked(
+    tmp_path, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        migration_module,
+        "_validate_controlled_rebuild_authorization",
+        lambda: migration_module.CONTROLLED_REBUILD_AUTHORIZATION_ID,
+    )
     source = tmp_path / "legacy"
     destination = tmp_path / "new" / "stage"
     (source / "data" / "dbn").mkdir(parents=True)

@@ -46,6 +46,17 @@ from futures_rebuild.migration import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _synthetic_migration_authorization(monkeypatch) -> None:
+    """Keep synthetic copy mechanics independent of the Desktop checkout path."""
+
+    monkeypatch.setattr(
+        migration_module,
+        "_validate_controlled_rebuild_authorization",
+        lambda: migration_module.CONTROLLED_REBUILD_AUTHORIZATION_ID,
+    )
+
+
 def _manifest(tmp_path: Path, *, authorized: bool, direct_only: bool = False) -> Path:
     source = tmp_path / "legacy"
     active = tmp_path / "new"
