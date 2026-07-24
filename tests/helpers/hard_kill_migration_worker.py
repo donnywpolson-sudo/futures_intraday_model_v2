@@ -17,6 +17,11 @@ from futures_rebuild.boundary import (
 def main() -> int:
     if len(sys.argv) != 5:
         raise SystemExit("manifest approval inventory_sha256 kill_phase required")
+    # This helper runs outside pytest's monkeypatch process and exercises only
+    # synthetic crash/recovery mechanics in a temporary repository.
+    migration._validate_controlled_rebuild_authorization = (
+        lambda: migration.CONTROLLED_REBUILD_AUTHORIZATION_ID
+    )
     manifest_path = Path(sys.argv[1])
     approval_path = Path(sys.argv[2])
     approved_inventory = sys.argv[3]
