@@ -31,6 +31,32 @@ def test_atomic_release_is_content_addressed_and_tamper_evident(boundary, operat
         verify_release(release)
 
 
+def test_idempotent_publication_removes_only_its_duplicate_stage(
+    boundary, operation_factory
+) -> None:
+    publisher = AtomicPublisher(
+        boundary.active_root / "data" / "vault" / ".staging" / "releases" / "dedupe",
+        boundary.active_root / "data" / "vault" / "releases",
+        boundary.active_root / "state" / "locks" / "dedupe.lock",
+        boundary=boundary,
+        operation_receipt=operation_factory("PUBLISH_RELEASE"),
+    )
+    first = publisher.create_stage("same")
+    (first / "rows.json").write_text('{"x":1}\n', encoding="utf-8")
+    manifest = ReleaseManifest.build(first, release_kind="same", schema_version="1")
+    target = publisher.publish(first, manifest)
+    unrelated = publisher.create_stage("unrelated")
+    (unrelated / "keep.txt").write_text("preserve", encoding="utf-8")
+    duplicate = publisher.create_stage("same")
+    (duplicate / "rows.json").write_text('{"x":1}\n', encoding="utf-8")
+    duplicate_manifest = ReleaseManifest.build(
+        duplicate, release_kind="same", schema_version="1"
+    )
+    assert publisher.publish(duplicate, duplicate_manifest) == target
+    assert not duplicate.exists()
+    assert (unrelated / "keep.txt").read_text(encoding="utf-8") == "preserve"
+
+
 def test_release_rejects_wrong_directory_identity_and_extra_empty_tree(boundary, operation_factory) -> None:
     publisher = AtomicPublisher(
         boundary.active_root / "data" / "vault" / ".staging" / "releases" / "test-two",

@@ -25,6 +25,7 @@ class CoverageDisposition(str, Enum):
 @dataclass(frozen=True)
 class CausalBarResult:
     actual: ActualContractIdentity
+    definition: ProviderDefinition
     economics: ResolvedEconomics
     event_at_ns: int
     available_at_ns: int
@@ -39,6 +40,7 @@ class CausalBarResult:
     volume: int
     availability_basis: str
     availability_policy_hash: str
+    provider_timestamp_epoch_id: str
     source_release_id: str
     source_manifest_sha256: str
     source_file_path: str
@@ -64,6 +66,7 @@ def build_causal_bar(
     available_ns = policy.bar_available_at_ns(bar.event_at_ns)
     if decision_ns < available_ns:
         raise ContractError("bar is not modeled available at the decision time")
+    policy.assert_definition_lifecycle_trusted(bar.event_at_ns)
     actual, definition, economics = actual_identity_as_of(
         bar,
         definitions,
@@ -79,6 +82,7 @@ def build_causal_bar(
     )
     return CausalBarResult(
         actual=actual,
+        definition=definition,
         economics=economics,
         event_at_ns=bar.event_at_ns,
         available_at_ns=available_ns,
@@ -93,6 +97,9 @@ def build_causal_bar(
         volume=bar.volume,
         availability_basis=policy.availability_basis,
         availability_policy_hash=policy.policy_hash,
+        provider_timestamp_epoch_id=policy.provider_timestamp_epoch_id(
+            bar.event_at_ns
+        ),
         source_release_id=bar.source_release_id,
         source_manifest_sha256=bar.source_manifest_sha256,
         source_file_path=bar.source_file_path,

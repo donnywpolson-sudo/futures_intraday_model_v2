@@ -6,6 +6,7 @@ import json
 import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from functools import lru_cache
 from pathlib import Path
 from types import MappingProxyType
 from typing import Mapping
@@ -79,7 +80,7 @@ class EconomicsRuleBook:
         if (
             not isinstance(payload, dict)
             or set(payload) != expected
-            or payload.get("rules_version") != "1.1.0"
+            or payload.get("rules_version") != "1.2.0"
             or payload.get("dataset") != "GLBX.MDP3"
             or payload.get("currency") != "USD"
             or payload.get("forbidden_authorities")
@@ -117,10 +118,23 @@ class EconomicsRuleBook:
         authoritative = [
             key for key, value in sources.items() if value["authoritative"] is True
         ]
-        if authoritative != ["DATABENTO_DEFINITION_GLBX_MDP3"] or any(
+        databento_source = sources.get("DATABENTO_DEFINITION_GLBX_MDP3")
+        if (
+            authoritative != ["DATABENTO_DEFINITION_GLBX_MDP3"]
+            or not isinstance(databento_source, dict)
+            or databento_source.get("binding")
+            != "EXACT_LAYOUT_V2_DBN_RELEASE_LOGICAL_DEFINITION_PATH_AND_PROVIDER_EVENT_TIME"
+            or databento_source.get("locator")
+            != (
+                "manifests/data_releases/dbn/"
+                "9e5a9f2a405e50b0cda6702b67506b0951b057500781d37c45171da3967e9b51.json"
+                "#data/dbn/definition/{market}/{year}/{filename}"
+            )
+            or any(
             value["authoritative"] is False
             and value["binding"] != "MUTABLE_PUBLIC_REFERENCE_NOT_TRUST_EVIDENCE"
             for value in sources.values()
+            )
         ):
             raise IntegrityError("economics authority registry is ambiguous")
         parsed: dict[str, EconomicsRule] = {}
@@ -181,26 +195,47 @@ class EconomicsRuleBook:
             rule = self.rules[market]
         except KeyError as exc:
             raise ContractError("market has no verified quote-convention rule") from exc
-        observed = definition.observed_unit_qty
-        if observed is None:
-            raise ContractError(
-                "provider unit quantity is unavailable; economics fail closed"
-            )
-        if observed != rule.expected_unit_qty:
-            raise ContractError("provider unit quantity contradicts the pinned market rule")
-        quantity_state = "PROVIDER_DEFINITION_CROSSCHECK_MATCH"
-        tick_size = definition.min_tick
-        tick_value = tick_size * rule.point_value
-        if not tick_value.is_finite() or tick_value <= 0:
-            raise ContractError("resolved tick value is invalid")
-        return ResolvedEconomics(
-            market=market,
-            point_value=rule.point_value,
-            tick_size=tick_size,
-            tick_value=tick_value,
-            currency="USD",
-            quote_convention=rule.quote_convention,
-            source_ids=rule.source_ids,
-            rulebook_hash=self.rulebook_hash,
-            provider_unit_qty_state=quantity_state,
+        return _resolve_economics(
+            self.rulebook_hash,
+            rule,
+            market,
+            definition,
         )
+
+
+@lru_cache(maxsize=65_536)
+def _resolve_economics(
+    rulebook_hash: str,
+    rule: EconomicsRule,
+    market: str,
+    definition: ProviderDefinition,
+) -> ResolvedEconomics:
+    """Resolve one complete immutable provider definition once per rulebook."""
+
+    if rule.market != market:
+        raise ContractError("economics rule and market disagree")
+    if not rulebook_hash:
+        raise ContractError("economics rulebook hash is required")
+    observed = definition.observed_unit_qty
+    if observed is None:
+        raise ContractError(
+            "provider unit quantity is unavailable; economics fail closed"
+        )
+    if observed != rule.expected_unit_qty:
+        raise ContractError("provider unit quantity contradicts the pinned market rule")
+    quantity_state = "PROVIDER_DEFINITION_CROSSCHECK_MATCH"
+    tick_size = definition.min_tick
+    tick_value = tick_size * rule.point_value
+    if not tick_value.is_finite() or tick_value <= 0:
+        raise ContractError("resolved tick value is invalid")
+    return ResolvedEconomics(
+        market=market,
+        point_value=rule.point_value,
+        tick_size=tick_size,
+        tick_value=tick_value,
+        currency="USD",
+        quote_convention=rule.quote_convention,
+        source_ids=rule.source_ids,
+        rulebook_hash=rulebook_hash,
+        provider_unit_qty_state=quantity_state,
+    )

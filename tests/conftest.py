@@ -12,10 +12,10 @@ from futures_rebuild.boundary import (
     RepoBoundary,
 )
 from futures_rebuild.identity import ActualContractIdentity
-from futures_rebuild.release import (
-    AtomicPublisher,
-    ReleaseManifest,
-    VerifiedReleaseReceipt,
+from futures_rebuild.data_layout import (
+    DataReleaseManifest as ReleaseManifest,
+    DataReleaseReceipt as VerifiedReleaseReceipt,
+    PhasePublisher as AtomicPublisher,
 )
 
 
@@ -81,36 +81,83 @@ def release_factory(boundary, operation_factory):
         content: bytes | str | dict | list,
         schema_version: str = "1.0.0",
         metadata: dict | None = None,
+        phase: str = "evaluations",
+        logical_path: str | None = None,
+        source_release_ids: tuple[str, ...] = (),
+        embedded_documents: dict | None = None,
     ) -> tuple[object, VerifiedReleaseReceipt]:
         nonlocal counter
         counter += 1
         publisher = AtomicPublisher(
-            boundary.active_root / "data" / "vault" / ".staging" / "releases" / f"release-{counter}",
-            boundary.active_root / "data" / "vault" / "releases",
-            boundary.active_root / "state" / "locks" / f"release-{counter}.lock",
             boundary=boundary,
             operation_receipt=operation_factory("PUBLISH_RELEASE"),
+            lock_path=boundary.active_root / "state" / "locks" / "data-publication.lock",
         )
         stage = publisher.create_stage("synthetic")
-        path = stage / filename
-        path.parent.mkdir(parents=True, exist_ok=True)
-        if isinstance(content, bytes):
-            path.write_bytes(content)
-        elif isinstance(content, str):
-            path.write_text(content, encoding="utf-8")
-        else:
-            path.write_text(
-                json.dumps(content, sort_keys=True, separators=(",", ":")),
-                encoding="utf-8",
+        documents = dict(embedded_documents or {})
+        staged_paths: dict[str, str] = {}
+        logical_paths: dict[str, str] = {}
+        if phase == "evaluations" and logical_path is None:
+            routed = {
+                "actual_contract_definitions": (
+                    "reference",
+                    f"data/reference/definitions/{Path(filename).name}",
+                ),
+                "actual_contract_economics": (
+                    "reference",
+                    f"data/reference/economics/{Path(filename).name}",
+                ),
+                "futures_phase2_causal_interval": (
+                    "causally_gated_normalized",
+                    f"data/causally_gated_normalized/ES/2026/1m/{Path(filename).name}",
+                ),
+                "feature_release": (
+                    "features",
+                    f"data/features/synthetic/ES/2026/1m/{Path(filename).name}",
+                ),
+            }.get(release_kind)
+            if routed is not None:
+                phase, logical_path = routed
+        if release_kind == "versioned_session_policy" and not documents:
+            phase = "controls"
+            documents[filename] = content
+        elif not documents:
+            path = stage / filename
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if isinstance(content, bytes):
+                path.write_bytes(content)
+            elif isinstance(content, str):
+                path.write_text(content, encoding="utf-8")
+            else:
+                path.write_text(
+                    json.dumps(content, sort_keys=True, separators=(",", ":")),
+                    encoding="utf-8",
+                )
+            logical = logical_path or (
+                f"data/evaluations/SYNTHETIC/{counter:08d}/fold-0001/{Path(filename).name}"
             )
+            logical_paths[filename] = logical
+            staged_paths[logical] = filename
         manifest = ReleaseManifest.build(
             stage,
+            phase=phase,
             release_kind=release_kind,
             schema_version=schema_version,
+            logical_paths=logical_paths,
+            source_release_ids=source_release_ids,
+            embedded_documents=documents,
             metadata=metadata,
         )
-        release = publisher.publish(stage, manifest)
-        return release, VerifiedReleaseReceipt.from_release(release, boundary)
+        manifest_path = publisher.publish(
+            stage, manifest, staged_paths=staged_paths or None
+        )
+        receipt = VerifiedReleaseReceipt.from_manifest(manifest_path, boundary)
+        if manifest.files:
+            payload_path = receipt.resolve_unique_filename(Path(filename).name, boundary)
+            release_root: object = payload_path.parent
+        else:
+            release_root = manifest_path.parent
+        return release_root, receipt
 
     return publish
 

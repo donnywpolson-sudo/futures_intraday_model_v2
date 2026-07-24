@@ -1,0 +1,10 @@
+* text=auto eol=lf
+
+*.dbn binary
+*.dbn.zst binary
+*.exe binary
+*.parquet binary
+*.png binary
+*.pyc binary
+*.whl binary
+*.zip binary

@@ -425,7 +425,16 @@ def _load_checked_in_migration_approval() -> MigrationApproval:
         raise UnauthorizedOperation(
             "checked-in migration approval does not authorize hash-copy"
         )
-    return MigrationApproval.from_dict(payload.get("approval"))
+    approval = MigrationApproval.from_dict(payload.get("approval"))
+    if (
+        approval.migration_implementation_sha256
+        != migration_implementation_sha256()
+    ):
+        raise UnauthorizedOperation(
+            "checked-in migration approval is historical and cannot authorize "
+            "the current implementation"
+        )
+    return approval
 
 
 def migration_authorization_scope(

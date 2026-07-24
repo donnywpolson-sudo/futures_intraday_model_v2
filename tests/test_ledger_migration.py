@@ -10,6 +10,7 @@ from futures_rebuild.boundary import (
     RepoBoundary,
 )
 from futures_rebuild.clock import SyntheticClock
+from futures_rebuild.data_layout import MANIFEST_ROOT, PhasePublisher
 from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 from futures_rebuild.ledger import LedgerHeadContract, PredictionLedger
 from futures_rebuild.migration import (
@@ -63,11 +64,17 @@ def prediction(contract, decision, *, economics="e" * 64):
 def ledger(boundary, operation_factory, decision):
     receipt = operation_factory("APPEND_PREDICTION")
     clock = SyntheticClock(boundary, receipt, decision)
+    publisher = PhasePublisher(
+        boundary=boundary,
+        operation_receipt=operation_factory("PUBLISH_RELEASE"),
+        lock_path=boundary.active_root / "state" / "locks" / "data-publication.lock",
+    )
     target = PredictionLedger(
-        boundary.active_root / "state" / "predictions",
+        boundary.active_root / MANIFEST_ROOT / "predictions",
         boundary.active_root / "state" / "locks" / "ledger.lock",
         boundary.active_root / "state" / "anchors",
         boundary.active_root / "state" / "ledger_heads" / "head.json",
+        publisher=publisher,
         max_append_delay=timedelta(minutes=5),
         clock=clock,
         boundary=boundary,
@@ -113,11 +120,17 @@ def test_prediction_ledger_rejects_noncanonical_authorization_scope(
     receipt = operation_factory(
         "APPEND_PREDICTION", scope={"unexpected": "scope"}
     )
+    publisher = PhasePublisher(
+        boundary=boundary,
+        operation_receipt=operation_factory("PUBLISH_RELEASE"),
+        lock_path=boundary.active_root / "state" / "locks" / "data-publication.lock",
+    )
     target_ledger = PredictionLedger(
-        boundary.active_root / "state" / "predictions",
+        boundary.active_root / MANIFEST_ROOT / "predictions",
         boundary.active_root / "state" / "locks" / "ledger.lock",
         boundary.active_root / "state" / "anchors",
         boundary.active_root / "state" / "ledger_heads" / "head.json",
+        publisher=publisher,
         max_append_delay=timedelta(minutes=5),
         clock=SyntheticClock(boundary, receipt, decision),
         boundary=boundary,
@@ -137,7 +150,7 @@ def test_prediction_record_crash_before_anchor_recovers_after_window(
     item = prediction(contract, decision)
     original = target_ledger._write_anchor
 
-    def crash(record, previous):
+    def crash(record, previous, receipt):
         raise OSError("synthetic anchor crash")
 
     monkeypatch.setattr(target_ledger, "_write_anchor", crash)
@@ -223,7 +236,7 @@ def test_crash_recovery_rejects_different_prediction_payload(
     target_ledger, _ = ledger(boundary, operation_factory, decision)
     original = target_ledger._write_anchor
 
-    def crash(record, previous):
+    def crash(record, previous, receipt):
         raise OSError("synthetic anchor crash")
 
     monkeypatch.setattr(target_ledger, "_write_anchor", crash)

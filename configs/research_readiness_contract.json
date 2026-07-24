@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "contract_version": "2.0.0-controlled-rebuild",
+  "contract_version": "2.1.0-robustness-monitoring",
   "project": "futures_intraday_model_v2",
   "contract_status": "IMPLEMENTED_SYNTHETICALLY_VALIDATED_DATA_FOUNDATION_ABSENT",
   "independence": {
@@ -400,6 +400,35 @@
     "minimum_power": 0.8,
     "below_minimum_status": "INCONCLUSIVE_DATA_OR_POWER"
   },
+  "robustness": {
+    "policy_hash_must_be_bound_to_trial_and_evaluation": true,
+    "temporal_concentration": {
+      "minimum_outer_folds": 8,
+      "minimum_positive_fold_fraction": 0.625,
+      "every_leave_one_fold_out_weighted_mean_gt_zero": true,
+      "applies_to_each_required_sleeve_and_primary_aggregate": true
+    },
+    "stability": {
+      "seed_count": 5,
+      "seeds_derived_from_trial_id": true,
+      "deterministic_repeat_requires_identical_artifact_and_prediction_hashes": true,
+      "variant_manifest_frozen_before_outer_access": true,
+      "every_variant_in_trial_ledger_and_multiplicity_family": true,
+      "minimum_positive_variant_fraction": 0.8,
+      "minimum_median_effect_retention": 0.5,
+      "variant_selection_after_outer_access_allowed": false
+    },
+    "valid_instability_status": "INCONCLUSIVE_ROBUSTNESS",
+    "malformed_or_incomplete_binding_status": "INVALID"
+  },
+  "prospective_monitoring": {
+    "policy_path": "configs/prospective_monitoring_policy.json",
+    "policy_and_reference_hashes_bound_to_bundle": true,
+    "records_append_only_and_bundle_bound": true,
+    "paused_or_invalid_requires_abstention": true,
+    "pending_blocks_manual_decision_support_ready": true,
+    "automatic_retraining_retuning_source_substitution_or_resume": false
+  },
   "binding_gate": {
     "decision_order": [
       "INVALID",
@@ -408,6 +437,7 @@
       "FAIL_NOT_ECONOMIC",
       "INCONCLUSIVE_EFFECT",
       "FAIL_MULTIPLICITY_OR_CONTROL",
+      "INCONCLUSIVE_ROBUSTNESS",
       "PASS_HISTORICAL_SCREEN"
     ],
     "INVALID": "lineage_leakage_timing_role_ledger_cost_or_evidence_failure",
@@ -416,6 +446,7 @@
     "FAIL_NOT_ECONOMIC": "after_no_edge_rule_confidence_upper_bound_lte_mees",
     "INCONCLUSIVE_EFFECT": "confidence_interval_intersects_mees",
     "FAIL_MULTIPLICITY_OR_CONTROL": "effect_bound_passes_but_adjusted_test_dsr_pbo_cost_baseline_sleeve_or_control_fails",
+    "INCONCLUSIVE_ROBUSTNESS": "valid_effect_is_temporally_concentrated_or_seed_or_parameter_fragile",
     "PASS_HISTORICAL_SCREEN": {
       "multiplicity_adjusted_one_sided_95pct_lower_bound_gt_mees": true,
       "romano_wolf_adjusted_p_lte": 0.05,
@@ -423,6 +454,7 @@
       "pbo_policy_satisfied_when_applicable": true,
       "stress_cost_pass": true,
       "all_required_sleeves_baselines_and_controls_pass": true,
+      "robustness_gate_pass": true,
       "candidate_sealed": false,
       "authorizes_only": "eligibility_for_separate_candidate_sealing_decision"
     }

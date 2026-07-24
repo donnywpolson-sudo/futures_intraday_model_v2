@@ -159,7 +159,9 @@ def test_eligibility_tie_fails_independent_of_input_order(contract, decision) ->
         AsOfRollLedger((), (conflict, first))
 
 
-def test_definition_requires_received_time_and_causal_chronology(contract, decision) -> None:
+def test_definition_requires_received_time_but_provider_clocks_are_independent(
+    contract, decision
+) -> None:
     with pytest.raises(TypeError):
         DefinitionObservation(  # type: ignore[call-arg]
             _definition(contract), decision - timedelta(days=2),
@@ -170,6 +172,16 @@ def test_definition_requires_received_time_and_causal_chronology(contract, decis
             _definition(contract), decision, decision - timedelta(seconds=1),
             contract.definition_release_id, decision + timedelta(seconds=1)
         )
+    announced_before_activation = DefinitionObservation(
+        _definition(contract),
+        decision + timedelta(days=1),
+        decision,
+        contract.definition_release_id,
+        decision - timedelta(seconds=1),
+        expires_at=decision + timedelta(days=30),
+        provider_event_at=decision + timedelta(seconds=1),
+    )
+    assert announced_before_activation.source_received_at < announced_before_activation.effective_at
 
 
 def test_one_definition_resolves_multiple_bar_dates_and_reuse_is_asof(
@@ -240,7 +252,7 @@ def test_future_mapping_and_definition_cannot_change_earlier_identity(
     assert observed.raw_symbol == contract.raw_symbol
 
 
-def test_definition_effective_after_bar_cannot_rewrite_delayed_decision_identity(
+def test_definition_change_within_observation_window_fails_closed(
     contract, decision, release_factory, boundary
 ) -> None:
     policy = _policy(release_factory, boundary)
@@ -259,16 +271,53 @@ def test_definition_effective_after_bar_cannot_rewrite_delayed_decision_identity
         later_definition.definition_release_id,
         event + timedelta(minutes=2),
     )
-    observed = resolve_bar_identity(
+    with pytest.raises(ContractError, match="changed within"):
+        resolve_bar_identity(
+            contract.dataset,
+            contract.publisher_id,
+            contract.instrument_id,
+            event,
+            (known, later),
+            decision_at=decision,
+            session_policy=policy,
+        )
+
+
+def test_definition_index_date_prevents_cross_day_instrument_id_reuse(
+    contract, release_factory, boundary
+) -> None:
+    policy = _policy(release_factory, boundary)
+    event = datetime(2026, 7, 14, 15, tzinfo=UTC)
+    observation = DefinitionObservation(
+        _definition(contract),
+        event - timedelta(days=30),
+        event - timedelta(hours=1),
+        contract.definition_release_id,
+        event - timedelta(hours=1),
+        expires_at=event + timedelta(days=30),
+        definition_index_date_utc=event.date(),
+        source_file_path="dbn/definition/ES/2026/example.dbn.zst",
+    )
+    resolved = resolve_bar_identity(
         contract.dataset,
         contract.publisher_id,
         contract.instrument_id,
         event,
-        (known, later),
-        decision_at=decision,
+        (observation,),
+        decision_at=event + timedelta(minutes=1),
         session_policy=policy,
     )
-    assert observed.raw_symbol == contract.raw_symbol
+    assert resolved.instrument_id_date_utc == event.date()
+    with pytest.raises(ContractError, match="same-day"):
+        resolve_bar_identity(
+            contract.dataset,
+            contract.publisher_id,
+            contract.instrument_id,
+            event + timedelta(days=1),
+            (observation,),
+            decision_at=event + timedelta(days=1, minutes=1),
+            session_policy=policy,
+        )
 
 
 def test_utc_midnight_mapping_change_is_a_hard_contract_segment_boundary(
@@ -325,10 +374,29 @@ def test_same_actual_contract_can_remain_one_segment_across_utc_dates(contract) 
 
 def test_session_policy_release_tamper_fails_on_use(release_factory, boundary) -> None:
     policy = _policy(release_factory, boundary)
-    path = boundary.active_root / policy.receipt.relative_root / "session_policy.json"
-    path.write_text('{"tampered":true}', encoding="utf-8")
+    path = boundary.active_root / policy.receipt.manifest_path
+    path.write_bytes(path.read_bytes() + b"\n")
     with pytest.raises(IntegrityError):
         policy.exchange_session_date("XCME", datetime(2026, 7, 14, tzinfo=UTC))
+
+
+def test_preverified_session_date_requires_exact_policy_hash(
+    release_factory, boundary
+) -> None:
+    policy = _policy(release_factory, boundary)
+    policy.verify()
+    event = datetime(2026, 7, 14, tzinfo=UTC)
+    assert policy._exchange_session_date_preverified(
+        "XCME",
+        event,
+        expected_policy_hash=policy.policy_hash,
+    ) == policy.exchange_session_date("XCME", event)
+    with pytest.raises(IntegrityError, match="policy hash changed"):
+        policy._exchange_session_date_preverified(
+            "XCME",
+            event,
+            expected_policy_hash="0" * 64,
+        )
 
 
 def test_full_identity_hash_changes_with_economics(contract) -> None:

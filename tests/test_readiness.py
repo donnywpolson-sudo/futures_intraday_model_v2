@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+import futures_rebuild.readiness as readiness_module
 from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
 from futures_rebuild.boundary import RepoBoundary
 from futures_rebuild.errors import IntegrityError
@@ -18,28 +19,38 @@ from futures_rebuild.historical_capability import build_foundation_research_blue
 from futures_rebuild.readiness import (
     CLOSED_RESEARCH_LINES,
     ENGINE_CONFIG_PATHS,
-    ENGINE_TEST_PATHS,
     HISTORICAL_READY_RELEASE_KIND,
     REBUILD_COMPLETE_RELEASE_KIND,
     REQUIRED_HARD_PAUSES,
     ReadinessAssessment,
     ReadinessPublication,
-    SyntheticTestAttestation,
+    _compute_isolation_proof,
+    _scan_no_cross_import,
     assess_readiness,
     engine_code_closure,
+    engine_test_closure,
     load_historical_research_ready,
     load_rebuild_complete,
+    load_synthetic_test_evidence,
     publish_engine_registration,
     publish_project_isolation_evidence,
+    publish_readiness_prerequisites,
     publish_readiness_states,
     publish_synthetic_test_evidence,
 )
-from futures_rebuild.release import AtomicPublisher, ReleaseManifest, VerifiedReleaseReceipt
+from futures_rebuild.data_layout import (
+    DataReleaseManifest as ReleaseManifest,
+    DataReleaseReceipt as VerifiedReleaseReceipt,
+    PhasePublisher as AtomicPublisher,
+)
 from tests.test_foundation_orchestrator import (
     _orchestrator as _foundation_orchestrator,
 )
 from tests.test_foundation_orchestrator import _setup as _foundation_setup
-from tests.test_legacy_trial_census import _snapshot as _legacy_census_snapshot
+from tests.test_legacy_trial_census import (
+    _archive_receipt as _legacy_archive_receipt,
+    _snapshot as _legacy_census_snapshot,
+)
 
 
 REPO = Path(__file__).resolve().parents[1]
@@ -86,9 +97,10 @@ def _install_readiness_closure(boundary) -> None:
     paths = {
         *(entry["path"] for entry in engine_code_closure(REPO)),
         *ENGINE_CONFIG_PATHS,
-        *ENGINE_TEST_PATHS,
+        *(entry["path"] for entry in engine_test_closure(REPO)),
         *(entry["path"] for entry in dependency["files"]),
         "configs/controlled_rebuild_authorization.json",
+        ".gitattributes",
         ".gitignore",
     }
     for relative in sorted(paths):
@@ -143,16 +155,23 @@ def _commit_fixture_repo(root: Path) -> None:
 
 def _publisher(boundary, operation_factory, name: str = "readiness") -> AtomicPublisher:
     return AtomicPublisher(
-        boundary.active_root
-        / "data"
-        / "vault"
-        / ".staging"
-        / "releases"
-        / name,
-        boundary.active_root / "data" / "vault" / "releases",
-        boundary.active_root / "state" / "locks" / f"{name}.lock",
         boundary=boundary,
         operation_receipt=operation_factory("PUBLISH_RELEASE"),
+        lock_path=boundary.active_root / "state" / "locks" / f"{name}.lock",
+    )
+
+
+def _publish_fixture_synthetic_evidence(
+    *, boundary, publisher, monkeypatch, output: bytes
+) -> VerifiedReleaseReceipt:
+    monkeypatch.setattr(
+        readiness_module,
+        "_run_pinned_synthetic_suite",
+        lambda _archive: output,
+    )
+    return publish_synthetic_test_evidence(
+        boundary=boundary,
+        publisher=publisher,
     )
 
 
@@ -164,8 +183,12 @@ def _census(
     snapshot, _ = _legacy_census_snapshot(
         boundary=boundary, monkeypatch=monkeypatch
     )
+    archive_receipt = _legacy_archive_receipt(
+        boundary, operation_factory, snapshot
+    )
     return publish_legacy_trial_census(
         snapshot=snapshot,
+        source_archive_receipt=archive_receipt,
         boundary=boundary,
         publisher=_publisher(boundary, operation_factory, "census-production-derived"),
     )
@@ -175,28 +198,27 @@ def _prerequisites(boundary, operation_factory, monkeypatch):
     _install_readiness_closure(boundary)
     snapshot, selection, spec = _foundation_setup(boundary, operation_factory)
     foundation = _foundation_orchestrator(boundary, operation_factory).run(
-        source_snapshot_root=snapshot.root,
+        source_dbn_manifest=snapshot.manifest_path,
         source_selection_receipt=selection,
         feature_spec=spec,
     ).foundation_set_receipt
     census = _census(boundary, operation_factory, monkeypatch)
     _commit_fixture_repo(boundary.active_root)
     publisher = _publisher(boundary, operation_factory)
-    synthetic = publish_synthetic_test_evidence(
-        attestation=SyntheticTestAttestation(100, "b" * 64),
+    monkeypatch.setattr(
+        readiness_module,
+        "_run_pinned_synthetic_suite",
+        lambda _archive: (
+            b"................................................................ 100 passed in 1.00s\n"
+        ),
+    )
+    prerequisites = publish_readiness_prerequisites(
         boundary=boundary,
         publisher=publisher,
     )
-    engine = publish_engine_registration(
-        synthetic_test_evidence_receipt=synthetic,
-        boundary=boundary,
-        publisher=publisher,
-    )
-    isolation = publish_project_isolation_evidence(
-        synthetic_test_evidence_receipt=synthetic,
-        boundary=boundary,
-        publisher=publisher,
-    )
+    synthetic = prerequisites.synthetic_test_evidence_receipt
+    engine = prerequisites.engine_registration_receipt
+    isolation = prerequisites.isolation_evidence_receipt
     return foundation, synthetic, engine, isolation, census, publisher
 
 
@@ -246,13 +268,8 @@ def test_readiness_publishes_exact_non_authorizing_states_idempotently(
         assert all(value is False for value in safety["authority"].values())
         assert all(value is False for value in safety["claims"].values())
     assert rebuild["synthetic_test_evidence_receipt"] == synthetic.as_dict()
-    census_payload = json.loads(
-        (
-            boundary.active_root
-            / census.relative_root
-            / "legacy_census.json"
-        ).read_text(encoding="utf-8")
-    )
+    census_payload = census.embedded_document("legacy_census.json", boundary)
+    assert isinstance(census_payload, dict)
     assert historical["legacy_census"] == census_payload
     assert historical["legacy_census"]["status"] == (
         "INVALID_TRIAL_CENSUS_UNRESOLVED"
@@ -289,14 +306,80 @@ def test_readiness_publishes_exact_non_authorizing_states_idempotently(
     )
 
 
+def test_synthetic_evidence_derives_and_rechecks_verbatim_pytest_output(
+    boundary, operation_factory, monkeypatch
+) -> None:
+    _install_readiness_closure(boundary)
+    _commit_fixture_repo(boundary.active_root)
+    output = b"........................................................ 100 passed in 1.25s\n"
+    receipt = _publish_fixture_synthetic_evidence(
+        boundary=boundary,
+        publisher=_publisher(boundary, operation_factory, "captured-tests"),
+        monkeypatch=monkeypatch,
+        output=output,
+    )
+    payload = load_synthetic_test_evidence(receipt, boundary=boundary)
+    assert payload["test_attestation"]["passed_test_count"] == 100
+    assert payload["test_attestation"]["test_output_size"] == len(output)
+    execution = payload["test_execution_contract"]
+    assert execution["fixed_environment"]["PYTEST_DISABLE_PLUGIN_AUTOLOAD"] == "1"
+    assert execution["pythonpath_role"] == "IMMUTABLE_COMMITTED_ARCHIVE_SRC_ONLY"
+    assert "PYTEST_ADDOPTS" in execution["removed_environment"]
+    closure_paths = {item["path"] for item in payload["test_closure"]}
+    assert {
+        "tests/conftest.py",
+        "tests/test_legacy_trial_census.py",
+        "tests/test_time_and_identity.py",
+        "tests/test_trust_chain_hardening.py",
+    }.issubset(closure_paths)
+    manifest_path = boundary.active_root / receipt.manifest_path
+    manifest_path.write_bytes(manifest_path.read_bytes() + b"tampered\n")
+    with pytest.raises(IntegrityError, match="manifest"):
+        load_synthetic_test_evidence(receipt, boundary=boundary)
+
+
+def test_isolation_proof_rejects_hardlinked_mutable_descendant(
+    boundary, operation_factory
+) -> None:
+    _install_readiness_closure(boundary)
+    (boundary.active_root / "data").mkdir(exist_ok=True)
+    (boundary.active_root / "state").mkdir(exist_ok=True)
+    _commit_fixture_repo(boundary.active_root)
+    source = boundary.active_root / "bundles" / "source.bin"
+    alias = boundary.active_root / "bundles" / "alias.bin"
+    source.write_bytes(b"not shared across repositories")
+    try:
+        os.link(source, alias)
+    except OSError as exc:
+        pytest.skip(f"hard links unavailable: {exc}")
+    with pytest.raises(IntegrityError, match="hard-linked file"):
+        _compute_isolation_proof(boundary)
+
+
+def test_isolation_source_scan_rejects_literal_dynamic_stock_import(
+    boundary,
+) -> None:
+    source = boundary.active_root / "src" / "futures_rebuild" / "dynamic.py"
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        'import importlib\nimportlib.import_module("us_stocks_swing_model_v2.bad")\n',
+        encoding="utf-8",
+    )
+    with pytest.raises(IntegrityError, match="stock-project import"):
+        _scan_no_cross_import(boundary.active_root)
+
+
 def test_missing_census_returns_only_blocker_and_publishes_no_state(
     boundary, operation_factory, monkeypatch
 ) -> None:
     foundation, _, engine, isolation, _, publisher = _prerequisites(
         boundary, operation_factory, monkeypatch
     )
-    release_root = boundary.active_root / "data" / "vault" / "releases"
-    before = {path.name for path in release_root.iterdir()}
+    release_root = boundary.active_root / "manifests" / "data_releases"
+    before = {
+        path.relative_to(release_root).as_posix()
+        for path in release_root.rglob("*.json")
+    }
 
     result = publish_readiness_states(
         boundary=boundary,
@@ -318,7 +401,10 @@ def test_missing_census_returns_only_blocker_and_publishes_no_state(
         "publication_allowed": False,
         "status": "BLOCKED",
     }
-    assert {path.name for path in release_root.iterdir()} == before
+    assert {
+        path.relative_to(release_root).as_posix()
+        for path in release_root.rglob("*.json")
+    } == before
 
 
 def test_all_absent_inputs_return_blockers_without_writes(
@@ -340,7 +426,9 @@ def test_all_absent_inputs_return_blockers_without_writes(
     assert isinstance(result, ReadinessAssessment)
     assert not result.publication_allowed
     assert len(result.blockers) == 6
-    assert not (boundary.active_root / "data" / "vault" / "releases").exists()
+    assert not (
+        boundary.active_root / "manifests" / "data_releases" / "readiness"
+    ).exists()
 
 
 def test_tampered_legacy_census_returns_blocker_without_readiness_writes(
@@ -349,9 +437,12 @@ def test_tampered_legacy_census_returns_blocker_without_readiness_writes(
     foundation, _, engine, isolation, census, publisher = _prerequisites(
         boundary, operation_factory, monkeypatch
     )
-    release_root = boundary.active_root / "data" / "vault" / "releases"
-    before = {path.name for path in release_root.iterdir()}
-    census_path = boundary.active_root / census.relative_root / "legacy_census.json"
+    release_root = boundary.active_root / "manifests" / "data_releases"
+    before = {
+        path.relative_to(release_root).as_posix()
+        for path in release_root.rglob("*.json")
+    }
+    census_path = boundary.active_root / census.manifest_path
     census_path.write_bytes(census_path.read_bytes() + b" ")
 
     result = publish_readiness_states(
@@ -369,7 +460,10 @@ def test_tampered_legacy_census_returns_blocker_without_readiness_writes(
             "state": "HISTORICAL_RESEARCH_READY",
         }
     ]
-    assert {path.name for path in release_root.iterdir()} == before
+    assert {
+        path.relative_to(release_root).as_posix()
+        for path in release_root.rglob("*.json")
+    } == before
 
 
 def test_receipt_kind_substitution_fails_closed(
@@ -388,10 +482,11 @@ def test_receipt_kind_substitution_fails_closed(
             legacy_census_release_receipt=census,
         )
 
-    different_test_run = publish_synthetic_test_evidence(
-        attestation=SyntheticTestAttestation(100, "f" * 64),
+    different_test_run = _publish_fixture_synthetic_evidence(
         boundary=boundary,
         publisher=publisher,
+        monkeypatch=monkeypatch,
+        output=b"................................................................ 101 passed in 1.01s\n",
     )
     substituted_isolation = publish_project_isolation_evidence(
         synthetic_test_evidence_receipt=different_test_run,
@@ -421,12 +516,11 @@ def test_receipt_kind_substitution_fails_closed(
         boundary=boundary,
         publisher=publisher,
     )
-    original_path = (
-        boundary.active_root
-        / valid.historical_research_ready_receipt.relative_root
-        / "historical_research_ready.json"
+    substituted_payload = valid.historical_research_ready_receipt.embedded_document(
+        "historical_research_ready.json", boundary
     )
-    substituted_payload = json.loads(original_path.read_text(encoding="utf-8"))
+    assert isinstance(substituted_payload, dict)
+    substituted_payload = dict(substituted_payload)
     substituted_payload["engine_registration_receipt"] = (
         substituted_engine.as_dict()
     )
@@ -439,11 +533,9 @@ def test_receipt_kind_substitution_fails_closed(
     substituted_payload.pop("readiness_receipt_id")
     substituted_payload["readiness_receipt_id"] = sha256_json(substituted_payload)
     stage = publisher.create_stage("substituted_historical")
-    (stage / "historical_research_ready.json").write_bytes(
-        canonical_bytes(substituted_payload) + b"\n"
-    )
     substituted_manifest = ReleaseManifest.build(
         stage,
+        phase="readiness",
         release_kind=HISTORICAL_READY_RELEASE_KIND,
         schema_version="1.0.0",
         source_release_ids=(
@@ -458,8 +550,11 @@ def test_receipt_kind_substitution_fails_closed(
             "readiness_receipt_id": substituted_payload["readiness_receipt_id"],
             "state": "HISTORICAL_RESEARCH_READY",
         },
+        embedded_documents={
+            "historical_research_ready.json": substituted_payload
+        },
     )
-    substituted_receipt = VerifiedReleaseReceipt.from_release(
+    substituted_receipt = VerifiedReleaseReceipt.from_manifest(
         publisher.publish(stage, substituted_manifest), boundary
     )
     with pytest.raises(IntegrityError, match="exact dependency closure"):
@@ -467,7 +562,7 @@ def test_receipt_kind_substitution_fails_closed(
 
     engine_path = boundary.active_root / Path(engine_code_closure(REPO)[0]["path"])
     engine_path.write_bytes(engine_path.read_bytes() + b"\n")
-    with pytest.raises(IntegrityError, match="stale, substituted, or unsafe"):
+    with pytest.raises(IntegrityError, match="one clean committed branch state"):
         assess_readiness(
             boundary=boundary,
             foundation_set_receipt=foundation,
@@ -492,11 +587,7 @@ def test_tampered_readiness_release_fails_reverification(
         legacy_census_release_receipt=census,
     )
     assert isinstance(result, ReadinessPublication)
-    payload_path = (
-        boundary.active_root
-        / result.rebuild_complete_receipt.relative_root
-        / "rebuild_complete.json"
-    )
+    payload_path = boundary.active_root / result.rebuild_complete_receipt.manifest_path
     payload_path.write_bytes(payload_path.read_bytes() + b" ")
 
     with pytest.raises(IntegrityError):

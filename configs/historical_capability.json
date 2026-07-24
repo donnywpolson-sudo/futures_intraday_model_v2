@@ -42,8 +42,9 @@
     "romano_wolf_adjusted_p_maximum": "0.05"
   },
   "required_components": {
+    "futures_rebuild.foundation.coverage": ["StatusResearchScopePolicy"],
     "futures_rebuild.foundation.selection": ["resolve_foundation_selection"],
-    "futures_rebuild.foundation.orchestrator": ["load_foundation_set"],
+    "futures_rebuild.foundation.orchestrator": ["load_feature_source_input", "load_foundation_set"],
     "futures_rebuild.historical_builder": ["build_synthetic_research_run"],
     "futures_rebuild.historical_evaluator": ["evaluate_frozen_research_run"],
     "futures_rebuild.historical_splitter": ["split_synthetic_research_run"],

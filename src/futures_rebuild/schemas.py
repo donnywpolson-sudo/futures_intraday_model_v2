@@ -14,7 +14,7 @@ from .boundary import RepoBoundary
 from .canonical import sha256_json
 from .errors import ContractError
 from .identity import ActualContractIdentity
-from .release import VerifiedReleaseReceipt
+from .data_layout import DataReleaseReceipt as VerifiedReleaseReceipt
 from .time_contracts import AvailabilityBasis, require_utc
 
 

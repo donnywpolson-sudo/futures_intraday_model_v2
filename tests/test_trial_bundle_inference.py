@@ -24,6 +24,7 @@ from futures_rebuild.clock import SyntheticClock, issue_production_clock
 from futures_rebuild.economics import VerifiedEconomicsRegistry
 from futures_rebuild.errors import ContractError, IntegrityError, UnauthorizedOperation
 from futures_rebuild.identity import ActualContractIdentity
+from futures_rebuild.legacy_trial_census import publish_legacy_trial_census
 from futures_rebuild.inference import (
     InferenceAdapter,
     InferencePolicy,
@@ -46,6 +47,11 @@ from futures_rebuild.trial import (
     LegacyCensusReceipt,
     TrialEventLedger,
     TrialRegistry,
+)
+from tests.test_legacy_trial_census import (
+    _archive_receipt as _legacy_archive_receipt,
+    _publisher as _legacy_publisher,
+    _snapshot as _legacy_census_snapshot,
 )
 
 
@@ -190,6 +196,8 @@ def build_inference_system(
         preprocessing_hash="1" * 64,
         calibration_hash="2" * 64,
         decision_policy_hash=policy.policy_hash,
+        monitoring_policy_hash="8" * 64,
+        monitoring_reference_hash="9" * 64,
         training_release_receipts=(training_receipt,),
         inference_source_release_receipts=(feature_receipt,),
         definition_release_receipts=(definition_receipt,),
@@ -400,46 +408,30 @@ def test_candidate_sealing_requires_exact_external_authorization(
         )
 
 
-def _census(release_factory, boundary, *, resolved=True):
-    _, receipt = release_factory(
-        release_kind="legacy_trial_census",
-        filename="legacy_census.json",
-        content={
-            "census_sha256": "c" * 64,
-            "observed_attempt_floor": 7,
-            "preregistered_penalty_count": 100 if resolved else 0,
-            "rationale_sha256": "d" * 64,
-            "source_evidence_sha256": "e" * 64,
-            "status": (
-                "CONSERVATIVE_PENALTY_PREREGISTERED"
-                if resolved else "INVALID_TRIAL_CENSUS_UNRESOLVED"
-            ),
-        },
+def _census(boundary, operation_factory, monkeypatch):
+    snapshot, _ = _legacy_census_snapshot(
+        boundary=boundary, monkeypatch=monkeypatch
+    )
+    archive_receipt = _legacy_archive_receipt(
+        boundary, operation_factory, snapshot
+    )
+    receipt = publish_legacy_trial_census(
+        snapshot=snapshot,
+        source_archive_receipt=archive_receipt,
+        boundary=boundary,
+        publisher=_legacy_publisher(boundary, operation_factory),
     )
     return LegacyCensusReceipt.from_release(receipt, boundary)
 
 
-@pytest.mark.parametrize(
-    ("status", "penalty"),
-    (("RESOLVED", 7), ("CONSERVATIVE_PENALTY_PREREGISTERED", 7)),
-)
-def test_legacy_census_cannot_claim_exact_resolution_or_nonconservative_penalty(
-    release_factory, boundary, status, penalty
+def test_legacy_census_is_explicitly_unresolved_and_non_authorizing(
+    boundary, operation_factory, monkeypatch
 ) -> None:
-    _, receipt = release_factory(
-        release_kind="legacy_trial_census",
-        filename="legacy_census.json",
-        content={
-            "census_sha256": "c" * 64,
-            "observed_attempt_floor": 7,
-            "preregistered_penalty_count": penalty,
-            "rationale_sha256": "d" * 64,
-            "source_evidence_sha256": "e" * 64,
-            "status": status,
-        },
-    )
-    with pytest.raises(IntegrityError, match="census fields"):
-        LegacyCensusReceipt.from_release(receipt, boundary)
+    census = _census(boundary, operation_factory, monkeypatch)
+    assert census.status == "INVALID_TRIAL_CENSUS_UNRESOLVED"
+    assert census.exact_count_state == "INDETERMINATE"
+    assert census.preregistered_penalty_count == 0
+    assert census.trusted_gate is False
 
 
 def _charter(
@@ -495,6 +487,7 @@ def _charter(
         multiplicity_family_id="family_a",
         multiplicity_family_rule_hash="6" * 64,
         holdout_policy_hash="7" * 64,
+        robustness_policy_hash="8" * 64,
         outcome_unlock_at=outcome_unlock_at,
         evaluation_classification=(
             EvaluationClassification.REAL_HISTORY_DISCOVERY
@@ -519,7 +512,7 @@ def _registry(boundary, operation_factory, census):
     )
     registry = TrialRegistry(
         boundary.active_root / "state" / "trial_registry",
-        boundary.active_root / "data" / "vault" / "releases",
+        boundary.active_root / "manifests" / "data_releases",
         event_ledger=events,
         census=census,
         boundary=boundary,
@@ -552,7 +545,7 @@ def _trial_economics_payload():
 
 
 def test_global_trial_ledger_assigns_counts_and_semantic_changes_increment(
-    boundary, operation_factory, release_factory
+    boundary, operation_factory, release_factory, monkeypatch
 ) -> None:
     _, evaluation = release_factory(
         release_kind="historical_evaluation", filename="rows.bin", content=b"history"
@@ -562,7 +555,7 @@ def test_global_trial_ledger_assigns_counts_and_semantic_changes_increment(
         filename="contract_economics.json",
         content=_trial_economics_payload(),
     )
-    census = _census(release_factory, boundary)
+    census = _census(boundary, operation_factory, monkeypatch)
     registry, events = _registry(boundary, operation_factory, census)
     first = _charter(
         (evaluation, economics), real=True, economics=(economics.receipt_id,)
@@ -575,15 +568,15 @@ def test_global_trial_ledger_assigns_counts_and_semantic_changes_increment(
     second_path = registry.register(second)
     first_record = json.loads(first_path.read_text(encoding="utf-8"))
     second_record = json.loads(second_path.read_text(encoding="utf-8"))
-    assert first_record["counted_trial_number"] == 101
-    assert second_record["counted_trial_number"] == 102
+    assert first_record["counted_trial_number"] == 1
+    assert second_record["counted_trial_number"] == 2
     declarations = [item for item in events.events() if item["event_type"] == "DECLARED"]
-    assert [item["counted_trial_number"] for item in declarations] == [101, 102]
+    assert [item["counted_trial_number"] for item in declarations] == [1, 2]
     assert "trial_number" not in first.core() and "trusted" not in first.core()
 
 
 def test_unresolved_census_and_missing_preoutcome_anchor_block_real_history(
-    boundary, operation_factory, release_factory
+    boundary, operation_factory, release_factory, monkeypatch
 ) -> None:
     _, evaluation = release_factory(
         release_kind="historical_evaluation", filename="rows.bin", content=b"history"
@@ -596,7 +589,7 @@ def test_unresolved_census_and_missing_preoutcome_anchor_block_real_history(
     real = _charter(
         (evaluation, economics), real=True, economics=(economics.receipt_id,)
     )
-    unresolved = _census(release_factory, boundary, resolved=False)
+    unresolved = _census(boundary, operation_factory, monkeypatch)
     registry, _ = _registry(boundary, operation_factory, unresolved)
     registry.register(real)
     with pytest.raises(UnauthorizedOperation, match="UNRESOLVED"):
@@ -604,7 +597,7 @@ def test_unresolved_census_and_missing_preoutcome_anchor_block_real_history(
 
 
 def test_real_history_declaration_after_outcome_unlock_is_rejected(
-    boundary, operation_factory, release_factory
+    boundary, operation_factory, release_factory, monkeypatch
 ) -> None:
     _, evaluation = release_factory(
         release_kind="historical_evaluation", filename="rows.bin", content=b"history"
@@ -614,7 +607,7 @@ def test_real_history_declaration_after_outcome_unlock_is_rejected(
         filename="contract_economics.json",
         content=_trial_economics_payload(),
     )
-    census = _census(release_factory, boundary)
+    census = _census(boundary, operation_factory, monkeypatch)
     registry, events = _registry(boundary, operation_factory, census)
     real = _charter(
         (evaluation, economics),
@@ -627,8 +620,8 @@ def test_real_history_declaration_after_outcome_unlock_is_rejected(
     assert events.events() == ()
 
 
-def test_real_history_permit_remains_blocked_without_pinned_external_authority(
-    boundary, operation_factory, release_factory
+def test_unresolved_census_blocks_before_external_authority_can_be_considered(
+    boundary, operation_factory, release_factory, monkeypatch
 ) -> None:
     evaluations = []
     for role_index in range(4):
@@ -643,13 +636,13 @@ def test_real_history_permit_remains_blocked_without_pinned_external_authority(
         filename="contract_economics.json",
         content=_trial_economics_payload(),
     )
-    census = _census(release_factory, boundary)
+    census = _census(boundary, operation_factory, monkeypatch)
     registry, events = _registry(boundary, operation_factory, census)
     real = _charter(
         (*evaluations, economics), real=True, economics=(economics.receipt_id,)
     )
     registry.register(real)
-    with pytest.raises(UnauthorizedOperation, match="pre-outcome"):
+    with pytest.raises(UnauthorizedOperation, match="INVALID_TRIAL_CENSUS_UNRESOLVED"):
         registry.permit(real.charter_id)
     with pytest.raises(TypeError):
         boundary_module.EXTERNAL_AUTHORITY_KEYS[TEST_AUTHORITY_KEY_ID] = (1, 3)
@@ -657,7 +650,7 @@ def test_real_history_permit_remains_blocked_without_pinned_external_authority(
 
 
 def test_real_history_registration_rejects_economics_evidence_before_counting(
-    boundary, operation_factory, release_factory
+    boundary, operation_factory, release_factory, monkeypatch
 ) -> None:
     _, evaluation = release_factory(
         release_kind="historical_evaluation", filename="rows.bin", content=b"history"
@@ -667,7 +660,7 @@ def test_real_history_registration_rejects_economics_evidence_before_counting(
         filename="costs.yaml",
         content="ES:\n  tick_value: 12.5\n",
     )
-    census = _census(release_factory, boundary)
+    census = _census(boundary, operation_factory, monkeypatch)
     registry, events = _registry(boundary, operation_factory, census)
     real = _charter(
         (evaluation, evidence), real=True, economics=(evidence.receipt_id,)
@@ -678,12 +671,12 @@ def test_real_history_registration_rejects_economics_evidence_before_counting(
 
 
 def test_synthetic_permit_uses_verified_release_and_firewall(
-    boundary, operation_factory, release_factory
+    boundary, operation_factory, release_factory, monkeypatch
 ) -> None:
     release, evaluation = release_factory(
         release_kind="synthetic_evaluation", filename="rows.bin", content=b"synthetic"
     )
-    census = _census(release_factory, boundary)
+    census = _census(boundary, operation_factory, monkeypatch)
     registry, _ = _registry(boundary, operation_factory, census)
     charter = _charter((evaluation,))
     registry.register(charter)
@@ -730,12 +723,12 @@ def test_synthetic_permit_uses_verified_release_and_firewall(
 
 
 def test_trial_tail_and_canonical_path_substitution_fail_closed(
-    boundary, operation_factory, release_factory
+    boundary, operation_factory, release_factory, monkeypatch
 ) -> None:
     _, evaluation = release_factory(
         release_kind="synthetic_evaluation", filename="rows.bin", content=b"synthetic"
     )
-    census = _census(release_factory, boundary)
+    census = _census(boundary, operation_factory, monkeypatch)
     registry, events = _registry(boundary, operation_factory, census)
     charter = _charter((evaluation,))
     registry.register(charter)

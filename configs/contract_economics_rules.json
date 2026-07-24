@@ -1,5 +1,5 @@
 {
-  "rules_version": "1.1.0",
+  "rules_version": "1.2.0",
   "dataset": "GLBX.MDP3",
   "currency": "USD",
   "valid_from": "2010-01-01",
@@ -14,8 +14,8 @@
   "verification_sources": {
     "DATABENTO_DEFINITION_GLBX_MDP3": {
       "authoritative": true,
-      "binding": "EXACT_IMMUTABLE_SOURCE_RELEASE_DEFINITION_ROW_AND_PROVIDER_EVENT_TIME",
-      "locator": "data/vault/source_snapshots/<source_snapshot_id>/dbn/definition",
+      "binding": "EXACT_LAYOUT_V2_DBN_RELEASE_LOGICAL_DEFINITION_PATH_AND_PROVIDER_EVENT_TIME",
+      "locator": "manifests/data_releases/dbn/9e5a9f2a405e50b0cda6702b67506b0951b057500781d37c45171da3967e9b51.json#data/dbn/definition/{market}/{year}/{filename}",
       "role": "ACTUAL_CONTRACT_QUANTITY_TICK_CURRENCY_AND_EFFECTIVE_IDENTITY"
     },
     "CME_CONTRACT_SPECIFICATIONS": {"authoritative":false,"binding":"MUTABLE_PUBLIC_REFERENCE_NOT_TRUST_EVIDENCE","locator":"https://www.cmegroup.com/education/courses/introduction-to-futures/learn-about-contract-specifications","role":"HUMAN_REVIEW_ONLY"},

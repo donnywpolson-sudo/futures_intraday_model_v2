@@ -7,6 +7,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+from pathlib import Path
 from types import MappingProxyType
 from typing import Mapping
 
@@ -14,7 +15,7 @@ from .boundary import RepoBoundary
 from .canonical import sha256_json
 from .errors import ContractError, IntegrityError
 from .identity import ActualContractIdentity
-from .release import VerifiedReleaseReceipt
+from .data_layout import DataReleaseReceipt as VerifiedReleaseReceipt
 from .time_contracts import require_utc
 
 
@@ -88,11 +89,17 @@ class VerifiedEconomicsRegistry:
         cls, receipt: VerifiedReleaseReceipt, boundary: RepoBoundary
     ) -> "VerifiedEconomicsRegistry":
         manifest = receipt.verify(boundary)
-        if manifest.release_kind != "actual_contract_economics":
+        if (
+            receipt.phase != "reference"
+            or manifest.release_kind != "actual_contract_economics"
+            or manifest.schema_version not in {"1.0.0", "1.1.0"}
+        ):
             raise IntegrityError("economics receipt has the wrong release kind")
-        if {entry.path for entry in manifest.files} != {"contract_economics.json"}:
+        if {
+            entry.logical_path for entry in manifest.files
+        } != {"data/reference/economics/contract_economics.json"}:
             raise IntegrityError("economics release must contain exactly one registry file")
-        path = boundary.active_root / receipt.relative_root / "contract_economics.json"
+        path = receipt.resolve_unique_filename("contract_economics.json", boundary)
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
@@ -100,9 +107,13 @@ class VerifiedEconomicsRegistry:
         if (
             not isinstance(payload, dict)
             or set(payload) != {"records", "schema_version"}
-            or payload.get("schema_version") != "1.0.0"
+            or payload.get("schema_version") not in {"1.0.0", "1.1.0"}
+            or payload.get("schema_version") != manifest.schema_version
             or not isinstance(payload.get("records"), list)
-            or not payload["records"]
+            or (
+                manifest.schema_version == "1.0.0"
+                and not payload["records"]
+            )
         ):
             raise IntegrityError("economics registry schema/version is invalid")
         expected_fields = {
@@ -253,6 +264,23 @@ class VerifiedEconomicsRegistry:
         self, actual: ActualContractIdentity, decision_at: datetime
     ) -> VerifiedContractEconomics:
         self.verify()
+        return self._resolve_preverified(
+            actual,
+            decision_at,
+            expected_registry_hash=self.registry_hash,
+        )
+
+    def _resolve_preverified(
+        self,
+        actual: ActualContractIdentity,
+        decision_at: datetime,
+        *,
+        expected_registry_hash: str,
+    ) -> VerifiedContractEconomics:
+        """Resolve from one already verified immutable phase snapshot."""
+
+        if expected_registry_hash != self.registry_hash:
+            raise IntegrityError("economics preverified snapshot hash changed")
         decision = require_utc(decision_at, "decision_at")
         try:
             record = self.records[actual.identity_hash]

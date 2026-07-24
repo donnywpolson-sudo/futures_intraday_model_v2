@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .boundary import RepoBoundary
 from .canonical import sha256_json
 from .errors import ContractError, IntegrityError
-from .release import VerifiedReleaseReceipt
+from .data_layout import DataReleaseReceipt as VerifiedReleaseReceipt
 from .time_contracts import require_utc
 
 
@@ -67,14 +67,9 @@ class VerifiedSessionPolicy:
         manifest = receipt.verify(boundary)
         if manifest.release_kind != "versioned_session_policy":
             raise IntegrityError("session policy receipt has the wrong release kind")
-        paths = {entry.path for entry in manifest.files}
-        if paths != {"session_policy.json"}:
+        if manifest.files or set(manifest.embedded_documents) != {"session_policy.json"}:
             raise IntegrityError("session policy release must contain exactly one policy file")
-        policy_path = boundary.active_root / receipt.relative_root / "session_policy.json"
-        try:
-            payload = json.loads(policy_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            raise IntegrityError("session policy JSON is invalid") from exc
+        payload = receipt.embedded_document("session_policy.json", boundary)
         if (
             not isinstance(payload, dict)
             or set(payload) != {"policy_version", "rules"}
@@ -129,8 +124,15 @@ class VerifiedSessionPolicy:
         if rebuilt.policy_hash != self.policy_hash or dict(rebuilt.rules) != dict(self.rules):
             raise IntegrityError("session policy changed after verification")
 
-    def exchange_session_date(self, exchange: str, event_at: datetime) -> date:
-        self.verify()
+    def _exchange_session_date_preverified(
+        self,
+        exchange: str,
+        event_at: datetime,
+        *,
+        expected_policy_hash: str,
+    ) -> date:
+        if expected_policy_hash != self.policy_hash:
+            raise IntegrityError("preverified session policy hash changed")
         event = require_utc(event_at, "bar_event_at")
         try:
             rule = self.rules[exchange]
@@ -141,3 +143,11 @@ class VerifiedSessionPolicy:
         if local.timetz().replace(tzinfo=None) >= rule.session_roll_local:
             result += timedelta(days=rule.post_roll_day_offset)
         return result
+
+    def exchange_session_date(self, exchange: str, event_at: datetime) -> date:
+        self.verify()
+        return self._exchange_session_date_preverified(
+            exchange,
+            event_at,
+            expected_policy_hash=self.policy_hash,
+        )

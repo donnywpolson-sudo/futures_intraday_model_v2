@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -400,6 +401,14 @@ class AtomicPublisher:
         operation_receipt: OperationReceipt,
     ) -> None:
         operation_receipt.verify(boundary, operation="PUBLISH_RELEASE")
+        layout_contract = boundary.active_root / "configs" / "data_layout_contract.json"
+        if layout_contract.exists():
+            from .data_layout import verify_layout_contract
+
+            verify_layout_contract(layout_contract)
+            raise UnauthorizedOperation(
+                "layout-v1 vault publication is disabled by the layout-v2 contract"
+            )
         self.boundary = boundary
         self.operation_receipt = operation_receipt
         expected_release_root = (boundary.active_root / "data" / "vault" / "releases").resolve(
@@ -435,6 +444,15 @@ class AtomicPublisher:
         stage.mkdir()
         return stage
 
+    def _remove_current_duplicate_stage(self, stage: Path) -> None:
+        resolved = stage.resolve(strict=True)
+        resolved.relative_to(self.staging_root.resolve(strict=True))
+        for path in resolved.rglob("*"):
+            if is_linklike(path):
+                raise IntegrityError("duplicate stage contains a link-like entry")
+        shutil.rmtree(resolved)
+        fsync_directory(self.staging_root)
+
     def publish(self, stage: Path, manifest: ReleaseManifest) -> Path:
         self.operation_receipt.verify(self.boundary, operation="PUBLISH_RELEASE")
         self.boundary.assert_active_path(self.staging_root, purpose="release staging")
@@ -462,6 +480,7 @@ class AtomicPublisher:
             target = self.release_root / manifest.release_id
             if target.exists():
                 verify_release(target, manifest)
+                self._remove_current_duplicate_stage(stage_resolved)
                 return target
             manifest_path = stage_resolved / "release_manifest.json"
             descriptor = os.open(
@@ -482,6 +501,7 @@ class AtomicPublisher:
             except OSError:
                 if target.exists():
                     verify_release(target, manifest)
+                    self._remove_current_duplicate_stage(stage_resolved)
                     return target
                 raise
             fsync_directory(self.release_root)

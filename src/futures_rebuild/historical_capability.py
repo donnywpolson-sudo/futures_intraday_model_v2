@@ -23,9 +23,10 @@ import numpy as np
 from .boundary import OperationClassification, OperationReceipt, RepoBoundary
 from .canonical import sha256_file, sha256_json
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
+from .foundation.coverage import StatusResearchScopePolicy
 from .foundation.market_state import FoundationCoveragePolicy
 from .foundation.orchestrator import load_foundation_set
-from .release import VerifiedReleaseReceipt
+from .data_layout import DataReleaseReceipt as VerifiedReleaseReceipt
 from .research.bootstrap import stationary_bootstrap_index_rows
 from .research.contracts import (
     ResearchContractError,
@@ -51,8 +52,12 @@ REAL_HISTORY_OPERATION = "RUN_HISTORICAL_HYPOTHESIS_WFA"
 REAL_HISTORY_CLASSIFICATION = OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION
 _SHA = re.compile(r"[0-9a-f]{64}")
 REQUIRED_COMPONENTS = {
+    "futures_rebuild.foundation.coverage": ["StatusResearchScopePolicy"],
     "futures_rebuild.foundation.selection": ["resolve_foundation_selection"],
-    "futures_rebuild.foundation.orchestrator": ["load_foundation_set"],
+    "futures_rebuild.foundation.orchestrator": [
+        "load_feature_source_input",
+        "load_foundation_set",
+    ],
     "futures_rebuild.historical_builder": ["build_synthetic_research_run"],
     "futures_rebuild.historical_evaluator": ["evaluate_frozen_research_run"],
     "futures_rebuild.historical_splitter": ["split_synthetic_research_run"],
@@ -248,7 +253,7 @@ class FoundationResearchBlueprint:
     foundation_receipt_id: str
     foundation_set_id: str
     run_id: str
-    source_snapshot_id: str
+    source_dbn_release_id: str
     source_selection_release_id: str
     source_selection_receipt_id: str
     selection_manifest_id: str
@@ -261,6 +266,8 @@ class FoundationResearchBlueprint:
     status_eligible_rows: int
     status_gated_feature_ready_rows: int
     status_resolved_decision_fraction: str
+    research_interval_start: str
+    research_scope_policy_hash: str
     feature_release_ids: tuple[str, ...]
     outcome_source_release_ids: tuple[str, ...]
     economics_release_ids: tuple[str, ...]
@@ -279,13 +286,15 @@ class FoundationResearchBlueprint:
             "interval_count": self.interval_count,
             "outcome_source_release_ids": list(self.outcome_source_release_ids),
             "run_id": self.run_id,
-            "source_snapshot_id": self.source_snapshot_id,
+            "source_dbn_release_id": self.source_dbn_release_id,
             "source_selection_release_id": self.source_selection_release_id,
             "source_selection_receipt_id": self.source_selection_receipt_id,
             "selection_manifest_id": self.selection_manifest_id,
             "query_manifest_id": self.query_manifest_id,
             "query_manifest_file_count": self.query_manifest_file_count,
             "query_mode_census": list(self.query_mode_census),
+            "research_interval_start": self.research_interval_start,
+            "research_scope_policy_hash": self.research_scope_policy_hash,
             "status_eligible_rows": self.status_eligible_rows,
             "status_gated_feature_ready_rows": (
                 self.status_gated_feature_ready_rows
@@ -316,6 +325,9 @@ def build_foundation_research_blueprint(
     ):
         raise IntegrityError("foundation cannot produce a historical blueprint")
     policy = FoundationCoveragePolicy.from_dict(coverage.get("coverage_policy"))
+    scope_policy = StatusResearchScopePolicy.from_dict(
+        coverage.get("research_scope_policy")
+    )
     eligible_intervals = [
         item
         for item in intervals
@@ -327,8 +339,14 @@ def build_foundation_research_blueprint(
         not eligible_intervals
         or len(eligible_intervals)
         != coverage.get("research_eligible_interval_count")
+        or len(eligible_intervals) != coverage.get("research_scope_interval_count")
+        or coverage.get("research_failed_interval_count") != 0
         or len(intervals) - len(eligible_intervals)
         != coverage.get("research_abstained_interval_count")
+        or any(
+            item.get("start", "") < scope_policy.research_interval_start
+            for item in eligible_intervals
+        )
     ):
         raise IntegrityError("foundation research epoch eligibility is invalid")
     gates = [item["status_epoch_gate"] for item in eligible_intervals]
@@ -350,11 +368,23 @@ def build_foundation_research_blueprint(
     resolved_rows = sum(int(gate["status_resolved_rows"]) for gate in gates)
     resolved = str(Decimal(resolved_rows) / Decimal(bar_rows)) if bar_rows else "0"
     resolved_value = float(resolved)
+    gated_fraction = (
+        Decimal(ready)
+        / Decimal(sum(int(gate["feature_ready_rows"]) for gate in gates))
+        if gates
+        else Decimal(0)
+    )
     if (
         bar_rows < policy.minimum_bar_rows
         or eligible < policy.minimum_status_eligible_rows
         or ready < policy.minimum_status_gated_feature_ready_rows
         or resolved_value < float(policy.minimum_status_resolved_decision_fraction)
+        or gated_fraction < policy.minimum_status_gated_feature_ready_fraction
+        or bar_rows != coverage.get("bar_rows")
+        or eligible != coverage.get("status_eligible_rows")
+        or ready != coverage.get("status_gated_feature_ready_rows")
+        or resolved != coverage.get("status_resolved_decision_fraction")
+        or coverage.get("research_scope_policy_hash") != scope_policy.policy_hash
         or foundation.get("historical_outcome_or_label_execution") is not False
         or foundation.get("model_fit_count") != 0
         or foundation.get("wfa_execution_count") != 0
@@ -381,7 +411,7 @@ def build_foundation_research_blueprint(
     ):
         raise IntegrityError("foundation research dependency IDs are invalid")
     query_manifest_id = str(foundation.get("query_manifest_id"))
-    source_snapshot_id = str(foundation.get("source_snapshot_id"))
+    source_dbn_release_id = str(foundation.get("source_dbn_release_id"))
     selection_manifest_id = str(run_contract.get("selection_manifest_id"))
     source_selection_release_id = str(selection_receipt.get("release_id"))
     source_selection_receipt_id = str(selection_receipt.get("receipt_id"))
@@ -391,7 +421,7 @@ def build_foundation_research_blueprint(
             _SHA.fullmatch(value) is None
             for value in (
                 query_manifest_id,
-                source_snapshot_id,
+                source_dbn_release_id,
                 selection_manifest_id,
                 source_selection_release_id,
                 source_selection_receipt_id,
@@ -411,13 +441,15 @@ def build_foundation_research_blueprint(
         "interval_count": len(eligible_intervals),
         "outcome_source_release_ids": sorted(outcome_ids),
         "run_id": foundation["run_id"],
-        "source_snapshot_id": source_snapshot_id,
+        "source_dbn_release_id": source_dbn_release_id,
         "source_selection_release_id": source_selection_release_id,
         "source_selection_receipt_id": source_selection_receipt_id,
         "selection_manifest_id": selection_manifest_id,
         "query_manifest_id": query_manifest_id,
         "query_manifest_file_count": len(query_manifest),
         "query_mode_census": query_mode_census,
+        "research_interval_start": scope_policy.research_interval_start,
+        "research_scope_policy_hash": scope_policy.policy_hash,
         "status_eligible_rows": eligible,
         "status_gated_feature_ready_rows": ready,
         "status_resolved_decision_fraction": resolved,
@@ -427,7 +459,7 @@ def build_foundation_research_blueprint(
         foundation_receipt_id=receipt.receipt_id,
         foundation_set_id=str(foundation["foundation_set_id"]),
         run_id=str(foundation["run_id"]),
-        source_snapshot_id=source_snapshot_id,
+        source_dbn_release_id=source_dbn_release_id,
         source_selection_release_id=source_selection_release_id,
         source_selection_receipt_id=source_selection_receipt_id,
         selection_manifest_id=selection_manifest_id,
@@ -440,6 +472,8 @@ def build_foundation_research_blueprint(
         status_eligible_rows=eligible,
         status_gated_feature_ready_rows=ready,
         status_resolved_decision_fraction=resolved,
+        research_interval_start=scope_policy.research_interval_start,
+        research_scope_policy_hash=scope_policy.policy_hash,
         feature_release_ids=tuple(sorted(feature_ids)),
         outcome_source_release_ids=tuple(sorted(outcome_ids)),
         economics_release_ids=tuple(sorted(economics_ids)),

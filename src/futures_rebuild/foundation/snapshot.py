@@ -1,4 +1,4 @@
-"""Exact, verified access to one published source snapshot."""
+"""Exact, verified access to one immutable layout-v2 DBN release."""
 
 from __future__ import annotations
 
@@ -9,11 +9,12 @@ from types import MappingProxyType
 from typing import Mapping
 
 from ..boundary import RepoBoundary
-from ..canonical import sha256_file
+from ..canonical import sha256_file, sha256_json
+from ..data_layout import DataReleaseReceipt, verify_data_release_manifest
 from ..errors import ContractError, IntegrityError
-from ..migration import verify_published_source_snapshot
 
 
+DBN_RELEASE_KIND = "futures_phase1a_verified_dbn"
 SCHEMA_DIRECTORIES = MappingProxyType(
     {
         "definition": "definition",
@@ -32,84 +33,128 @@ DBN_NAME = re.compile(
 
 
 @dataclass(frozen=True)
-class SnapshotFile:
-    root: Path
+class DbnReleaseFile:
+    logical_path: str
+    physical_path: Path
     relative_path: str
     size: int
     sha256: str
-    source_snapshot_id: str
-    migration_manifest_sha256: str
+    source_release_id: str
+    source_manifest_sha256: str
     files_index_sha256: str
 
     @property
     def path(self) -> Path:
-        return self.root / Path(self.relative_path)
+        return self.physical_path
 
     def verify(self) -> Path:
-        path = self.path
+        path = self.physical_path
         if (
             not path.is_file()
             or path.is_symlink()
             or path.stat().st_size != self.size
             or sha256_file(path) != self.sha256
         ):
-            raise IntegrityError("snapshot file bytes differ from their accepted index")
+            raise IntegrityError("DBN release file bytes differ from their central manifest")
         return path
 
 
 @dataclass(frozen=True)
-class PublishedSourceSnapshot:
-    root: Path
-    receipt: Mapping[str, object]
-    files: Mapping[str, SnapshotFile]
+class PublishedDbnRelease:
+    manifest_path: Path
+    receipt: DataReleaseReceipt
+    files: Mapping[str, DbnReleaseFile]
+    files_index_sha256: str
 
     @classmethod
-    def open(
-        cls, path: Path, *, boundary: RepoBoundary
-    ) -> "PublishedSourceSnapshot":
-        root = boundary.assert_snapshot_path(path)
-        receipt = verify_published_source_snapshot(root)
-        snapshot_id = receipt["source_snapshot_id"]
-        manifest_hash = receipt["manifest_sha256"]
-        index_hash = receipt["files_index_sha256"]
-        if not all(
-            isinstance(item, str) and re.fullmatch(r"[0-9a-f]{64}", item)
-            for item in (snapshot_id, manifest_hash, index_hash)
+    def open(cls, path: Path, *, boundary: RepoBoundary) -> "PublishedDbnRelease":
+        manifest = verify_data_release_manifest(path, boundary)
+        if (
+            manifest.phase != "dbn"
+            or manifest.release_kind != DBN_RELEASE_KIND
+            or manifest.schema_version != "1.0.0"
+            or not manifest.files
+            or manifest.source_release_ids
         ):
-            raise IntegrityError("source snapshot receipt hashes are invalid")
-        indexed: dict[str, SnapshotFile] = {}
-        for raw in receipt["files"]:  # type: ignore[index]
-            if not isinstance(raw, dict):
-                raise IntegrityError("source snapshot file index is invalid")
-            relative = str(raw["path"])
-            indexed[relative] = SnapshotFile(
-                root=root,
+            raise IntegrityError("source DBN manifest is not the accepted Phase 1A release")
+        # The manifest and every file were verified immediately above.  Building
+        # the content-addressed receipt must not repeat the same multi-gigabyte
+        # hash pass.
+        receipt = DataReleaseReceipt.from_manifest(
+            path,
+            boundary,
+            verify_files=False,
+        )
+        index_hash = sha256_json([item.as_dict() for item in manifest.files])
+        indexed: dict[str, DbnReleaseFile] = {}
+        for entry in manifest.files:
+            logical = PurePosixPath(entry.logical_path)
+            if (
+                len(logical.parts) != 6
+                or logical.parts[:2] != ("data", "dbn")
+                or logical.parts[2] not in SCHEMA_DIRECTORIES.values()
+                or re.fullmatch(r"[0-9A-Z]{2,3}", logical.parts[3]) is None
+                or re.fullmatch(r"\d{4}", logical.parts[4]) is None
+                or not (
+                    logical.name.endswith(".dbn.zst")
+                    or logical.name.endswith(".dbn.zst.manifest.json")
+                )
+            ):
+                raise IntegrityError("DBN manifest contains a noncanonical logical path")
+            relative = PurePosixPath(*logical.parts[1:]).as_posix()
+            if relative in indexed:
+                raise IntegrityError("DBN manifest contains a duplicate logical path")
+            indexed[relative] = DbnReleaseFile(
+                logical_path=entry.logical_path,
+                physical_path=boundary.active_root / manifest.physical_relative_path(entry),
                 relative_path=relative,
-                size=int(raw["size"]),
-                sha256=str(raw["sha256"]),
-                source_snapshot_id=snapshot_id,
-                migration_manifest_sha256=manifest_hash,
+                size=entry.size,
+                sha256=entry.sha256,
+                source_release_id=manifest.release_id,
+                source_manifest_sha256=receipt.manifest_sha256,
                 files_index_sha256=index_hash,
             )
-        return cls(root, MappingProxyType(dict(receipt)), MappingProxyType(indexed))
+        dbns = {key for key in indexed if key.endswith(".dbn.zst")}
+        sidecars = {
+            key.removesuffix(".manifest.json")
+            for key in indexed
+            if key.endswith(".dbn.zst.manifest.json")
+        }
+        if dbns != sidecars:
+            raise IntegrityError("DBN release does not contain an exact DBN/sidecar pairing")
+        return cls(
+            manifest_path=path.resolve(strict=True),
+            receipt=receipt,
+            files=MappingProxyType(indexed),
+            files_index_sha256=index_hash,
+        )
 
     @property
-    def source_snapshot_id(self) -> str:
-        return str(self.receipt["source_snapshot_id"])
+    def root(self) -> Path:
+        return self.manifest_path.parent
 
-    def file(self, relative_path: str) -> SnapshotFile:
+    @property
+    def source_release_id(self) -> str:
+        return self.receipt.release_id
+
+    @property
+    def source_manifest_sha256(self) -> str:
+        return self.receipt.manifest_sha256
+
+    def file(self, relative_path: str) -> DbnReleaseFile:
         relative = PurePosixPath(relative_path)
         if (
             not relative_path
             or relative.is_absolute()
             or ".." in relative.parts
             or relative.as_posix() != relative_path
+            or relative.parts[0] != "dbn"
         ):
-            raise ContractError("snapshot file path is not a canonical relative path")
+            raise ContractError("DBN release file path is not canonical")
         try:
             return self.files[relative_path]
         except KeyError as exc:
-            raise IntegrityError("file is absent from the accepted source snapshot") from exc
+            raise IntegrityError("file is absent from the accepted DBN release") from exc
 
     def dbn_file(
         self,
@@ -118,7 +163,7 @@ class PublishedSourceSnapshot:
         market: str,
         year: int,
         filename: str,
-    ) -> SnapshotFile:
+    ) -> DbnReleaseFile:
         try:
             directory = SCHEMA_DIRECTORIES[schema]
         except KeyError as exc:
@@ -139,3 +184,8 @@ class PublishedSourceSnapshot:
         result.verify()
         sidecar.verify()
         return result
+
+
+# Transitional import spellings are aliases only; the layout-v1 opener no longer exists.
+SnapshotFile = DbnReleaseFile
+PublishedSourceSnapshot = PublishedDbnRelease

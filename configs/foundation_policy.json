@@ -1,5 +1,5 @@
 {
-  "policy_version": "1.0.0",
+  "policy_version": "2.0.0",
   "dataset": "GLBX.MDP3",
   "canonical_research_schemas": ["definition", "ohlcv-1m", "statistics", "status"],
   "ohlcv_1m": {
@@ -10,9 +10,13 @@
     "provider_ts_recv_may_be_invented": false
   },
   "definition": {
-    "effective_time_field": "ts_event",
-    "knowledge_time_field": "ts_recv",
-    "required_order": "ts_event<=bar_event_and_ts_recv<=decision"
+    "bar_start_baseline_required": true,
+    "causal_knowledge_time_field": "ts_recv",
+    "index_date_basis": "ts_recv_utc_date",
+    "intrabar_critical_change_disposition": "FAIL_CLOSED",
+    "lifecycle_authority": ["activation", "expiration", "security_update_action"],
+    "provider_event_time_role": "AUDIT_ONLY",
+    "selection": "SAME_INDEX_UTC_DATE_REPLAY_BY_TS_RECV_SOURCE_ORDER"
   },
   "continuous_contract": {
     "symbol": ".v.0",
@@ -26,6 +30,20 @@
     "foundation_forbidden": ["GLOBAL_ZSCORE", "GLOBAL_WINSORIZATION", "GLOBAL_IMPUTATION", "GLOBAL_VOLATILITY_SCALING", "OUTCOME_CONDITIONED_FILTER"],
     "learned_transform_location": "INSIDE_EACH_WFA_TRAINING_FOLD_ONLY"
   },
+  "provider_timestamp_clock_policy": {
+    "causal_visibility": "TS_RECV_MUST_NOT_EXCEED_DECISION_TS_EVENT_AUDIT_ONLY",
+    "cross_clock_order_assumption": "NONE",
+    "definition_lifecycle_authority": "ACTIVATION_EXPIRATION_SECURITY_UPDATE_ACTION",
+    "definition_selection": "SAME_INDEX_UTC_DATE_REPLAY_BY_TS_RECV_SOURCE_ORDER",
+    "historical_archive_latency_claim": "SOURCE_EPOCH_DEPENDENT_NEVER_INFERRED_FROM_CROSS_CLOCK_DELTA",
+    "index_timestamp_when_present": "ts_recv",
+    "instrument_id_date_utc_basis_when_ts_recv_present": "ts_recv",
+    "negative_receive_event_delta": "VALID_RECORDED_CROSS_CLOCK_OBSERVATION_NOT_AN_ELIGIBILITY_SIGNAL",
+    "source_order": "NONDECREASING_TS_RECV_THEN_SOURCE_FILE_AND_ROW_ORDINAL_EQUAL_TIME_CONFLICT_FAILS_CLOSED",
+    "ts_event_authority": "PUBLISHER_OR_MARKET_ORIGINAL_UNADJUSTED",
+    "ts_recv_authority": "DATABENTO_INDEX_TIMESTAMP_SOURCE_EPOCH_DEPENDENT"
+  },
+  "provider_data_epochs_sha256": "8615f460221e4f71ccb8d9c9cffe1a8f3863c6d03ffb52f627e76ae405648b3a",
   "known_anomalies_sha256": "eb7c83bf69d1c7a1b57878a66ac86581fc5d1572e252db7f48e6dedc4e49f923",
   "unknown_or_ambiguous_disposition": "FAIL_CLOSED_OR_EXPLICIT_ABSTENTION_IN_COVERAGE_DENOMINATOR"
 }

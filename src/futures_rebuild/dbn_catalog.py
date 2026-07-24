@@ -17,7 +17,7 @@ import uuid
 from collections import deque
 from datetime import date, datetime, time, timezone
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 import databento
 import databento_dbn as dbn
@@ -31,8 +31,14 @@ from .canonical import (
 )
 from .boundary import RepoBoundary
 from .errors import ContractError, IntegrityError
-from .migration import verify_published_source_snapshot
-from .release import VerifiedReleaseReceipt
+from .data_layout import (
+    LAYOUT_VERSION,
+    MANIFEST_ROOT,
+    STAGING_ROOT,
+    DataReleaseReceipt,
+    verify_layout_contract,
+)
+from .foundation.snapshot import PublishedDbnRelease
 from .source_symbology import build_query_contract, require_allowed_query_symbology
 
 
@@ -105,6 +111,90 @@ def _validate_continuous_contract_policy(contract: dict[str, object]) -> dict[st
     ):
         raise IntegrityError("continuous-contract selection policy is not the pinned causal rule")
     return dict(payload)
+
+
+def _validate_layout_v2_source_contract(
+    contract: dict[str, object],
+    *,
+    dbn_release: PublishedDbnRelease,
+    boundary: RepoBoundary,
+) -> None:
+    """Bind active cataloging to the one configured Phase 1A release and layout."""
+
+    provider = contract.get("provider")
+    layout = contract.get("data_layout")
+    source = contract.get("canonical_dbn_release")
+    expected_layout = {
+        "layout_version": LAYOUT_VERSION,
+        "layout_contract_path": "configs/data_layout_contract.json",
+        "layout_contract_sha256": (
+            str(layout.get("layout_contract_sha256"))
+            if isinstance(layout, dict)
+            else ""
+        ),
+        "manifest_root": MANIFEST_ROOT.as_posix(),
+        "staging_root": STAGING_ROOT.as_posix(),
+        "phase1b_logical_template": (
+            "data/raw/{market}/{year}/{interval}/{filename}"
+        ),
+        "phase1b_physical_template": (
+            "data/raw/{market}/{year}/{interval}/{release-id}/{filename}"
+        ),
+        "phase2_logical_template": (
+            "data/causally_gated_normalized/{market}/{year}/{interval}/{filename}"
+        ),
+        "phase2_physical_template": (
+            "data/causally_gated_normalized/{market}/{year}/{interval}/"
+            "{release-id}/{filename}"
+        ),
+    }
+    manifest = dbn_release.receipt.verify(boundary)
+    dbn_count = sum(
+        1 for item in manifest.files if item.logical_path.endswith(".dbn.zst")
+    )
+    sidecar_count = sum(
+        1
+        for item in manifest.files
+        if item.logical_path.endswith(".dbn.zst.manifest.json")
+    )
+    expected_source = {
+        "phase": dbn_release.receipt.phase,
+        "release_id": dbn_release.receipt.release_id,
+        "release_kind": dbn_release.receipt.release_kind,
+        "schema_version": dbn_release.receipt.schema_version,
+        "manifest_path": dbn_release.receipt.manifest_path,
+        "manifest_sha256": dbn_release.receipt.manifest_sha256,
+        "dbn_files": dbn_count,
+        "sidecar_files": sidecar_count,
+        "combined_files": len(manifest.files),
+        "combined_bytes": sum(item.size for item in manifest.files),
+    }
+    if (
+        contract.get("contract_version") != "2.0.0"
+        or contract.get("active_repository") != str(boundary.active_root)
+        or not isinstance(provider, dict)
+        or provider
+        != {
+            "name": "Databento",
+            "dataset": DATASET,
+            "paid_calls_authorized": False,
+            "downloads_authorized": False,
+        }
+        or not isinstance(layout, dict)
+        or set(layout) != set(expected_layout)
+        or layout != expected_layout
+        or not isinstance(source, dict)
+        or source != expected_source
+    ):
+        raise IntegrityError("layout-v2 source contract is not exactly pinned")
+    layout_contract = boundary.assert_active_path(
+        boundary.active_root / str(layout["layout_contract_path"]),
+        purpose="data layout contract",
+        subtree="configs",
+    )
+    if sha256_file(layout_contract) != layout["layout_contract_sha256"]:
+        raise IntegrityError("source contract data-layout hash is stale")
+    verify_layout_contract(layout_contract)
 
 
 def _load_known_anomalies(
@@ -261,7 +351,7 @@ def _apply_overlap_resolution(
     prior: dict[str, object],
     current: dict[str, object],
     resolutions: tuple[dict[str, object], ...],
-    dbn_root: Path,
+    resolve_logical_path: Callable[[str], Path],
 ) -> dict[str, object]:
     paths = frozenset((str(prior["path"]), str(current["path"])))
     matches = [
@@ -304,9 +394,8 @@ def _apply_overlap_resolution(
     expected_count = int(resolution["record_count"])
     expected_hash = str(resolution["record_subset_sha256"])
     for item in (authoritative, redundant):
-        relative = Path(str(item["path"])).relative_to(Path("data") / "dbn")
         observed = _record_subset_proof(
-            dbn_root / relative,
+            resolve_logical_path(str(item["path"])),
             start=overlap_start,
             end=overlap_end,
             timestamp_field=str(resolution["timestamp_field"]),
@@ -513,6 +602,11 @@ def _decode_summary(
     first: list[dict[str, object]] = []
     last: deque[dict[str, object]] = deque(maxlen=sample_records)
     count = 0
+    coverage_timestamp_field = (
+        "ts_recv" if metadata_schema in RECEIVE_TIME_COVERAGE_SCHEMAS else "ts_event"
+    )
+    coverage_timestamp_min: int | None = None
+    coverage_timestamp_max: int | None = None
     try:
         for array in _iter_arrays(
             store, scan_to_end=scan_to_end, sample_records=sample_records
@@ -539,6 +633,17 @@ def _decode_summary(
                 if len(first) < sample_records:
                     first.append(summary)
                 last.append(summary)
+                coverage_timestamp = int(summary[coverage_timestamp_field])
+                coverage_timestamp_min = (
+                    coverage_timestamp
+                    if coverage_timestamp_min is None
+                    else min(coverage_timestamp_min, coverage_timestamp)
+                )
+                coverage_timestamp_max = (
+                    coverage_timestamp
+                    if coverage_timestamp_max is None
+                    else max(coverage_timestamp_max, coverage_timestamp)
+                )
                 count += 1
     except (NotImplementedError, ValueError, TypeError) as exc:
         raise IntegrityError(f"DBN cannot be decoded with the pinned offline decoder: {path}") from exc
@@ -550,6 +655,9 @@ def _decode_summary(
     return {
         "dataset": str(metadata.dataset),
         "decode_status": "FULL_SCAN" if scan_to_end else "FIRST_SAMPLE_ONLY",
+        "coverage_timestamp_field": coverage_timestamp_field,
+        "coverage_timestamp_max": coverage_timestamp_max,
+        "coverage_timestamp_min": coverage_timestamp_min,
         "first_records": first,
         "last_records": list(last) if scan_to_end else None,
         "metadata_end_ns": _metadata_ns(metadata.end, "end"),
@@ -583,7 +691,9 @@ def _decode_summary(
 def validate_dbn_pair(
     dbn_path: Path,
     *,
-    dbn_root: Path,
+    dbn_root: Path | None = None,
+    logical_path: str | None = None,
+    sidecar_path: Path | None = None,
     expected_schema: str,
     role: str,
     sample_records: int = 1,
@@ -593,14 +703,23 @@ def validate_dbn_pair(
 
     if is_linklike(dbn_path) or not dbn_path.is_file():
         raise IntegrityError(f"DBN path is absent or link-like: {dbn_path}")
-    sidecar = Path(f"{dbn_path}.manifest.json")
+    sidecar = sidecar_path or Path(f"{dbn_path}.manifest.json")
     if not sidecar.exists() or is_linklike(sidecar):
         raise IntegrityError(f"DBN sidecar is absent or link-like: {sidecar}")
     try:
         payload = json.loads(sidecar.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise IntegrityError(f"invalid DBN sidecar: {sidecar}") from exc
-    relative = dbn_path.relative_to(dbn_root)
+    if logical_path is None:
+        if dbn_root is None:
+            raise ContractError("legacy DBN validation requires an explicit DBN root")
+        relative = dbn_path.relative_to(dbn_root)
+    else:
+        logical = Path(logical_path)
+        try:
+            relative = logical.relative_to(Path("data") / "dbn")
+        except ValueError as exc:
+            raise ContractError("DBN logical path must be beneath data/dbn") from exc
     if len(relative.parts) != 4:
         raise ContractError(
             f"DBN must use exact schema/market/year/file layout: {relative.as_posix()}"
@@ -713,6 +832,19 @@ def validate_dbn_pair(
             f"sampled DBN {coverage_timestamp_field} lies outside declared coverage: "
             f"{relative.as_posix()}"
         )
+    if scan_to_end and (
+        decoded.get("coverage_timestamp_field") != coverage_timestamp_field
+        or type(decoded.get("coverage_timestamp_min")) is not int
+        or type(decoded.get("coverage_timestamp_max")) is not int
+        or not expected_start_ns
+        <= int(decoded["coverage_timestamp_min"])
+        <= int(decoded["coverage_timestamp_max"])
+        < expected_end_ns
+    ):
+        raise IntegrityError(
+            f"full-scan DBN {coverage_timestamp_field} range lies outside declared "
+            f"coverage: {relative.as_posix()}"
+        )
     sidecar_hash = sha256_file(sidecar)
     query_contract = build_query_contract(
         schema=expected_schema,
@@ -789,7 +921,7 @@ def build_source_selection_manifest(
     source_contract_path: Path,
     *,
     boundary: RepoBoundary,
-    source_snapshot_root: Path | None = None,
+    source_dbn_manifest_path: Path | None = None,
     overlap_contract_path: Path | None = None,
     known_anomaly_contract_path: Path,
     sample_records: int = 1,
@@ -818,23 +950,39 @@ def build_source_selection_manifest(
         known_anomaly_contract_path,
         expected_sha256=str(contract.get("known_anomalies_sha256", "")),
     )
-    snapshot_receipt: dict[str, object] | None = None
-    if source_snapshot_root is None:
+    dbn_release: PublishedDbnRelease | None = None
+    if source_dbn_manifest_path is None:
         boundary.assert_legacy_read_root(repository_root)
         dbn_root = repository_root / "data" / "dbn"
         source_scope = "LEGACY_PRECOPY_VALIDATION"
-        source_snapshot_id: str | None = None
-        source_snapshot_receipt_sha256: str | None = None
+        source_dbn_release_id: str | None = None
+        source_dbn_manifest_sha256: str | None = None
+
+        def resolve_logical_path(value: str) -> Path:
+            relative = Path(value).relative_to(Path("data") / "dbn")
+            return dbn_root / relative
     else:
         boundary.assert_active_root(repository_root)
-        source_snapshot_root = boundary.assert_snapshot_path(source_snapshot_root)
-        snapshot_receipt = verify_published_source_snapshot(source_snapshot_root)
-        dbn_root = source_snapshot_root / "dbn"
-        source_scope = "VERIFIED_PUBLISHED_SOURCE_SNAPSHOT"
-        source_snapshot_id = str(snapshot_receipt["source_snapshot_id"])
-        source_snapshot_receipt_sha256 = sha256_file(
-            source_snapshot_root / "SOURCE_SNAPSHOT_RECEIPT.json"
+        dbn_release = PublishedDbnRelease.open(
+            source_dbn_manifest_path, boundary=boundary
         )
+        _validate_layout_v2_source_contract(
+            contract,
+            dbn_release=dbn_release,
+            boundary=boundary,
+        )
+        dbn_root = boundary.active_root / "data" / "dbn"
+        source_scope = "VERIFIED_LAYOUT_V2_DBN_RELEASE"
+        source_dbn_release_id = dbn_release.source_release_id
+        source_dbn_manifest_sha256 = dbn_release.source_manifest_sha256
+
+        def resolve_logical_path(value: str) -> Path:
+            logical = Path(value)
+            try:
+                relative = logical.relative_to(Path("data") / "dbn")
+            except ValueError as exc:
+                raise IntegrityError("catalog DBN path is outside data/dbn") from exc
+            return dbn_release.file((Path("dbn") / relative).as_posix()).verify()
     if scan_to_end and (not family_ids or max_full_scan_bytes is None or max_full_scan_bytes <= 0):
         raise ContractError(
             "full scan requires at least one --family and a positive byte ceiling"
@@ -872,7 +1020,19 @@ def build_source_selection_manifest(
         if len(schema_relative.parts) != 1:
             raise ContractError("DBN family path must identify exactly one schema directory")
         schema_root = dbn_root / schema_relative
-        paths = _exact_dbn_paths(schema_root)
+        if dbn_release is None:
+            path_bindings = tuple(
+                (path, f"data/dbn/{path.relative_to(dbn_root).as_posix()}")
+                for path in _exact_dbn_paths(schema_root)
+            )
+        else:
+            prefix = f"dbn/{schema_relative.as_posix()}/"
+            path_bindings = tuple(
+                (item.path, f"data/{relative}")
+                for relative, item in sorted(dbn_release.files.items())
+                if relative.startswith(prefix) and relative.endswith(".dbn.zst")
+            )
+        paths = tuple(path for path, _ in path_bindings)
         if "expected_dbn_files" in family and len(paths) != int(
             family["expected_dbn_files"]
         ):
@@ -886,10 +1046,19 @@ def build_source_selection_manifest(
                     "selected families exceed the explicit full-scan resource ceiling"
                 )
         family_entries: list[dict[str, object]] = []
-        for dbn_path in paths:
+        for dbn_path, logical_path in path_bindings:
+            sidecar_binding = (
+                dbn_release.file(
+                    f"{Path(logical_path).relative_to('data').as_posix()}.manifest.json"
+                )
+                if dbn_release is not None
+                else None
+            )
             validated = validate_dbn_pair(
                 dbn_path,
-                dbn_root=dbn_root,
+                dbn_root=dbn_root if dbn_release is None else None,
+                logical_path=logical_path if dbn_release is not None else None,
+                sidecar_path=(sidecar_binding.path if sidecar_binding else None),
                 expected_schema=schema,
                 role=role,
                 sample_records=sample_records,
@@ -919,7 +1088,7 @@ def build_source_selection_manifest(
                         prior=prior_entry,
                         current=validated,
                         resolutions=overlap_resolutions,
-                        dbn_root=dbn_root,
+                        resolve_logical_path=resolve_logical_path,
                     )
                     resolution_id = str(applied["resolution_id"])
                     if resolution_id in used_overlap_resolution_ids:
@@ -979,8 +1148,8 @@ def build_source_selection_manifest(
         "selection_scope": "FILTERED" if family_ids else "ALL_SOURCE_FAMILIES",
         "record_scan_policy": "FULL_STREAM_BOUNDED_MEMORY" if scan_to_end else "METADATA_PLUS_FIRST_SAMPLE",
         "source_scope": source_scope,
-        "source_snapshot_id": source_snapshot_id,
-        "source_snapshot_receipt_sha256": source_snapshot_receipt_sha256,
+        "source_dbn_manifest_sha256": source_dbn_manifest_sha256,
+        "source_dbn_release_id": source_dbn_release_id,
         "source_contract_sha256": sha256_file(source_contract_path),
     }
     return {**core, "selection_manifest_id": sha256_json(core)}
@@ -989,44 +1158,26 @@ def build_source_selection_manifest(
 def assert_m2b_source_eligible(
     selection_manifest: dict[str, object],
     *,
-    acceptance_receipts: tuple[VerifiedReleaseReceipt, ...],
+    acceptance_receipts: tuple[DataReleaseReceipt, ...],
     boundary: RepoBoundary,
 ) -> None:
-    """Block M2B release construction until every quarantined file is accepted."""
+    """Compatibility wrapper for the strict aggregate layout-v2 gate."""
 
-    accepted: set[str] = set()
-    for receipt in acceptance_receipts:
-        manifest = receipt.verify(boundary)
-        if manifest.release_kind != "anomaly_acceptance" or {
-            entry.path for entry in manifest.files
-        } != {"acceptance.json"}:
-            raise IntegrityError("anomaly acceptance release has unexpected content")
-        path = boundary.active_root / receipt.relative_root / "acceptance.json"
-        try:
-            payload = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, ValueError) as exc:
-            raise IntegrityError("anomaly acceptance evidence is invalid") from exc
-        if (
-            not isinstance(payload, dict)
-            or set(payload)
-            != {
-                "anomaly_contract_sha256",
-                "accepted_validation_sha256",
-                "status",
-            }
-            or payload.get("status") != "ACCEPTED_AFTER_CAUSAL_REVALIDATION"
-            or payload.get("anomaly_contract_sha256")
-            != selection_manifest.get("known_anomalies_sha256")
-        ):
-            raise IntegrityError("anomaly acceptance evidence is not exact")
-        accepted.add(str(payload["accepted_validation_sha256"]))
-    for raw in selection_manifest.get("files", []):
-        if not isinstance(raw, dict):
-            raise IntegrityError("selection manifest file entry is invalid")
-        if str(raw.get("coverage_disposition", "")).startswith("QUARANTINED") and str(
-            raw.get("validation_sha256", "")
-        ) not in accepted:
-            raise IntegrityError("M2B source includes an unaccepted quarantined anomaly")
+    from .anomaly_acceptance import assert_anomaly_materialization_eligible
+
+    release_id = selection_manifest.get("source_dbn_release_id")
+    if type(release_id) is not str:
+        raise IntegrityError("M2B source lacks a layout-v2 DBN release identity")
+    snapshot = PublishedDbnRelease.open(
+        boundary.active_root / MANIFEST_ROOT / "dbn" / f"{release_id}.json",
+        boundary=boundary,
+    )
+    assert_anomaly_materialization_eligible(
+        selection_manifest,
+        acceptance_receipts=acceptance_receipts,
+        snapshot=snapshot,
+        boundary=boundary,
+    )
 
 
 def _atomic_write(path: Path, payload: dict[str, object]) -> None:
@@ -1077,7 +1228,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository-root", type=Path, required=True)
     parser.add_argument("--source-contract", type=Path, required=True)
-    parser.add_argument("--source-snapshot-root", type=Path)
+    parser.add_argument("--source-dbn-manifest", type=Path)
     parser.add_argument("--overlap-contract", type=Path)
     parser.add_argument("--known-anomalies", type=Path, required=True)
     parser.add_argument("--output", type=Path)
@@ -1110,7 +1261,7 @@ def main(argv: list[str] | None = None) -> int:
         args.repository_root,
         args.source_contract,
         boundary=boundary,
-        source_snapshot_root=args.source_snapshot_root,
+        source_dbn_manifest_path=args.source_dbn_manifest,
         overlap_contract_path=args.overlap_contract,
         known_anomaly_contract_path=args.known_anomalies,
         sample_records=args.sample_records,
@@ -1136,7 +1287,7 @@ def main(argv: list[str] | None = None) -> int:
             "record_scan_policy": result["record_scan_policy"],
             "selection_scope": result["selection_scope"],
             "source_scope": result["source_scope"],
-            "source_snapshot_id": result["source_snapshot_id"],
+            "source_dbn_release_id": result["source_dbn_release_id"],
         }
         print(canonical_bytes(summary).decode("utf-8"))
     return 0

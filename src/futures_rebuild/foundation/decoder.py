@@ -21,8 +21,8 @@ from .records import (
     ProviderDefinition,
     StatisticsRecordV1,
     StatusRecordV1,
+    UINT64_NULL,
     exact_int,
-    ns_to_datetime,
 )
 from .snapshot import DBN_NAME, SnapshotFile
 
@@ -30,6 +30,7 @@ from .snapshot import DBN_NAME, SnapshotFile
 SUPPORTED_DATABENTO_VERSION = "0.78.0"
 DATASET = "GLBX.MDP3"
 MAX_BATCH_ROWS = 1_000_000
+DAY_NS = 86_400_000_000_000
 DEFINITION_DTYPE_V1 = (
     "length", "rtype", "publisher_id", "instrument_id", "ts_event", "ts_recv",
     "min_price_increment", "display_factor", "expiration", "activation",
@@ -117,6 +118,21 @@ def _enum_name(enum_type: object, value: object, name: str) -> str:
         return f"UNKNOWN_{raw}"
 
 
+def _char_enum_name(enum_type: object, value: object, name: str) -> str:
+    if isinstance(value, np.bytes_):
+        value = bytes(value)
+    if not isinstance(value, bytes) or len(value) != 1:
+        raise IntegrityError(f"{name} is not one exact encoded enum byte")
+    try:
+        decoded = value.decode("ascii", errors="strict")
+    except UnicodeDecodeError as exc:
+        raise IntegrityError(f"{name} is not strict ASCII") from exc
+    try:
+        return str(enum_type(decoded).name)  # type: ignore[operator]
+    except (TypeError, ValueError):
+        return f"UNKNOWN_{value.hex()}"
+
+
 def _tri_state(value: object, name: str) -> str:
     if isinstance(value, np.bytes_):
         value = bytes(value)
@@ -135,6 +151,15 @@ def _date_boundary_ns(value: str) -> int:
     epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
     delta = parsed - epoch
     return delta.days * 86_400_000_000_000
+
+
+def _index_date_iso(timestamp_ns: int, cache: dict[int, str]) -> str:
+    day = timestamp_ns // DAY_NS
+    observed = cache.get(day)
+    if observed is None:
+        observed = datetime.fromtimestamp(day * 86_400, tz=timezone.utc).date().isoformat()
+        cache[day] = observed
+    return observed
 
 
 def _validate_metadata(
@@ -208,9 +233,26 @@ def _chunks(
     if expected_dtypes is None:
         raise ContractError("foundation decoder schema is unsupported")
     try:
+        prior_ts_recv: int | None = None
         for chunk in chunks:
             if not isinstance(chunk, np.ndarray) or chunk.dtype.names not in expected_dtypes:
                 raise IntegrityError("decoded DBN dtype differs from the pinned schema")
+            if schema in {"definition", "status", "statistics"} and len(chunk):
+                for field in ("ts_event", "ts_recv"):
+                    timestamps = chunk[field]
+                    if np.any(timestamps == 0) or np.any(timestamps == UINT64_NULL):
+                        raise IntegrityError(
+                            f"decoded {schema} contains an undefined provider timestamp"
+                        )
+                receive_times = chunk["ts_recv"]
+                if (
+                    (prior_ts_recv is not None and int(receive_times[0]) < prior_ts_recv)
+                    or np.any(receive_times[1:] < receive_times[:-1])
+                ):
+                    raise IntegrityError(
+                        f"decoded {schema} is not ordered by provider index timestamp"
+                    )
+                prior_ts_recv = int(receive_times[-1])
             yield chunk
     except (NotImplementedError, TypeError, ValueError) as exc:
         raise IntegrityError("offline DBN decoding failed") from exc
@@ -239,6 +281,7 @@ def iter_definitions(
     batch_rows: int = 100_000,
 ) -> Iterator[ProviderDefinition]:
     ordinal = 0
+    index_date_cache: dict[int, str] = {}
     for chunk in _chunks(
         binding,
         schema="definition",
@@ -248,13 +291,34 @@ def iter_definitions(
     ):
         for row in chunk:
             raw_bytes = row.tobytes()
+            ts_recv_ns = _integer(row["ts_recv"], "definition.ts_recv", nonnegative=True)
             yield ProviderDefinition(
                 dataset=DATASET,
                 market=market,
                 publisher_id=_integer(row["publisher_id"], "publisher_id"),
                 instrument_id=_integer(row["instrument_id"], "instrument_id"),
+                instrument_id_date_utc=_index_date_iso(
+                    ts_recv_ns, index_date_cache
+                ),
                 ts_event_ns=_integer(row["ts_event"], "ts_event", nonnegative=True),
-                ts_recv_ns=_integer(row["ts_recv"], "ts_recv", nonnegative=True),
+                ts_recv_ns=ts_recv_ns,
+                activation_ns=_integer(
+                    row["activation"], "definition.activation", nonnegative=True
+                ),
+                expiration_ns=_integer(
+                    row["expiration"], "definition.expiration", nonnegative=True
+                ),
+                security_update_action=_char_enum_name(
+                    dbn.SecurityUpdateAction,
+                    row["security_update_action"],
+                    "definition.security_update_action",
+                ),
+                instrument_class=_char_enum_name(
+                    dbn.InstrumentClass,
+                    row["instrument_class"],
+                    "definition.instrument_class",
+                ),
+                security_type=_text(row["security_type"], "definition.security_type"),
                 raw_symbol=_text(row["raw_symbol"], "raw_symbol"),
                 exchange=_text(row["exchange"], "exchange"),
                 currency=_text(row["currency"], "currency"),
@@ -265,10 +329,11 @@ def iter_definitions(
                     row["unit_of_measure_qty"], "unit_of_measure_qty"
                 ),
                 unit_of_measure=_text(row["unit_of_measure"], "unit_of_measure"),
-                source_release_id=binding.source_snapshot_id,
-                source_manifest_sha256=binding.migration_manifest_sha256,
+                source_release_id=binding.source_release_id,
+                source_manifest_sha256=binding.source_manifest_sha256,
                 source_file_path=binding.relative_path,
                 source_file_sha256=binding.sha256,
+                row_ordinal=ordinal,
                 row_sha256=_row_id(binding, ordinal, raw_bytes),
             )
             ordinal += 1
@@ -305,8 +370,8 @@ def iter_bars(
                 low_nano=_integer(row["low"], "low"),
                 close_nano=_integer(row["close"], "close"),
                 volume=_integer(row["volume"], "volume", nonnegative=True),
-                source_release_id=binding.source_snapshot_id,
-                source_manifest_sha256=binding.migration_manifest_sha256,
+                source_release_id=binding.source_release_id,
+                source_manifest_sha256=binding.source_manifest_sha256,
                 source_file_path=binding.relative_path,
                 source_file_sha256=binding.sha256,
                 row_sha256=_row_id(binding, ordinal, raw_bytes),
@@ -322,6 +387,7 @@ def iter_statuses(
     batch_rows: int = 100_000,
 ) -> Iterator[StatusRecordV1]:
     ordinal = 0
+    index_date_cache: dict[int, str] = {}
     for chunk in _chunks(
         binding,
         schema="status",
@@ -331,6 +397,9 @@ def iter_statuses(
     ):
         for row in chunk:
             raw_bytes = row.tobytes()
+            ts_recv_ns = _integer(
+                row["ts_recv"], "status.ts_recv", nonnegative=True
+            )
             ts_event_ns = _integer(
                 row["ts_event"], "status.ts_event", nonnegative=True
             )
@@ -339,13 +408,11 @@ def iter_statuses(
                 market=market,
                 publisher_id=_integer(row["publisher_id"], "publisher_id"),
                 instrument_id=_integer(row["instrument_id"], "instrument_id"),
-                instrument_id_date_utc=ns_to_datetime(
-                    ts_event_ns, "status.ts_event"
-                ).date().isoformat(),
-                ts_event_ns=ts_event_ns,
-                ts_recv_ns=_integer(
-                    row["ts_recv"], "status.ts_recv", nonnegative=True
+                instrument_id_date_utc=_index_date_iso(
+                    ts_recv_ns, index_date_cache
                 ),
+                ts_event_ns=ts_event_ns,
+                ts_recv_ns=ts_recv_ns,
                 action=_enum_name(dbn.StatusAction, row["action"], "status.action"),
                 reason=_enum_name(dbn.StatusReason, row["reason"], "status.reason"),
                 trading_event=_enum_name(
@@ -357,8 +424,8 @@ def iter_statuses(
                     row["is_short_sell_restricted"],
                     "status.is_short_sell_restricted",
                 ),
-                source_release_id=binding.source_snapshot_id,
-                source_manifest_sha256=binding.migration_manifest_sha256,
+                source_release_id=binding.source_release_id,
+                source_manifest_sha256=binding.source_manifest_sha256,
                 source_file_path=binding.relative_path,
                 source_file_sha256=binding.sha256,
                 row_ordinal=ordinal,
@@ -375,6 +442,7 @@ def iter_statistics(
     batch_rows: int = 100_000,
 ) -> Iterator[StatisticsRecordV1]:
     ordinal = 0
+    index_date_cache: dict[int, str] = {}
     for chunk in _chunks(
         binding,
         schema="statistics",
@@ -384,6 +452,9 @@ def iter_statistics(
     ):
         for row in chunk:
             raw_bytes = row.tobytes()
+            ts_recv_ns = _integer(
+                row["ts_recv"], "statistics.ts_recv", nonnegative=True
+            )
             ts_event_ns = _integer(
                 row["ts_event"], "statistics.ts_event", nonnegative=True
             )
@@ -392,13 +463,11 @@ def iter_statistics(
                 market=market,
                 publisher_id=_integer(row["publisher_id"], "publisher_id"),
                 instrument_id=_integer(row["instrument_id"], "instrument_id"),
-                instrument_id_date_utc=ns_to_datetime(
-                    ts_event_ns, "statistics.ts_event"
-                ).date().isoformat(),
-                ts_event_ns=ts_event_ns,
-                ts_recv_ns=_integer(
-                    row["ts_recv"], "statistics.ts_recv", nonnegative=True
+                instrument_id_date_utc=_index_date_iso(
+                    ts_recv_ns, index_date_cache
                 ),
+                ts_event_ns=ts_event_ns,
+                ts_recv_ns=ts_recv_ns,
                 ts_ref_ns=_integer(
                     row["ts_ref"], "statistics.ts_ref", nonnegative=True
                 ),
@@ -426,8 +495,8 @@ def iter_statistics(
                 flags=_integer(
                     row["stat_flags"], "statistics.stat_flags", nonnegative=True
                 ),
-                source_release_id=binding.source_snapshot_id,
-                source_manifest_sha256=binding.migration_manifest_sha256,
+                source_release_id=binding.source_release_id,
+                source_manifest_sha256=binding.source_manifest_sha256,
                 source_file_path=binding.relative_path,
                 source_file_sha256=binding.sha256,
                 row_ordinal=ordinal,

@@ -28,7 +28,7 @@ from .canonical import (
 )
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
 from .locking import FileLease
-from .release import VerifiedReleaseReceipt
+from .data_layout import DataReleaseReceipt as VerifiedReleaseReceipt
 from .time_contracts import require_utc
 
 
@@ -189,6 +189,8 @@ class BundleMetadata:
     preprocessing_hash: str
     calibration_hash: str
     decision_policy_hash: str
+    monitoring_policy_hash: str
+    monitoring_reference_hash: str
     training_release_receipts: tuple[VerifiedReleaseReceipt, ...]
     inference_source_release_receipts: tuple[VerifiedReleaseReceipt, ...]
     definition_release_receipts: tuple[VerifiedReleaseReceipt, ...]
@@ -220,6 +222,8 @@ class BundleMetadata:
             self.preprocessing_hash,
             self.calibration_hash,
             self.decision_policy_hash,
+            self.monitoring_policy_hash,
+            self.monitoring_reference_hash,
             self.loader_code_hash,
             self.code_hash,
             self.config_hash,
@@ -303,6 +307,8 @@ class BundleMetadata:
                 item.as_dict() for item in self.inference_source_release_receipts
             ],
             "loader_code_hash": self.loader_code_hash,
+            "monitoring_policy_hash": self.monitoring_policy_hash,
+            "monitoring_reference_hash": self.monitoring_reference_hash,
             "preprocessing_hash": self.preprocessing_hash,
             "training_cutoff": self.training_cutoff.isoformat(),
             "training_release_receipts": [
@@ -327,6 +333,8 @@ class BundleMetadata:
             "feature_schema_hash",
             "inference_source_release_receipts",
             "loader_code_hash",
+            "monitoring_policy_hash",
+            "monitoring_reference_hash",
             "preprocessing_hash",
             "training_cutoff",
             "training_release_receipts",
@@ -343,6 +351,8 @@ class BundleMetadata:
                 preprocessing_hash=str(payload["preprocessing_hash"]),
                 calibration_hash=str(payload["calibration_hash"]),
                 decision_policy_hash=str(payload["decision_policy_hash"]),
+                monitoring_policy_hash=str(payload["monitoring_policy_hash"]),
+                monitoring_reference_hash=str(payload["monitoring_reference_hash"]),
                 training_release_receipts=_receipt_tuple(
                     payload["training_release_receipts"]
                 ),

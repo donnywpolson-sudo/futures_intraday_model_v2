@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from functools import lru_cache
 import re
 from typing import Sequence
 
@@ -56,10 +57,19 @@ class ContractDefinition:
         return self.dataset, self.publisher_id, self.instrument_id
 
     def as_dict(self) -> dict[str, object]:
-        result = asdict(self)
-        result["multiplier"] = str(self.multiplier)
-        result["min_tick"] = str(self.min_tick)
-        return result
+        return {
+            "currency": self.currency,
+            "dataset": self.dataset,
+            "definition_manifest_sha256": self.definition_manifest_sha256,
+            "definition_release_id": self.definition_release_id,
+            "definition_row_id": self.definition_row_id,
+            "exchange": self.exchange,
+            "instrument_id": self.instrument_id,
+            "min_tick": str(self.min_tick),
+            "multiplier": str(self.multiplier),
+            "publisher_id": self.publisher_id,
+            "raw_symbol": self.raw_symbol,
+        }
 
 
 @dataclass(frozen=True)
@@ -132,16 +142,25 @@ class ActualContractIdentity:
         )
 
     def as_dict(self) -> dict[str, object]:
-        result = asdict(self)
-        result["multiplier"] = str(self.multiplier)
-        result["min_tick"] = str(self.min_tick)
-        result["instrument_id_date_utc"] = self.instrument_id_date_utc.isoformat()
-        result["exchange_session_date"] = self.exchange_session_date.isoformat()
-        return result
+        return {
+            "currency": self.currency,
+            "dataset": self.dataset,
+            "definition_manifest_sha256": self.definition_manifest_sha256,
+            "definition_release_id": self.definition_release_id,
+            "definition_row_id": self.definition_row_id,
+            "exchange": self.exchange,
+            "exchange_session_date": self.exchange_session_date.isoformat(),
+            "instrument_id": self.instrument_id,
+            "instrument_id_date_utc": self.instrument_id_date_utc.isoformat(),
+            "min_tick": str(self.min_tick),
+            "multiplier": str(self.multiplier),
+            "publisher_id": self.publisher_id,
+            "raw_symbol": self.raw_symbol,
+        }
 
     @property
     def identity_hash(self) -> str:
-        return sha256_json(self.as_dict())
+        return _actual_contract_identity_hash(self)
 
     @property
     def contract_segment_key(self) -> tuple[str, int, int, str, str]:
@@ -192,29 +211,79 @@ class ActualContractIdentity:
         )
 
 
+@lru_cache(maxsize=131_072)
+def _actual_contract_identity_hash(identity: ActualContractIdentity) -> str:
+    """Hash each complete immutable actual identity once per process."""
+
+    return sha256_json(identity.as_dict())
+
+
 @dataclass(frozen=True)
 class DefinitionObservation:
-    """One actual-contract definition version with causal availability."""
+    """One actual-contract definition version with independent provider clocks.
+
+    ``effective_at`` is the provider's explicit instrument activation time, not
+    ``ts_event``.  ``source_received_at`` is the provider index timestamp used
+    for causal visibility.  The publisher event clock is retained separately
+    as audit provenance and is never ordered against the receive clock.
+    """
 
     definition: ContractDefinition
-    effective_at: datetime
+    effective_at: datetime | None
     available_at: datetime
     source_release_id: str
     source_received_at: datetime
+    expires_at: datetime | None = None
+    provider_event_at: datetime | None = None
+    definition_index_date_utc: date | None = None
+    security_update_action: str = "ADD"
+    instrument_class: str = "FUTURE"
+    security_type: str = "FUT"
+    source_file_path: str = "LEGACY_UNSPECIFIED"
+    source_row_ordinal: int = 0
 
     def __post_init__(self) -> None:
-        require_utc(self.effective_at, "effective_at")
         available = require_utc(self.available_at, "available_at")
         if not self.source_release_id:
             raise ContractError("definition source release is required")
         if self.definition.definition_release_id != self.source_release_id:
             raise ContractError("actual identity and definition observation release disagree")
         received = require_utc(self.source_received_at, "source_received_at")
-        effective = require_utc(self.effective_at, "effective_at")
-        if not (effective <= received <= available):
+        effective = (
+            None
+            if self.effective_at is None
+            else require_utc(self.effective_at, "effective_at")
+        )
+        expires = (
+            None
+            if self.expires_at is None
+            else require_utc(self.expires_at, "expires_at")
+        )
+        if self.provider_event_at is not None:
+            require_utc(self.provider_event_at, "provider_event_at")
+        if received > available:
             raise ContractError(
-                "definition effective/received/available chronology is invalid"
+                "definition received/available chronology is invalid"
             )
+        if effective is not None and expires is not None and expires <= effective:
+            raise ContractError("definition activation/expiration chronology is invalid")
+        if self.definition_index_date_utc is not None and (
+            not isinstance(self.definition_index_date_utc, date)
+            or isinstance(self.definition_index_date_utc, datetime)
+        ):
+            raise ContractError("definition index UTC date is invalid")
+        if self.security_update_action not in {"ADD", "MODIFY", "DELETE"}:
+            raise ContractError("definition update action is not supported")
+        if not self.instrument_class or not self.security_type:
+            raise ContractError("definition instrument class/type is missing")
+        if not self.source_file_path:
+            raise ContractError("definition source file path is missing")
+        if (
+            isinstance(self.source_row_ordinal, bool)
+            or not isinstance(self.source_row_ordinal, int)
+            or self.source_row_ordinal < 0
+        ):
+            raise ContractError("definition source row ordinal is invalid")
 
 
 @dataclass(frozen=True)
@@ -382,26 +451,101 @@ def resolve_bar_identity(
         publisher_id,
         bar_instrument_id,
     )
-    candidates = [
+    visible = [
         observation
         for observation in definitions
         if observation.definition.lookup_key == key
-        and observation.effective_at <= event
         and observation.source_received_at <= decision
         and observation.available_at <= decision
-    ]
-    if not candidates:
-        raise ContractError(
-            f"bar instrument_id has no as-of-available definition: {bar_instrument_id}"
+        and (
+            observation.definition_index_date_utc is None
+            or observation.definition_index_date_utc == instrument_id_date_utc
         )
-    selected_key = max(
-        (item.effective_at, item.available_at) for item in candidates
-    )
-    selected = [
-        item
-        for item in candidates
-        if (item.effective_at, item.available_at) == selected_key
     ]
+    baseline = [
+        observation
+        for observation in visible
+        if observation.source_received_at <= event
+        and observation.available_at <= event
+    ]
+    if not baseline:
+        raise ContractError(
+            f"bar instrument_id has no same-day definition available by bar start: {bar_instrument_id}"
+        )
+
+    def semantic_state(item: DefinitionObservation) -> tuple[object, ...]:
+        definition = item.definition
+        return (
+            definition.dataset,
+            definition.publisher_id,
+            definition.instrument_id,
+            definition.raw_symbol,
+            definition.exchange,
+            definition.currency,
+            definition.multiplier,
+            definition.min_tick,
+            item.effective_at,
+            item.expires_at,
+            item.security_update_action,
+            item.instrument_class,
+            item.security_type,
+        )
+
+    latest_received = max(item.source_received_at for item in baseline)
+    receive_ties = [
+        item for item in baseline if item.source_received_at == latest_received
+    ]
+    by_file: dict[str, list[DefinitionObservation]] = {}
+    for item in receive_ties:
+        by_file.setdefault(item.source_file_path, []).append(item)
+    sequences: dict[str, tuple[tuple[object, ...], ...]] = {}
+    for source_path, items in by_file.items():
+        if len({item.source_row_ordinal for item in items}) != len(items):
+            raise ContractError("definition receive-time tie repeats a source row ordinal")
+        items.sort(key=lambda item: item.source_row_ordinal)
+        sequences[source_path] = tuple(semantic_state(item) for item in items)
+    if len(set(sequences.values())) != 1:
+        raise ContractError("definition receive-time tie conflicts across source files")
+    selected_path = min(sequences)
+    selected_observation = max(
+        by_file[selected_path], key=lambda item: item.source_row_ordinal
+    )
+
+    selected_state = semantic_state(selected_observation)
+    changes_during_observation = [
+        item
+        for item in visible
+        if (
+            item.source_received_at > event or item.available_at > event
+        )
+        and (
+            item.definition_index_date_utc is not None
+            or semantic_state(item) != selected_state
+        )
+    ]
+    if changes_during_observation:
+        raise ContractError("definition changed within the bar observation window")
+    if (
+        selected_observation.security_update_action == "DELETE"
+        or selected_observation.effective_at is None
+        or (
+            selected_observation.expires_at is None
+            and selected_observation.definition_index_date_utc is not None
+        )
+        or not (
+            selected_observation.effective_at
+            <= event
+            and (
+                selected_observation.expires_at is None
+                or event < selected_observation.expires_at
+            )
+        )
+        or selected_observation.instrument_class != "FUTURE"
+        or selected_observation.security_type != "FUT"
+    ):
+        raise ContractError("definition is deleted, inactive, expired, or not an outright future")
+
+    selected = [selected_observation]
     definition_versions = {
         (
             item.definition.definition_release_id,
@@ -417,7 +561,7 @@ def resolve_bar_identity(
     }
     if len(definition_versions) != 1:
         raise ContractError("definition observations are ambiguous at the decision time")
-    definition = selected[0].definition
+    definition = selected_observation.definition
     return ActualContractIdentity.from_definition(
         definition,
         instrument_id_date_utc=instrument_id_date_utc,

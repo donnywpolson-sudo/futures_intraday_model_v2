@@ -23,6 +23,12 @@ from .canonical import (
     sha256_json,
 )
 from .clock import ProductionClock, SyntheticClock, TrustedClock, require_trusted_clock
+from .data_layout import (
+    MANIFEST_ROOT,
+    DataReleaseManifest,
+    DataReleaseReceipt,
+    PhasePublisher,
+)
 from .errors import ContractError, IntegrityError
 from .identity import ActualContractIdentity
 from .locking import FileLease
@@ -32,9 +38,12 @@ from .time_contracts import require_utc
 
 RECORD_NAME = re.compile(r"^(?P<sequence>\d{20})_(?P<id>[0-9a-f]{64})\.json$")
 ANCHOR_NAME = re.compile(r"^(?P<sequence>\d{20})_(?P<hash>[0-9a-f]{64})\.json$")
-HEAD_VERSION = "1.0.0"
-INTENT_VERSION = "1.0.0"
-_PREDICTION_ROOT = Path("state/predictions")
+HEAD_VERSION = "2.0.0"
+INTENT_VERSION = "2.0.0"
+ANCHOR_VERSION = "2.0.0"
+PREDICTION_RECORD_SCHEMA_VERSION = "2.0.0"
+PREDICTION_RELEASE_KIND = "prospective_prediction_event"
+_PREDICTION_MANIFEST_ROOT = MANIFEST_ROOT / "predictions"
 _PREDICTION_LOCK_PATH = Path("state/locks/ledger.lock")
 _PREDICTION_ANCHOR_ROOT = Path("state/anchors")
 _PREDICTION_HEAD_PATH = Path("state/ledger_heads/head.json")
@@ -278,11 +287,12 @@ class PredictionCensusReceipt:
 class PredictionLedger:
     def __init__(
         self,
-        root: Path,
+        prediction_manifest_root: Path,
         lock_path: Path,
         anchor_root: Path,
         persistent_head_path: Path,
         *,
+        publisher: PhasePublisher,
         max_append_delay: timedelta,
         clock: TrustedClock,
         boundary: RepoBoundary,
@@ -290,6 +300,9 @@ class PredictionLedger:
     ) -> None:
         if type(max_append_delay) is not timedelta or max_append_delay <= timedelta(0):
             raise ContractError("maximum prediction append delay must be positive")
+        if type(publisher) is not PhasePublisher or publisher.boundary is not boundary:
+            raise ContractError("prediction publisher must use the exact repository boundary")
+        publisher.operation_receipt.verify(boundary, operation="PUBLISH_RELEASE")
         operation_receipt.verify(boundary, operation="APPEND_PREDICTION")
         self.boundary = boundary
         self.operation_receipt = operation_receipt
@@ -311,7 +324,11 @@ class PredictionLedger:
         if type(self.clock) is not expected_clock_type:
             raise ContractError("ledger clock type differs from its operation capability")
         canonical_paths = (
-            (root, _PREDICTION_ROOT, "prediction ledger"),
+            (
+                prediction_manifest_root,
+                _PREDICTION_MANIFEST_ROOT,
+                "prediction manifest root",
+            ),
             (lock_path, _PREDICTION_LOCK_PATH, "prediction lock"),
             (anchor_root, _PREDICTION_ANCHOR_ROOT, "prediction anchors"),
             (persistent_head_path, _PREDICTION_HEAD_PATH, "persistent ledger head"),
@@ -323,7 +340,7 @@ class PredictionLedger:
                 raise ContractError(f"{purpose} must use its canonical repository path")
             resolved_paths.append(candidate)
         (
-            self.root,
+            self.prediction_manifest_root,
             self.lock_path,
             self.anchor_root,
             self.persistent_head_path,
@@ -334,7 +351,11 @@ class PredictionLedger:
         )
         resolved = [
             item.resolve(strict=False)
-            for item in (self.root, self.anchor_root, self.persistent_head_path.parent)
+            for item in (
+                self.prediction_manifest_root,
+                self.anchor_root,
+                self.persistent_head_path.parent,
+            )
         ]
         for index, left in enumerate(resolved):
             for right in resolved[index + 1 :]:
@@ -351,13 +372,16 @@ class PredictionLedger:
                 else:
                     raise ContractError("ledger, anchor, and persistent-head trees must be separate")
         self.max_append_delay = max_append_delay
+        self.publisher = publisher
         self.ledger_id = sha256_json(
             {
                 "anchor_root": self.anchor_root.relative_to(boundary.active_root).as_posix(),
                 "head_path": self.persistent_head_path.relative_to(
                     boundary.active_root
                 ).as_posix(),
-                "ledger_root": self.root.relative_to(boundary.active_root).as_posix(),
+                "prediction_manifest_root": self.prediction_manifest_root.relative_to(
+                    boundary.active_root
+                ).as_posix(),
                 "lock_path": self.lock_path.relative_to(boundary.active_root).as_posix(),
                 "repository_id": boundary.repository_id,
             }
@@ -380,13 +404,37 @@ class PredictionLedger:
             files.append(path)
         return sorted(files)
 
-    def _load_records(self) -> list[dict[str, object]]:
+    @staticmethod
+    def _prediction_logical_path(prediction: PredictionRow) -> str:
+        session_date = prediction.actual.exchange_session_date
+        return (
+            f"data/predictions/{prediction.bundle_id}/{prediction.actual.raw_symbol}/"
+            f"{session_date.year:04d}/{session_date.isoformat()}/"
+            "prediction.json"
+        )
+
+    def _load_records(
+        self, anchors: list[dict[str, object]]
+    ) -> list[dict[str, object]]:
         records: list[dict[str, object]] = []
         previous = "GENESIS"
         previous_time: datetime | None = None
-        for expected_sequence, path in enumerate(
-            self._exact_json_files(self.root, RECORD_NAME), start=1
-        ):
+        for expected_sequence, anchor in enumerate(anchors, start=1):
+            receipt_payload = anchor["prediction_release_receipt"]
+            assert isinstance(receipt_payload, dict)
+            receipt = DataReleaseReceipt.from_dict(receipt_payload)
+            manifest = receipt.verify(self.boundary)
+            if (
+                receipt.phase != "predictions"
+                or receipt.release_kind != PREDICTION_RELEASE_KIND
+                or receipt.schema_version != PREDICTION_RECORD_SCHEMA_VERSION
+                or len(manifest.files) != 1
+                or manifest.embedded_documents
+            ):
+                raise IntegrityError("prediction release contract is invalid")
+            path = receipt.resolve_unique_filename(
+                "prediction.json", self.boundary
+            )
             try:
                 record = json.loads(path.read_text(encoding="utf-8"))
             except (OSError, ValueError) as exc:
@@ -405,6 +453,23 @@ class PredictionLedger:
             if sha256_json(body) != record["record_hash"]:
                 raise IntegrityError("prediction ledger record hash is invalid")
             row = _prediction_from_payload(record["prediction"])
+            expected_logical = self._prediction_logical_path(row)
+            expected_metadata = {
+                "appended_at": record["appended_at"],
+                "ledger_id": self.ledger_id,
+                "prediction_id": row.prediction_id,
+                "previous_record_hash": record["previous_hash"],
+                "record_hash": record["record_hash"],
+                "sequence": expected_sequence,
+            }
+            if (
+                manifest.files[0].logical_path != expected_logical
+                or manifest.source_release_ids != (row.source_release_id,)
+                or dict(manifest.metadata) != expected_metadata
+                or anchor["record_hash"] != record["record_hash"]
+                or anchor["prediction_id"] != row.prediction_id
+            ):
+                raise IntegrityError("prediction release differs from its ledger anchor")
             expected_classification = (
                 OperationClassification.EXTERNAL_CANDIDATE_AUTHORIZATION
                 if row.production_eligible
@@ -425,15 +490,14 @@ class PredictionLedger:
                 or (previous_time is not None and appended < previous_time)
             ):
                 raise IntegrityError("prediction ledger append time violates prospective timing")
-            expected_name = f"{expected_sequence:020d}_{row.prediction_id}.json"
-            if path.name != expected_name:
-                raise IntegrityError("prediction filename disagrees with sequence or identity")
+            if path.name != "prediction.json":
+                raise IntegrityError("prediction filename disagrees with its identity")
             previous = str(record["record_hash"])
             previous_time = appended
             records.append(record)
         return records
 
-    def _load_anchors(self, records: list[dict[str, object]]) -> list[dict[str, object]]:
+    def _load_anchors(self) -> list[dict[str, object]]:
         anchors: list[dict[str, object]] = []
         previous_anchor = LedgerHeadContract.genesis().anchor_hash
         for expected_sequence, path in enumerate(
@@ -444,8 +508,10 @@ class PredictionLedger:
             except (OSError, ValueError) as exc:
                 raise IntegrityError(f"invalid ledger anchor: {path}") from exc
             if not isinstance(anchor, dict) or set(anchor) != {
+                "anchor_version",
                 "anchor_hash",
                 "prediction_id",
+                "prediction_release_receipt",
                 "previous_anchor_hash",
                 "record_hash",
                 "sequence",
@@ -453,21 +519,23 @@ class PredictionLedger:
                 raise IntegrityError("ledger anchor fields are invalid")
             body = {key: value for key, value in anchor.items() if key != "anchor_hash"}
             if (
-                anchor["sequence"] != expected_sequence
+                anchor["anchor_version"] != ANCHOR_VERSION
+                or anchor["sequence"] != expected_sequence
                 or anchor["previous_anchor_hash"] != previous_anchor
                 or sha256_json(body) != anchor["anchor_hash"]
                 or path.name != f"{expected_sequence:020d}_{anchor['anchor_hash']}.json"
-                or expected_sequence > len(records)
             ):
                 raise IntegrityError("ledger anchor sequence, chain, or identity is invalid")
-            record = records[expected_sequence - 1]
-            prediction = record["prediction"]
-            assert isinstance(prediction, dict)
+            receipt_payload = anchor["prediction_release_receipt"]
+            if not isinstance(receipt_payload, dict):
+                raise IntegrityError("ledger anchor release receipt is invalid")
+            receipt = DataReleaseReceipt.from_dict(receipt_payload)
             if (
-                anchor["record_hash"] != record["record_hash"]
-                or anchor["prediction_id"] != prediction["prediction_id"]
+                receipt.phase != "predictions"
+                or receipt.release_kind != PREDICTION_RELEASE_KIND
+                or receipt.schema_version != PREDICTION_RECORD_SCHEMA_VERSION
             ):
-                raise IntegrityError("ledger anchor disagrees with prediction record")
+                raise IntegrityError("ledger anchor references a non-prediction release")
             previous_anchor = str(anchor["anchor_hash"])
             anchors.append(anchor)
         return anchors
@@ -502,17 +570,24 @@ class PredictionLedger:
         prior: LedgerHeadContract,
         prediction_payload: dict[str, object],
         appended_at: datetime,
+        *,
+        logical_path: str,
+        record_hash: str,
+        release_id: str,
     ) -> dict[str, object]:
         core: dict[str, object] = {
             "appended_at": require_utc(appended_at, "appended_at").isoformat(),
             "intent_version": INTENT_VERSION,
             "ledger_id": self.ledger_id,
+            "logical_path": logical_path,
             "prediction_payload_sha256": sha256_json(prediction_payload),
             "prior_head": {
                 "anchor_hash": prior.anchor_hash,
                 "record_hash": prior.record_hash,
                 "sequence": prior.sequence,
             },
+            "record_hash": record_hash,
+            "release_id": release_id,
             "repository_id": self.boundary.repository_id,
         }
         return {**core, "intent_id": sha256_json(core)}
@@ -530,8 +605,11 @@ class PredictionLedger:
             "intent_id",
             "intent_version",
             "ledger_id",
+            "logical_path",
             "prediction_payload_sha256",
             "prior_head",
+            "record_hash",
+            "release_id",
             "repository_id",
         }
         if not isinstance(payload, dict) or set(payload) != expected:
@@ -555,6 +633,9 @@ class PredictionLedger:
             or payload["repository_id"] != self.boundary.repository_id
             or re.fullmatch(r"[0-9a-f]{64}", str(payload["prediction_payload_sha256"]))
             is None
+            or re.fullmatch(r"[0-9a-f]{64}", str(payload["record_hash"])) is None
+            or re.fullmatch(r"[0-9a-f]{64}", str(payload["release_id"])) is None
+            or type(payload["logical_path"]) is not str
             or sha256_json(core) != payload["intent_id"]
             or parsed_prior.sequence < 0
         ):
@@ -574,10 +655,21 @@ class PredictionLedger:
         prior: LedgerHeadContract,
         prediction_payload: dict[str, object],
         appended_at: datetime,
+        *,
+        logical_path: str,
+        record_hash: str,
+        release_id: str,
     ) -> None:
         self._write_new_json(
             self.intent_path,
-            self._intent_payload(prior, prediction_payload, appended_at),
+            self._intent_payload(
+                prior,
+                prediction_payload,
+                appended_at,
+                logical_path=logical_path,
+                record_hash=record_hash,
+                release_id=release_id,
+            ),
         )
 
     def _clear_intent(self) -> None:
@@ -591,13 +683,10 @@ class PredictionLedger:
         self, recovery_prior: LedgerHeadContract | None = None
     ) -> LedgerHeadContract:
         if not self.persistent_head_path.exists():
-            if self.root.exists() or self.anchor_root.exists():
-                if self._exact_json_files(self.root, RECORD_NAME) or self._exact_json_files(
-                    self.anchor_root, ANCHOR_NAME
-                ):
-                    if recovery_prior is not None:
-                        return recovery_prior
-                    raise IntegrityError("persistent external ledger head is missing")
+            if self._exact_json_files(self.anchor_root, ANCHOR_NAME):
+                if recovery_prior is not None:
+                    return recovery_prior
+                raise IntegrityError("persistent external ledger head is missing")
             return LedgerHeadContract.genesis()
         assert_plain_file(self.persistent_head_path)
         try:
@@ -651,8 +740,8 @@ class PredictionLedger:
     def verify(self) -> list[dict[str, object]]:
         if self._load_intent() is not None:
             raise IntegrityError("ledger has an incomplete append intent requiring recovery")
-        records = self._load_records()
-        anchors = self._load_anchors(records)
+        anchors = self._load_anchors()
+        records = self._load_records(anchors)
         actual = self._head(records, anchors)
         if actual != self._load_persistent_head():
             raise IntegrityError("ledger differs from its persistent external head")
@@ -664,7 +753,7 @@ class PredictionLedger:
         records = self.verify()
         if not records:
             raise ContractError("prediction census cannot be issued for an empty ledger")
-        anchors = self._load_anchors(records)
+        anchors = self._load_anchors()
         head = self._head(records, anchors)
         prediction_ids: list[str] = []
         for record in records:
@@ -741,13 +830,54 @@ class PredictionLedger:
         os.rename(temporary, path)
         fsync_directory(path.parent)
 
+    def _prepare_prediction_release(
+        self, record: dict[str, object], prediction: PredictionRow
+    ) -> tuple[Path, DataReleaseManifest, str]:
+        logical_path = self._prediction_logical_path(prediction)
+        stage = self.publisher.create_stage("prediction")
+        staged_name = "prediction.json"
+        self._write_new_json(stage / staged_name, record)
+        manifest = DataReleaseManifest.build(
+            stage,
+            phase="predictions",
+            release_kind=PREDICTION_RELEASE_KIND,
+            schema_version=PREDICTION_RECORD_SCHEMA_VERSION,
+            logical_paths={staged_name: logical_path},
+            source_release_ids=(prediction.source_release_id,),
+            metadata={
+                "appended_at": record["appended_at"],
+                "ledger_id": self.ledger_id,
+                "prediction_id": prediction.prediction_id,
+                "previous_record_hash": record["previous_hash"],
+                "record_hash": record["record_hash"],
+                "sequence": record["sequence"],
+            },
+        )
+        return stage, manifest, logical_path
+
+    def _publish_prediction_release(
+        self, stage: Path, manifest: DataReleaseManifest, logical_path: str
+    ) -> tuple[DataReleaseReceipt, Path]:
+        manifest_path = self.publisher.publish(
+            stage,
+            manifest,
+            staged_paths={logical_path: "prediction.json"},
+        )
+        receipt = DataReleaseReceipt.from_manifest(manifest_path, self.boundary)
+        return receipt, receipt.resolve_file(logical_path, self.boundary)
+
     def _write_anchor(
-        self, record: dict[str, object], previous: LedgerHeadContract
+        self,
+        record: dict[str, object],
+        previous: LedgerHeadContract,
+        receipt: DataReleaseReceipt,
     ) -> LedgerHeadContract:
         prediction = record["prediction"]
         assert isinstance(prediction, dict)
         body = {
+            "anchor_version": ANCHOR_VERSION,
             "prediction_id": prediction["prediction_id"],
+            "prediction_release_receipt": receipt.as_dict(),
             "previous_anchor_hash": previous.anchor_hash,
             "record_hash": record["record_hash"],
             "sequence": record["sequence"],
@@ -823,7 +953,11 @@ class PredictionLedger:
             raise IntegrityError("prediction ID does not match its immutable input identity")
         payload = _prediction_payload(prediction)
         with FileLease(self.lock_path):
-            self.boundary.assert_active_path(self.root, purpose="prediction ledger")
+            self.boundary.assert_active_path(
+                self.prediction_manifest_root / "_probe",
+                purpose="prediction manifest root",
+                subtree=_PREDICTION_MANIFEST_ROOT.as_posix(),
+            ).parent
             self.boundary.assert_active_path(self.anchor_root, purpose="prediction anchors")
             intent = self._load_intent()
             recovery_prior = self._intent_prior(intent) if intent is not None else None
@@ -841,27 +975,9 @@ class PredictionLedger:
             else:
                 timestamp = observed_timestamp
             stored_head = self._load_persistent_head(recovery_prior)
-            self.root.mkdir(parents=True, exist_ok=True)
             self.anchor_root.mkdir(parents=True, exist_ok=True)
-            records = self._load_records()
-            anchors = self._load_anchors(records)
-            if len(records) > len(anchors) + 1 or len(anchors) > len(records):
-                raise IntegrityError("ledger crash tail exceeds one recoverable event")
-            if len(records) == len(anchors) + 1:
-                if intent is None:
-                    raise IntegrityError("unanchored ledger tail has no durable recovery intent")
-                prior = self._head(records[:-1], anchors)
-                tail = records[-1]
-                if stored_head != prior or expected_head != prior or tail["prediction"] != payload:
-                    raise IntegrityError("unanchored tail does not match exact prior head and retry")
-                head = self._write_anchor(tail, prior)
-                self._write_persistent_head(head)
-                self._clear_intent()
-                return LedgerAppendResult(
-                    self.root / f"{head.sequence:020d}_{prediction.prediction_id}.json",
-                    head,
-                    True,
-                )
+            anchors = self._load_anchors()
+            records = self._load_records(anchors)
             actual_head = self._head(records, anchors)
             if stored_head != actual_head:
                 # Crash after anchor but before persistent-head replacement.
@@ -873,15 +989,20 @@ class PredictionLedger:
                     or records[-1]["prediction"] != payload
                     or expected_head != stored_head
                     or self._head(records[:-1], anchors[:-1]) != stored_head
+                    or anchors[-1]["record_hash"] != intent["record_hash"]
                 ):
                     raise IntegrityError("ledger is ahead of persistent head without exact retry")
+                receipt_payload = anchors[-1]["prediction_release_receipt"]
+                assert isinstance(receipt_payload, dict)
+                receipt = DataReleaseReceipt.from_dict(receipt_payload)
+                if receipt.release_id != intent["release_id"]:
+                    raise IntegrityError("ledger recovery release differs from its intent")
+                target = receipt.resolve_unique_filename(
+                    "prediction.json", self.boundary
+                )
                 self._write_persistent_head(actual_head)
                 self._clear_intent()
-                return LedgerAppendResult(
-                    self.root / f"{actual_head.sequence:020d}_{prediction.prediction_id}.json",
-                    actual_head,
-                    True,
-                )
+                return LedgerAppendResult(target, actual_head, True)
             for index, record in enumerate(records):
                 existing = record["prediction"]
                 assert isinstance(existing, dict)
@@ -894,10 +1015,24 @@ class PredictionLedger:
                         or record["previous_hash"] != prior.record_hash
                     ):
                         raise IntegrityError("prediction retry conflicts with ledger history")
+                    receipt_payload = anchors[index]["prediction_release_receipt"]
+                    assert isinstance(receipt_payload, dict)
+                    receipt = DataReleaseReceipt.from_dict(receipt_payload)
                     if intent is not None:
+                        if (
+                            intent["record_hash"] != record["record_hash"]
+                            or intent["release_id"] != receipt.release_id
+                            or intent["logical_path"]
+                            != self._prediction_logical_path(prediction)
+                        ):
+                            raise IntegrityError(
+                                "completed prediction differs from its recovery intent"
+                            )
                         self._clear_intent()
                     return LedgerAppendResult(
-                        self.root / f"{len(records):020d}_{prediction.prediction_id}.json",
+                        receipt.resolve_unique_filename(
+                            "prediction.json", self.boundary
+                        ),
                         actual_head,
                         True,
                     )
@@ -927,8 +1062,6 @@ class PredictionLedger:
                     required_scope=authorization_scope,
                 )
                 self._candidate_session_binding = binding
-            if intent is None:
-                self._write_intent(actual_head, payload, timestamp)
             sequence = len(records) + 1
             body = {
                 "appended_at": timestamp.isoformat(),
@@ -937,13 +1070,34 @@ class PredictionLedger:
                 "sequence": sequence,
             }
             record = {**body, "record_hash": sha256_json(body)}
-            target = self.root / f"{sequence:020d}_{prediction.prediction_id}.json"
-            self._write_new_json(target, record)
-            head = self._write_anchor(record, actual_head)
+            stage, manifest, logical_path = self._prepare_prediction_release(
+                record, prediction
+            )
+            if intent is None:
+                self._write_intent(
+                    actual_head,
+                    payload,
+                    timestamp,
+                    logical_path=logical_path,
+                    record_hash=str(record["record_hash"]),
+                    release_id=manifest.release_id,
+                )
+            elif (
+                intent["logical_path"] != logical_path
+                or intent["record_hash"] != record["record_hash"]
+                or intent["release_id"] != manifest.release_id
+            ):
+                raise IntegrityError(
+                    "ledger recovery release differs from its durable append intent"
+                )
+            receipt, target = self._publish_prediction_release(
+                stage, manifest, logical_path
+            )
+            head = self._write_anchor(record, actual_head, receipt)
             self._write_persistent_head(head)
             self._clear_intent()
             self.verify()
-            return LedgerAppendResult(target, head, False)
+            return LedgerAppendResult(target, head, intent is not None)
 
     def quarantine_orphan_temps(self, recovery_root: Path) -> tuple[Path, ...]:
         recovery_root = self.boundary.assert_active_path(
@@ -952,15 +1106,13 @@ class PredictionLedger:
         recovery_root.mkdir(parents=True, exist_ok=True)
         moved: list[Path] = []
         with FileLease(self.lock_path):
-            for root in (self.root, self.anchor_root):
-                if not root.exists():
-                    continue
-                for source in sorted(root.glob(".tmp-*")):
+            if self.anchor_root.exists():
+                for source in sorted(self.anchor_root.glob(".tmp-*")):
                     if is_linklike(source) or not source.is_file():
                         raise IntegrityError("orphan ledger temp is not a plain file")
                     target = recovery_root / f"{source.name}.{uuid.uuid4().hex}.orphan"
                     os.rename(source, target)
                     moved.append(target)
-                fsync_directory(root)
+                fsync_directory(self.anchor_root)
             fsync_directory(recovery_root)
         return tuple(moved)

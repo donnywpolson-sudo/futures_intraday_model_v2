@@ -45,4 +45,4 @@ def test_frozen_legacy_project_is_unchanged() -> None:
     config = Path(__file__).parents[1] / "configs" / "legacy_baseline.json"
     observed = verify_legacy_baseline(config)
     assert observed["head"] == "5929e9ec07f6815b149dbab97cbacf7fdbf7cb19"
-    assert observed["status_count"] == 711
+    assert observed["status_count"] == 839

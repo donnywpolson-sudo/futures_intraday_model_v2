@@ -15,6 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Iterable, Mapping, Sequence
 
+from .archive import (
+    ARCHIVE_RELEASE_KIND,
+    ARCHIVE_SCHEMA_VERSION,
+    archive_snapshot_receipt_entry,
+)
 from .boundary import OperationClassification, OperationReceipt, RepoBoundary
 from .canonical import (
     assert_plain_file,
@@ -24,21 +29,29 @@ from .canonical import (
     sha256_json,
 )
 from .errors import ContractError, IntegrityError
-from .foundation.snapshot import PublishedSourceSnapshot, SnapshotFile
+from .legacy_evidence_snapshot import (
+    LegacyEvidenceFile as SnapshotFile,
+    PublishedLegacyEvidenceSnapshot as PublishedSourceSnapshot,
+)
 from .migration import (
     AUTHORIZED_MIGRATION_MANIFEST_RELATIVE,
     AUTHORIZED_MIGRATION_MANIFEST_SHA256,
     load_manifest,
 )
-from .release import AtomicPublisher, ReleaseManifest, VerifiedReleaseReceipt
+from .data_layout import (
+    DataReleaseManifest as ReleaseManifest,
+    DataReleaseReceipt as VerifiedReleaseReceipt,
+    PhasePublisher as AtomicPublisher,
+)
 
 
 LEGACY_CENSUS_RELEASE_KIND = "legacy_trial_census"
-LEGACY_CENSUS_SCHEMA_VERSION = "2.0.0"
+LEGACY_CENSUS_SCHEMA_VERSION = "3.0.0"
 LEGACY_CENSUS_FILENAME = "legacy_census.json"
 LEGACY_EVIDENCE_DISPOSITION = "legacy_trial_census_evidence_only"
 LEGACY_EVIDENCE_PREFIX = "evidence/legacy_research/"
 PRESCRIBED_EVIDENCE_FILE_COUNT = 24
+SOURCE_SNAPSHOT_RECEIPT_FILENAME = "SOURCE_SNAPSHOT_RECEIPT.json"
 
 TARGET_REGISTRY_PATH = "manifests/target_hypotheses/registry.json"
 TARGET_STATUSES_PATH = "manifests/target_hypotheses/trial_statuses.jsonl"
@@ -1249,6 +1262,7 @@ def validate_legacy_trial_census_payload(
 def publish_legacy_trial_census(
     *,
     snapshot: PublishedSourceSnapshot,
+    source_archive_receipt: VerifiedReleaseReceipt,
     boundary: RepoBoundary,
     publisher: AtomicPublisher,
 ) -> VerifiedReleaseReceipt:
@@ -1256,26 +1270,41 @@ def publish_legacy_trial_census(
 
     if publisher.boundary.repository_id != boundary.repository_id:
         raise IntegrityError("legacy census publisher belongs to another repository")
+    _verify_source_archive_binding(
+        source_archive_receipt,
+        snapshot=snapshot,
+        boundary=boundary,
+    )
     payload = _derive_legacy_trial_census(snapshot, boundary=boundary)
     stage = publisher.create_stage("legacy_trial_census")
-    (stage / LEGACY_CENSUS_FILENAME).write_bytes(canonical_bytes(payload) + b"\n")
     manifest = ReleaseManifest.build(
         stage,
+        phase="evidence",
         release_kind=LEGACY_CENSUS_RELEASE_KIND,
         schema_version=LEGACY_CENSUS_SCHEMA_VERSION,
-        source_release_ids=(snapshot.source_snapshot_id,),
+        source_release_ids=(source_archive_receipt.release_id,),
+        embedded_documents={
+            LEGACY_CENSUS_FILENAME: payload,
+            "source_archive_receipt.json": source_archive_receipt.as_dict(),
+        },
         metadata={
             "census_sha256": payload["census_sha256"],
             "exact_count_state": payload["exact_count_state"],
             "source_evidence_sha256": payload["source_evidence_sha256"],
             "source_snapshot_id": payload["source_snapshot_id"],
+            "source_archive_release_id": source_archive_receipt.release_id,
             "status": payload["status"],
             "trusted_gate": payload["trusted_gate"],
         },
     )
-    release = publisher.publish(stage, manifest)
-    receipt = VerifiedReleaseReceipt.from_release(release, boundary)
-    load_legacy_trial_census(receipt, snapshot=snapshot, boundary=boundary)
+    manifest_path = publisher.publish(stage, manifest)
+    receipt = VerifiedReleaseReceipt.from_manifest(manifest_path, boundary)
+    load_legacy_trial_census(
+        receipt,
+        snapshot=snapshot,
+        source_archive_receipt=source_archive_receipt,
+        boundary=boundary,
+    )
     return receipt
 
 
@@ -1283,16 +1312,23 @@ def load_legacy_trial_census(
     receipt: VerifiedReleaseReceipt,
     *,
     snapshot: PublishedSourceSnapshot,
+    source_archive_receipt: VerifiedReleaseReceipt,
     boundary: RepoBoundary,
 ) -> dict[str, object]:
     """Load a census only after re-deriving it from the verified source snapshot."""
 
     verified = _reopen_snapshot(snapshot, boundary=boundary)
+    _verify_source_archive_binding(
+        source_archive_receipt,
+        snapshot=verified,
+        boundary=boundary,
+    )
     manifest = receipt.verify(boundary)
     expected_metadata = {
         "census_sha256",
         "exact_count_state",
         "source_evidence_sha256",
+        "source_archive_release_id",
         "source_snapshot_id",
         "status",
         "trusted_gate",
@@ -1300,19 +1336,19 @@ def load_legacy_trial_census(
     if (
         manifest.release_kind != LEGACY_CENSUS_RELEASE_KIND
         or manifest.schema_version != LEGACY_CENSUS_SCHEMA_VERSION
-        or {entry.path for entry in manifest.files} != {LEGACY_CENSUS_FILENAME}
+        or receipt.phase != "evidence"
+        or manifest.files
+        or set(manifest.embedded_documents)
+        != {LEGACY_CENSUS_FILENAME, "source_archive_receipt.json"}
         or set(manifest.metadata) != expected_metadata
-        or manifest.source_release_ids != (verified.source_snapshot_id,)
+        or manifest.source_release_ids != (source_archive_receipt.release_id,)
+        or manifest.embedded_documents["source_archive_receipt.json"]
+        != source_archive_receipt.as_dict()
     ):
         raise IntegrityError("canonical legacy census release contract is invalid")
-    path = boundary.active_root / receipt.relative_root / LEGACY_CENSUS_FILENAME
-    try:
-        raw = path.read_bytes()
-        payload = json.loads(raw.decode("utf-8"))
-    except (OSError, UnicodeDecodeError, ValueError) as exc:
-        raise IntegrityError("canonical legacy census release JSON is invalid") from exc
-    if not isinstance(payload, dict) or raw != canonical_bytes(payload) + b"\n":
-        raise IntegrityError("canonical legacy census release is not canonical JSON")
+    payload = receipt.embedded_document(LEGACY_CENSUS_FILENAME, boundary)
+    if not isinstance(payload, dict):
+        raise IntegrityError("canonical legacy census release is not a JSON object")
     validated = validate_legacy_trial_census_payload(payload)
     if (
         manifest.metadata["census_sha256"] != validated["census_sha256"]
@@ -1320,6 +1356,8 @@ def load_legacy_trial_census(
         or manifest.metadata["source_evidence_sha256"]
         != validated["source_evidence_sha256"]
         or manifest.metadata["source_snapshot_id"] != verified.source_snapshot_id
+        or manifest.metadata["source_archive_release_id"]
+        != source_archive_receipt.release_id
         or manifest.metadata["status"] != validated["status"]
         or manifest.metadata["trusted_gate"] is not False
     ):
@@ -1328,6 +1366,36 @@ def load_legacy_trial_census(
     if rebuilt != validated:
         raise IntegrityError("canonical legacy census diverges from source evidence")
     return validated
+
+
+def _verify_source_archive_binding(
+    receipt: VerifiedReleaseReceipt,
+    *,
+    snapshot: PublishedSourceSnapshot,
+    boundary: RepoBoundary,
+) -> None:
+    manifest = receipt.verify(boundary)
+    if (
+        receipt.phase != "migration"
+        or manifest.release_kind != ARCHIVE_RELEASE_KIND
+        or manifest.schema_version != ARCHIVE_SCHEMA_VERSION
+        or manifest.files
+        or set(manifest.embedded_documents) != {"archive_receipt"}
+    ):
+        raise IntegrityError("legacy census source archive receipt is invalid")
+    archive_document = receipt.embedded_document("archive_receipt", boundary)
+    entry = archive_snapshot_receipt_entry(
+        archive_document, snapshot.source_snapshot_id
+    )
+    snapshot_receipt_path = snapshot.root / SOURCE_SNAPSHOT_RECEIPT_FILENAME
+    assert_plain_file(snapshot_receipt_path)
+    if (
+        entry.get("size") != snapshot_receipt_path.stat().st_size
+        or entry.get("sha256") != sha256_file(snapshot_receipt_path)
+    ):
+        raise IntegrityError(
+            "archive snapshot receipt binding differs from preserved evidence"
+        )
 
 
 def _cli_boundary(repository_root: Path, source_contract: Path) -> RepoBoundary:
@@ -1421,6 +1489,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repository-root", type=Path, required=True)
     parser.add_argument("--source-contract", type=Path, required=True)
     parser.add_argument("--source-snapshot-root", type=Path, required=True)
+    parser.add_argument("--source-archive-manifest", type=Path)
     parser.add_argument(
         "--publish",
         action="store_true",
@@ -1441,6 +1510,12 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
 
+    if args.source_archive_manifest is None:
+        raise ContractError("publishing requires the verified layout-v1 archive manifest")
+    source_archive_receipt = VerifiedReleaseReceipt.from_manifest(
+        args.source_archive_manifest, boundary
+    )
+
     if (
         payload["status"] != UNRESOLVED_STATUS
         or payload["exact_count_state"] != INDETERMINATE_COUNT_STATE
@@ -1458,25 +1533,22 @@ def main(argv: list[str] | None = None) -> int:
             "historical_execution_authorized": "false",
             "preregistered_penalty_count": "0",
             "source_contract_sha256": sha256_file(args.source_contract),
+            "source_archive_release_id": source_archive_receipt.release_id,
             "source_snapshot_id": snapshot.source_snapshot_id,
             "status": UNRESOLVED_STATUS,
             "trusted_gate": "false",
         },
     )
     publisher = AtomicPublisher(
-        boundary.active_root
-        / "data"
-        / "vault"
-        / ".staging"
-        / "releases"
-        / "legacy_trial_census",
-        boundary.active_root / "data" / "vault" / "releases",
-        boundary.active_root / "state" / "locks" / "legacy-trial-census.lock",
         boundary=boundary,
         operation_receipt=operation,
+        lock_path=boundary.active_root / "state" / "locks" / "data-publication.lock",
     )
     receipt = publish_legacy_trial_census(
-        snapshot=snapshot, boundary=boundary, publisher=publisher
+        snapshot=snapshot,
+        source_archive_receipt=source_archive_receipt,
+        boundary=boundary,
+        publisher=publisher,
     )
     print(
         canonical_bytes(

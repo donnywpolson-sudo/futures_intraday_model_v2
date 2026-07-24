@@ -13,7 +13,7 @@ from futures_rebuild.boundary import (
 )
 from futures_rebuild.canonical import sha256_json
 from futures_rebuild.errors import ContractError, UnauthorizedOperation
-from futures_rebuild.release import AtomicPublisher, VerifiedReleaseReceipt, verify_release
+from futures_rebuild.release import AtomicPublisher
 
 
 @pytest.mark.parametrize("component", ["staging", "publication", "lock"])
@@ -116,7 +116,7 @@ def test_verified_release_receipt_requires_exact_active_release_tree(
 def test_release_verification_rejects_hardlinked_payload(
     boundary, release_factory
 ) -> None:
-    release, _ = release_factory(
+    release, receipt = release_factory(
         release_kind="synthetic_hardlink_test",
         filename="rows.bin",
         content=b"synthetic",
@@ -129,4 +129,4 @@ def test_release_verification_rejects_hardlinked_payload(
     except OSError as exc:
         pytest.skip(f"hard links unavailable on this filesystem: {exc}")
     with pytest.raises(ContractError, match="Hard-linked|hard-linked"):
-        verify_release(release)
+        receipt.verify(boundary)

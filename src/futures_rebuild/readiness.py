@@ -9,15 +9,20 @@ from __future__ import annotations
 
 import argparse
 import ast
+import functools
 import hashlib
+import io
 import importlib.metadata
 import importlib.util
 import json
 import os
 import platform
 import re
+import stat
 import subprocess
 import sys
+import tempfile
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping, Sequence
@@ -28,7 +33,7 @@ from .boundary import (
     RepoBoundary,
 )
 from .canonical import assert_plain_file, canonical_bytes, sha256_file, sha256_json
-from .errors import ContractError, IntegrityError
+from .errors import ContractError, IntegrityError, UnauthorizedOperation
 from .foundation.orchestrator import (
     FOUNDATION_SET_RELEASE_KIND,
     load_foundation_set,
@@ -44,12 +49,17 @@ from .legacy_trial_census import (
     UNRESOLVED_STATUS,
     validate_legacy_trial_census_payload,
 )
-from .release import AtomicPublisher, ReleaseManifest, VerifiedReleaseReceipt
+from .data_layout import (
+    DataReleaseManifest as ReleaseManifest,
+    DataReleaseReceipt as VerifiedReleaseReceipt,
+    PhasePublisher as AtomicPublisher,
+)
 from .trial import LegacyCensusReceipt
 
 
 PROJECT = "futures_intraday_model_v2"
 SCHEMA_VERSION = "1.0.0"
+SYNTHETIC_TEST_SCHEMA_VERSION = "2.0.0"
 SYNTHETIC_TEST_RELEASE_KIND = "futures_synthetic_test_evidence"
 ENGINE_REGISTRATION_RELEASE_KIND = "futures_synthetic_engine_registration"
 ISOLATION_RELEASE_KIND = "futures_project_isolation_evidence"
@@ -76,30 +86,47 @@ ENGINE_CONFIG_PATHS = (
     "configs/research_readiness_contract.json",
     "configs/synthetic_research_engine.json",
 )
-ENGINE_TEST_PATHS = (
-    "tests/test_dbn_catalog.py",
-    "tests/test_dependency_lock.py",
-    "tests/test_foundation_dbn_causality.py",
-    "tests/test_foundation_market_state.py",
-    "tests/test_foundation_orchestrator.py",
-    "tests/test_historical_capability.py",
-    "tests/test_historical_engine.py",
-    "tests/test_producer_bridge.py",
-    "tests/test_project_isolation.py",
-    "tests/test_readiness.py",
-    "tests/test_research_contracts_splits.py",
-    "tests/test_research_controls_sleeves_boundary.py",
-    "tests/test_research_dsr_cscv_power.py",
-    "tests/test_research_futures_economics_abstention.py",
-    "tests/test_research_governance_contract.py",
-    "tests/test_research_hac_bootstrap_rw.py",
-    "tests/test_source_symbology.py",
-    "tests/test_trial_bundle_inference.py",
+ENGINE_TEST_PATHS = ("tests",)
+SYNTHETIC_TEST_ARGUMENTS = (
+    "-B",
+    "-m",
+    "pytest",
+    "-q",
+    "-c",
+    "pyproject.toml",
+    "-p",
+    "no:cacheprovider",
+    "tests",
 )
-SYNTHETIC_TEST_COMMAND = "python -m pytest -q " + " ".join(ENGINE_TEST_PATHS)
+SYNTHETIC_TEST_COMMAND = "python " + " ".join(SYNTHETIC_TEST_ARGUMENTS)
 SYNTHETIC_TEST_COMMAND_SHA256 = hashlib.sha256(
     SYNTHETIC_TEST_COMMAND.encode("utf-8")
 ).hexdigest()
+SYNTHETIC_TEST_INHERITED_ENVIRONMENT = (
+    "COMSPEC",
+    "PATH",
+    "PATHEXT",
+    "SYSTEMROOT",
+    "TEMP",
+    "TMP",
+    "WINDIR",
+)
+SYNTHETIC_TEST_REMOVED_ENVIRONMENT = (
+    "COVERAGE_PROCESS_START",
+    "PYTEST_ADDOPTS",
+    "PYTEST_PLUGINS",
+    "PYTHONSTARTUP",
+    "PYTHONUSERBASE",
+)
+SYNTHETIC_TEST_FIXED_ENVIRONMENT = {
+    "GIT_OPTIONAL_LOCKS": "0",
+    "NO_COLOR": "1",
+    "PYTHONDONTWRITEBYTECODE": "1",
+    "PYTHONHASHSEED": "0",
+    "PYTHONIOENCODING": "utf-8",
+    "PYTHONUTF8": "1",
+    "PYTEST_DISABLE_PLUGIN_AUTOLOAD": "1",
+}
 DEPENDENCY_LOCK_PATHS = (
     "configs/environment.lock.json",
     "configs/offline_vault_environment.lock.json",
@@ -150,23 +177,41 @@ CLOSED_RESEARCH_LINES = (
 
 @dataclass(frozen=True)
 class SyntheticTestAttestation:
-    passed_test_count: int
-    test_output_sha256: str
+    raw_test_output: bytes
+    pytest_exit_code: int = 0
 
     def __post_init__(self) -> None:
         if (
-            type(self.passed_test_count) is not int
-            or self.passed_test_count < len(ENGINE_TEST_PATHS)
-            or re.fullmatch(r"[0-9a-f]{64}", self.test_output_sha256) is None
+            type(self.raw_test_output) is not bytes
+            or not self.raw_test_output
+            or type(self.pytest_exit_code) is not int
+            or self.pytest_exit_code != 0
+            or self.passed_test_count < 1
         ):
             raise ContractError("synthetic test attestation fields are invalid")
+
+    @property
+    def passed_test_count(self) -> int:
+        try:
+            output = self.raw_test_output.decode("utf-8", errors="strict")
+        except UnicodeDecodeError as exc:
+            raise ContractError("pytest output is not exact UTF-8") from exc
+        matches = re.findall(r"(?m)(\d+) passed(?:\s|,|$)", output)
+        if not matches:
+            raise ContractError("pytest output lacks an exact passed-test summary")
+        return int(matches[-1])
+
+    @property
+    def test_output_sha256(self) -> str:
+        return hashlib.sha256(self.raw_test_output).hexdigest()
 
     def as_dict(self) -> dict[str, object]:
         return {
             "passed_test_count": self.passed_test_count,
-            "pytest_exit_code": 0,
+            "pytest_exit_code": self.pytest_exit_code,
             "test_command": SYNTHETIC_TEST_COMMAND,
             "test_command_sha256": SYNTHETIC_TEST_COMMAND_SHA256,
+            "test_output_size": len(self.raw_test_output),
             "test_output_sha256": self.test_output_sha256,
         }
 
@@ -214,6 +259,23 @@ class ReadinessPublication:
             ),
             "rebuild_complete_receipt": self.rebuild_complete_receipt.as_dict(),
             "status": "MECHANICAL_STATES_PUBLISHED_NO_EXECUTION_AUTHORITY",
+        }
+
+
+@dataclass(frozen=True)
+class ReadinessPrerequisitePublication:
+    synthetic_test_evidence_receipt: VerifiedReleaseReceipt
+    engine_registration_receipt: VerifiedReleaseReceipt
+    isolation_evidence_receipt: VerifiedReleaseReceipt
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "engine_registration_receipt": self.engine_registration_receipt.as_dict(),
+            "isolation_evidence_receipt": self.isolation_evidence_receipt.as_dict(),
+            "status": "NON_ALPHA_READINESS_PREREQUISITES_PUBLISHED",
+            "synthetic_test_evidence_receipt": (
+                self.synthetic_test_evidence_receipt.as_dict()
+            ),
         }
 
 
@@ -378,7 +440,17 @@ def engine_config_closure(root: Path) -> list[dict[str, object]]:
 
 
 def engine_test_closure(root: Path) -> list[dict[str, object]]:
-    return _file_entries(root, ENGINE_TEST_PATHS)
+    test_root = root / "tests"
+    paths = tuple(
+        sorted(
+            path.relative_to(root).as_posix()
+            for path in test_root.rglob("*.py")
+            if path.is_file()
+        )
+    )
+    if not paths or "tests/conftest.py" not in paths:
+        raise IntegrityError("complete pytest source/support closure is absent")
+    return _file_entries(root, paths)
 
 
 def _verify_dependency_lock(root: Path) -> str:
@@ -519,32 +591,227 @@ def _publish_json_release(
     metadata: Mapping[str, object],
 ) -> VerifiedReleaseReceipt:
     stage = publisher.create_stage(purpose)
-    (stage / filename).write_bytes(canonical_bytes(dict(payload)) + b"\n")
+    phase = (
+        "readiness"
+        if release_kind
+        in {REBUILD_COMPLETE_RELEASE_KIND, HISTORICAL_READY_RELEASE_KIND}
+        else "evidence"
+    )
     manifest = ReleaseManifest.build(
         stage,
+        phase=phase,
         release_kind=release_kind,
         schema_version=SCHEMA_VERSION,
+        logical_paths={},
         source_release_ids=source_release_ids,
+        embedded_documents={filename: dict(payload)},
         metadata=metadata,
     )
-    release = publisher.publish(stage, manifest)
-    return VerifiedReleaseReceipt.from_release(release, publisher.boundary)
+    manifest_path = publisher.publish(stage, manifest)
+    return VerifiedReleaseReceipt.from_manifest(manifest_path, publisher.boundary)
+
+
+def _git_head_archive(root: Path, git_closure: Mapping[str, object]) -> bytes:
+    head = git_closure.get("head_commit")
+    if type(head) is not str or _SHA_RE.fullmatch(head) is None:
+        raise IntegrityError("tested Git closure has no exact HEAD")
+    environment = dict(os.environ)
+    environment["GIT_OPTIONAL_LOCKS"] = "0"
+    result = subprocess.run(
+        ("git", "-C", str(root), "archive", "--format=zip", head),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+        env=environment,
+    )
+    if result.returncode != 0 or not result.stdout:
+        raise IntegrityError("cannot export the exact committed test tree")
+    return result.stdout
+
+
+@functools.lru_cache(maxsize=32)
+def _git_head_archive_sha256(root_text: str, head: str) -> str:
+    archive = _git_head_archive(Path(root_text), {"head_commit": head})
+    return hashlib.sha256(archive).hexdigest()
+
+
+def _synthetic_test_execution_contract(
+    *,
+    root: Path,
+    git_closure: Mapping[str, object],
+    archive: bytes,
+) -> dict[str, object]:
+    inherited = {
+        name: hashlib.sha256(os.environ[name].encode("utf-8")).hexdigest()
+        for name in SYNTHETIC_TEST_INHERITED_ENVIRONMENT
+        if name in os.environ
+    }
+    core = {
+        "argv": ["python", *SYNTHETIC_TEST_ARGUMENTS],
+        "command_sha256": SYNTHETIC_TEST_COMMAND_SHA256,
+        "committed_archive_format": "GIT_ZIP",
+        "committed_archive_sha256": hashlib.sha256(archive).hexdigest(),
+        "ephemeral_write_policy": "OS_TEMP_EXPORT_ONLY_REMOVED_AFTER_RUN",
+        "fixed_environment": dict(SYNTHETIC_TEST_FIXED_ENVIRONMENT),
+        "inherited_environment_value_sha256": inherited,
+        "interpreter_path_fingerprint": sha256_json(
+            str(Path(sys.executable).resolve(strict=True)).casefold()
+        ),
+        "interpreter_sha256": sha256_file(Path(sys.executable)),
+        "platform": sys.platform,
+        "pytest_version": importlib.metadata.version("pytest"),
+        "python_version": platform.python_version(),
+        "pythonpath_role": "IMMUTABLE_COMMITTED_ARCHIVE_SRC_ONLY",
+        "removed_environment": list(SYNTHETIC_TEST_REMOVED_ENVIRONMENT),
+        "tested_git_closure_id": git_closure["git_closure_id"],
+        "working_directory_role": "IMMUTABLE_COMMITTED_ARCHIVE_ROOT",
+    }
+    return {**core, "test_execution_contract_id": sha256_json(core)}
+
+
+def _validate_synthetic_test_execution_contract(
+    contract: object,
+    *,
+    root: Path,
+    git_closure: Mapping[str, object],
+) -> None:
+    if not isinstance(contract, dict):
+        raise IntegrityError("synthetic test execution contract is absent")
+    contract_id = contract.get("test_execution_contract_id")
+    core = {key: value for key, value in contract.items() if key != "test_execution_contract_id"}
+    inherited = contract.get("inherited_environment_value_sha256")
+    head = git_closure.get("head_commit")
+    if type(head) is not str:
+        raise IntegrityError("synthetic test Git closure has no exact HEAD")
+    expected_archive_sha256 = _git_head_archive_sha256(
+        str(root.resolve(strict=True)), head
+    )
+    if (
+        set(contract)
+        != {
+            "argv",
+            "command_sha256",
+            "committed_archive_format",
+            "committed_archive_sha256",
+            "ephemeral_write_policy",
+            "fixed_environment",
+            "inherited_environment_value_sha256",
+            "interpreter_path_fingerprint",
+            "interpreter_sha256",
+            "platform",
+            "pytest_version",
+            "python_version",
+            "pythonpath_role",
+            "removed_environment",
+            "test_execution_contract_id",
+            "tested_git_closure_id",
+            "working_directory_role",
+        }
+        or contract_id != sha256_json(core)
+        or contract.get("argv") != ["python", *SYNTHETIC_TEST_ARGUMENTS]
+        or contract.get("command_sha256") != SYNTHETIC_TEST_COMMAND_SHA256
+        or contract.get("committed_archive_format") != "GIT_ZIP"
+        or contract.get("committed_archive_sha256")
+        != expected_archive_sha256
+        or contract.get("ephemeral_write_policy")
+        != "OS_TEMP_EXPORT_ONLY_REMOVED_AFTER_RUN"
+        or contract.get("fixed_environment")
+        != SYNTHETIC_TEST_FIXED_ENVIRONMENT
+        or not isinstance(inherited, dict)
+        or not set(inherited).issubset(SYNTHETIC_TEST_INHERITED_ENVIRONMENT)
+        or any(
+            re.fullmatch(r"[0-9a-f]{64}", str(value)) is None
+            for value in inherited.values()
+        )
+        or contract.get("interpreter_path_fingerprint")
+        != sha256_json(str(Path(sys.executable).resolve(strict=True)).casefold())
+        or contract.get("interpreter_sha256") != sha256_file(Path(sys.executable))
+        or contract.get("platform") != sys.platform
+        or contract.get("pytest_version") != importlib.metadata.version("pytest")
+        or contract.get("python_version") != platform.python_version()
+        or contract.get("pythonpath_role")
+        != "IMMUTABLE_COMMITTED_ARCHIVE_SRC_ONLY"
+        or contract.get("removed_environment")
+        != list(SYNTHETIC_TEST_REMOVED_ENVIRONMENT)
+        or contract.get("tested_git_closure_id") != git_closure["git_closure_id"]
+        or contract.get("working_directory_role")
+        != "IMMUTABLE_COMMITTED_ARCHIVE_ROOT"
+    ):
+        raise IntegrityError("synthetic test execution contract is invalid or stale")
+
+
+def _run_pinned_synthetic_suite(archive: bytes) -> bytes:
+    with tempfile.TemporaryDirectory(prefix="futures-v2-synthetic-") as raw_root:
+        export_root = Path(raw_root) / "head"
+        export_root.mkdir()
+        try:
+            with zipfile.ZipFile(io.BytesIO(archive)) as package:
+                for item in package.infolist():
+                    relative = Path(item.filename)
+                    mode = (item.external_attr >> 16) & 0xFFFF
+                    if (
+                        relative.is_absolute()
+                        or ".." in relative.parts
+                        or stat.S_ISLNK(mode)
+                    ):
+                        raise IntegrityError("committed test archive contains an unsafe path")
+                package.extractall(export_root)
+        except (OSError, ValueError, zipfile.BadZipFile) as exc:
+            raise IntegrityError("committed test archive cannot be extracted") from exc
+        if not (export_root / "pyproject.toml").is_file() or not (
+            export_root / "tests" / "conftest.py"
+        ).is_file():
+            raise IntegrityError("committed test archive lacks its full pytest closure")
+        environment = {
+            name: os.environ[name]
+            for name in SYNTHETIC_TEST_INHERITED_ENVIRONMENT
+            if name in os.environ
+        }
+        environment.update(SYNTHETIC_TEST_FIXED_ENVIRONMENT)
+        environment["PYTHONPATH"] = str(export_root / "src")
+        result = subprocess.run(
+            (sys.executable, *SYNTHETIC_TEST_ARGUMENTS),
+            cwd=export_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            check=False,
+            env=environment,
+        )
+    if result.returncode != 0:
+        raise IntegrityError(
+            "full pinned synthetic suite failed: "
+            + hashlib.sha256(result.stdout).hexdigest()
+        )
+    return result.stdout
 
 
 def publish_synthetic_test_evidence(
     *,
-    attestation: SyntheticTestAttestation,
     boundary: RepoBoundary,
     publisher: AtomicPublisher,
 ) -> VerifiedReleaseReceipt:
+    """Run the exact pinned suite and publish its verbatim output atomically."""
+
     if publisher.boundary.repository_id != boundary.repository_id:
         raise IntegrityError("synthetic evidence publisher belongs to another repository")
+    tested_git_closure = committed_git_closure(boundary.active_root)
+    archive = _git_head_archive(boundary.active_root, tested_git_closure)
+    execution_contract = _synthetic_test_execution_contract(
+        root=boundary.active_root,
+        git_closure=tested_git_closure,
+        archive=archive,
+    )
+    raw_test_output = _run_pinned_synthetic_suite(archive)
+    attestation = SyntheticTestAttestation(raw_test_output, 0)
+    if committed_git_closure(boundary.active_root) != tested_git_closure:
+        raise IntegrityError("committed Git closure changed after the pinned test run")
     config = _load_synthetic_engine_config(boundary.active_root)
     code = engine_code_closure(boundary.active_root)
     configs = engine_config_closure(boundary.active_root)
     tests = engine_test_closure(boundary.active_root)
     dependency_receipt_id = _verify_dependency_lock(boundary.active_root)
     core = {
+        "active_or_peer_repository_write_count": 0,
         "alpha_evidence": False,
         "candidate_eligible": False,
         "code_closure": code,
@@ -552,32 +819,48 @@ def publish_synthetic_test_evidence(
         "config_closure": configs,
         "config_closure_sha256": sha256_json(configs),
         "dependency_lock_receipt_id": dependency_receipt_id,
-        "external_write_count": 0,
+        "git_closure": tested_git_closure,
         "paid_provider_call_count": 0,
         "project": PROJECT,
         "real_history_model_fit_count": 0,
         "real_history_row_count": 0,
-        "schema_version": SCHEMA_VERSION,
+        "schema_version": SYNTHETIC_TEST_SCHEMA_VERSION,
         "status": "PASS_SYNTHETIC_MECHANICS_ONLY",
         "synthetic_only": True,
         "test_attestation": attestation.as_dict(),
         "test_closure": tests,
         "test_closure_sha256": sha256_json(tests),
+        "test_execution_contract": execution_contract,
+        "test_execution_mode": (
+            "IMMUTABLE_COMMITTED_GIT_ARCHIVE_FULL_PYTEST_CAPTURED_VERBATIM"
+        ),
         "verified_controls": list(config["synthetic_controls"]),
         "verified_isolation_checks": list(REQUIRED_ISOLATION_CHECKS),
     }
     payload = {**core, "synthetic_test_evidence_id": sha256_json(core)}
-    receipt = _publish_json_release(
-        publisher=publisher,
-        purpose="synthetic_test_evidence",
-        filename="synthetic_test_evidence.json",
-        payload=payload,
+    stage = publisher.create_stage("synthetic_test_evidence")
+    manifest = ReleaseManifest.build(
+        stage,
+        phase="evidence",
         release_kind=SYNTHETIC_TEST_RELEASE_KIND,
+        schema_version=SYNTHETIC_TEST_SCHEMA_VERSION,
+        logical_paths={},
+        embedded_documents={
+            "pytest_output.txt": raw_test_output.decode("utf-8"),
+            "synthetic_test_evidence.json": payload,
+        },
         metadata={
             "code_closure_sha256": payload["code_closure_sha256"],
+            "passed_test_count": attestation.passed_test_count,
             "synthetic_test_evidence_id": payload["synthetic_test_evidence_id"],
             "test_closure_sha256": payload["test_closure_sha256"],
+            "test_output_sha256": attestation.test_output_sha256,
         },
+    )
+    if committed_git_closure(boundary.active_root) != tested_git_closure:
+        raise IntegrityError("committed Git closure changed before evidence publication")
+    receipt = VerifiedReleaseReceipt.from_manifest(
+        publisher.publish(stage, manifest), boundary
     )
     load_synthetic_test_evidence(receipt, boundary=boundary)
     return receipt
@@ -588,32 +871,79 @@ def load_synthetic_test_evidence(
 ) -> dict[str, object]:
     manifest = receipt.verify(boundary)
     if (
-        manifest.release_kind != SYNTHETIC_TEST_RELEASE_KIND
-        or manifest.schema_version != SCHEMA_VERSION
-        or {entry.path for entry in manifest.files} != {"synthetic_test_evidence.json"}
+        receipt.phase != "evidence"
+        or manifest.release_kind != SYNTHETIC_TEST_RELEASE_KIND
+        or manifest.schema_version != SYNTHETIC_TEST_SCHEMA_VERSION
+        or manifest.files
+        or set(manifest.embedded_documents)
+        != {"pytest_output.txt", "synthetic_test_evidence.json"}
         or set(manifest.metadata)
         != {
             "code_closure_sha256",
+            "passed_test_count",
             "synthetic_test_evidence_id",
             "test_closure_sha256",
+            "test_output_sha256",
         }
         or manifest.source_release_ids
     ):
         raise IntegrityError("synthetic test evidence release contract is invalid")
-    payload = _read_canonical(
-        boundary.active_root / receipt.relative_root / "synthetic_test_evidence.json",
-        description="synthetic test evidence",
-    )
+    raw_payload = receipt.embedded_document("synthetic_test_evidence.json", boundary)
+    if not isinstance(raw_payload, dict):
+        raise IntegrityError("synthetic test evidence document is invalid")
+    payload = dict(raw_payload)
+    try:
+        output_document = receipt.embedded_document("pytest_output.txt", boundary)
+        if not isinstance(output_document, str):
+            raise ContractError("captured pytest output document is invalid")
+        raw_test_output = output_document.encode("utf-8")
+        observed_attestation = SyntheticTestAttestation(
+            raw_test_output, 0
+        ).as_dict()
+    except (OSError, ContractError) as exc:
+        raise IntegrityError("captured pytest output is invalid") from exc
     evidence_id = payload.pop("synthetic_test_evidence_id", None)
     code = engine_code_closure(boundary.active_root)
     configs = engine_config_closure(boundary.active_root)
     tests = engine_test_closure(boundary.active_root)
     config = _load_synthetic_engine_config(boundary.active_root)
     attestation = payload.get("test_attestation")
+    git_closure = committed_git_closure(boundary.active_root)
+    _validate_synthetic_test_execution_contract(
+        payload.get("test_execution_contract"),
+        root=boundary.active_root,
+        git_closure=git_closure,
+    )
     if (
-        evidence_id != sha256_json(payload)
+        set(payload)
+        != {
+            "active_or_peer_repository_write_count",
+            "alpha_evidence",
+            "candidate_eligible",
+            "code_closure",
+            "code_closure_sha256",
+            "config_closure",
+            "config_closure_sha256",
+            "dependency_lock_receipt_id",
+            "git_closure",
+            "paid_provider_call_count",
+            "project",
+            "real_history_model_fit_count",
+            "real_history_row_count",
+            "schema_version",
+            "status",
+            "synthetic_only",
+            "test_attestation",
+            "test_closure",
+            "test_closure_sha256",
+            "test_execution_contract",
+            "test_execution_mode",
+            "verified_controls",
+            "verified_isolation_checks",
+        }
+        or evidence_id != sha256_json(payload)
         or evidence_id != manifest.metadata["synthetic_test_evidence_id"]
-        or payload.get("schema_version") != SCHEMA_VERSION
+        or payload.get("schema_version") != SYNTHETIC_TEST_SCHEMA_VERSION
         or payload.get("project") != PROJECT
         or payload.get("status") != "PASS_SYNTHETIC_MECHANICS_ONLY"
         or payload.get("synthetic_only") is not True
@@ -622,7 +952,10 @@ def load_synthetic_test_evidence(
         or payload.get("real_history_row_count") != 0
         or payload.get("real_history_model_fit_count") != 0
         or payload.get("paid_provider_call_count") != 0
-        or payload.get("external_write_count") != 0
+        or payload.get("active_or_peer_repository_write_count") != 0
+        or payload.get("git_closure") != git_closure
+        or payload.get("test_execution_mode")
+        != "IMMUTABLE_COMMITTED_GIT_ARCHIVE_FULL_PYTEST_CAPTURED_VERBATIM"
         or payload.get("code_closure") != code
         or payload.get("code_closure_sha256") != sha256_json(code)
         or payload.get("config_closure") != configs
@@ -641,18 +974,14 @@ def load_synthetic_test_evidence(
             "pytest_exit_code",
             "test_command",
             "test_command_sha256",
+            "test_output_size",
             "test_output_sha256",
         }
-        or attestation.get("pytest_exit_code") != 0
-        or attestation.get("test_command") != SYNTHETIC_TEST_COMMAND
-        or attestation.get("test_command_sha256")
-        != SYNTHETIC_TEST_COMMAND_SHA256
-        or type(attestation.get("passed_test_count")) is not int
-        or attestation["passed_test_count"] < len(ENGINE_TEST_PATHS)
-        or re.fullmatch(
-            r"[0-9a-f]{64}", str(attestation.get("test_output_sha256"))
-        )
-        is None
+        or attestation != observed_attestation
+        or manifest.metadata["passed_test_count"]
+        != observed_attestation["passed_test_count"]
+        or manifest.metadata["test_output_sha256"]
+        != observed_attestation["test_output_sha256"]
         or manifest.metadata["code_closure_sha256"] != sha256_json(code)
         or manifest.metadata["test_closure_sha256"] != sha256_json(tests)
     ):
@@ -711,17 +1040,19 @@ def load_engine_registration(
 ) -> dict[str, object]:
     manifest = receipt.verify(boundary)
     if (
-        manifest.release_kind != ENGINE_REGISTRATION_RELEASE_KIND
+        receipt.phase != "evidence"
+        or manifest.release_kind != ENGINE_REGISTRATION_RELEASE_KIND
         or manifest.schema_version != SCHEMA_VERSION
-        or {entry.path for entry in manifest.files} != {"engine_registration.json"}
+        or manifest.files
+        or set(manifest.embedded_documents) != {"engine_registration.json"}
         or set(manifest.metadata)
         != {"capability_closure_id", "engine_registration_id", "status"}
     ):
         raise IntegrityError("engine registration release contract is invalid")
-    payload = _read_canonical(
-        boundary.active_root / receipt.relative_root / "engine_registration.json",
-        description="engine registration",
-    )
+    raw_payload = receipt.embedded_document("engine_registration.json", boundary)
+    if not isinstance(raw_payload, dict):
+        raise IntegrityError("engine registration document is invalid")
+    payload = dict(raw_payload)
     registration_id = payload.pop("engine_registration_id", None)
     evidence_receipt = _receipt_from(payload.get("synthetic_test_evidence_receipt"))
     evidence = load_synthetic_test_evidence(evidence_receipt, boundary=boundary)
@@ -767,6 +1098,20 @@ def _scan_no_cross_import(root: Path) -> str:
                 modules = tuple(alias.name for alias in node.names)
             elif isinstance(node, ast.ImportFrom) and node.module:
                 modules = (node.module,)
+            elif (
+                isinstance(node, ast.Call)
+                and node.args
+                and isinstance(node.args[0], ast.Constant)
+                and isinstance(node.args[0].value, str)
+                and (
+                    (isinstance(node.func, ast.Name) and node.func.id == "__import__")
+                    or (
+                        isinstance(node.func, ast.Attribute)
+                        and node.func.attr == "import_module"
+                    )
+                )
+            ):
+                modules = (node.args[0].value,)
             if any(module.startswith("us_stocks_swing_model") for module in modules):
                 violations.append(f"{relative}:{node.lineno}")
     if not records or violations:
@@ -787,6 +1132,201 @@ def _boundary_fingerprints(boundary: RepoBoundary) -> dict[str, object]:
     }
 
 
+def _path_identity(path: Path) -> dict[str, object]:
+    resolved = path.resolve(strict=True)
+    details = path.lstat()
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    attributes = int(getattr(details, "st_file_attributes", 0))
+    if not resolved.is_dir() or path.is_symlink() or attributes & reparse_flag:
+        raise IntegrityError("isolation root is absent, non-directory, or link-like")
+    core = {
+        "device": int(details.st_dev),
+        "inode": int(details.st_ino),
+        "resolved_path_fingerprint": sha256_json(str(resolved).casefold()),
+    }
+    return {**core, "path_identity_id": sha256_json(core)}
+
+
+def _git_directory_identity(root: Path) -> dict[str, object] | None:
+    environment = dict(os.environ)
+    environment["GIT_OPTIONAL_LOCKS"] = "0"
+    result = subprocess.run(
+        ("git", "-C", str(root), "rev-parse", "--absolute-git-dir"),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+        env=environment,
+    )
+    if result.returncode != 0:
+        return None
+    raw = result.stdout.decode("utf-8", errors="strict").strip()
+    if not raw:
+        raise IntegrityError("repository Git directory probe returned an empty path")
+    return _path_identity(Path(raw))
+
+
+def _assert_plain_unshared_mutable_tree(root: Path) -> None:
+    pending = [root]
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
+    while pending:
+        directory = pending.pop()
+        try:
+            entries = list(os.scandir(directory))
+        except OSError as exc:
+            raise IntegrityError("mutable isolation tree cannot be inspected") from exc
+        for entry in entries:
+            try:
+                details = entry.stat(follow_symlinks=False)
+            except OSError as exc:
+                raise IntegrityError("mutable isolation entry cannot be inspected") from exc
+            attributes = int(getattr(details, "st_file_attributes", 0))
+            if entry.is_symlink() or attributes & reparse_flag:
+                raise IntegrityError("mutable isolation tree contains a link or junction")
+            if entry.is_dir(follow_symlinks=False):
+                pending.append(Path(entry.path))
+            elif entry.is_file(follow_symlinks=False):
+                link_count = _regular_file_link_count(Path(entry.path), details)
+                if link_count > 1:
+                    raise IntegrityError(
+                        "mutable isolation tree contains a hard-linked file: "
+                        f"{entry.path} (links={link_count})"
+                    )
+            else:
+                raise IntegrityError("mutable isolation tree contains a non-regular entry")
+
+
+def _regular_file_link_count(path: Path, details: os.stat_result) -> int:
+    if os.name != "nt":
+        return int(details.st_nlink)
+    import ctypes
+    from ctypes import wintypes
+
+    class _ByHandleFileInformation(ctypes.Structure):
+        _fields_ = [
+            ("dwFileAttributes", wintypes.DWORD),
+            ("ftCreationTime", wintypes.FILETIME),
+            ("ftLastAccessTime", wintypes.FILETIME),
+            ("ftLastWriteTime", wintypes.FILETIME),
+            ("dwVolumeSerialNumber", wintypes.DWORD),
+            ("nFileSizeHigh", wintypes.DWORD),
+            ("nFileSizeLow", wintypes.DWORD),
+            ("nNumberOfLinks", wintypes.DWORD),
+            ("nFileIndexHigh", wintypes.DWORD),
+            ("nFileIndexLow", wintypes.DWORD),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    create_file = kernel32.CreateFileW
+    create_file.argtypes = (
+        wintypes.LPCWSTR,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.LPVOID,
+        wintypes.DWORD,
+        wintypes.DWORD,
+        wintypes.HANDLE,
+    )
+    create_file.restype = wintypes.HANDLE
+    handle = create_file(
+        str(path),
+        0x80,
+        0x1 | 0x2 | 0x4,
+        None,
+        3,
+        0,
+        None,
+    )
+    invalid = ctypes.c_void_p(-1).value
+    if handle == invalid:
+        raise IntegrityError("mutable file identity handle cannot be opened")
+    try:
+        information = _ByHandleFileInformation()
+        if not kernel32.GetFileInformationByHandle(
+            handle, ctypes.byref(information)
+        ):
+            raise IntegrityError("mutable file identity cannot be inspected")
+        return int(information.nNumberOfLinks)
+    finally:
+        kernel32.CloseHandle(handle)
+
+
+def _compute_isolation_proof(boundary: RepoBoundary) -> dict[str, object]:
+    roots = (
+        ("ACTIVE", boundary.active_root),
+        *(("LEGACY", path) for path in boundary.legacy_roots),
+        *(("FOREIGN", path) for path in boundary.foreign_roots),
+    )
+    root_records: list[dict[str, object]] = []
+    git_ids: list[str] = []
+    for role, root in roots:
+        identity = _path_identity(root)
+        git_identity = _git_directory_identity(root)
+        if role == "ACTIVE" and git_identity is None:
+            raise IntegrityError("active isolation root is not a Git repository")
+        if git_identity is not None:
+            git_ids.append(str(git_identity["path_identity_id"]))
+        root_records.append(
+            {
+                "git_directory_identity": git_identity,
+                "role": role,
+                "root_identity": identity,
+            }
+        )
+    root_ids = [str(item["root_identity"]["path_identity_id"]) for item in root_records]  # type: ignore[index]
+    if len(root_ids) != len(set(root_ids)) or len(git_ids) != len(set(git_ids)):
+        raise IntegrityError("repository roots or Git directories are aliased")
+
+    mutable_roots: list[dict[str, object]] = []
+    active_mutable_paths = [boundary.active_root / name for name in ("bundles", "data", "state")]
+    for path in active_mutable_paths:
+        identity = _path_identity(path)
+        _assert_plain_unshared_mutable_tree(path)
+        for _, peer in roots[1:]:
+            peer_candidate = peer / path.name
+            if peer_candidate.exists() and os.path.samefile(path, peer_candidate):
+                raise IntegrityError("active mutable root aliases a peer project root")
+        mutable_roots.append(
+            {"name": path.name, "root_identity": identity}
+        )
+
+    cross_write_probes: list[dict[str, str]] = []
+    for role, peer in roots[1:]:
+        probe = peer / ".codex_isolation_probe_must_not_exist"
+        try:
+            boundary.assert_active_path(probe, purpose="isolation cross-write probe")
+        except UnauthorizedOperation:
+            result = "BOUNDARY_REJECTED_WITHOUT_WRITE"
+        else:
+            raise IntegrityError("repository boundary accepted a peer write path")
+        cross_write_probes.append(
+            {
+                "peer_root_fingerprint": sha256_json(
+                    str(peer.resolve(strict=True)).casefold()
+                ),
+                "result": result,
+                "role": role,
+            }
+        )
+
+    core = {
+        "active_mutable_roots": mutable_roots,
+        "cross_write_probes": cross_write_probes,
+        "proof_scope": {
+            "DISTINCT_REPOSITORY_ROOTS": (
+                "CONFIGURED_ROOT_AND_GIT_DIRECTORY_OS_IDENTITIES"
+            ),
+            "NO_CROSS_IMPORT": "STATIC_AND_LITERAL_DYNAMIC_SOURCE_IMPORT_SCAN",
+            "NO_CROSS_WRITE": "REPO_BOUNDARY_REJECTS_EVERY_CONFIGURED_PEER_ROOT",
+            "NO_SHARED_MUTABLE_DATA_STATE_BUNDLES": (
+                "ACTIVE_DESCENDANTS_PLAIN_WITH_NO_REPORTED_MULTILINK_PLUS_TOP_LEVEL_SAMEFILE_CHECK"
+            ),
+        },
+        "repository_roots": root_records,
+        "source_scan_sha256": _scan_no_cross_import(boundary.active_root),
+    }
+    return {**core, "isolation_proof_id": sha256_json(core)}
+
+
 def publish_project_isolation_evidence(
     *,
     synthetic_test_evidence_receipt: VerifiedReleaseReceipt,
@@ -798,12 +1338,15 @@ def publish_project_isolation_evidence(
     )
     if evidence["verified_isolation_checks"] != list(REQUIRED_ISOLATION_CHECKS):
         raise IntegrityError("synthetic evidence lacks exact isolation checks")
+    isolation_proof = _compute_isolation_proof(boundary)
     core = {
         **_boundary_fingerprints(boundary),
         "checks": {name: "PASS" for name in REQUIRED_ISOLATION_CHECKS},
+        "isolation_proof": isolation_proof,
+        "isolation_proof_id": isolation_proof["isolation_proof_id"],
         "project": PROJECT,
         "schema_version": SCHEMA_VERSION,
-        "source_scan_sha256": _scan_no_cross_import(boundary.active_root),
+        "source_scan_sha256": isolation_proof["source_scan_sha256"],
         "status": "PASS_PROJECT_ISOLATED",
         "synthetic_test_evidence_receipt": (
             synthetic_test_evidence_receipt.as_dict()
@@ -819,6 +1362,7 @@ def publish_project_isolation_evidence(
         source_release_ids=(synthetic_test_evidence_receipt.release_id,),
         metadata={
             "isolation_evidence_id": payload["isolation_evidence_id"],
+            "isolation_proof_id": payload["isolation_proof_id"],
             "status": payload["status"],
         },
     )
@@ -831,20 +1375,24 @@ def load_project_isolation_evidence(
 ) -> dict[str, object]:
     manifest = receipt.verify(boundary)
     if (
-        manifest.release_kind != ISOLATION_RELEASE_KIND
+        receipt.phase != "evidence"
+        or manifest.release_kind != ISOLATION_RELEASE_KIND
         or manifest.schema_version != SCHEMA_VERSION
-        or {entry.path for entry in manifest.files} != {"project_isolation.json"}
-        or set(manifest.metadata) != {"isolation_evidence_id", "status"}
+        or manifest.files
+        or set(manifest.embedded_documents) != {"project_isolation.json"}
+        or set(manifest.metadata)
+        != {"isolation_evidence_id", "isolation_proof_id", "status"}
     ):
         raise IntegrityError("project isolation release contract is invalid")
-    payload = _read_canonical(
-        boundary.active_root / receipt.relative_root / "project_isolation.json",
-        description="project isolation evidence",
-    )
+    raw_payload = receipt.embedded_document("project_isolation.json", boundary)
+    if not isinstance(raw_payload, dict):
+        raise IntegrityError("project isolation document is invalid")
+    payload = dict(raw_payload)
     evidence_id = payload.pop("isolation_evidence_id", None)
     test_receipt = _receipt_from(payload.get("synthetic_test_evidence_receipt"))
     test_evidence = load_synthetic_test_evidence(test_receipt, boundary=boundary)
     expected_boundary = _boundary_fingerprints(boundary)
+    expected_proof = _compute_isolation_proof(boundary)
     if (
         evidence_id != sha256_json(payload)
         or evidence_id != manifest.metadata["isolation_evidence_id"]
@@ -857,8 +1405,13 @@ def load_project_isolation_evidence(
         != expected_boundary["active_repository_id"]
         or payload.get("peer_root_fingerprints")
         != expected_boundary["peer_root_fingerprints"]
+        or payload.get("isolation_proof") != expected_proof
+        or payload.get("isolation_proof_id")
+        != expected_proof["isolation_proof_id"]
+        or manifest.metadata["isolation_proof_id"]
+        != expected_proof["isolation_proof_id"]
         or payload.get("source_scan_sha256")
-        != _scan_no_cross_import(boundary.active_root)
+        != expected_proof["source_scan_sha256"]
         or test_evidence["verified_isolation_checks"]
         != list(REQUIRED_ISOLATION_CHECKS)
         or manifest.source_release_ids != (test_receipt.release_id,)
@@ -866,6 +1419,41 @@ def load_project_isolation_evidence(
         raise IntegrityError("project isolation evidence is stale or substituted")
     payload["isolation_evidence_id"] = evidence_id
     return payload
+
+
+def publish_readiness_prerequisites(
+    *,
+    boundary: RepoBoundary,
+    publisher: AtomicPublisher,
+) -> ReadinessPrerequisitePublication:
+    """Publish one test run and bind both prerequisite receipts to it."""
+
+    if publisher.boundary.repository_id != boundary.repository_id:
+        raise IntegrityError("readiness prerequisite publisher belongs elsewhere")
+    synthetic = publish_synthetic_test_evidence(
+        boundary=boundary,
+        publisher=publisher,
+    )
+    engine = publish_engine_registration(
+        synthetic_test_evidence_receipt=synthetic,
+        boundary=boundary,
+        publisher=publisher,
+    )
+    isolation = publish_project_isolation_evidence(
+        synthetic_test_evidence_receipt=synthetic,
+        boundary=boundary,
+        publisher=publisher,
+    )
+    engine_payload = load_engine_registration(engine, boundary=boundary)
+    isolation_payload = load_project_isolation_evidence(isolation, boundary=boundary)
+    if (
+        _receipt_from(engine_payload["synthetic_test_evidence_receipt"])
+        != synthetic
+        or _receipt_from(isolation_payload["synthetic_test_evidence_receipt"])
+        != synthetic
+    ):
+        raise IntegrityError("readiness prerequisites do not share one test receipt")
+    return ReadinessPrerequisitePublication(synthetic, engine, isolation)
 
 
 def _receipt_from(payload: object) -> VerifiedReleaseReceipt:
@@ -883,10 +1471,7 @@ def _load_mechanical_legacy_census(
     census.verify()
     manifest = receipt.verify(boundary)
     payload = validate_legacy_trial_census_payload(
-        _read_canonical(
-            boundary.active_root / receipt.relative_root / LEGACY_CENSUS_FILENAME,
-            description="production-derived unresolved legacy census",
-        )
+        receipt.embedded_document(LEGACY_CENSUS_FILENAME, boundary)
     )
     if (
         manifest.schema_version != LEGACY_CENSUS_SCHEMA_VERSION
@@ -936,7 +1521,8 @@ def _safety_contract(boundary: RepoBoundary) -> dict[str, object]:
     )
     if (
         readiness.get("project") != PROJECT
-        or readiness.get("contract_version") != "2.0.0-controlled-rebuild"
+        or readiness.get("contract_version")
+        != "2.1.0-robustness-monitoring"
         or readiness.get("readiness", {}).get("readiness_is_execution_authority")
         is not False
         or set(research_pauses or ()) != REQUIRED_HARD_PAUSES
@@ -948,6 +1534,35 @@ def _safety_contract(boundary: RepoBoundary) -> dict[str, object]:
             "mixed_status_statistics_query_epochs_explicit"
         )
         is not True
+        or readiness.get("robustness", {}).get("valid_instability_status")
+        != "INCONCLUSIVE_ROBUSTNESS"
+        or readiness.get("robustness", {}).get(
+            "malformed_or_incomplete_binding_status"
+        )
+        != "INVALID"
+        or readiness.get("robustness", {}).get(
+            "policy_hash_must_be_bound_to_trial_and_evaluation"
+        )
+        is not True
+        or readiness.get("binding_gate", {}).get("decision_order")
+        != [
+            "INVALID",
+            "INCONCLUSIVE_DATA_OR_POWER",
+            "FAIL_NO_EDGE",
+            "FAIL_NOT_ECONOMIC",
+            "INCONCLUSIVE_EFFECT",
+            "FAIL_MULTIPLICITY_OR_CONTROL",
+            "INCONCLUSIVE_ROBUSTNESS",
+            "PASS_HISTORICAL_SCREEN",
+        ]
+        or readiness.get("prospective_monitoring", {}).get(
+            "paused_or_invalid_requires_abstention"
+        )
+        is not True
+        or readiness.get("prospective_monitoring", {}).get(
+            "automatic_retraining_retuning_source_substitution_or_resume"
+        )
+        is not False
     ):
         raise IntegrityError("research readiness contract weakens hard pauses")
     return {
@@ -1210,17 +1825,19 @@ def _load_state_payload(
 ) -> tuple[dict[str, object], object]:
     manifest = receipt.verify(boundary)
     if (
-        manifest.release_kind != release_kind
+        receipt.phase != "readiness"
+        or manifest.release_kind != release_kind
         or manifest.schema_version != SCHEMA_VERSION
-        or {entry.path for entry in manifest.files} != {filename}
+        or manifest.files
+        or set(manifest.embedded_documents) != {filename}
         or set(manifest.metadata) != {"readiness_receipt_id", "state"}
         or manifest.metadata["state"] != state
     ):
         raise IntegrityError("readiness state release contract is invalid")
-    payload = _read_canonical(
-        boundary.active_root / receipt.relative_root / filename,
-        description=state,
-    )
+    raw_payload = receipt.embedded_document(filename, boundary)
+    if not isinstance(raw_payload, dict):
+        raise IntegrityError("readiness state document is invalid")
+    payload = dict(raw_payload)
     receipt_id = payload.pop("readiness_receipt_id", None)
     if (
         receipt_id != sha256_json(payload)
@@ -1432,19 +2049,17 @@ def _cli_release(
 ) -> VerifiedReleaseReceipt | None:
     if path is None:
         return None
-    release_root = boundary.assert_active_path(
+    manifest_path = boundary.assert_active_path(
         path,
         purpose=description,
-        subtree="data/vault/releases",
+        subtree="manifests/data_releases",
     )
-    relative = release_root.relative_to(
-        (boundary.active_root / "data" / "vault" / "releases").resolve(
-            strict=False
-        )
+    relative = manifest_path.relative_to(
+        (boundary.active_root / "manifests" / "data_releases").resolve(strict=False)
     )
-    if len(relative.parts) != 1:
-        raise ContractError(f"{description} must name one immutable release root")
-    return VerifiedReleaseReceipt.from_release(release_root, boundary)
+    if len(relative.parts) != 2 or manifest_path.suffix != ".json":
+        raise ContractError(f"{description} must name one central layout-v2 manifest")
+    return VerifiedReleaseReceipt.from_manifest(manifest_path, boundary)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -1460,14 +2075,58 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--engine-registration-release", type=Path)
     parser.add_argument("--isolation-evidence-release", type=Path)
     parser.add_argument("--legacy-census-release", type=Path)
-    parser.add_argument(
+    publication_mode = parser.add_mutually_exclusive_group()
+    publication_mode.add_argument(
         "--publish",
         action="store_true",
         help="publish only the two non-authorizing mechanical readiness states",
     )
+    publication_mode.add_argument(
+        "--publish-prerequisites",
+        action="store_true",
+        help=(
+            "run the pinned synthetic suite and publish its test, engine, and "
+            "project-isolation prerequisite receipts"
+        ),
+    )
     args = parser.parse_args(argv)
 
     boundary = _cli_boundary(args.repository_root, args.source_contract)
+    if args.publish_prerequisites:
+        if any(
+            value is not None
+            for value in (
+                args.foundation_set_release,
+                args.engine_registration_release,
+                args.isolation_evidence_release,
+                args.legacy_census_release,
+            )
+        ):
+            parser.error(
+                "--publish-prerequisites cannot be combined with release inputs"
+            )
+        operation = OperationReceipt.issue_local(
+            boundary,
+            operation="PUBLISH_RELEASE",
+            classification=OperationClassification.CONTROLLED_REBUILD_NON_ALPHA,
+            scope={
+                "readiness_scope": (
+                    "PINNED_SYNTHETIC_TEST_ENGINE_AND_ISOLATION_ONLY"
+                )
+            },
+        )
+        publisher = AtomicPublisher(
+            boundary=boundary,
+            operation_receipt=operation,
+            lock_path=boundary.active_root / "state" / "locks" / "data-publication.lock",
+        )
+        prerequisites = publish_readiness_prerequisites(
+            boundary=boundary,
+            publisher=publisher,
+        )
+        print(canonical_bytes(prerequisites.as_dict()).decode("utf-8"))
+        return 0
+
     foundation = _cli_release(
         args.foundation_set_release,
         boundary=boundary,
@@ -1516,16 +2175,9 @@ def main(argv: list[str] | None = None) -> int:
         },
     )
     publisher = AtomicPublisher(
-        boundary.active_root
-        / "data"
-        / "vault"
-        / ".staging"
-        / "releases"
-        / "readiness-cli",
-        boundary.active_root / "data" / "vault" / "releases",
-        boundary.active_root / "state" / "locks" / "readiness-cli.lock",
         boundary=boundary,
         operation_receipt=operation,
+        lock_path=boundary.active_root / "state" / "locks" / "data-publication.lock",
     )
     result = publish_readiness_states(
         boundary=boundary,

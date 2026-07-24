@@ -84,6 +84,32 @@ def test_identity_and_economics_registries_derive_only_from_verified_releases(
     assert "min_price_increment_amount" not in resolved.source_fields_used
 
 
+def test_preverified_economics_resolution_is_bound_to_the_verified_registry_hash(
+    release_factory, boundary, decision
+) -> None:
+    _, actual = _definition_registry(release_factory, boundary, decision)
+    _, receipt = release_factory(
+        release_kind="actual_contract_economics",
+        filename="contract_economics.json",
+        content=_economics_payload(actual, decision),
+    )
+    economics = VerifiedEconomicsRegistry.from_release(receipt, boundary)
+
+    economics.verify()
+    resolved = economics._resolve_preverified(
+        actual,
+        decision,
+        expected_registry_hash=economics.registry_hash,
+    )
+    assert resolved.actual_identity_hash == actual.identity_hash
+    with pytest.raises(IntegrityError, match="preverified snapshot hash changed"):
+        economics._resolve_preverified(
+            actual,
+            decision,
+            expected_registry_hash="0" * 64,
+        )
+
+
 @pytest.mark.parametrize(
     "overrides",
     (

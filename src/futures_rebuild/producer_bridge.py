@@ -36,7 +36,11 @@ from .foundation.support import VerifiedFoundationPolicies
 from .identity import ActualContractIdentity, ContractDefinition
 from .inference import VerifiedIdentityRegistry
 from .ledger import PredictionCensusReceipt, PredictionLedger
-from .release import AtomicPublisher, ReleaseManifest, VerifiedReleaseReceipt
+from .data_layout import (
+    DataReleaseManifest as ReleaseManifest,
+    DataReleaseReceipt as VerifiedReleaseReceipt,
+    PhasePublisher as AtomicPublisher,
+)
 from .schemas import (
     FeatureLineage,
     FeatureRow,
@@ -49,9 +53,11 @@ from .time_contracts import AvailabilityBasis
 
 
 DEFINITION_RELEASE_KIND = "actual_contract_definitions"
-DEFINITION_SCHEMA_VERSION = "1.1.0"
+DEFINITION_SCHEMA_VERSION = "2.1.0"
+DEFINITION_INELIGIBILITY_DOCUMENT = "definition_ineligibility.json"
+DEFINITION_INELIGIBILITY_SCHEMA_VERSION = "1.0.0"
 ECONOMICS_RELEASE_KIND = "actual_contract_economics"
-ECONOMICS_SCHEMA_VERSION = "1.0.0"
+ECONOMICS_SCHEMA_VERSION = "1.1.0"
 SESSION_RELEASE_KIND = "versioned_session_policy"
 SESSION_SCHEMA_VERSION = "1.0.0"
 FEATURE_RELEASE_KIND = "feature_release"
@@ -102,10 +108,16 @@ _ACTUAL_CAUSAL_FIELDS = frozenset(
         "definition_row_sha256",
         "definition_ts_event_ns",
         "definition_ts_recv_ns",
+        "definition_index_date_utc",
+        "definition_activation_ns",
+        "definition_expiration_ns",
+        "definition_security_update_action",
+        "definition_instrument_class",
+        "definition_security_type",
+        "definition_source_row_ordinal",
         "economics_rulebook_hash",
         "exchange",
         "exchange_session_date",
-        "instrument_id_date_utc",
         "point_value",
         "provider_unit_qty_state",
         "quote_convention",
@@ -114,8 +126,68 @@ _ACTUAL_CAUSAL_FIELDS = frozenset(
         "tick_value",
     }
 )
+_TRUST_CACHE_FIELDS = tuple(
+    sorted(
+        _ACTUAL_CAUSAL_FIELDS
+        | {
+            "dataset",
+            "instrument_id",
+            "market",
+            "publisher_id",
+            "source_manifest_sha256",
+            "source_release_id",
+        }
+    )
+)
+_CAUSAL_CENSUS_FIELDS = frozenset(
+    _ACTUAL_CAUSAL_FIELDS
+    | {
+        "disposition",
+        "failure_code",
+        "failure_detail_sha256",
+        "prediction_in_coverage_denominator",
+    }
+)
+_ECONOMICS_CAUSAL_FIELDS = tuple(
+    sorted(
+        set(_TRUST_CACHE_FIELDS)
+        | {
+            "actual_identity_hash",
+            "availability_basis",
+            "availability_policy_hash",
+            "available_at_ns",
+            "event_at_ns",
+            "foundation_policy_set_id",
+            "instrument_id_date_utc",
+            "provider_timestamp_epoch_id",
+            "resolution_as_of_ns",
+            "source_raw_release_id",
+        }
+    )
+)
 _RESOLVED_CAUSAL_DISPOSITIONS = frozenset({"ELIGIBLE", "ANOMALY_QUARANTINED"})
 _UNRESOLVED_CAUSAL_DISPOSITION = "UNRESOLVED_FAIL_CLOSED"
+
+
+class _ColumnarBatchRow(Mapping[str, object]):
+    """A read-only row view that does not materialize one dict per Parquet row."""
+
+    __slots__ = ("_columns", "_index")
+
+    def __init__(
+        self, columns: Mapping[str, Sequence[object]], index: int
+    ) -> None:
+        self._columns = columns
+        self._index = index
+
+    def __getitem__(self, name: str) -> object:
+        return self._columns[name][self._index]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._columns)
+
+    def __len__(self) -> int:
+        return len(self._columns)
 
 
 def _module_hash() -> str:
@@ -176,16 +248,67 @@ def _definition_record(
 ) -> dict[str, object]:
     economics = policies.economics.resolve(provider.market, provider)
     available = provider.ts_recv
+    activation = provider.activation
+    expiration = provider.expiration
     return {
         "available_at": available.isoformat(),
         "currency": economics.currency,
         "dataset": provider.dataset,
-        "effective_at": provider.ts_event.isoformat(),
+        "definition_index_date_utc": provider.instrument_id_date_utc,
+        "effective_at": None if activation is None else activation.isoformat(),
         "exchange": provider.exchange,
+        "expires_at": None if expiration is None else expiration.isoformat(),
         "instrument_id": provider.instrument_id,
+        "instrument_class": provider.instrument_class,
         "market": provider.market,
         "min_tick": str(economics.tick_size),
         "multiplier": str(economics.point_value),
+        "provider_definition_manifest_sha256": provider.source_manifest_sha256,
+        "provider_definition_activation_ns": provider.activation_ns,
+        "provider_definition_expiration_ns": provider.expiration_ns,
+        "provider_definition_release_id": provider.source_release_id,
+        "provider_definition_row_sha256": provider.row_sha256,
+        "provider_definition_ts_event_ns": provider.ts_event_ns,
+        "provider_definition_ts_recv_ns": provider.ts_recv_ns,
+        "provider_event_at": provider.ts_event.isoformat(),
+        "provider_min_price_increment_nano": provider.min_price_increment_nano,
+        "provider_source_file_path": provider.source_file_path,
+        "provider_source_file_sha256": provider.source_file_sha256,
+        "provider_unit_of_measure": provider.unit_of_measure,
+        "provider_unit_of_measure_qty_nano": provider.unit_of_measure_qty_nano,
+        "publisher_id": provider.publisher_id,
+        "raw_symbol": provider.raw_symbol,
+        "security_type": provider.security_type,
+        "security_update_action": provider.security_update_action,
+        "source_received_at": provider.ts_recv.isoformat(),
+        "source_row_ordinal": provider.row_ordinal,
+    }
+
+
+def _definition_ineligibility_record(
+    provider: ProviderDefinition,
+    policies: VerifiedFoundationPolicies,
+    error: ContractError,
+) -> dict[str, object]:
+    message = str(error)
+    if message == "provider unit quantity is unavailable; economics fail closed":
+        reason_code = "PROVIDER_UNIT_QTY_UNAVAILABLE"
+    elif message == "provider unit quantity contradicts the pinned market rule":
+        reason_code = "PROVIDER_UNIT_QTY_CONTRADICTION"
+    else:
+        reason_code = "ECONOMICS_CONTRACT_UNRESOLVED"
+    core: dict[str, object] = {
+        "dataset": provider.dataset,
+        "definition_index_date_utc": provider.instrument_id_date_utc,
+        "disposition": "ABSTAIN_ECONOMICS_UNRESOLVED",
+        "economics_rulebook_hash": policies.economics.rulebook_hash,
+        "failure_detail_sha256": sha256_json(
+            {"error_type": type(error).__name__, "message": message}
+        ),
+        "instrument_class": provider.instrument_class,
+        "instrument_id": provider.instrument_id,
+        "market": provider.market,
+        "prediction_in_coverage_denominator": True,
         "provider_definition_manifest_sha256": provider.source_manifest_sha256,
         "provider_definition_release_id": provider.source_release_id,
         "provider_definition_row_sha256": provider.row_sha256,
@@ -198,8 +321,61 @@ def _definition_record(
         "provider_unit_of_measure_qty_nano": provider.unit_of_measure_qty_nano,
         "publisher_id": provider.publisher_id,
         "raw_symbol": provider.raw_symbol,
-        "source_received_at": provider.ts_recv.isoformat(),
+        "reason_code": reason_code,
+        "research_eligible": False,
+        "security_type": provider.security_type,
+        "security_update_action": provider.security_update_action,
+        "source_row_ordinal": provider.row_ordinal,
     }
+    return {
+        **core,
+        "economics_ineligibility_id": sha256_json(core),
+    }
+
+
+def _definition_projection(
+    raw_receipt: VerifiedReleaseReceipt,
+    policies: VerifiedFoundationPolicies,
+    boundary: RepoBoundary,
+) -> tuple[tuple[dict[str, object], ...], tuple[dict[str, object], ...]]:
+    loaded = load_raw_interval(raw_receipt, boundary=boundary)
+    policies.verify()
+    providers = read_definitions(loaded.definitions_path)
+    eligible: list[dict[str, object]] = []
+    ineligible: list[dict[str, object]] = []
+    for provider in providers:
+        try:
+            eligible.append(_definition_record(provider, policies))
+        except ContractError as exc:
+            ineligible.append(
+                _definition_ineligibility_record(provider, policies, exc)
+            )
+    ordering = lambda item: (
+        str(item["dataset"]),
+        str(item["market"]),
+        int(item["publisher_id"]),
+        int(item["instrument_id"]),
+        str(item["definition_index_date_utc"]),
+        int(item["provider_definition_ts_recv_ns"]),
+        str(item["provider_source_file_path"]),
+        int(item["source_row_ordinal"]),
+        str(item["provider_definition_row_sha256"]),
+    )
+    records = tuple(sorted(eligible, key=ordering))
+    exclusions = tuple(sorted(ineligible, key=ordering))
+    source_rows = {
+        str(item["provider_definition_row_sha256"])
+        for item in (*records, *exclusions)
+    }
+    if (
+        not providers
+        or len(source_rows) != len(providers)
+        or len(records) + len(exclusions) != len(providers)
+    ):
+        raise IntegrityError(
+            "definition bridge eligibility partition is empty, duplicate, or incomplete"
+        )
+    return records, exclusions
 
 
 def _definition_records(
@@ -207,27 +383,26 @@ def _definition_records(
     policies: VerifiedFoundationPolicies,
     boundary: RepoBoundary,
 ) -> tuple[dict[str, object], ...]:
-    loaded = load_raw_interval(raw_receipt, boundary=boundary)
-    policies.verify()
-    providers = read_definitions(loaded.definitions_path)
-    records = tuple(
-        sorted(
-            (_definition_record(provider, policies) for provider in providers),
-            key=lambda item: (
-                str(item["dataset"]),
-                int(item["publisher_id"]),
-                int(item["instrument_id"]),
-                str(item["effective_at"]),
-                str(item["source_received_at"]),
-                str(item["provider_definition_row_sha256"]),
-            ),
-        )
-    )
-    if not records or len(
-        {str(item["provider_definition_row_sha256"]) for item in records}
-    ) != len(records):
-        raise IntegrityError("definition bridge rows are empty or duplicate")
+    records, _ = _definition_projection(raw_receipt, policies, boundary)
     return records
+
+
+def _definition_ineligibility_document(
+    *,
+    records: Sequence[Mapping[str, object]],
+    ineligible: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    core: dict[str, object] = {
+        "eligible_definition_row_count": len(records),
+        "ineligible_definition_row_count": len(ineligible),
+        "records": list(ineligible),
+        "schema_version": DEFINITION_INELIGIBILITY_SCHEMA_VERSION,
+        "source_definition_row_count": len(records) + len(ineligible),
+    }
+    return {
+        **core,
+        "definition_ineligibility_ledger_id": sha256_json(core),
+    }
 
 
 @dataclass(frozen=True)
@@ -243,6 +418,7 @@ class LoadedActualContractDefinitions:
     policy_receipt: VerifiedReleaseReceipt
     registry: VerifiedIdentityRegistry
     by_provider_row: Mapping[str, BridgeDefinitionRecord]
+    ineligible_by_provider_row: Mapping[str, Mapping[str, object]]
 
     def provider_record(self, provider_row_sha256: str) -> BridgeDefinitionRecord:
         try:
@@ -258,19 +434,29 @@ def publish_actual_contract_definitions(
     boundary: RepoBoundary,
     publisher: AtomicPublisher,
 ) -> VerifiedReleaseReceipt:
-    """Publish every Phase 1B definition row without dropping provider provenance."""
+    """Publish eligible identities plus every fail-closed provider-row abstention."""
 
     _assert_publisher(boundary, publisher)
     if policies.boundary.repository_id != boundary.repository_id:
         raise IntegrityError("foundation policies belong to another repository")
-    records = _definition_records(raw_receipt, policies, boundary)
+    records, ineligible = _definition_projection(raw_receipt, policies, boundary)
+    ineligibility = _definition_ineligibility_document(
+        records=records,
+        ineligible=ineligible,
+    )
     sources = (raw_receipt, policies.receipt)
     metadata = {
         **_base_metadata(boundary, sources),
         "definition_row_count": len(records),
+        "eligible_definition_row_count": len(records),
         "economics_rulebook_hash": policies.economics.rulebook_hash,
         "foundation_policy_receipt_id": policies.receipt.receipt_id,
         "foundation_policy_set_id": policies.policy_set_id,
+        "ineligible_definition_row_count": len(ineligible),
+        "ineligibility_ledger_id": ineligibility[
+            "definition_ineligibility_ledger_id"
+        ],
+        "source_definition_row_count": len(records) + len(ineligible),
         "source_raw_release_receipt_id": raw_receipt.receipt_id,
     }
     stage = publisher.create_stage("actual_contract_definitions")
@@ -280,13 +466,20 @@ def publish_actual_contract_definitions(
     )
     manifest = ReleaseManifest.build(
         stage,
+        phase="reference",
         release_kind=DEFINITION_RELEASE_KIND,
         schema_version=DEFINITION_SCHEMA_VERSION,
+        logical_paths={
+            "identities.json": "data/reference/definitions/identities.json"
+        },
         source_release_ids=tuple(receipt.release_id for receipt in sources),
+        embedded_documents={
+            DEFINITION_INELIGIBILITY_DOCUMENT: ineligibility,
+        },
         metadata=metadata,
     )
-    release = publisher.publish(stage, manifest)
-    receipt = VerifiedReleaseReceipt.from_release(release, boundary)
+    manifest_path = publisher.publish(stage, manifest)
+    receipt = VerifiedReleaseReceipt.from_manifest(manifest_path, boundary)
     load_actual_contract_definitions(
         receipt,
         raw_receipt=raw_receipt,
@@ -304,27 +497,40 @@ def load_actual_contract_definitions(
     boundary: RepoBoundary,
 ) -> LoadedActualContractDefinitions:
     manifest = receipt.verify(boundary)
-    records = _definition_records(raw_receipt, policies, boundary)
+    records, ineligible = _definition_projection(raw_receipt, policies, boundary)
+    ineligibility = _definition_ineligibility_document(
+        records=records,
+        ineligible=ineligible,
+    )
     sources = (raw_receipt, policies.receipt)
     expected_metadata = {
         **_base_metadata(boundary, sources),
         "definition_row_count": len(records),
+        "eligible_definition_row_count": len(records),
         "economics_rulebook_hash": policies.economics.rulebook_hash,
         "foundation_policy_receipt_id": policies.receipt.receipt_id,
         "foundation_policy_set_id": policies.policy_set_id,
+        "ineligible_definition_row_count": len(ineligible),
+        "ineligibility_ledger_id": ineligibility[
+            "definition_ineligibility_ledger_id"
+        ],
+        "source_definition_row_count": len(records) + len(ineligible),
         "source_raw_release_receipt_id": raw_receipt.receipt_id,
     }
     if (
-        manifest.release_kind != DEFINITION_RELEASE_KIND
+        receipt.phase != "reference"
+        or manifest.release_kind != DEFINITION_RELEASE_KIND
         or manifest.schema_version != DEFINITION_SCHEMA_VERSION
-        or {entry.path for entry in manifest.files} != {"identities.json"}
+        or {Path(entry.path).name for entry in manifest.files} != {"identities.json"}
         or manifest.source_release_ids
         != tuple(sorted(receipt.release_id for receipt in sources))
+        or dict(manifest.embedded_documents)
+        != {DEFINITION_INELIGIBILITY_DOCUMENT: ineligibility}
         or dict(manifest.metadata) != expected_metadata
     ):
         raise IntegrityError("definition bridge manifest or provenance is invalid")
     payload = _read_canonical(
-        boundary.active_root / receipt.relative_root / "identities.json"
+        receipt.resolve_unique_filename("identities.json", boundary)
     )
     if payload != {"records": list(records), "schema_version": DEFINITION_SCHEMA_VERSION}:
         raise IntegrityError("definition bridge changed, dropped, or reordered source rows")
@@ -337,8 +543,14 @@ def load_actual_contract_definitions(
             market=str(raw["market"]),
             publisher_id=int(raw["publisher_id"]),
             instrument_id=int(raw["instrument_id"]),
+            instrument_id_date_utc=str(raw["definition_index_date_utc"]),
             ts_event_ns=int(raw["provider_definition_ts_event_ns"]),
             ts_recv_ns=int(raw["provider_definition_ts_recv_ns"]),
+            activation_ns=int(raw["provider_definition_activation_ns"]),
+            expiration_ns=int(raw["provider_definition_expiration_ns"]),
+            security_update_action=str(raw["security_update_action"]),
+            instrument_class=str(raw["instrument_class"]),
+            security_type=str(raw["security_type"]),
             raw_symbol=str(raw["raw_symbol"]),
             exchange=str(raw["exchange"]),
             currency=str(raw["currency"]),
@@ -349,17 +561,32 @@ def load_actual_contract_definitions(
             source_manifest_sha256=str(raw["provider_definition_manifest_sha256"]),
             source_file_path=str(raw["provider_source_file_path"]),
             source_file_sha256=str(raw["provider_source_file_sha256"]),
+            row_ordinal=int(raw["source_row_ordinal"]),
             row_sha256=str(raw["provider_definition_row_sha256"]),
         )
         if row_id not in registry.definitions or provider.row_sha256 in by_provider:
             raise IntegrityError("definition bridge registry/provider mapping is ambiguous")
         by_provider[provider.row_sha256] = BridgeDefinitionRecord(provider, row_id)
+    ineligible_by_provider: dict[str, Mapping[str, object]] = {}
+    for raw in ineligible:
+        provider_hash = str(raw["provider_definition_row_sha256"])
+        if provider_hash in by_provider or provider_hash in ineligible_by_provider:
+            raise IntegrityError("definition eligibility partition is ambiguous")
+        ineligible_by_provider[provider_hash] = MappingProxyType(dict(raw))
+    if (
+        len(by_provider) != len(records)
+        or len(ineligible_by_provider) != len(ineligible)
+        or len(by_provider) + len(ineligible_by_provider)
+        != expected_metadata["source_definition_row_count"]
+    ):
+        raise IntegrityError("definition eligibility partition census is invalid")
     return LoadedActualContractDefinitions(
         receipt,
         raw_receipt,
         policies.receipt,
         registry,
         MappingProxyType(by_provider),
+        MappingProxyType(ineligible_by_provider),
     )
 
 
@@ -374,8 +601,8 @@ def publish_versioned_session_policy(
     _assert_publisher(boundary, publisher)
     policies.verify()
     active = _config_path(boundary, _SESSION_CONFIG)
-    policy_copy = boundary.active_root / policies.receipt.relative_root / _SESSION_CONFIG
-    if sha256_file(active) != sha256_file(policy_copy):
+    active_payload = _read_canonical(active)
+    if policies.receipt.embedded_document(_SESSION_CONFIG, boundary) != active_payload:
         raise IntegrityError("active session policy differs from the verified foundation policy")
     sources = (policies.receipt,)
     metadata = {
@@ -385,16 +612,18 @@ def publish_versioned_session_policy(
         "session_policy_sha256": sha256_file(active),
     }
     stage = publisher.create_stage("versioned_session_policy")
-    (stage / "session_policy.json").write_bytes(active.read_bytes())
     manifest = ReleaseManifest.build(
         stage,
+        phase="controls",
         release_kind=SESSION_RELEASE_KIND,
         schema_version=SESSION_SCHEMA_VERSION,
+        logical_paths={},
         source_release_ids=(policies.receipt.release_id,),
+        embedded_documents={"session_policy.json": active_payload},
         metadata=metadata,
     )
-    release = publisher.publish(stage, manifest)
-    receipt = VerifiedReleaseReceipt.from_release(release, boundary)
+    manifest_path = publisher.publish(stage, manifest)
+    receipt = VerifiedReleaseReceipt.from_manifest(manifest_path, boundary)
     load_versioned_session_policy(
         receipt, policies=policies, boundary=boundary
     )
@@ -409,7 +638,7 @@ def load_versioned_session_policy(
 ) -> VerifiedSessionPolicy:
     manifest = receipt.verify(boundary)
     active = _config_path(boundary, _SESSION_CONFIG)
-    policy_copy = boundary.active_root / policies.receipt.relative_root / _SESSION_CONFIG
+    active_payload = _read_canonical(active)
     sources = (policies.receipt,)
     expected_metadata = {
         **_base_metadata(boundary, sources),
@@ -418,22 +647,25 @@ def load_versioned_session_policy(
         "session_policy_sha256": sha256_file(active),
     }
     if (
-        sha256_file(active) != sha256_file(policy_copy)
+        policies.receipt.embedded_document(_SESSION_CONFIG, boundary) != active_payload
         or manifest.release_kind != SESSION_RELEASE_KIND
         or manifest.schema_version != SESSION_SCHEMA_VERSION
-        or {entry.path for entry in manifest.files} != {"session_policy.json"}
+        or manifest.files
+        or set(manifest.embedded_documents) != {"session_policy.json"}
         or manifest.source_release_ids != (policies.receipt.release_id,)
         or dict(manifest.metadata) != expected_metadata
-        or sha256_file(boundary.active_root / receipt.relative_root / "session_policy.json")
-        != sha256_file(active)
+        or manifest.embedded_documents["session_policy.json"] != active_payload
     ):
         raise IntegrityError("session-policy bridge provenance is invalid")
     return VerifiedSessionPolicy.from_release(receipt, boundary)
 
 
 def _iter_causal_rows(
-    receipt: VerifiedReleaseReceipt, boundary: RepoBoundary
-) -> Iterator[dict[str, object]]:
+    receipt: VerifiedReleaseReceipt,
+    boundary: RepoBoundary,
+    *,
+    columns: Sequence[str] | None = None,
+) -> Iterator[Mapping[str, object]]:
     bars, report = load_causal_interval(receipt, boundary=boundary)
     try:
         parquet = pq.ParquetFile(bars)
@@ -441,26 +673,46 @@ def _iter_causal_rows(
         raise IntegrityError("causal bridge input is invalid Parquet") from exc
     if not parquet.schema_arrow.equals(CAUSAL_BAR_SCHEMA, check_metadata=True):
         raise IntegrityError("causal bridge input schema differs from Phase 2")
+    schema_names = tuple(CAUSAL_BAR_SCHEMA.names)
+    if columns is None:
+        selected_names = schema_names
+    else:
+        requested = set(columns) | _CAUSAL_CENSUS_FIELDS
+        unknown = requested.difference(schema_names)
+        if unknown:
+            raise IntegrityError(
+                "causal bridge requested unknown columns: "
+                + ",".join(sorted(unknown))
+            )
+        selected_names = tuple(name for name in schema_names if name in requested)
     count = denominator_count = 0
     dispositions: dict[str, int] = {}
-    for batch in parquet.iter_batches(batch_size=100_000):
-        for row in batch.to_pylist():
-            if not isinstance(row, dict):
-                raise IntegrityError("causal bridge row is not an object")
+    for batch in parquet.iter_batches(
+        batch_size=100_000, columns=list(selected_names)
+    ):
+        column_values: Mapping[str, Sequence[object]] = MappingProxyType(
+            {
+                name: batch.column(index).to_pylist()
+                for index, name in enumerate(selected_names)
+            }
+        )
+        if any(len(values) != batch.num_rows for values in column_values.values()):
+            raise IntegrityError("causal bridge column length differs from its batch")
+        for index in range(batch.num_rows):
+            row = _ColumnarBatchRow(column_values, index)
             disposition = row.get("disposition")
             failure_code = row.get("failure_code")
             failure_hash = row.get("failure_detail_sha256")
-            actual_values = {name: row.get(name) for name in _ACTUAL_CAUSAL_FIELDS}
             if disposition in _RESOLVED_CAUSAL_DISPOSITIONS:
                 if (
-                    any(value is None for value in actual_values.values())
+                    any(row.get(name) is None for name in _ACTUAL_CAUSAL_FIELDS)
                     or failure_code is not None
                     or failure_hash is not None
                 ):
                     raise IntegrityError("resolved causal row has incomplete identity/economics")
             elif disposition == _UNRESOLVED_CAUSAL_DISPOSITION:
                 if (
-                    any(value is not None for value in actual_values.values())
+                    any(row.get(name) is not None for name in _ACTUAL_CAUSAL_FIELDS)
                     or type(failure_code) is not str
                     or not failure_code
                     or type(failure_hash) is not str
@@ -483,6 +735,41 @@ def _iter_causal_rows(
         or report.get("learned_or_outcome_informed_transform_count") != 0
     ):
         raise IntegrityError("causal Parquet census differs from its interval receipt")
+
+
+def causal_feature_ready_join_keys(
+    receipt: VerifiedReleaseReceipt, *, boundary: RepoBoundary
+) -> frozenset[tuple[str, int, int]]:
+    """Return exact keys that can support deterministic bar-local features."""
+
+    keys: set[tuple[str, int, int]] = set()
+    for row in _iter_causal_rows(
+        receipt,
+        boundary,
+        columns=(
+            "actual_identity_hash",
+            "available_at_ns",
+            "disposition",
+            "event_at_ns",
+        ),
+    ):
+        if row.get("disposition") != "ELIGIBLE":
+            continue
+        identity_hash = row.get("actual_identity_hash")
+        event_ns = row.get("event_at_ns")
+        available_ns = row.get("available_at_ns")
+        if (
+            type(identity_hash) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", identity_hash) is None
+            or type(event_ns) is not int
+            or type(available_ns) is not int
+        ):
+            raise IntegrityError("feature-ready causal key is invalid")
+        key = (identity_hash, event_ns, available_ns)
+        if key in keys:
+            raise IntegrityError("feature-ready causal key is duplicated")
+        keys.add(key)
+    return frozenset(keys)
 
 
 def _verify_bridge_context(
@@ -508,6 +795,8 @@ def _verify_bridge_context(
         != rebuilt_definitions.registry.registry_hash
         or dict(definitions.by_provider_row)
         != dict(rebuilt_definitions.by_provider_row)
+        or dict(definitions.ineligible_by_provider_row)
+        != dict(rebuilt_definitions.ineligible_by_provider_row)
     ):
         raise IntegrityError("definition bridge is not bound to the supplied policy set")
     rebuilt_session = load_versioned_session_policy(
@@ -547,6 +836,7 @@ def _verify_causal_policy_row(
 ) -> tuple[int, int]:
     event_ns = _exact_int(row.get("event_at_ns"), "causal.event_at_ns")
     available_ns = _exact_int(row.get("available_at_ns"), "causal.available_at_ns")
+    event = ns_to_datetime(event_ns, "causal.event_at_ns")
     if (
         row.get("source_raw_release_id") != definitions.raw_receipt.release_id
         or row.get("foundation_policy_set_id") != policies.policy_set_id
@@ -554,6 +844,9 @@ def _verify_causal_policy_row(
         or row.get("availability_policy_hash") != policies.foundation.policy_hash
         or row.get("resolution_as_of_ns") != available_ns
         or policies.foundation.bar_available_at_ns(event_ns) != available_ns
+        or row.get("provider_timestamp_epoch_id")
+        != policies.foundation.provider_timestamp_epoch_id(event_ns)
+        or row.get("instrument_id_date_utc") != event.date().isoformat()
     ):
         raise IntegrityError("causal row differs from its raw/policy dependency chain")
     return event_ns, available_ns
@@ -564,6 +857,8 @@ def _trust_actual_from_causal(
     definitions: LoadedActualContractDefinitions,
     policies: VerifiedFoundationPolicies,
     session_policy: VerifiedSessionPolicy,
+    *,
+    verified_times: tuple[int, int] | None = None,
 ) -> tuple[ActualContractIdentity, BridgeDefinitionRecord, ResolvedEconomics]:
     provider_hash = row.get("definition_row_sha256")
     if type(provider_hash) is not str:
@@ -572,13 +867,19 @@ def _trust_actual_from_causal(
     provider = bridged.provider
     observation = definitions.registry.definitions[bridged.registry_row_id]
     economics = policies.economics.resolve(provider.market, provider)
-    event_ns, available_ns = _verify_causal_policy_row(
-        row, definitions=definitions, policies=policies
-    )
+    if verified_times is None:
+        event_ns, available_ns = _verify_causal_policy_row(
+            row, definitions=definitions, policies=policies
+        )
+    else:
+        event_ns, available_ns = verified_times
     event = ns_to_datetime(event_ns, "event")
-    available = ns_to_datetime(
-        available_ns, "available"
+    instrument_date = _exact_date(row.get("instrument_id_date_utc"), "instrument date")
+    definition_index_date = _exact_date(
+        row.get("definition_index_date_utc"), "definition index date"
     )
+    activation = provider.activation
+    expiration = provider.expiration
     if (
         provider.dataset != row.get("dataset")
         or provider.market != row.get("market")
@@ -594,20 +895,43 @@ def _trust_actual_from_causal(
         or provider.row_sha256 != row.get("definition_row_sha256")
         or provider.ts_event_ns != row.get("definition_ts_event_ns")
         or provider.ts_recv_ns != row.get("definition_ts_recv_ns")
-        or provider.ts_event_ns > event_ns
+        or provider.instrument_id_date_utc != definition_index_date.isoformat()
+        or definition_index_date != instrument_date
+        or provider.activation_ns != row.get("definition_activation_ns")
+        or provider.expiration_ns != row.get("definition_expiration_ns")
+        or provider.security_update_action
+        != row.get("definition_security_update_action")
+        or provider.instrument_class != row.get("definition_instrument_class")
+        or provider.security_type != row.get("definition_security_type")
+        or provider.row_ordinal != row.get("definition_source_row_ordinal")
+        or provider.ts_recv_ns > event_ns
         or provider.ts_recv_ns > available_ns
+        or provider.security_update_action not in {"ADD", "MODIFY"}
+        or provider.instrument_class != "FUTURE"
+        or provider.security_type != "FUT"
+        or activation is None
+        or expiration is None
+        or not provider.activation_ns <= event_ns < provider.expiration_ns
         or str(economics.tick_size) != row.get("tick_size")
         or str(economics.point_value) != row.get("point_value")
         or str(economics.tick_value) != row.get("tick_value")
         or economics.quote_convention != row.get("quote_convention")
         or economics.rulebook_hash != row.get("economics_rulebook_hash")
         or economics.provider_unit_qty_state != row.get("provider_unit_qty_state")
-        or observation.effective_at > event
-        or observation.source_received_at > available
-        or observation.available_at > available
+        or observation.effective_at != activation
+        or observation.expires_at != expiration
+        or observation.provider_event_at != provider.ts_event
+        or observation.source_received_at != provider.ts_recv
+        or observation.available_at != provider.ts_recv
+        or observation.definition_index_date_utc != definition_index_date
+        or observation.security_update_action != provider.security_update_action
+        or observation.instrument_class != provider.instrument_class
+        or observation.security_type != provider.security_type
+        or observation.source_file_path != provider.source_file_path
+        or observation.source_row_ordinal != provider.row_ordinal
     ):
         raise IntegrityError("causal row contradicts its verified definition/economics chain")
-    instrument_date = _exact_date(row.get("instrument_id_date_utc"), "instrument date")
+    policies.foundation.assert_definition_lifecycle_trusted(event_ns)
     session_date = _exact_date(row.get("exchange_session_date"), "session date")
     if (
         instrument_date != event.date()
@@ -640,6 +964,71 @@ def _trust_actual_from_causal(
     if foundation_actual.identity_hash != row.get("actual_identity_hash"):
         raise IntegrityError("foundation actual-identity hash is not reproducible")
     return actual, bridged, economics
+
+
+def _trust_actual_from_causal_cached(
+    row: Mapping[str, object],
+    definitions: LoadedActualContractDefinitions,
+    policies: VerifiedFoundationPolicies,
+    session_policy: VerifiedSessionPolicy,
+    cache: dict[
+        tuple[object, ...],
+        tuple[ActualContractIdentity, BridgeDefinitionRecord, ResolvedEconomics],
+    ],
+    *,
+    verified_times: tuple[int, int] | None = None,
+    verified_session_policy_hash: str | None = None,
+) -> tuple[ActualContractIdentity, BridgeDefinitionRecord, ResolvedEconomics]:
+    """Reuse only a fully validated static identity while rechecking row time."""
+
+    times = verified_times or _verify_causal_policy_row(
+        row, definitions=definitions, policies=policies
+    )
+    key = tuple(row.get(name) for name in _TRUST_CACHE_FIELDS)
+    cached = cache.get(key)
+    if cached is None:
+        cached = _trust_actual_from_causal(
+            row,
+            definitions,
+            policies,
+            session_policy,
+            verified_times=times,
+        )
+        cache[key] = cached
+        return cached
+
+    actual, bridged, economics = cached
+    provider = bridged.provider
+    event_ns, available_ns = times
+    event = ns_to_datetime(event_ns, "event")
+    instrument_date = _exact_date(
+        row.get("instrument_id_date_utc"), "instrument date"
+    )
+    session_date = _exact_date(row.get("exchange_session_date"), "session date")
+    activation = provider.activation
+    expiration = provider.expiration
+    if (
+        activation is None
+        or expiration is None
+        or provider.ts_recv_ns > event_ns
+        or provider.ts_recv_ns > available_ns
+        or not provider.activation_ns <= event_ns < provider.expiration_ns
+            or instrument_date != event.date()
+            or (
+                session_policy.exchange_session_date(provider.exchange, event)
+                if verified_session_policy_hash is None
+                else session_policy._exchange_session_date_preverified(
+                    provider.exchange,
+                    event,
+                    expected_policy_hash=verified_session_policy_hash,
+                )
+            )
+            != session_date
+            or economics.rulebook_hash != row.get("economics_rulebook_hash")
+        ):
+        raise IntegrityError("cached causal identity differs at this event time")
+    policies.foundation.assert_definition_lifecycle_trusted(event_ns)
+    return cached
 
 
 def _exact_int(value: object, name: str) -> int:
@@ -675,15 +1064,31 @@ def _economics_records(
         boundary=boundary,
     )
     records: dict[str, dict[str, object]] = {}
-    for row in _iter_causal_rows(causal_receipt, boundary):
-        _verify_causal_policy_row(
-            row, definitions=definitions, policies=policies
-        )
-        if row.get("actual_identity_hash") is None:
+    session_policy.verify()
+    identity_signatures: dict[str, tuple[object, ...]] = {}
+    for row in _iter_causal_rows(
+        causal_receipt, boundary, columns=_ECONOMICS_CAUSAL_FIELDS
+    ):
+        identity_hash = row.get("actual_identity_hash")
+        if identity_hash is None:
+            continue
+        if type(identity_hash) is not str:
+            raise IntegrityError("resolved causal identity hash is invalid")
+        signature = tuple(row.get(name) for name in _TRUST_CACHE_FIELDS)
+        prior_signature = identity_signatures.get(identity_hash)
+        if prior_signature is not None:
+            if prior_signature != signature:
+                raise IntegrityError(
+                    "one actual identity has conflicting causal provenance"
+                )
             continue
         actual, bridged, economics = _trust_actual_from_causal(
-            row, definitions, policies, session_policy
+            row,
+            definitions,
+            policies,
+            session_policy,
         )
+        identity_signatures[identity_hash] = signature
         observation = definitions.registry.definitions[bridged.registry_row_id]
         try:
             asset_class = _ASSET_CLASSES[economics.market]
@@ -712,9 +1117,104 @@ def _economics_records(
         if prior is not None and prior != record:
             raise IntegrityError("one actual identity has conflicting economics")
         records[actual.identity_hash] = record
-    if not records:
-        raise IntegrityError("no causally resolved identities are available for economics")
     return tuple(records[key] for key in sorted(records))
+
+
+def _economics_sources(
+    causal_receipt: VerifiedReleaseReceipt,
+    definitions: LoadedActualContractDefinitions,
+    policies: VerifiedFoundationPolicies,
+    session_policy: VerifiedSessionPolicy,
+) -> tuple[VerifiedReleaseReceipt, ...]:
+    return (
+        causal_receipt,
+        definitions.receipt,
+        policies.receipt,
+        session_policy.receipt,
+    )
+
+
+def _economics_metadata(
+    *,
+    actual_identity_count: int,
+    causal_receipt: VerifiedReleaseReceipt,
+    definitions: LoadedActualContractDefinitions,
+    policies: VerifiedFoundationPolicies,
+    session_policy: VerifiedSessionPolicy,
+    boundary: RepoBoundary,
+) -> dict[str, object]:
+    sources = _economics_sources(
+        causal_receipt, definitions, policies, session_policy
+    )
+    return {
+        **_base_metadata(boundary, sources),
+        "actual_identity_count": actual_identity_count,
+        "definition_release_receipt_id": definitions.receipt.receipt_id,
+        "economics_rulebook_hash": policies.economics.rulebook_hash,
+        "foundation_policy_set_id": policies.policy_set_id,
+        "session_policy_receipt_id": session_policy.receipt.receipt_id,
+        "source_causal_release_receipt_id": causal_receipt.receipt_id,
+    }
+
+
+def _validate_actual_contract_economics_release(
+    receipt: VerifiedReleaseReceipt,
+    *,
+    causal_receipt: VerifiedReleaseReceipt,
+    definitions: LoadedActualContractDefinitions,
+    policies: VerifiedFoundationPolicies,
+    session_policy: VerifiedSessionPolicy,
+    boundary: RepoBoundary,
+    expected_records: tuple[dict[str, object], ...] | None,
+) -> VerifiedEconomicsRegistry:
+    manifest = receipt.verify(boundary)
+    registry = VerifiedEconomicsRegistry.from_release(receipt, boundary)
+    sources = _economics_sources(
+        causal_receipt, definitions, policies, session_policy
+    )
+    expected_count = (
+        len(registry.records)
+        if expected_records is None
+        else len(expected_records)
+    )
+    expected_metadata = _economics_metadata(
+        actual_identity_count=expected_count,
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
+    )
+    if (
+        receipt.phase != "reference"
+        or manifest.release_kind != ECONOMICS_RELEASE_KIND
+        or manifest.schema_version != ECONOMICS_SCHEMA_VERSION
+        or {Path(entry.path).name for entry in manifest.files}
+        != {"contract_economics.json"}
+        or manifest.source_release_ids
+        != tuple(sorted(source.release_id for source in sources))
+        or dict(manifest.metadata) != expected_metadata
+    ):
+        raise IntegrityError("economics bridge manifest or provenance is invalid")
+    payload = _read_canonical(
+        receipt.resolve_unique_filename("contract_economics.json", boundary)
+    )
+    if (
+        not isinstance(payload, dict)
+        or payload.get("schema_version") != ECONOMICS_SCHEMA_VERSION
+        or not isinstance(payload.get("records"), list)
+        or len(payload["records"]) != len(registry.records)
+        or (
+            expected_records is not None
+            and payload
+            != {
+                "records": list(expected_records),
+                "schema_version": ECONOMICS_SCHEMA_VERSION,
+            }
+        )
+    ):
+        raise IntegrityError("economics bridge differs from its verified inputs")
+    return registry
 
 
 def publish_actual_contract_economics(
@@ -730,21 +1230,17 @@ def publish_actual_contract_economics(
     records = _economics_records(
         causal_receipt, definitions, policies, session_policy, boundary
     )
-    sources = (
-        causal_receipt,
-        definitions.receipt,
-        policies.receipt,
-        session_policy.receipt,
+    sources = _economics_sources(
+        causal_receipt, definitions, policies, session_policy
     )
-    metadata = {
-        **_base_metadata(boundary, sources),
-        "actual_identity_count": len(records),
-        "definition_release_receipt_id": definitions.receipt.receipt_id,
-        "economics_rulebook_hash": policies.economics.rulebook_hash,
-        "foundation_policy_set_id": policies.policy_set_id,
-        "session_policy_receipt_id": session_policy.receipt.receipt_id,
-        "source_causal_release_receipt_id": causal_receipt.receipt_id,
-    }
+    metadata = _economics_metadata(
+        actual_identity_count=len(records),
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
+    )
     stage = publisher.create_stage("actual_contract_economics")
     _write_canonical(
         stage / "contract_economics.json",
@@ -752,20 +1248,27 @@ def publish_actual_contract_economics(
     )
     manifest = ReleaseManifest.build(
         stage,
+        phase="reference",
         release_kind=ECONOMICS_RELEASE_KIND,
         schema_version=ECONOMICS_SCHEMA_VERSION,
+        logical_paths={
+            "contract_economics.json": (
+                "data/reference/economics/contract_economics.json"
+            )
+        },
         source_release_ids=tuple(receipt.release_id for receipt in sources),
         metadata=metadata,
     )
-    release = publisher.publish(stage, manifest)
-    receipt = VerifiedReleaseReceipt.from_release(release, boundary)
-    load_actual_contract_economics(
+    manifest_path = publisher.publish(stage, manifest)
+    receipt = VerifiedReleaseReceipt.from_manifest(manifest_path, boundary)
+    _validate_actual_contract_economics_release(
         receipt,
         causal_receipt=causal_receipt,
         definitions=definitions,
         policies=policies,
         session_policy=session_policy,
         boundary=boundary,
+        expected_records=records,
     )
     return receipt
 
@@ -779,40 +1282,40 @@ def load_actual_contract_economics(
     session_policy: VerifiedSessionPolicy,
     boundary: RepoBoundary,
 ) -> VerifiedEconomicsRegistry:
-    manifest = receipt.verify(boundary)
     records = _economics_records(
         causal_receipt, definitions, policies, session_policy, boundary
     )
-    sources = (
-        causal_receipt,
-        definitions.receipt,
-        policies.receipt,
-        session_policy.receipt,
+    return _validate_actual_contract_economics_release(
+        receipt,
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
+        expected_records=records,
     )
-    expected_metadata = {
-        **_base_metadata(boundary, sources),
-        "actual_identity_count": len(records),
-        "definition_release_receipt_id": definitions.receipt.receipt_id,
-        "economics_rulebook_hash": policies.economics.rulebook_hash,
-        "foundation_policy_set_id": policies.policy_set_id,
-        "session_policy_receipt_id": session_policy.receipt.receipt_id,
-        "source_causal_release_receipt_id": causal_receipt.receipt_id,
-    }
-    if (
-        manifest.release_kind != ECONOMICS_RELEASE_KIND
-        or manifest.schema_version != ECONOMICS_SCHEMA_VERSION
-        or {entry.path for entry in manifest.files} != {"contract_economics.json"}
-        or manifest.source_release_ids
-        != tuple(sorted(source.release_id for source in sources))
-        or dict(manifest.metadata) != expected_metadata
-    ):
-        raise IntegrityError("economics bridge manifest or provenance is invalid")
-    payload = _read_canonical(
-        boundary.active_root / receipt.relative_root / "contract_economics.json"
+
+
+def verify_actual_contract_economics_context(
+    receipt: VerifiedReleaseReceipt,
+    *,
+    causal_receipt: VerifiedReleaseReceipt,
+    definitions: LoadedActualContractDefinitions,
+    policies: VerifiedFoundationPolicies,
+    session_policy: VerifiedSessionPolicy,
+    boundary: RepoBoundary,
+) -> VerifiedEconomicsRegistry:
+    """Rebind one already derived registry without rescanning causal rows."""
+
+    return _validate_actual_contract_economics_release(
+        receipt,
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
+        expected_records=None,
     )
-    if payload != {"records": list(records), "schema_version": ECONOMICS_SCHEMA_VERSION}:
-        raise IntegrityError("economics bridge differs from its verified inputs")
-    return VerifiedEconomicsRegistry.from_release(receipt, boundary)
 
 
 @dataclass(frozen=True)
@@ -928,6 +1431,12 @@ def _feature_record(
     policies: VerifiedFoundationPolicies,
     session_policy: VerifiedSessionPolicy,
     spec: CausalFeatureSpec,
+    trust_cache: dict[
+        tuple[object, ...],
+        tuple[ActualContractIdentity, BridgeDefinitionRecord, ResolvedEconomics],
+    ],
+    verified_economics_registry_hash: str,
+    verified_session_policy_hash: str,
 ) -> dict[str, object]:
     event_ns, available_ns = _verify_causal_policy_row(
         row, definitions=definitions, policies=policies
@@ -971,13 +1480,31 @@ def _feature_record(
         "values": None,
     }
     if disposition == "ANOMALY_QUARANTINED":
-        _trust_actual_from_causal(row, definitions, policies, session_policy)
+        _trust_actual_from_causal_cached(
+            row,
+            definitions,
+            policies,
+            session_policy,
+            trust_cache,
+            verified_times=(event_ns, available_ns),
+            verified_session_policy_hash=verified_session_policy_hash,
+        )
     if disposition != "ELIGIBLE":
         return {**base, "record_id": sha256_json(base)}
-    actual, _, _ = _trust_actual_from_causal(
-        row, definitions, policies, session_policy
+    actual, _, _ = _trust_actual_from_causal_cached(
+        row,
+        definitions,
+        policies,
+        session_policy,
+        trust_cache,
+        verified_times=(event_ns, available_ns),
+        verified_session_policy_hash=verified_session_policy_hash,
     )
-    verified_economics = economics_registry.resolve(actual, available)
+    verified_economics = economics_registry._resolve_preverified(
+        actual,
+        available,
+        expected_registry_hash=verified_economics_registry_hash,
+    )
     if (
         str(verified_economics.tick_size) != row.get("tick_size")
         or str(verified_economics.point_value) != row.get("point_value")
@@ -1029,6 +1556,14 @@ def _iter_feature_records(
     spec: CausalFeatureSpec,
     boundary: RepoBoundary,
 ) -> Iterator[dict[str, object]]:
+    economics_registry.verify()
+    verified_economics_registry_hash = economics_registry.registry_hash
+    session_policy.verify()
+    verified_session_policy_hash = session_policy.policy_hash
+    trust_cache: dict[
+        tuple[object, ...],
+        tuple[ActualContractIdentity, BridgeDefinitionRecord, ResolvedEconomics],
+    ] = {}
     for row in _iter_causal_rows(causal_receipt, boundary):
         yield _feature_record(
             row,
@@ -1038,6 +1573,9 @@ def _iter_feature_records(
             policies=policies,
             session_policy=session_policy,
             spec=spec,
+            trust_cache=trust_cache,
+            verified_economics_registry_hash=verified_economics_registry_hash,
+            verified_session_policy_hash=verified_session_policy_hash,
         )
 
 
@@ -1152,7 +1690,7 @@ def _verify_economics_context(
     session_policy: VerifiedSessionPolicy,
     boundary: RepoBoundary,
 ) -> None:
-    rebuilt = load_actual_contract_economics(
+    rebuilt = verify_actual_contract_economics_context(
         economics_registry.release_receipt,
         causal_receipt=causal_receipt,
         definitions=definitions,
@@ -1164,7 +1702,7 @@ def _verify_economics_context(
         raise IntegrityError("economics bridge is not bound to the supplied causal chain")
 
 
-def publish_causal_feature_release(
+def _publish_causal_feature_release(
     *,
     causal_receipt: VerifiedReleaseReceipt,
     definitions: LoadedActualContractDefinitions,
@@ -1174,6 +1712,7 @@ def publish_causal_feature_release(
     feature_spec: CausalFeatureSpec,
     boundary: RepoBoundary,
     publisher: AtomicPublisher,
+    verify_readback: bool,
 ) -> VerifiedReleaseReceipt:
     """Publish bar-local features while retaining every upstream disposition row."""
 
@@ -1233,25 +1772,92 @@ def publish_causal_feature_release(
     metadata = {
         key: value for key, value in contract.items() if key != "feature_spec"
     }
+    causal_manifest = causal_receipt.verify(boundary)
+    causal_root = str(causal_manifest.metadata.get("logical_root", ""))
+    causal_prefix = "data/causally_gated_normalized/"
+    if not causal_root.startswith(causal_prefix):
+        raise IntegrityError("feature release lacks a layout-v2 causal selector")
+    feature_root = (
+        f"data/features/{feature_spec.spec_hash}/"
+        f"{causal_root.removeprefix(causal_prefix)}"
+    )
     manifest = ReleaseManifest.build(
         stage,
+        phase="features",
         release_kind=FEATURE_RELEASE_KIND,
         schema_version=FEATURE_SCHEMA_VERSION,
+        logical_paths={
+            "feature_contract.json": f"{feature_root}/feature_contract.json",
+            "feature_rows.jsonl": f"{feature_root}/feature_rows.jsonl",
+        },
         source_release_ids=tuple(source.release_id for source in sources),
         metadata=metadata,
     )
-    release = publisher.publish(stage, manifest)
-    receipt = VerifiedReleaseReceipt.from_release(release, boundary)
-    load_causal_feature_release(
-        receipt,
+    manifest_path = publisher.publish(stage, manifest)
+    receipt = VerifiedReleaseReceipt.from_manifest(manifest_path, boundary)
+    if verify_readback:
+        load_causal_feature_release(
+            receipt,
+            causal_receipt=causal_receipt,
+            definitions=definitions,
+            economics_registry=economics_registry,
+            policies=policies,
+            session_policy=session_policy,
+            boundary=boundary,
+        )
+    return receipt
+
+
+def publish_causal_feature_release(
+    *,
+    causal_receipt: VerifiedReleaseReceipt,
+    definitions: LoadedActualContractDefinitions,
+    economics_registry: VerifiedEconomicsRegistry,
+    policies: VerifiedFoundationPolicies,
+    session_policy: VerifiedSessionPolicy,
+    feature_spec: CausalFeatureSpec,
+    boundary: RepoBoundary,
+    publisher: AtomicPublisher,
+) -> VerifiedReleaseReceipt:
+    """Publish and independently reproduce a feature release."""
+
+    return _publish_causal_feature_release(
         causal_receipt=causal_receipt,
         definitions=definitions,
         economics_registry=economics_registry,
         policies=policies,
         session_policy=session_policy,
+        feature_spec=feature_spec,
         boundary=boundary,
+        publisher=publisher,
+        verify_readback=True,
     )
-    return receipt
+
+
+def publish_causal_feature_release_checkpointed(
+    *,
+    causal_receipt: VerifiedReleaseReceipt,
+    definitions: LoadedActualContractDefinitions,
+    economics_registry: VerifiedEconomicsRegistry,
+    policies: VerifiedFoundationPolicies,
+    session_policy: VerifiedSessionPolicy,
+    feature_spec: CausalFeatureSpec,
+    boundary: RepoBoundary,
+    publisher: AtomicPublisher,
+) -> VerifiedReleaseReceipt:
+    """Publish once for an orchestrator that persists the exact receipt next."""
+
+    return _publish_causal_feature_release(
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        economics_registry=economics_registry,
+        policies=policies,
+        session_policy=session_policy,
+        feature_spec=feature_spec,
+        boundary=boundary,
+        publisher=publisher,
+        verify_readback=False,
+    )
 
 
 def _parse_feature_row(
@@ -1331,7 +1937,32 @@ def _parse_feature_row(
         raise IntegrityError("feature-ready row violates FeatureRow") from exc
 
 
-def load_causal_feature_release(
+_FEATURE_RECORD_KEYS = frozenset(
+    {
+        "actual_contract",
+        "available_at",
+        "bar_event_at",
+        "decision_at",
+        "failure_code",
+        "failure_detail_sha256",
+        "inputs_complete",
+        "label_unlock_at",
+        "lineage",
+        "planned_entry_at",
+        "prediction_in_coverage_denominator",
+        "record_id",
+        "status",
+        "upstream_disposition",
+        "upstream_foundation_actual_identity_hash",
+        "upstream_release_id",
+        "upstream_release_receipt_id",
+        "upstream_source_row_sha256",
+        "values",
+    }
+)
+
+
+def _verified_feature_release_header(
     receipt: VerifiedReleaseReceipt,
     *,
     causal_receipt: VerifiedReleaseReceipt,
@@ -1340,8 +1971,14 @@ def load_causal_feature_release(
     policies: VerifiedFoundationPolicies,
     session_policy: VerifiedSessionPolicy,
     boundary: RepoBoundary,
-) -> LoadedFeatureRelease:
+) -> tuple[ReleaseManifest, dict[str, object], CausalFeatureSpec, Path]:
     manifest = receipt.verify(boundary)
+    if (
+        receipt.phase != "features"
+        or manifest.release_kind != FEATURE_RELEASE_KIND
+        or manifest.schema_version != FEATURE_SCHEMA_VERSION
+    ):
+        raise IntegrityError("receipt is not an exact feature release")
     _verify_bridge_context(
         causal_receipt=causal_receipt,
         definitions=definitions,
@@ -1360,8 +1997,17 @@ def load_causal_feature_release(
     sources = _feature_sources(
         causal_receipt, definitions, economics_registry, session_policy, policies
     )
-    root = boundary.active_root / receipt.relative_root
-    contract = _read_canonical(root / "feature_contract.json")
+    paths = {
+        Path(entry.logical_path).name: boundary.assert_active_path(
+            boundary.active_root / manifest.physical_relative_path(entry),
+            purpose="verified feature release file",
+            subtree="data/features",
+        )
+        for entry in manifest.files
+    }
+    if set(paths) != {"feature_contract.json", "feature_rows.jsonl"}:
+        raise IntegrityError("feature release file set is invalid")
+    contract = _read_canonical(paths["feature_contract.json"])
     if not isinstance(contract, dict) or set(contract) != {
         "bridge_code_sha256",
         "environment_lock_sha256",
@@ -1382,10 +2028,6 @@ def load_causal_feature_release(
     if (
         contract["schema_version"] != FEATURE_SCHEMA_VERSION
         or contract["feature_spec_hash"] != spec.spec_hash
-        or {entry.path for entry in manifest.files}
-        != {"feature_contract.json", "feature_rows.jsonl"}
-        or manifest.release_kind != FEATURE_RELEASE_KIND
-        or manifest.schema_version != FEATURE_SCHEMA_VERSION
         or manifest.source_release_ids
         != tuple(sorted(source.release_id for source in sources))
         or dict(manifest.metadata) != expected_metadata
@@ -1394,22 +2036,56 @@ def load_causal_feature_release(
         or contract["environment_lock_sha256"] != _environment_hash(boundary)
     ):
         raise IntegrityError("feature release provenance is invalid")
-    expected_records = _iter_feature_records(
-        causal_receipt,
-        definitions,
-        economics_registry,
-        policies,
-        session_policy,
-        spec,
-        boundary,
+    return manifest, contract, spec, paths["feature_rows.jsonl"]
+
+
+def _load_causal_feature_release(
+    receipt: VerifiedReleaseReceipt,
+    *,
+    causal_receipt: VerifiedReleaseReceipt,
+    definitions: LoadedActualContractDefinitions,
+    economics_registry: VerifiedEconomicsRegistry,
+    policies: VerifiedFoundationPolicies,
+    session_policy: VerifiedSessionPolicy,
+    boundary: RepoBoundary,
+    reproduce_from_source: bool,
+) -> LoadedFeatureRelease:
+    _, contract, spec, rows_path = _verified_feature_release_header(
+        receipt,
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        economics_registry=economics_registry,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
+    )
+    expected_records = (
+        _iter_feature_records(
+            causal_receipt,
+            definitions,
+            economics_registry,
+            policies,
+            session_policy,
+            spec,
+            boundary,
+        )
+        if reproduce_from_source
+        else None
     )
     rows: list[FeatureRow] = []
     total = ready = unresolved = 0
     try:
-        with (root / "feature_rows.jsonl").open("rb") as handle:
-            for line, expected in zip(handle, expected_records, strict=True):
+        with rows_path.open("rb") as handle:
+            paired = (
+                zip(handle, expected_records, strict=True)
+                if expected_records is not None
+                else ((line, None) for line in handle)
+            )
+            for line, expected in paired:
                 observed = json.loads(line.decode("utf-8"))
-                if line != canonical_bytes(observed) + b"\n" or observed != expected:
+                if line != canonical_bytes(observed) + b"\n" or (
+                    expected is not None and observed != expected
+                ):
                     raise IntegrityError("feature row differs from verified causal input")
                 total += 1
                 if observed["status"] == "FEATURE_READY":
@@ -1437,6 +2113,114 @@ def load_causal_feature_release(
     return LoadedFeatureRelease(
         receipt, causal_receipt, spec, tuple(rows), total, unresolved
     )
+
+
+def load_causal_feature_release(
+    receipt: VerifiedReleaseReceipt,
+    *,
+    causal_receipt: VerifiedReleaseReceipt,
+    definitions: LoadedActualContractDefinitions,
+    economics_registry: VerifiedEconomicsRegistry,
+    policies: VerifiedFoundationPolicies,
+    session_policy: VerifiedSessionPolicy,
+    boundary: RepoBoundary,
+) -> LoadedFeatureRelease:
+    """Reproduce a persisted release from its full causal dependency chain."""
+
+    return _load_causal_feature_release(
+        receipt,
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        economics_registry=economics_registry,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
+        reproduce_from_source=True,
+    )
+
+
+def verify_newly_published_causal_feature_release(
+    receipt: VerifiedReleaseReceipt,
+    *,
+    causal_receipt: VerifiedReleaseReceipt,
+    definitions: LoadedActualContractDefinitions,
+    economics_registry: VerifiedEconomicsRegistry,
+    policies: VerifiedFoundationPolicies,
+    session_policy: VerifiedSessionPolicy,
+    boundary: RepoBoundary,
+) -> None:
+    """Stream-verify a just-published release without rebuilding FeatureRows."""
+
+    manifest, contract, spec, rows_path = _verified_feature_release_header(
+        receipt,
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        economics_registry=economics_registry,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
+    )
+    total = ready = unresolved = 0
+    try:
+        with rows_path.open("rb") as handle:
+            for line in handle:
+                observed = json.loads(line.decode("utf-8"))
+                if not isinstance(observed, dict) or set(observed) != _FEATURE_RECORD_KEYS:
+                    raise IntegrityError("feature row schema is invalid")
+                core = dict(observed)
+                record_id = core.pop("record_id")
+                disposition = observed["upstream_disposition"]
+                status = observed["status"]
+                if (
+                    type(record_id) is not str
+                    or record_id != sha256_json(core)
+                    or type(disposition) is not str
+                    or disposition
+                    not in _RESOLVED_CAUSAL_DISPOSITIONS
+                    | {_UNRESOLVED_CAUSAL_DISPOSITION}
+                    or observed["prediction_in_coverage_denominator"] is not True
+                    or observed["upstream_release_id"] != causal_receipt.release_id
+                    or observed["upstream_release_receipt_id"]
+                    != causal_receipt.receipt_id
+                ):
+                    raise IntegrityError("feature row identity or dependency is invalid")
+                total += 1
+                if status == "FEATURE_READY":
+                    if (
+                        disposition != "ELIGIBLE"
+                        or observed["inputs_complete"] is not True
+                        or not isinstance(observed["actual_contract"], dict)
+                        or not isinstance(observed["values"], dict)
+                        or set(observed["values"]) != set(spec.feature_names)
+                        or not isinstance(observed["lineage"], dict)
+                        or set(observed["lineage"]) != set(spec.feature_names)
+                        or observed["failure_code"] is not None
+                        or observed["failure_detail_sha256"] is not None
+                    ):
+                        raise IntegrityError("feature-ready row is not fail-closed")
+                    ready += 1
+                else:
+                    if (
+                        disposition == "ELIGIBLE"
+                        or status != f"UPSTREAM_{disposition}"
+                        or observed["inputs_complete"] is not False
+                        or observed["actual_contract"] is not None
+                        or observed["values"] is not None
+                        or observed["lineage"] is not None
+                    ):
+                        raise IntegrityError("unresolved feature row is invalid")
+                    unresolved += 1
+    except (OSError, UnicodeDecodeError, ValueError, KeyError, TypeError) as exc:
+        raise IntegrityError("feature rows JSONL is invalid") from exc
+    if (
+        total != contract["total_upstream_rows"]
+        or ready != contract["feature_ready_rows"]
+        or unresolved != contract["unresolved_upstream_rows"]
+        or ready + unresolved != total
+    ):
+        raise IntegrityError("feature release census is invalid")
+    if receipt.verify(boundary).as_dict() != manifest.as_dict():
+        raise IntegrityError("feature release changed during streaming verification")
 
 
 def _prediction_market(
@@ -1804,7 +2588,7 @@ def publish_outcome_release(
     """Publish an exact post-prediction join; unresolved rows remain denominator rows."""
 
     _assert_publisher(boundary, publisher)
-    if label_method_id not in {None, CAUSAL_OUTCOME_LABEL_METHOD_ID}:
+    if label_method_id != CAUSAL_OUTCOME_LABEL_METHOD_ID:
         raise ContractError("outcome label method is not an allowlisted contract")
     source_ids = _verified_outcome_sources(source_receipts, boundary)
     _verify_outcome_prediction_join(
@@ -1833,15 +2617,35 @@ def publish_outcome_release(
         },
     )
     _write_canonical(stage / "outcome_contract.json", metadata)
+    causal_sources = [
+        item.verify(boundary)
+        for item in source_receipts
+        if item.phase == "causally_gated_normalized"
+    ]
+    if len(causal_sources) != 1:
+        raise ContractError("outcome publication requires one exact causal data release")
+    causal_root = str(causal_sources[0].metadata.get("logical_root", ""))
+    causal_prefix = "data/causally_gated_normalized/"
+    if not causal_root.startswith(causal_prefix):
+        raise IntegrityError("outcome release lacks a layout-v2 causal selector")
+    outcome_root = (
+        f"data/outcomes/{label_method_id}/"
+        f"{causal_root.removeprefix(causal_prefix)}"
+    )
     manifest = ReleaseManifest.build(
         stage,
+        phase="outcomes",
         release_kind=OUTCOME_RELEASE_KIND,
         schema_version=OUTCOME_SCHEMA_VERSION,
+        logical_paths={
+            "outcome_contract.json": f"{outcome_root}/outcome_contract.json",
+            "outcomes.json": f"{outcome_root}/outcomes.json",
+        },
         source_release_ids=tuple(source.release_id for source in source_receipts),
         metadata=metadata,
     )
-    release = publisher.publish(stage, manifest)
-    receipt = VerifiedReleaseReceipt.from_release(release, boundary)
+    manifest_path = publisher.publish(stage, manifest)
+    receipt = VerifiedReleaseReceipt.from_manifest(manifest_path, boundary)
     load_outcome_release(
         receipt,
         prediction_census=prediction_census,
@@ -1867,9 +2671,12 @@ def load_outcome_release(
     manifest = receipt.verify(boundary)
     source_ids = _verified_outcome_sources(source_receipts, boundary)
     census_contract = _census_contract(prediction_census, prediction_ledger)
-    root = boundary.active_root / receipt.relative_root
-    contract = _read_canonical(root / "outcome_contract.json")
-    payload = _read_canonical(root / "outcomes.json")
+    contract = _read_canonical(
+        receipt.resolve_unique_filename("outcome_contract.json", boundary)
+    )
+    payload = _read_canonical(
+        receipt.resolve_unique_filename("outcomes.json", boundary)
+    )
     if (
         not isinstance(contract, dict)
         or not isinstance(payload, dict)
@@ -1897,9 +2704,10 @@ def load_outcome_release(
     }
     if (
         contract != expected_contract
+        or receipt.phase != "outcomes"
         or manifest.release_kind != OUTCOME_RELEASE_KIND
         or manifest.schema_version != OUTCOME_SCHEMA_VERSION
-        or {entry.path for entry in manifest.files}
+        or {Path(entry.path).name for entry in manifest.files}
         != {"outcome_contract.json", "outcomes.json"}
         or manifest.source_release_ids
         != tuple(sorted(source.release_id for source in source_receipts))

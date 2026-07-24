@@ -1,13 +1,17 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from futures_rebuild.canonical import sha256_json
+from futures_rebuild.errors import UnauthorizedOperation
 import futures_rebuild.migration as migration_module
 from futures_rebuild.migration import (
     AUTHORIZED_MIGRATION_MANIFEST_SHA256,
     AUTHORIZED_MIGRATION_SOURCE_SCOPE_SHA256,
     CONTROLLED_REBUILD_AUTHORIZATION_ID,
     MIGRATION_APPROVAL_COMPLETE,
+    MigrationApproval,
     migration_implementation_sha256,
     migration_source_scope,
 )
@@ -144,7 +148,7 @@ def test_checked_in_migration_approval_is_exact_reviewed_hash_copy_only() -> Non
     assert payload["status"] == MIGRATION_APPROVAL_COMPLETE
     assert payload["execution_authorized"] is True
     assert payload["required_next_step"] is None
-    approval = migration_module._load_checked_in_migration_approval()
+    approval = MigrationApproval.from_dict(payload["approval"])
     assert approval.approval_id == (
         "186ee07ee57c578043dfc346a76f6ef4b5ab703958ff9f94e69b00c40b1b7abd"
     )
@@ -152,9 +156,11 @@ def test_checked_in_migration_approval_is_exact_reviewed_hash_copy_only() -> Non
     assert approval.inventory_sha256 == (
         "1243eacf39007042126237913fe17070d445712cbc4c1147d11fcae4bc598e96"
     )
-    assert approval.migration_implementation_sha256 == (
+    assert approval.migration_implementation_sha256 != (
         migration_implementation_sha256()
     )
     assert approval.total_files == 9_122
     assert approval.total_bytes == 33_313_291_079
     assert approval.user_authorization_id == CONTROLLED_REBUILD_AUTHORIZATION_ID
+    with pytest.raises(UnauthorizedOperation, match="historical"):
+        migration_module._load_checked_in_migration_approval()

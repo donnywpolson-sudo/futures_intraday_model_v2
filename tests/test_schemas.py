@@ -5,6 +5,7 @@ import pytest
 
 from futures_rebuild.errors import ContractError, IntegrityError
 from futures_rebuild.clock import SyntheticClock
+from futures_rebuild.data_layout import MANIFEST_ROOT, PhasePublisher
 from futures_rebuild.ledger import LedgerHeadContract, PredictionLedger
 from futures_rebuild.schemas import (
     FeatureLineage,
@@ -115,11 +116,17 @@ def _prediction(contract, decision, feature_row_id):
 
 def _prediction_ledger(boundary, operation_factory, decision):
     receipt = operation_factory("APPEND_PREDICTION")
+    publisher = PhasePublisher(
+        boundary=boundary,
+        operation_receipt=operation_factory("PUBLISH_RELEASE"),
+        lock_path=boundary.active_root / "state" / "locks" / "data-publication.lock",
+    )
     return PredictionLedger(
-        boundary.active_root / "state" / "predictions",
+        boundary.active_root / MANIFEST_ROOT / "predictions",
         boundary.active_root / "state" / "locks" / "ledger.lock",
         boundary.active_root / "state" / "anchors",
         boundary.active_root / "state" / "ledger_heads" / "head.json",
+        publisher=publisher,
         max_append_delay=timedelta(minutes=5),
         clock=SyntheticClock(boundary, receipt, decision),
         boundary=boundary,
@@ -359,7 +366,7 @@ def test_prediction_census_detects_forgery_staleness_and_joint_deletion(
     with pytest.raises(IntegrityError, match="forged|stale|truncated"):
         census.verify(ledger)
 
-    for root in (ledger.root, ledger.anchor_root):
+    for root in (ledger.prediction_manifest_root, ledger.anchor_root):
         for path in root.glob("*.json"):
             path.unlink()
     ledger.persistent_head_path.unlink()

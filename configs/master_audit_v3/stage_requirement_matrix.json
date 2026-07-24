@@ -1,0 +1,63 @@
+{
+  "schema_version": "systematic_futures_audit/3.0.0",
+  "registry_id": "V2-MASTER-AUDIT-STAGE-MATRIX-3.0.0",
+  "target_states": {
+    "REBUILD_COMPLETE": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3"],
+    "HISTORICAL_RESEARCH_READY": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3", "G3.S1", "G3.S2", "G3.S3", "G4.S1", "G4.S2", "G4.S3", "G4.S4"],
+    "CANDIDATE_SEALED": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3", "G3.S1", "G3.S2", "G3.S3", "G4.S1", "G4.S2", "G4.S3", "G4.S4", "G5.S1", "G5.S2", "G5.S3", "G5.S4", "G5.S5", "G6.S1", "G6.S2", "G7.S1", "G7.S2", "G7.S3", "G7.S4", "G7.S5", "G7.S6", "G7.S7"],
+    "PROSPECTIVE_EVIDENCE_PENDING": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3", "G3.S1", "G3.S2", "G3.S3", "G4.S1", "G4.S2", "G4.S3", "G4.S4", "G5.S1", "G5.S2", "G5.S3", "G5.S4", "G5.S5", "G6.S1", "G6.S2", "G7.S1", "G7.S2", "G7.S3", "G7.S4", "G7.S5", "G7.S6", "G7.S7", "G8.S1", "G8.S2", "G8.S3", "G8.S4"],
+    "PROSPECTIVE_PASS": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3", "G3.S1", "G3.S2", "G3.S3", "G4.S1", "G4.S2", "G4.S3", "G4.S4", "G5.S1", "G5.S2", "G5.S3", "G5.S4", "G5.S5", "G6.S1", "G6.S2", "G7.S1", "G7.S2", "G7.S3", "G7.S4", "G7.S5", "G7.S6", "G7.S7", "G8.S1", "G8.S2", "G8.S3", "G8.S4"],
+    "PROSPECTIVE_FAIL": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3", "G3.S1", "G3.S2", "G3.S3", "G4.S1", "G4.S2", "G4.S3", "G4.S4", "G5.S1", "G5.S2", "G5.S3", "G5.S4", "G5.S5", "G6.S1", "G6.S2", "G7.S1", "G7.S2", "G7.S3", "G7.S4", "G7.S5", "G7.S6", "G7.S7", "G8.S1", "G8.S2", "G8.S3", "G8.S4"],
+    "PROSPECTIVE_INCONCLUSIVE": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3", "G3.S1", "G3.S2", "G3.S3", "G4.S1", "G4.S2", "G4.S3", "G4.S4", "G5.S1", "G5.S2", "G5.S3", "G5.S4", "G5.S5", "G6.S1", "G6.S2", "G7.S1", "G7.S2", "G7.S3", "G7.S4", "G7.S5", "G7.S6", "G7.S7", "G8.S1", "G8.S2", "G8.S3", "G8.S4"],
+    "MANUAL_DECISION_SUPPORT_READY": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3", "G3.S1", "G3.S2", "G3.S3", "G4.S1", "G4.S2", "G4.S3", "G4.S4", "G5.S1", "G5.S2", "G5.S3", "G5.S4", "G5.S5", "G6.S1", "G6.S2", "G7.S1", "G7.S2", "G7.S3", "G7.S4", "G7.S5", "G7.S6", "G7.S7", "G8.S1", "G8.S2", "G8.S3", "G8.S4"]
+  },
+  "gates": [
+    {"gate_id": "G1", "title": "EVIDENCE_INTEGRITY_AND_REPRODUCIBILITY", "subchecks": [
+      {"subcheck_id": "G1.S1", "title": "INDEPENDENT_ENGINE_REPLICATION"},
+      {"subcheck_id": "G1.S2", "title": "CLAIM_EVIDENCE_UNIVERSE_CLOSURE"},
+      {"subcheck_id": "G1.S3", "title": "REGISTRY_THRESHOLD_AND_APPLICABILITY_INTEGRITY"}
+    ]},
+    {"gate_id": "G2", "title": "POINT_IN_TIME_CAUSALITY_AND_FUTURES_IDENTITY", "subchecks": [
+      {"subcheck_id": "G2.S1", "title": "BITEMPORAL_VINTAGE_CONTROL"},
+      {"subcheck_id": "G2.S2", "title": "DATA_POPULATION_UNIVERSE_AND_TARGET_INTEGRITY"},
+      {"subcheck_id": "G2.S3", "title": "FUTURES_SESSION_CONTRACT_AND_ROLL_CONTROL"}
+    ]},
+    {"gate_id": "G3", "title": "SPLIT_FEATURE_LABEL_AND_PIPELINE_ISOLATION", "subchecks": [
+      {"subcheck_id": "G3.S1", "title": "FEATURE_TRANSFORM_AND_SERVING_POPULATION_INTEGRITY"},
+      {"subcheck_id": "G3.S2", "title": "LABEL_OVERLAP_PURGE_AND_EMBARGO"},
+      {"subcheck_id": "G3.S3", "title": "NESTED_SELECTION_AND_TRAIN_ONLY_TRANSFORMS"}
+    ]},
+    {"gate_id": "G4", "title": "COMPLETE_TRIAL_ACCOUNTING_AND_SELECTION_CONTROL", "subchecks": [
+      {"subcheck_id": "G4.S1", "title": "CANDIDATE_GENEALOGY_AND_AI_PROVENANCE"},
+      {"subcheck_id": "G4.S2", "title": "MULTIPLICITY_AND_RESEARCHER_DEGREES_OF_FREEDOM"},
+      {"subcheck_id": "G4.S3", "title": "SEQUENTIAL_TESTING_AND_OPTIONAL_STOPPING"},
+      {"subcheck_id": "G4.S4", "title": "MODEL_COMPLEXITY_SIMPLE_BASELINE_AND_PROXY_CONTROL"}
+    ]},
+    {"gate_id": "G5", "title": "DEPENDENCE_AWARE_NET_OOS_EVIDENCE", "subchecks": [
+      {"subcheck_id": "G5.S1", "title": "EFFECTIVE_BREADTH_AND_EVENT_CONCENTRATION"},
+      {"subcheck_id": "G5.S2", "title": "FACTOR_CARRY_ROLL_ATTRIBUTION_AND_PNL_CONSERVATION"},
+      {"subcheck_id": "G5.S3", "title": "SPECIFICATION_NEIGHBORHOOD_STABILITY"},
+      {"subcheck_id": "G5.S4", "title": "OOS_UNCERTAINTY_BASELINE_AND_TEMPORAL_STABILITY"},
+      {"subcheck_id": "G5.S5", "title": "SUBGROUP_REGIME_AND_PORTFOLIO_COMPATIBILITY"}
+    ]},
+    {"gate_id": "G6", "title": "HOLDOUT_ESCROW_AND_DISCLOSURE_CONTROL", "subchecks": [
+      {"subcheck_id": "G6.S1", "title": "HOLDOUT_ESCROW_IDENTITY_AND_ACCESS"},
+      {"subcheck_id": "G6.S2", "title": "INDIRECT_QUERY_AND_DISCLOSURE_BUDGET"}
+    ]},
+    {"gate_id": "G7", "title": "NET_EXECUTION_ECONOMICS_AND_ROBUSTNESS", "subchecks": [
+      {"subcheck_id": "G7.S1", "title": "EXECUTION_MODEL_AND_ORDER_INTENT_RECONCILIATION"},
+      {"subcheck_id": "G7.S2", "title": "PATHWISE_MARGIN_AND_EXECUTABLE_LIQUIDATION"},
+      {"subcheck_id": "G7.S3", "title": "FROZEN_SCALABLE_COST_BASKET"},
+      {"subcheck_id": "G7.S4", "title": "SIGNAL_DECAY_AND_BREAK_EVEN_MARGIN"},
+      {"subcheck_id": "G7.S5", "title": "CAPACITY_CONCENTRATION_AND_PORTFOLIO_INTERACTION"},
+      {"subcheck_id": "G7.S6", "title": "CROSS_STRATEGY_NETTING_AND_SHARED_LIQUIDITY"},
+      {"subcheck_id": "G7.S7", "title": "AVAILABILITY_ADJUSTED_ATTAINABLE_PNL"}
+    ]},
+    {"gate_id": "G8", "title": "TARGET_STATE_READINESS_GOVERNANCE_AND_RECOVERY", "subchecks": [
+      {"subcheck_id": "G8.S1", "title": "STAGE_CAPABILITY_AND_SERVING_PARITY"},
+      {"subcheck_id": "G8.S2", "title": "MONITORING_AND_CHANGE_DETECTION"},
+      {"subcheck_id": "G8.S3", "title": "ORDER_STATE_INVARIANTS_AND_OPERATIONAL_RECOVERY"},
+      {"subcheck_id": "G8.S4", "title": "CHANGE_CONTROL_INDEPENDENT_VALIDATION_AND_AUDIT_TRAIL"}
+    ]}
+  ]
+}

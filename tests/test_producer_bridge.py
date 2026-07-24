@@ -10,13 +10,26 @@ import pytest
 
 from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
 from futures_rebuild.clock import SyntheticClock
+from futures_rebuild.data_layout import (
+    MANIFEST_ROOT,
+    DataReleaseManifest as ReleaseManifest,
+    DataReleaseReceipt as VerifiedReleaseReceipt,
+    PhasePublisher as AtomicPublisher,
+    PhasePublisher,
+)
 from futures_rebuild.errors import ContractError, IntegrityError
 from futures_rebuild.foundation.materialize import (
+    FOUNDATION_TRANSFORMS,
     RAW_RELEASE_KIND,
     RAW_SCHEMA_VERSION,
     materialize_causal_interval,
 )
-from futures_rebuild.foundation.parquet import DEFINITION_SCHEMA, RAW_BAR_SCHEMA
+from futures_rebuild.foundation.parquet import (
+    DEFINITION_SCHEMA,
+    RAW_BAR_SCHEMA,
+    read_definition_audit,
+    read_raw_bar_audit,
+)
 from futures_rebuild.foundation.records import ProviderBar, ProviderDefinition
 from futures_rebuild.foundation.support import (
     VerifiedFoundationPolicies,
@@ -41,11 +54,6 @@ from futures_rebuild.producer_bridge import (
     publish_outcome_release,
     publish_versioned_session_policy,
 )
-from futures_rebuild.release import (
-    AtomicPublisher,
-    ReleaseManifest,
-    VerifiedReleaseReceipt,
-)
 from futures_rebuild.source_symbology import build_query_contract
 from futures_rebuild.schemas import (
     OutcomeRow,
@@ -66,16 +74,9 @@ DEFINITION_ROW_SHA256 = "e" * 64
 
 def _publisher(boundary, operation_factory) -> AtomicPublisher:
     return AtomicPublisher(
-        boundary.active_root
-        / "data"
-        / "vault"
-        / ".staging"
-        / "releases"
-        / "producer-bridge",
-        boundary.active_root / "data" / "vault" / "releases",
-        boundary.active_root / "state" / "locks" / "producer-bridge.lock",
         boundary=boundary,
         operation_receipt=operation_factory("PUBLISH_RELEASE"),
+        lock_path=boundary.active_root / "state" / "locks" / "producer-bridge.lock",
     )
 
 
@@ -85,6 +86,7 @@ def _copy_active_configs(boundary) -> None:
         "environment.lock.json",
         "foundation_policy.json",
         "known_anomalies.json",
+        "provider_data_epochs.json",
         "session_policy.json",
     ):
         (boundary.active_root / "configs" / name).write_bytes(
@@ -112,6 +114,7 @@ def _publish_raw_interval(
     publisher: AtomicPublisher,
     *,
     label_path: bool = False,
+    missing_unit_qty: bool = False,
     omit_minute: int | None = None,
     roll_minute: int | None = None,
 ) -> VerifiedReleaseReceipt:
@@ -123,13 +126,21 @@ def _publish_raw_interval(
             market="ES",
             publisher_id=1,
             instrument_id=instrument_id,
-            ts_event_ns=EVENT_NS,
-            ts_recv_ns=EVENT_NS + 1,
+            instrument_id_date_utc="2024-01-01",
+            ts_event_ns=EVENT_NS + 1,
+            ts_recv_ns=EVENT_NS,
+            activation_ns=EVENT_NS - 86_400_000_000_000,
+            expiration_ns=EVENT_NS + 366 * 86_400_000_000_000,
+            security_update_action="ADD",
+            instrument_class="FUTURE",
+            security_type="FUT",
             raw_symbol=raw_symbol,
             exchange="XCME",
             currency="USD",
             min_price_increment_nano=250_000_000,
-            unit_of_measure_qty_nano=50_000_000_000,
+            unit_of_measure_qty_nano=(
+                0 if missing_unit_qty and instrument_id == 123 else 50_000_000_000
+            ),
             unit_of_measure="IPNT",
             source_release_id=SOURCE_SNAPSHOT_ID,
             source_manifest_sha256=SOURCE_MANIFEST_SHA256,
@@ -137,6 +148,7 @@ def _publish_raw_interval(
                 "dbn/definition/ES/2024/2024-01-01_2025-01-01.dbn.zst"
             ),
             source_file_sha256=DEFINITION_FILE_SHA256,
+            row_ordinal=0,
             row_sha256=row_sha256,
         )
 
@@ -204,13 +216,20 @@ def _publish_raw_interval(
                 ((123, "f" * 64), (999, "9" * 64))
             )
         ]
-    logical_root = "raw/ES/2024/2024-01-01_2025-01-01"
+    logical_root = "data/raw/ES/2024/2024-01-01_2025-01-01"
     stage = publisher.create_stage("synthetic_raw_interval")
     bars_path = stage / logical_root / "bars.parquet"
     definitions_path = stage / logical_root / "definitions.parquet"
     _write_parquet(bars_path, RAW_BAR_SCHEMA, [asdict(row) for row in bars])
     _write_parquet(
         definitions_path, DEFINITION_SCHEMA, [asdict(item) for item in definitions]
+    )
+    observed_bar_count, bar_identity_date_keys = read_raw_bar_audit(bars_path)
+    definition_timestamp_census, definition_identity_date_keys = (
+        read_definition_audit(definitions_path)
+    )
+    unmatched_identity_date_keys = (
+        bar_identity_date_keys - definition_identity_date_keys
     )
     definition_query = build_query_contract(
         schema="definition",
@@ -229,25 +248,29 @@ def _publish_raw_interval(
         symbols=["ES.v.0"],
     )
     core = {
+        "bar_identity_date_key_count": len(bar_identity_date_keys),
+        "bar_identity_date_key_set_sha256": sha256_json(
+            sorted(bar_identity_date_keys)
+        ),
         "bar_query_contract": bar_query,
         "bar_query_contract_id": bar_query["query_contract_id"],
-        "bar_rows": len(bars),
+        "bar_rows": observed_bar_count,
         "bars_parquet_sha256": sha256_file(bars_path),
         "bars_schema": RAW_BAR_SCHEMA.metadata[b"schema_id"].decode("ascii"),
+        "definition_identity_date_key_count": len(definition_identity_date_keys),
+        "definition_identity_date_key_set_sha256": sha256_json(
+            sorted(definition_identity_date_keys)
+        ),
         "definition_rows_scanned": len(definitions),
         "definition_rows_selected": len(definitions),
+        "definition_timestamp_census": definition_timestamp_census,
         "definition_query_contract": definition_query,
         "definition_query_contract_id": definition_query["query_contract_id"],
         "definitions_parquet_sha256": sha256_file(definitions_path),
         "definitions_schema": DEFINITION_SCHEMA.metadata[b"schema_id"].decode(
             "ascii"
         ),
-        "foundation_transforms": [
-            "EXACT_DBN_DECODE",
-            "ACTUAL_BAR_INSTRUMENT_ID_SELECTION",
-            "NANOUNITS_PRESERVED_AS_INT64",
-            "UTC_NANOSECONDS_PRESERVED_AS_INT64",
-        ],
+        "foundation_transforms": list(FOUNDATION_TRANSFORMS),
         "learned_or_outcome_informed_transform_count": 0,
         "logical_root": logical_root,
         "market": "ES",
@@ -255,9 +278,13 @@ def _publish_raw_interval(
         "source_bar_file_sha256": BAR_FILE_SHA256,
         "source_definition_file_path": definition.source_file_path,
         "source_definition_file_sha256": DEFINITION_FILE_SHA256,
-        "source_manifest_sha256": SOURCE_MANIFEST_SHA256,
+        "source_dbn_manifest_sha256": SOURCE_MANIFEST_SHA256,
+        "source_dbn_release_id": SOURCE_SNAPSHOT_ID,
         "source_selection_release_id": "1" * 64,
-        "source_snapshot_id": SOURCE_SNAPSHOT_ID,
+        "unmatched_bar_identity_date_key_count": len(unmatched_identity_date_keys),
+        "unmatched_bar_identity_date_key_set_sha256": sha256_json(
+            sorted(unmatched_identity_date_keys)
+        ),
         "year": 2024,
     }
     interval_receipt = {**core, "interval_id": sha256_json(core)}
@@ -266,8 +293,14 @@ def _publish_raw_interval(
     )
     manifest = ReleaseManifest.build(
         stage,
+        phase="raw",
         release_kind=RAW_RELEASE_KIND,
         schema_version=RAW_SCHEMA_VERSION,
+        logical_paths={
+            path.relative_to(stage).as_posix(): path.relative_to(stage).as_posix()
+            for path in stage.rglob("*")
+            if path.is_file()
+        },
         source_release_ids=(SOURCE_SNAPSHOT_ID, "1" * 64),
         metadata={
             "interval_id": interval_receipt["interval_id"],
@@ -276,8 +309,8 @@ def _publish_raw_interval(
             "year": 2024,
         },
     )
-    release = publisher.publish(stage, manifest)
-    return VerifiedReleaseReceipt.from_release(release, boundary)
+    manifest_path = publisher.publish(stage, manifest)
+    return VerifiedReleaseReceipt.from_manifest(manifest_path, boundary)
 
 
 def _foundation_chain(
@@ -285,6 +318,7 @@ def _foundation_chain(
     operation_factory,
     *,
     label_path: bool = False,
+    missing_unit_qty: bool = False,
     omit_minute: int | None = None,
     roll_minute: int | None = None,
 ):
@@ -302,6 +336,7 @@ def _foundation_chain(
         boundary,
         publisher,
         label_path=label_path,
+        missing_unit_qty=missing_unit_qty,
         omit_minute=omit_minute,
         roll_minute=roll_minute,
     )
@@ -430,11 +465,17 @@ def _missing_economics_prediction(feature_row) -> PredictionRow:
 def _ledger(boundary, operation_factory, at):
     receipt = operation_factory("APPEND_PREDICTION")
     clock = SyntheticClock(boundary, receipt, at)
+    publisher = PhasePublisher(
+        boundary=boundary,
+        operation_receipt=operation_factory("PUBLISH_RELEASE"),
+        lock_path=boundary.active_root / "state" / "locks" / "data-publication.lock",
+    )
     ledger = PredictionLedger(
-        boundary.active_root / "state" / "predictions",
+        boundary.active_root / MANIFEST_ROOT / "predictions",
         boundary.active_root / "state" / "locks" / "ledger.lock",
         boundary.active_root / "state" / "anchors",
         boundary.active_root / "state" / "ledger_heads" / "head.json",
+        publisher=publisher,
         max_append_delay=timedelta(minutes=5),
         clock=clock,
         boundary=boundary,
@@ -457,8 +498,13 @@ def test_bridge_preserves_exact_identity_economics_and_unresolved_census(
     ) = _bridge_chain(boundary, operation_factory)
 
     provider = definitions.provider_record(DEFINITION_ROW_SHA256).provider
-    assert provider.ts_event_ns == EVENT_NS
-    assert provider.ts_recv_ns == EVENT_NS + 1
+    assert provider.ts_event_ns == EVENT_NS + 1
+    assert provider.ts_recv_ns == EVENT_NS
+    assert provider.ts_recv_ns < provider.ts_event_ns
+    assert provider.instrument_id_date_utc == "2024-01-01"
+    assert provider.security_update_action == "ADD"
+    assert provider.instrument_class == "FUTURE"
+    assert provider.security_type == "FUT"
     spec = CausalFeatureSpec(
         feature_names=("volume", "bar_return"),
         entry_delay_seconds=60,
@@ -499,6 +545,150 @@ def test_bridge_preserves_exact_identity_economics_and_unresolved_census(
     assert session_policy.exchange_session_date(
         "XCME", loaded.rows[0].bar_event_at
     ).isoformat() == "2024-01-01"
+
+
+def test_definition_bridge_hash_binds_provider_unit_qty_abstentions(
+    boundary, operation_factory
+) -> None:
+    publisher, policies, raw_receipt, causal_receipt = _foundation_chain(
+        boundary,
+        operation_factory,
+        label_path=True,
+        missing_unit_qty=True,
+        roll_minute=3,
+    )
+    definition_receipt = publish_actual_contract_definitions(
+        raw_receipt=raw_receipt,
+        policies=policies,
+        boundary=boundary,
+        publisher=publisher,
+    )
+    definitions = load_actual_contract_definitions(
+        definition_receipt,
+        raw_receipt=raw_receipt,
+        policies=policies,
+        boundary=boundary,
+    )
+    manifest = definition_receipt.verify(boundary)
+    audit = manifest.embedded_documents["definition_ineligibility.json"]
+
+    assert manifest.schema_version == "2.1.0"
+    assert manifest.metadata["source_definition_row_count"] == 2
+    assert manifest.metadata["eligible_definition_row_count"] == 1
+    assert manifest.metadata["ineligible_definition_row_count"] == 1
+    assert set(definitions.by_provider_row) == {"8" * 64}
+    assert set(definitions.ineligible_by_provider_row) == {DEFINITION_ROW_SHA256}
+    excluded = definitions.ineligible_by_provider_row[DEFINITION_ROW_SHA256]
+    assert excluded["disposition"] == "ABSTAIN_ECONOMICS_UNRESOLVED"
+    assert excluded["reason_code"] == "PROVIDER_UNIT_QTY_UNAVAILABLE"
+    assert excluded["prediction_in_coverage_denominator"] is True
+    assert excluded["research_eligible"] is False
+    assert audit["records"] == [dict(excluded)]
+    assert (
+        audit["definition_ineligibility_ledger_id"]
+        == manifest.metadata["ineligibility_ledger_id"]
+    )
+
+    session_receipt = publish_versioned_session_policy(
+        policies=policies, boundary=boundary, publisher=publisher
+    )
+    session_policy = load_versioned_session_policy(
+        session_receipt, policies=policies, boundary=boundary
+    )
+    economics_receipt = publish_actual_contract_economics(
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
+        publisher=publisher,
+    )
+    economics = load_actual_contract_economics(
+        economics_receipt,
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
+    )
+    assert len(economics.records) == 1
+
+
+def test_all_economics_ineligible_interval_publishes_empty_fail_closed_registries(
+    boundary, operation_factory
+) -> None:
+    publisher, policies, raw_receipt, causal_receipt = _foundation_chain(
+        boundary,
+        operation_factory,
+        missing_unit_qty=True,
+    )
+    definition_receipt = publish_actual_contract_definitions(
+        raw_receipt=raw_receipt,
+        policies=policies,
+        boundary=boundary,
+        publisher=publisher,
+    )
+    definitions = load_actual_contract_definitions(
+        definition_receipt,
+        raw_receipt=raw_receipt,
+        policies=policies,
+        boundary=boundary,
+    )
+    assert not definitions.by_provider_row
+    assert set(definitions.ineligible_by_provider_row) == {DEFINITION_ROW_SHA256}
+
+    session_receipt = publish_versioned_session_policy(
+        policies=policies, boundary=boundary, publisher=publisher
+    )
+    session_policy = load_versioned_session_policy(
+        session_receipt, policies=policies, boundary=boundary
+    )
+    economics_receipt = publish_actual_contract_economics(
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
+        publisher=publisher,
+    )
+    economics = load_actual_contract_economics(
+        economics_receipt,
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
+    )
+    assert economics_receipt.schema_version == "1.1.0"
+    assert not economics.records
+
+    spec = CausalFeatureSpec(
+        feature_names=("volume", "bar_return"),
+        entry_delay_seconds=60,
+        label_horizon_seconds=300,
+    )
+    feature_receipt = publish_causal_feature_release(
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        economics_registry=economics,
+        policies=policies,
+        session_policy=session_policy,
+        feature_spec=spec,
+        boundary=boundary,
+        publisher=publisher,
+    )
+    features = load_causal_feature_release(
+        feature_receipt,
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        economics_registry=economics,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
+    )
+    assert features.total_upstream_rows == 2
+    assert features.unresolved_upstream_rows == 2
+    assert not features.rows
 
 
 def test_outcome_release_requires_prediction_census_and_retains_unresolved(
@@ -565,6 +755,7 @@ def test_outcome_release_requires_prediction_census_and_retains_unresolved(
             source_receipts=(causal_receipt,),
             boundary=boundary,
             publisher=publisher,
+            label_method_id=CAUSAL_OUTCOME_LABEL_METHOD_ID,
         )
     outcome_receipt = publish_outcome_release(
         outcomes=(unresolved,),
@@ -573,6 +764,7 @@ def test_outcome_release_requires_prediction_census_and_retains_unresolved(
         source_receipts=(causal_receipt,),
         boundary=boundary,
         publisher=publisher,
+        label_method_id=CAUSAL_OUTCOME_LABEL_METHOD_ID,
     )
     loaded = load_outcome_release(
         outcome_receipt,
@@ -580,11 +772,12 @@ def test_outcome_release_requires_prediction_census_and_retains_unresolved(
         prediction_ledger=ledger,
         source_receipts=(causal_receipt,),
         boundary=boundary,
+        expected_label_method_id=CAUSAL_OUTCOME_LABEL_METHOD_ID,
     )
     assert loaded.coverage.denominator_count == 1
     assert loaded.coverage.resolved_count == 0
     assert loaded.coverage.unresolved_count == 1
-    assert loaded.label_method_id is None
+    assert loaded.label_method_id == CAUSAL_OUTCOME_LABEL_METHOD_ID
 
     later = feature.decision_at + timedelta(seconds=1)
     clock.set(later)
@@ -599,6 +792,7 @@ def test_outcome_release_requires_prediction_census_and_retains_unresolved(
             prediction_ledger=ledger,
             source_receipts=(causal_receipt,),
             boundary=boundary,
+            expected_label_method_id=CAUSAL_OUTCOME_LABEL_METHOD_ID,
         )
 
 

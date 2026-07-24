@@ -1,0 +1,50 @@
+{
+  "schema_version": "glbx_research_universe/1.0.0",
+  "classification": "NON_AUTHORIZING_RESEARCH_DESIGN",
+  "status": "PENDING_APPROVAL",
+  "approval_receipt_id": null,
+  "provider": {
+    "name": "Databento",
+    "dataset": "GLBX.MDP3",
+    "provider_calls_authorized": false
+  },
+  "data_contract": {
+    "modeling_schema": "ohlcv-1m",
+    "required_sidecars": ["definition", "statistics", "status"],
+    "continuous_symbol_rule": "V_PREVIOUS_DAY_VOLUME_RANK_0",
+    "prices": "ORIGINAL_UNADJUSTED",
+    "actual_instrument_id_is_authoritative": true,
+    "long_history_l1_l2_l3_features_allowed": false
+  },
+  "tiers": [
+    {"tier_id": 0, "role": "SYNTHETIC_OR_ENGINEERING_ONLY", "symbols": ["ES"], "year_policy": ["2024_ENGINEERING_ONLY_NEVER_ALPHA"]},
+    {"tier_id": 1, "role": "BARE_MINIMUM_DISCOVERY", "symbols": ["ES", "ZN", "6E", "CL", "NG", "GC", "ZC", "LE"], "year_policy": ["2018-2022_DISCOVERY", "2023-2024_PREVIOUSLY_USED_NON_PRISTINE", "2025_LOCKED_HOLDOUT", "2026_FORWARD_ONLY"]},
+    {"tier_id": 2, "role": "FROZEN_CROSS_MARKET_REPLICATION", "symbols": ["ES", "NQ", "CL", "NG", "RB", "GC", "HG", "SR3", "ZN", "ZB", "6E", "6J", "ZC", "ZS", "LE", "HE"], "year_policy": ["2018-2022_FROZEN_REPLICATION_NOT_SELECTION", "2023-2024_PREVIOUSLY_USED_NON_PRISTINE", "2025_LOCKED_HOLDOUT", "2026_FORWARD_ONLY", "SR3_2018_FORMATION_ONLY"]},
+    {"tier_id": 3, "role": "FULL_TRADITIONAL_CANDIDATE", "symbols": ["ES", "NQ", "RTY", "YM", "CL", "NG", "RB", "HO", "GC", "SI", "HG", "PL", "SR3", "SR1", "ZQ", "TN", "ZT", "ZF", "ZN", "ZB", "UB", "6A", "6B", "6C", "6E", "6J", "6M", "6N", "6S", "ZC", "ZS", "ZL", "ZM", "ZW", "KE", "LE", "HE", "GF"], "year_policy": ["EACH_MARKET_YEAR_REQUIRES_POINT_IN_TIME_ADMISSION", "2012-2016_LEGACY_FEED_STRESS", "2017_FEED_TRANSITION_STRESS", "2018-2024_REPLICATION_NOT_DISCOVERY", "2025_LOCKED_HOLDOUT", "2026_FORWARD_ONLY"]},
+    {"tier_id": 4, "role": "SATELLITE_AND_FRONTIER_STRESS", "symbols": ["BTC", "ETH", "PA"], "year_policy": ["SEPARATE_REPORTING_ONLY", "NEVER_RESCUES_TRADITIONAL_UNIVERSE_FAILURE", "POINT_IN_TIME_ADMISSION_REQUIRED"]}
+  ],
+  "cohorts": [
+    {"role": "DATA_QUALITY_ONLY", "years": ["2010"], "selection_eligible": false},
+    {"role": "FORMATION_CONTEXT", "years": ["2011"], "selection_eligible": false},
+    {"role": "LEGACY_FEED_STRESS", "years": ["2012-2016"], "selection_eligible": false},
+    {"role": "FEED_TRANSITION_STRESS", "years": ["2017"], "selection_eligible": false},
+    {"role": "DISCOVERY", "years": ["2018-2022"], "selection_eligible": true},
+    {"role": "PREVIOUSLY_USED_NON_PRISTINE_RESEARCH", "years": ["2023-2024"], "selection_eligible": false},
+    {"role": "LOCKED_UNTOUCHED_FINAL_HOLDOUT", "years": ["2025"], "selection_eligible": false},
+    {"role": "FORWARD_ONLY", "years": ["2026-partial"], "selection_eligible": false}
+  ],
+  "admission_policy": {
+    "decision_basis": "INFORMATION_AVAILABLE_THROUGH_PRIOR_MARKET_YEAR_ONLY",
+    "pnl_driven_membership_changes_forbidden": true,
+    "thresholds_must_be_frozen_before_coverage_audit": true,
+    "failed_and_sparse_market_years_must_be_retained": true
+  },
+  "evidence_rules": {
+    "balance_by_market_and_economic_family": true,
+    "raw_minute_rows_are_not_effective_sample_size": true,
+    "leave_one_market_and_family_out_required": true,
+    "satellite_results_reported_separately": true,
+    "full_l0_history_cannot_prove_historical_executable_spreads": true
+  },
+  "closed_legacy_lines": ["ORAC", "DISTRIBUTIONAL", "FAILED_LEGACY_ALPHA"]
+}

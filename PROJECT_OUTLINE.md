@@ -1,5 +1,14 @@
 # Project outline
 
+## Goal
+
+Build an independent, reproducible, bias-resistant futures research and manual
+decision-support system from approved, hash-verified local data and causal/as-of
+releases. Historical WFA/OOS, candidate sealing, and prospective inference
+advance only through separate authorization and evidence gates. The rebuild
+itself makes no alpha or trading claim, and automatic execution remains out of
+scope.
+
 ## Status vocabulary
 
 1. `REBUILD_IN_PROGRESS` - code, copied inputs, foundation, or required publications remain incomplete.
@@ -74,7 +83,13 @@ M1 completion does not imply that any real input was copied or that a milestone 
 - Materialize status/statistics as-of records, features, and separate outcome-source releases.
 - Preserve missing/unknown status as `STATUS_UNRESOLVED`, deny eligibility, and retain the row in coverage denominators.
 - Prove future source or roll changes cannot alter earlier rows or eligibility.
-- Pass all production coverage gates:
+- Preserve a complete archive census across every selected interval, including
+  pre-status-capability rows and their unresolved dispositions.
+- Apply the unchanged production thresholds only to the hash-bound research
+  scope beginning `2025-01-01`, the first complete UTC year after Databento
+  introduced CME status in July 2024. Every selected interval from that date
+  forward must pass; earlier intervals remain preserved and explicitly abstain.
+- Pass all research-scope production coverage gates:
   - at least 1,000,000 bars;
   - at least 100,000 status-eligible rows;
   - at least 100,000 status-gated feature-ready rows;

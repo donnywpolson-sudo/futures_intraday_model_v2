@@ -48,7 +48,15 @@ Continuous symbols are selection references only. Databento `.v.0` uses previous
 
 Status and statistics are causal, as-received source families. At a decision time, only records whose event and receive timestamps are already available may be used. Missing, unknown, halted, suspended, deleted, or ambiguous status fails closed as `STATUS_UNRESOLVED`; the row remains in the coverage denominator and is not eligible for a feature or trade.
 
-A production foundation must satisfy all of these gates:
+A production foundation preserves an all-history archive census, including
+unresolved rows. Trust-eligible historical research is separately restricted by
+`configs/status_research_scope_policy.json` to intervals beginning
+`2025-01-01`, the first complete UTC year after Databento introduced CME status
+in July 2024. This boundary is source-capability based, not chosen from model
+outcomes. Every selected interval at or after the boundary must pass; earlier
+history remains immutable and explicitly abstains.
+
+The research scope must satisfy all of these gates:
 
 - at least 1,000,000 bar rows;
 - at least 100,000 status-eligible rows;

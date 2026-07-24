@@ -6,7 +6,7 @@ import json
 import math
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from types import MappingProxyType
@@ -20,13 +20,25 @@ from .economics import VerifiedContractEconomics, VerifiedEconomicsRegistry
 from .errors import ContractError, IntegrityError
 from .identity import ContractDefinition, DefinitionObservation, ActualContractIdentity
 from .predictor import TrustedPredictor, TrustedPredictorLoader, TrustedRawForecast
-from .release import VerifiedReleaseReceipt
+from .data_layout import DataReleaseReceipt as VerifiedReleaseReceipt
 from .schemas import FeatureRow, PredictionRow, prediction_id_for
 from .time_contracts import require_utc
 
 
 RawForecast = TrustedRawForecast
 _VERIFIED_IDENTITY_FACTORY = object()
+_UINT64_NULL = 2**64 - 1
+_FULL_LIFECYCLE_DEFINITION_SCHEMAS = {"2.0.0", "2.1.0"}
+
+
+def _datetime_to_microsecond_ns(value: datetime, name: str) -> int:
+    observed = require_utc(value, name)
+    delta = observed - datetime(1970, 1, 1, tzinfo=timezone.utc)
+    return (
+        delta.days * 86_400_000_000_000
+        + delta.seconds * 1_000_000_000
+        + delta.microseconds * 1_000
+    )
 
 
 @dataclass(frozen=True)
@@ -83,11 +95,17 @@ class VerifiedIdentityRegistry:
         cls, receipt: VerifiedReleaseReceipt, boundary: RepoBoundary
     ) -> "VerifiedIdentityRegistry":
         manifest = receipt.verify(boundary)
-        if manifest.release_kind != "actual_contract_definitions":
+        if (
+            receipt.phase != "reference"
+            or manifest.release_kind != "actual_contract_definitions"
+            or manifest.schema_version not in {"1.0.0", "2.0.0", "2.1.0"}
+        ):
             raise IntegrityError("definition receipt has the wrong release kind")
-        if {entry.path for entry in manifest.files} != {"identities.json"}:
+        if {
+            entry.logical_path for entry in manifest.files
+        } != {"data/reference/definitions/identities.json"}:
             raise IntegrityError("definition release must contain exactly identities.json")
-        path = boundary.active_root / receipt.relative_root / "identities.json"
+        path = receipt.resolve_unique_filename("identities.json", boundary)
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
@@ -96,11 +114,45 @@ class VerifiedIdentityRegistry:
         if (
             not isinstance(payload, dict)
             or set(payload) != {"records", "schema_version"}
-            or schema_version not in {"1.0.0", "1.1.0"}
+            or schema_version not in {"1.0.0", "1.1.0", "2.0.0", "2.1.0"}
+            or schema_version != manifest.schema_version
             or not isinstance(payload.get("records"), list)
-            or not payload["records"]
         ):
             raise IntegrityError("definition registry schema/version is invalid")
+        if schema_version == "2.1.0":
+            audit = manifest.embedded_documents.get("definition_ineligibility.json")
+            audit_fields = {
+                "definition_ineligibility_ledger_id",
+                "eligible_definition_row_count",
+                "ineligible_definition_row_count",
+                "records",
+                "schema_version",
+                "source_definition_row_count",
+            }
+            if not isinstance(audit, dict) or set(audit) != audit_fields:
+                raise IntegrityError("definition ineligibility ledger is absent or invalid")
+            audit_core = {
+                key: value
+                for key, value in audit.items()
+                if key != "definition_ineligibility_ledger_id"
+            }
+            if (
+                audit.get("schema_version") != "1.0.0"
+                or not isinstance(audit.get("records"), list)
+                or type(audit.get("eligible_definition_row_count")) is not int
+                or type(audit.get("ineligible_definition_row_count")) is not int
+                or type(audit.get("source_definition_row_count")) is not int
+                or audit["eligible_definition_row_count"] != len(payload["records"])
+                or audit["ineligible_definition_row_count"] != len(audit["records"])
+                or audit["source_definition_row_count"]
+                != len(payload["records"]) + len(audit["records"])
+                or audit["source_definition_row_count"] <= 0
+                or audit.get("definition_ineligibility_ledger_id")
+                != sha256_json(audit_core)
+            ):
+                raise IntegrityError("definition ineligibility ledger census is invalid")
+        elif not payload["records"]:
+            raise IntegrityError("legacy definition registry cannot be empty")
         expected = {
             "available_at",
             "currency",
@@ -127,52 +179,91 @@ class VerifiedIdentityRegistry:
             "provider_unit_of_measure",
             "provider_unit_of_measure_qty_nano",
         }
-        if schema_version == "1.1.0":
+        lifecycle_fields = {
+            "definition_index_date_utc",
+            "expires_at",
+            "instrument_class",
+            "provider_definition_activation_ns",
+            "provider_definition_expiration_ns",
+            "provider_event_at",
+            "security_type",
+            "security_update_action",
+            "source_row_ordinal",
+        }
+        if schema_version in {"1.1.0", *_FULL_LIFECYCLE_DEFINITION_SCHEMAS}:
             expected |= bridge_fields
+        if schema_version in _FULL_LIFECYCLE_DEFINITION_SCHEMAS:
+            expected |= lifecycle_fields
         definitions: dict[str, DefinitionObservation] = {}
         for raw in payload["records"]:
             if not isinstance(raw, dict) or set(raw) != expected:
                 raise IntegrityError("definition row schema is invalid")
+            common_string_fields = {
+                "available_at",
+                "currency",
+                "dataset",
+                "exchange",
+                "min_tick",
+                "multiplier",
+                "raw_symbol",
+                "source_received_at",
+            }
+            bridge_integer_fields = {
+                "provider_definition_ts_event_ns",
+                "provider_definition_ts_recv_ns",
+                "provider_min_price_increment_nano",
+                "provider_unit_of_measure_qty_nano",
+            }
             if (
-                any(
-                    type(raw[name]) is not str
-                    for name in (
-                        "available_at",
-                        "currency",
-                        "dataset",
-                        "effective_at",
-                        "exchange",
-                        "min_tick",
-                        "multiplier",
-                        "raw_symbol",
-                        "source_received_at",
-                    )
-                )
+                any(type(raw[name]) is not str for name in common_string_fields)
                 or any(
                     type(raw[name]) is not int
                     for name in ("instrument_id", "publisher_id")
                 )
                 or (
-                    schema_version == "1.1.0"
+                    schema_version not in _FULL_LIFECYCLE_DEFINITION_SCHEMAS
+                    and type(raw["effective_at"]) is not str
+                )
+                or (
+                    schema_version in _FULL_LIFECYCLE_DEFINITION_SCHEMAS
+                    and raw["effective_at"] is not None
+                    and type(raw["effective_at"]) is not str
+                )
+                or (
+                    schema_version
+                    in {"1.1.0", *_FULL_LIFECYCLE_DEFINITION_SCHEMAS}
                     and (
                         any(
                             type(raw[name]) is not str
-                            for name in bridge_fields.difference(
-                                {
-                                    "provider_definition_ts_event_ns",
-                                    "provider_definition_ts_recv_ns",
-                                    "provider_min_price_increment_nano",
-                                    "provider_unit_of_measure_qty_nano",
-                                }
+                            for name in bridge_fields - bridge_integer_fields
+                        )
+                        or any(
+                            type(raw[name]) is not int
+                            for name in bridge_integer_fields
+                        )
+                    )
+                )
+                or (
+                    schema_version in _FULL_LIFECYCLE_DEFINITION_SCHEMAS
+                    and (
+                        raw["expires_at"] is not None
+                        and type(raw["expires_at"]) is not str
+                        or any(
+                            type(raw[name]) is not str
+                            for name in (
+                                "definition_index_date_utc",
+                                "instrument_class",
+                                "provider_event_at",
+                                "security_type",
+                                "security_update_action",
                             )
                         )
                         or any(
                             type(raw[name]) is not int
                             for name in (
-                                "provider_definition_ts_event_ns",
-                                "provider_definition_ts_recv_ns",
-                                "provider_min_price_increment_nano",
-                                "provider_unit_of_measure_qty_nano",
+                                "provider_definition_activation_ns",
+                                "provider_definition_expiration_ns",
+                                "source_row_ordinal",
                             )
                         )
                     )
@@ -181,6 +272,11 @@ class VerifiedIdentityRegistry:
                 raise IntegrityError("definition row field types are not exact")
             row_id = sha256_json(raw)
             try:
+                effective_at = (
+                    None
+                    if raw["effective_at"] is None
+                    else datetime.fromisoformat(raw["effective_at"])
+                )
                 definition = ContractDefinition(
                     dataset=raw["dataset"],
                     publisher_id=raw["publisher_id"],
@@ -196,11 +292,92 @@ class VerifiedIdentityRegistry:
                 )
                 observation = DefinitionObservation(
                     definition=definition,
-                    effective_at=datetime.fromisoformat(raw["effective_at"]),
+                    effective_at=effective_at,
                     source_received_at=datetime.fromisoformat(raw["source_received_at"]),
                     available_at=datetime.fromisoformat(raw["available_at"]),
                     source_release_id=receipt.release_id,
+                    expires_at=(
+                        None
+                        if schema_version not in _FULL_LIFECYCLE_DEFINITION_SCHEMAS
+                        or raw["expires_at"] is None
+                        else datetime.fromisoformat(raw["expires_at"])
+                    ),
+                    provider_event_at=(
+                        None
+                        if schema_version not in _FULL_LIFECYCLE_DEFINITION_SCHEMAS
+                        else datetime.fromisoformat(raw["provider_event_at"])
+                    ),
+                    definition_index_date_utc=(
+                        None
+                        if schema_version not in _FULL_LIFECYCLE_DEFINITION_SCHEMAS
+                        else date.fromisoformat(raw["definition_index_date_utc"])
+                    ),
+                    security_update_action=(
+                        "ADD"
+                        if schema_version not in _FULL_LIFECYCLE_DEFINITION_SCHEMAS
+                        else raw["security_update_action"]
+                    ),
+                    instrument_class=(
+                        "FUTURE"
+                        if schema_version not in _FULL_LIFECYCLE_DEFINITION_SCHEMAS
+                        else raw["instrument_class"]
+                    ),
+                    security_type=(
+                        "FUT"
+                        if schema_version not in _FULL_LIFECYCLE_DEFINITION_SCHEMAS
+                        else raw["security_type"]
+                    ),
+                    source_file_path=(
+                        "LEGACY_UNSPECIFIED"
+                        if schema_version == "1.0.0"
+                        else raw["provider_source_file_path"]
+                    ),
+                    source_row_ordinal=(
+                        0
+                        if schema_version not in _FULL_LIFECYCLE_DEFINITION_SCHEMAS
+                        else raw["source_row_ordinal"]
+                    ),
                 )
+                if schema_version in _FULL_LIFECYCLE_DEFINITION_SCHEMAS:
+                    activation_ns = raw["provider_definition_activation_ns"]
+                    expiration_ns = raw["provider_definition_expiration_ns"]
+                    event_ns = raw["provider_definition_ts_event_ns"]
+                    receive_ns = raw["provider_definition_ts_recv_ns"]
+                    activation_null = activation_ns in {0, _UINT64_NULL}
+                    expiration_null = expiration_ns in {0, _UINT64_NULL}
+                    if (
+                        activation_null != (observation.effective_at is None)
+                        or expiration_null != (observation.expires_at is None)
+                        or (
+                            observation.effective_at is not None
+                            and _datetime_to_microsecond_ns(
+                                observation.effective_at, "definition activation"
+                            )
+                            != activation_ns - activation_ns % 1_000
+                        )
+                        or (
+                            observation.expires_at is not None
+                            and _datetime_to_microsecond_ns(
+                                observation.expires_at, "definition expiration"
+                            )
+                            != expiration_ns - expiration_ns % 1_000
+                        )
+                        or observation.provider_event_at is None
+                        or _datetime_to_microsecond_ns(
+                            observation.provider_event_at, "definition provider event"
+                        )
+                        != event_ns - event_ns % 1_000
+                        or _datetime_to_microsecond_ns(
+                            observation.source_received_at, "definition index timestamp"
+                        )
+                        != receive_ns - receive_ns % 1_000
+                        or observation.available_at != observation.source_received_at
+                        or observation.definition_index_date_utc
+                        != observation.source_received_at.date()
+                    ):
+                        raise ContractError(
+                            "definition lifecycle/index timestamps contradict exact nanoseconds"
+                        )
             except (
                 KeyError,
                 TypeError,
@@ -216,9 +393,33 @@ class VerifiedIdentityRegistry:
             "definitions": {
                 key: {
                     "definition": definitions[key].definition.as_dict(),
-                    "effective_at": definitions[key].effective_at.isoformat(),
+                    "definition_index_date_utc": (
+                        None
+                        if definitions[key].definition_index_date_utc is None
+                        else definitions[key].definition_index_date_utc.isoformat()
+                    ),
+                    "effective_at": (
+                        None
+                        if definitions[key].effective_at is None
+                        else definitions[key].effective_at.isoformat()
+                    ),
+                    "expires_at": (
+                        None
+                        if definitions[key].expires_at is None
+                        else definitions[key].expires_at.isoformat()
+                    ),
+                    "instrument_class": definitions[key].instrument_class,
+                    "provider_event_at": (
+                        None
+                        if definitions[key].provider_event_at is None
+                        else definitions[key].provider_event_at.isoformat()
+                    ),
+                    "security_type": definitions[key].security_type,
+                    "security_update_action": definitions[key].security_update_action,
+                    "source_file_path": definitions[key].source_file_path,
                     "source_received_at": definitions[key].source_received_at.isoformat(),
                     "available_at": definitions[key].available_at.isoformat(),
+                    "source_row_ordinal": definitions[key].source_row_ordinal,
                 }
                 for key in sorted(definitions)
             },
@@ -259,6 +460,67 @@ class VerifiedIdentityRegistry:
         if observation is None:
             return False
         definition = observation.definition
+        if observation.definition_index_date_utc is not None:
+            peers = [
+                item
+                for item in self.definitions.values()
+                if item.definition.lookup_key == definition.lookup_key
+                and item.definition_index_date_utc == event.date()
+                and item.source_received_at <= decision
+                and item.available_at <= decision
+            ]
+            baseline = [
+                item
+                for item in peers
+                if item.source_received_at <= event and item.available_at <= event
+            ]
+            if not baseline:
+                return False
+
+            def semantic_state(item: DefinitionObservation) -> tuple[object, ...]:
+                candidate = item.definition
+                return (
+                    candidate.dataset,
+                    candidate.publisher_id,
+                    candidate.instrument_id,
+                    candidate.raw_symbol,
+                    candidate.exchange,
+                    candidate.currency,
+                    candidate.multiplier,
+                    candidate.min_tick,
+                    item.effective_at,
+                    item.expires_at,
+                    item.security_update_action,
+                    item.instrument_class,
+                    item.security_type,
+                )
+
+            latest_received = max(item.source_received_at for item in baseline)
+            ties = [
+                item for item in baseline if item.source_received_at == latest_received
+            ]
+            by_file: dict[str, list[DefinitionObservation]] = {}
+            for item in ties:
+                by_file.setdefault(item.source_file_path, []).append(item)
+            sequences: dict[str, tuple[tuple[object, ...], ...]] = {}
+            for source_path, items in by_file.items():
+                if len({item.source_row_ordinal for item in items}) != len(items):
+                    return False
+                items.sort(key=lambda item: item.source_row_ordinal)
+                sequences[source_path] = tuple(semantic_state(item) for item in items)
+            if len(set(sequences.values())) != 1:
+                return False
+            selected_path = min(sequences)
+            selected = max(
+                by_file[selected_path], key=lambda item: item.source_row_ordinal
+            )
+            if selected.definition.definition_row_id != actual.definition_row_id:
+                return False
+            if any(
+                item.source_received_at > event or item.available_at > event
+                for item in peers
+            ):
+                return False
         return (
             definition.dataset == actual.dataset
             and definition.publisher_id == actual.publisher_id
@@ -271,7 +533,28 @@ class VerifiedIdentityRegistry:
             and definition.currency == actual.currency
             and definition.multiplier == actual.multiplier
             and definition.min_tick == actual.min_tick
+            and observation.security_update_action in {"ADD", "MODIFY"}
+            and observation.instrument_class == "FUTURE"
+            and observation.security_type == "FUT"
+            and observation.effective_at is not None
             and observation.effective_at <= event
+            and (
+                observation.expires_at is None
+                and observation.definition_index_date_utc is None
+                or observation.expires_at is not None
+                and event < observation.expires_at
+            )
+            and (
+                observation.definition_index_date_utc is None
+                or observation.definition_index_date_utc
+                == actual.instrument_id_date_utc
+                == event.date()
+            )
+            and (
+                observation.definition_index_date_utc is None
+                or observation.source_received_at <= event
+                and observation.available_at <= event
+            )
             and observation.source_received_at <= decision
             and observation.available_at <= decision
         )

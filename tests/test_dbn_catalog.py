@@ -10,6 +10,10 @@ import pytest
 import zstandard
 
 from futures_rebuild.canonical import sha256_file, sha256_json
+from futures_rebuild.anomaly_acceptance import (
+    ACCEPTANCE_DOCUMENT,
+    publish_anomaly_materialization_acceptance,
+)
 from futures_rebuild.boundary import (
     OperationClassification,
     OperationReceipt,
@@ -33,15 +37,12 @@ from futures_rebuild.dbn_catalog import (
     validate_dbn_pair,
 )
 from futures_rebuild.errors import ContractError, IntegrityError, UnauthorizedOperation
-from futures_rebuild.migration import (
-    MigrationApproval,
-    approval_payload_for_review,
-    guarded_copy,
-    inventory,
-    load_manifest,
-    migration_authorization_scope,
+from futures_rebuild.data_layout import (
+    DataReleaseManifest as ReleaseManifest,
+    DataReleaseReceipt as VerifiedReleaseReceipt,
+    PhasePublisher as AtomicPublisher,
 )
-from futures_rebuild.release import AtomicPublisher, ReleaseManifest, VerifiedReleaseReceipt
+from futures_rebuild.foundation.snapshot import PublishedDbnRelease
 
 
 START_NS = 1_767_225_600_000_000_000
@@ -97,11 +98,11 @@ def test_overlap_resolution_cannot_silently_cross_query_modes(tmp_path) -> None:
     with pytest.raises(IntegrityError, match="crosses query modes"):
         module._apply_overlap_resolution(
             family_id="dbn_ohlcv_1m",
-            prior=authoritative,
-            current=redundant,
-            resolutions=(resolution,),
-            dbn_root=tmp_path,
-        )
+                prior=authoritative,
+                current=redundant,
+                resolutions=(resolution,),
+                resolve_logical_path=lambda _logical: tmp_path,
+            )
 
 
 def _write_pair(
@@ -452,51 +453,107 @@ def test_known_anomaly_is_quarantined_until_exact_verified_acceptance(tmp_path) 
         market="KE",
         year=2019,
     )
-    boundary, contract, anomalies = _catalog_context(tmp_path, legacy)
-    selection = build_source_selection_manifest(
-        legacy,
-        contract,
-        boundary=boundary,
-        known_anomaly_contract_path=anomalies,
+    project = tmp_path / "project"
+    boundary, _, anomalies = _catalog_context(
+        tmp_path, legacy, active=project
     )
-    quarantined = selection["files"][0]
-    assert quarantined["coverage_disposition"] == "QUARANTINED_PENDING_REVALIDATION"
-    with pytest.raises(IntegrityError, match="unaccepted quarantined anomaly"):
-        assert_m2b_source_eligible(selection, acceptance_receipts=(), boundary=boundary)
-
     operation = OperationReceipt.issue_local(
         boundary,
         operation="PUBLISH_RELEASE",
         classification=OperationClassification.SYNTHETIC_MECHANICS_ONLY,
     )
     publisher = AtomicPublisher(
-        boundary.active_root / "data" / "vault" / ".staging" / "releases" / "acceptance",
-        boundary.active_root / "data" / "vault" / "releases",
-        boundary.active_root / "state" / "locks" / "acceptance.lock",
         boundary=boundary,
         operation_receipt=operation,
+        lock_path=boundary.active_root / "state" / "locks" / "publication.lock",
     )
-    stage = publisher.create_stage("acceptance")
-    (stage / "acceptance.json").write_text(
-        json.dumps(
-            {
-                "accepted_validation_sha256": quarantined["validation_sha256"],
-                "anomaly_contract_sha256": selection["known_anomalies_sha256"],
-                "status": "ACCEPTED_AFTER_CAUSAL_REVALIDATION",
-            },
-            sort_keys=True,
-            separators=(",", ":"),
-        ),
-        encoding="utf-8",
+    source = next((legacy / "data" / "dbn" / "ohlcv_1m" / "KE" / "2019").glob("*.dbn.zst"))
+    sidecar = Path(f"{source}.manifest.json")
+    stage = publisher.create_stage("dbn")
+    (stage / source.name).write_bytes(source.read_bytes())
+    (stage / sidecar.name).write_bytes(sidecar.read_bytes())
+    logical_root = "data/dbn/ohlcv_1m/KE/2019"
+    source_manifest = ReleaseManifest.build(
+        stage,
+        phase="dbn",
+        release_kind="futures_phase1a_verified_dbn",
+        schema_version="1.0.0",
+        logical_paths={
+            source.name: f"{logical_root}/{source.name}",
+            sidecar.name: f"{logical_root}/{sidecar.name}",
+        },
     )
-    manifest = ReleaseManifest.build(
-        stage, release_kind="anomaly_acceptance", schema_version="1.0.0"
+    source_manifest_path = publisher.publish(stage, source_manifest)
+    snapshot = PublishedDbnRelease.open(source_manifest_path, boundary=boundary)
+    binding = snapshot.file(
+        f"dbn/ohlcv_1m/KE/2019/{source.name}"
     )
-    release = publisher.publish(stage, manifest)
-    receipt = VerifiedReleaseReceipt.from_release(release, boundary)
+    sidecar_binding = snapshot.file(f"{binding.relative_path}.manifest.json")
+    validated = validate_dbn_pair(
+        binding.path,
+        logical_path=f"data/{binding.relative_path}",
+        sidecar_path=sidecar_binding.path,
+        expected_schema="ohlcv-1m",
+        role="immutable_provider_source_and_canonical_research_input",
+    )
+    entry_core = {
+        **{key: value for key, value in validated.items() if key != "validation_sha256"},
+        "coverage_disposition": "QUARANTINED_PENDING_REVALIDATION",
+        "family": "dbn_ohlcv_1m",
+    }
+    quarantined = {
+        **entry_core,
+        "validation_sha256": sha256_json(entry_core),
+    }
+    selection_core = {
+        "catalog_contract_version": "2.0.0",
+        "dataset": "GLBX.MDP3",
+        "families": [{"family": "dbn_ohlcv_1m"}],
+        "files": [quarantined],
+        "known_anomalies_sha256": sha256_file(anomalies),
+        "selection_policy": "EXACT_CONTRACT_ALL_FILES_NO_RECURSIVE_NEWEST",
+        "selection_scope": "FILTERED",
+        "source_dbn_manifest_sha256": snapshot.source_manifest_sha256,
+        "source_dbn_release_id": snapshot.source_release_id,
+        "source_scope": "VERIFIED_LAYOUT_V2_DBN_RELEASE",
+    }
+    selection = {
+        **selection_core,
+        "selection_manifest_id": sha256_json(selection_core),
+    }
+    with pytest.raises(IntegrityError, match="one exact aggregate acceptance"):
+        assert_m2b_source_eligible(
+            selection, acceptance_receipts=(), boundary=boundary
+        )
+    with pytest.raises(ContractError, match="exceed the explicit scan cap"):
+        publish_anomaly_materialization_acceptance(
+            selection,
+            snapshot=snapshot,
+            publisher=publisher,
+            maximum_total_bytes=binding.size - 1,
+        )
+    receipt = publish_anomaly_materialization_acceptance(
+        selection,
+        snapshot=snapshot,
+        publisher=publisher,
+        maximum_total_bytes=binding.size,
+    )
     assert_m2b_source_eligible(
         selection, acceptance_receipts=(receipt,), boundary=boundary
     )
+    acceptance = receipt.embedded_document(ACCEPTANCE_DOCUMENT, boundary)
+    assert acceptance["causal_quarantine_retained"] is True
+    assert acceptance["research_eligibility_granted"] is False
+    assert acceptance["provider_call_count"] == 0
+    assert acceptance["validations"][0]["record_count"] == 1
+
+    anomaly_payload = json.loads(anomalies.read_text(encoding="utf-8"))
+    anomaly_payload["promotion_requirement"] = "mutated"
+    anomalies.write_text(json.dumps(anomaly_payload), encoding="utf-8")
+    with pytest.raises(IntegrityError, match="changed after catalog creation"):
+        assert_m2b_source_eligible(
+            selection, acceptance_receipts=(receipt,), boundary=boundary
+        )
 
 
 def test_default_decode_consumes_only_one_bounded_chunk(tmp_path, monkeypatch) -> None:
@@ -774,94 +831,115 @@ def test_exact_hash_pinned_overlap_selects_broad_and_preserves_redundant(tmp_pat
         )
 
 
-def test_catalog_binds_verified_published_snapshot_receipt(tmp_path) -> None:
+def test_catalog_binds_verified_layout_v2_dbn_manifest(tmp_path) -> None:
     legacy = tmp_path / "legacy"
-    _write_pair(legacy)
+    source = _write_pair(legacy)
     project = tmp_path / "project"
-    manifest_path = tmp_path / "migration.json"
-    manifest_path.write_text(
-        json.dumps(
-            {
-                "migration_id": "synthetic_dbn_snapshot",
-                "source_root": str(legacy.resolve()),
-                "destination_root": str(
-                    (project / "data" / "vault" / ".staging" / "import").resolve()
-                ),
-                "publication_root": str(
-                    (project / "data" / "vault" / "source_snapshots").resolve()
-                ),
-                "state_root": str((project / "state" / "migrations").resolve()),
-                "lock_path": str((project / "state" / "locks" / "migration.lock").resolve()),
-                "copy_authorized": True,
-                "policy": {
-                    "operation": "copy_only",
-                    "overwrite": False,
-                    "follow_links": False,
-                    "require_source_stable_during_copy": True,
-                    "verify_destination_sha256": True,
-                },
-                "entries": [
-                    {
-                        "family": "dbn_ohlcv_1m",
-                        "source": "data/dbn/ohlcv_1m",
-                        "destination": "dbn/ohlcv_1m",
-                        "disposition": "validate_then_promote",
-                    }
-                ],
-            }
-        ),
-        encoding="utf-8",
-    )
-    migration, manifest_hash = load_manifest(manifest_path)
-    source_inventory = inventory(migration, manifest_hash)
-    approved_inventory = source_inventory["inventory_sha256"]
-    approval = MigrationApproval.from_dict(
-        approval_payload_for_review(
-            manifest_hash=manifest_hash,
-            source_inventory=source_inventory,
-            approved_at="2026-07-15T00:00:00Z",
-        )
-    )
+    project.mkdir()
+    (project / "bundles").mkdir()
     copy_boundary = RepoBoundary(project.resolve(), (legacy.resolve(),), ())
-    copy_receipt = OperationReceipt.issue_local(
+    operation = OperationReceipt.issue_local(
         copy_boundary,
-        operation="COPY_SOURCE_SNAPSHOT",
+        operation="PUBLISH_RELEASE",
         classification=OperationClassification.SYNTHETIC_MECHANICS_ONLY,
-        scope=migration_authorization_scope(
-            migration, manifest_hash, approved_inventory, approval
-        ),
     )
-    copied = guarded_copy(
-        migration,
-        manifest_hash,
-        manifest_hash,
-        approved_inventory,
-        migration_approval=approval,
+    publisher = AtomicPublisher(
         boundary=copy_boundary,
-        operation_receipt=copy_receipt,
+        operation_receipt=operation,
+        lock_path=project / "state" / "locks" / "dbn-layout.lock",
     )
-    snapshot = Path(str(copied["publication_path"]))
+    stage = publisher.create_stage("dbn")
+    filename = source.name
+    sidecar = Path(f"{source}.manifest.json")
+    (stage / filename).write_bytes(source.read_bytes())
+    (stage / sidecar.name).write_bytes(sidecar.read_bytes())
+    logical_root = "data/dbn/ohlcv_1m/ES/2026"
+    manifest = ReleaseManifest.build(
+        stage,
+        phase="dbn",
+        release_kind="futures_phase1a_verified_dbn",
+        schema_version="1.0.0",
+        logical_paths={
+            filename: f"{logical_root}/{filename}",
+            sidecar.name: f"{logical_root}/{sidecar.name}",
+        },
+    )
+    dbn_manifest_path = publisher.publish(stage, manifest)
+    dbn_receipt = VerifiedReleaseReceipt.from_manifest(
+        dbn_manifest_path, copy_boundary
+    )
     boundary, source_contract, anomalies = _catalog_context(
         tmp_path, legacy, active=project
     )
+    layout_contract = project / "configs" / "data_layout_contract.json"
+    layout_contract.write_bytes(
+        (
+            Path(__file__).resolve().parents[1]
+            / "configs"
+            / "data_layout_contract.json"
+        ).read_bytes()
+    )
+    contract_payload = json.loads(source_contract.read_text(encoding="utf-8"))
+    contract_payload.update(
+        {
+            "contract_version": "2.0.0",
+            "provider": {
+                "name": "Databento",
+                "dataset": "GLBX.MDP3",
+                "paid_calls_authorized": False,
+                "downloads_authorized": False,
+            },
+            "data_layout": {
+                "layout_version": "2.0.0",
+                "layout_contract_path": "configs/data_layout_contract.json",
+                "layout_contract_sha256": sha256_file(layout_contract),
+                "manifest_root": "manifests/data_releases",
+                "staging_root": "state/data_publication_staging",
+                "phase1b_logical_template": (
+                    "data/raw/{market}/{year}/{interval}/{filename}"
+                ),
+                "phase1b_physical_template": (
+                    "data/raw/{market}/{year}/{interval}/{release-id}/{filename}"
+                ),
+                "phase2_logical_template": (
+                    "data/causally_gated_normalized/{market}/{year}/{interval}/{filename}"
+                ),
+                "phase2_physical_template": (
+                    "data/causally_gated_normalized/{market}/{year}/{interval}/"
+                    "{release-id}/{filename}"
+                ),
+            },
+            "canonical_dbn_release": {
+                "phase": dbn_receipt.phase,
+                "release_id": dbn_receipt.release_id,
+                "release_kind": dbn_receipt.release_kind,
+                "schema_version": dbn_receipt.schema_version,
+                "manifest_path": dbn_receipt.manifest_path,
+                "manifest_sha256": dbn_receipt.manifest_sha256,
+                "dbn_files": 1,
+                "sidecar_files": 1,
+                "combined_files": 2,
+                "combined_bytes": sum(item.size for item in manifest.files),
+            },
+        }
+    )
+    source_contract.write_text(json.dumps(contract_payload), encoding="utf-8")
     result = build_source_selection_manifest(
         project,
         source_contract,
         boundary=boundary,
         known_anomaly_contract_path=anomalies,
-        source_snapshot_root=snapshot,
+        source_dbn_manifest_path=dbn_manifest_path,
     )
-    assert result["source_scope"] == "VERIFIED_PUBLISHED_SOURCE_SNAPSHOT"
-    assert result["source_snapshot_id"] == copied["source_snapshot_id"]
-    receipt = snapshot / "SOURCE_SNAPSHOT_RECEIPT.json"
-    payload = json.loads(receipt.read_text(encoding="utf-8"))
-    payload["status"] = "INCOMPLETE"
-    receipt.write_text(json.dumps(payload), encoding="utf-8")
-    with pytest.raises(IntegrityError, match="not complete"):
+    assert result["source_scope"] == "VERIFIED_LAYOUT_V2_DBN_RELEASE"
+    assert result["source_dbn_release_id"] == manifest.release_id
+    payload_path = dbn_receipt.resolve_file(f"{logical_root}/{filename}", boundary)
+    payload_path.write_bytes(payload_path.read_bytes() + b"tamper")
+    with pytest.raises(IntegrityError, match="failed verification"):
         build_source_selection_manifest(
             project,
             source_contract,
             boundary=boundary,
             known_anomaly_contract_path=anomalies,
-            source_snapshot_root=snapshot,
+            source_dbn_manifest_path=dbn_manifest_path,
         )

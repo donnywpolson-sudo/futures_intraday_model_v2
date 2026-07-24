@@ -7,14 +7,19 @@ import json
 from dataclasses import dataclass
 from datetime import date
 from pathlib import Path
-from typing import Mapping
+from typing import Mapping, Sequence
 
+from ..anomaly_acceptance import assert_anomaly_materialization_eligible
 from ..boundary import OperationClassification, OperationReceipt, RepoBoundary
 from ..canonical import assert_plain_file, canonical_bytes, sha256_file, sha256_json
 from ..errors import ContractError, IntegrityError
-from ..release import AtomicPublisher, ReleaseManifest, VerifiedReleaseReceipt
+from ..data_layout import (
+    DataReleaseManifest as ReleaseManifest,
+    DataReleaseReceipt as VerifiedReleaseReceipt,
+    PhasePublisher as AtomicPublisher,
+)
 from ..source_symbology import require_query_contract
-from .snapshot import PublishedSourceSnapshot, SnapshotFile
+from .snapshot import DbnReleaseFile as SnapshotFile, PublishedDbnRelease as PublishedSourceSnapshot
 
 
 AUTHORITATIVE_COVERAGE_DISPOSITIONS = frozenset(
@@ -111,12 +116,13 @@ def publish_source_selection(
     *,
     snapshot: PublishedSourceSnapshot,
     publisher: AtomicPublisher,
+    acceptance_receipts: Sequence[VerifiedReleaseReceipt] = (),
 ) -> VerifiedReleaseReceipt:
     if (
         selection.get("catalog_contract_version") != "2.0.0"
         or
-        selection.get("source_scope") != "VERIFIED_PUBLISHED_SOURCE_SNAPSHOT"
-        or selection.get("source_snapshot_id") != snapshot.source_snapshot_id
+        selection.get("source_scope") != "VERIFIED_LAYOUT_V2_DBN_RELEASE"
+        or selection.get("source_dbn_release_id") != snapshot.source_release_id
         or selection.get("dataset") != "GLBX.MDP3"
         or selection.get("selection_policy")
         != "EXACT_CONTRACT_ALL_FILES_NO_RECURSIVE_NEWEST"
@@ -141,22 +147,38 @@ def publish_source_selection(
         raise IntegrityError(
             "source selection declares but does not contain every canonical family"
         )
+    assert_anomaly_materialization_eligible(
+        selection,
+        acceptance_receipts=acceptance_receipts,
+        snapshot=snapshot,
+        boundary=publisher.boundary,
+    )
     resolved = resolve_foundation_selection(selection, snapshot=snapshot)
+    acceptance_payload = [receipt.as_dict() for receipt in acceptance_receipts]
+    acceptance_release_ids = sorted(
+        receipt.release_id for receipt in acceptance_receipts
+    )
     stage = publisher.create_stage("source_selection")
-    (stage / "source_selection.json").write_bytes(canonical_bytes(selection) + b"\n")
     manifest = ReleaseManifest.build(
         stage,
+        phase="controls",
         release_kind=SELECTION_RELEASE_KIND,
         schema_version=SELECTION_SCHEMA_VERSION,
-        source_release_ids=(snapshot.source_snapshot_id,),
+        logical_paths={},
+        source_release_ids=(snapshot.source_release_id, *acceptance_release_ids),
+        embedded_documents={
+            "anomaly_acceptance_receipts.json": acceptance_payload,
+            "source_selection.json": selection,
+        },
         metadata={
+            "anomaly_acceptance_release_ids": acceptance_release_ids,
             "selection_manifest_id": selection_id,
-            "source_snapshot_id": snapshot.source_snapshot_id,
+            "source_dbn_release_id": snapshot.source_release_id,
             "query_manifest_id": resolved.query_manifest_id,
         },
     )
-    release = publisher.publish(stage, manifest)
-    return VerifiedReleaseReceipt.from_release(release, publisher.boundary)
+    manifest_path = publisher.publish(stage, manifest)
+    return VerifiedReleaseReceipt.from_manifest(manifest_path, publisher.boundary)
 
 
 def publish_catalog_selection(
@@ -165,6 +187,7 @@ def publish_catalog_selection(
     snapshot: PublishedSourceSnapshot,
     boundary: RepoBoundary,
     publisher: AtomicPublisher,
+    acceptance_receipts: Sequence[VerifiedReleaseReceipt] = (),
 ) -> VerifiedReleaseReceipt:
     """Promote one verified loose catalog into an immutable selection release."""
 
@@ -189,8 +212,86 @@ def publish_catalog_selection(
     if not isinstance(selection, dict) or raw != canonical_bytes(selection) + b"\n":
         raise IntegrityError("verified DBN catalog is not canonical JSON")
     return publish_source_selection(
-        selection, snapshot=snapshot, publisher=publisher
+        selection,
+        snapshot=snapshot,
+        publisher=publisher,
+        acceptance_receipts=acceptance_receipts,
     )
+
+
+def load_source_selection_with_resolution(
+    receipt: VerifiedReleaseReceipt,
+    *,
+    snapshot: PublishedSourceSnapshot,
+    boundary: RepoBoundary,
+) -> tuple[dict[str, object], ResolvedFoundationSelection]:
+    manifest = receipt.verify(boundary)
+    if (
+        receipt.phase != "controls"
+        or manifest.release_kind != SELECTION_RELEASE_KIND
+        or manifest.schema_version != SELECTION_SCHEMA_VERSION
+        or manifest.files
+        or set(manifest.embedded_documents)
+        != {"anomaly_acceptance_receipts.json", "source_selection.json"}
+        or set(manifest.metadata)
+        != {
+            "anomaly_acceptance_release_ids",
+            "query_manifest_id",
+            "selection_manifest_id",
+            "source_dbn_release_id",
+        }
+        or manifest.metadata["source_dbn_release_id"] != snapshot.source_release_id
+    ):
+        raise IntegrityError("source selection release contract is invalid")
+    raw_acceptance_receipts = receipt.embedded_document(
+        "anomaly_acceptance_receipts.json", boundary
+    )
+    raw_acceptance_ids = manifest.metadata["anomaly_acceptance_release_ids"]
+    if not isinstance(raw_acceptance_receipts, list) or not isinstance(
+        raw_acceptance_ids, list
+    ):
+        raise IntegrityError("source selection anomaly acceptance binding is invalid")
+    try:
+        acceptance_receipts = tuple(
+            VerifiedReleaseReceipt.from_dict(item)
+            for item in raw_acceptance_receipts
+            if isinstance(item, dict)
+        )
+    except IntegrityError as exc:
+        raise IntegrityError(
+            "source selection anomaly acceptance receipt is invalid"
+        ) from exc
+    acceptance_release_ids = sorted(
+        item.release_id for item in acceptance_receipts
+    )
+    if (
+        len(acceptance_receipts) != len(raw_acceptance_receipts)
+        or raw_acceptance_ids != acceptance_release_ids
+        or manifest.source_release_ids
+        != tuple(sorted((snapshot.source_release_id, *acceptance_release_ids)))
+    ):
+        raise IntegrityError("source selection anomaly acceptance closure is invalid")
+    selection = receipt.embedded_document("source_selection.json", boundary)
+    if not isinstance(selection, dict):
+        raise IntegrityError("source selection release document is invalid")
+    selection_id = selection.pop("selection_manifest_id", None)
+    if (
+        selection_id != sha256_json(selection)
+        or selection_id != manifest.metadata["selection_manifest_id"]
+        or selection.get("source_dbn_release_id") != snapshot.source_release_id
+    ):
+        raise IntegrityError("source selection release content address is invalid")
+    selection["selection_manifest_id"] = selection_id
+    assert_anomaly_materialization_eligible(
+        selection,
+        acceptance_receipts=acceptance_receipts,
+        snapshot=snapshot,
+        boundary=boundary,
+    )
+    resolved = resolve_foundation_selection(selection, snapshot=snapshot)
+    if resolved.query_manifest_id != manifest.metadata["query_manifest_id"]:
+        raise IntegrityError("source selection query manifest identity is invalid")
+    return selection, resolved
 
 
 def load_source_selection(
@@ -199,36 +300,13 @@ def load_source_selection(
     snapshot: PublishedSourceSnapshot,
     boundary: RepoBoundary,
 ) -> dict[str, object]:
-    manifest = receipt.verify(boundary)
-    if (
-        manifest.release_kind != SELECTION_RELEASE_KIND
-        or manifest.schema_version != SELECTION_SCHEMA_VERSION
-        or {entry.path for entry in manifest.files} != {"source_selection.json"}
-        or set(manifest.metadata)
-        != {"query_manifest_id", "selection_manifest_id", "source_snapshot_id"}
-        or manifest.metadata["source_snapshot_id"] != snapshot.source_snapshot_id
-        or manifest.source_release_ids != (snapshot.source_snapshot_id,)
-    ):
-        raise IntegrityError("source selection release contract is invalid")
-    path = boundary.active_root / receipt.relative_root / "source_selection.json"
-    try:
-        raw = path.read_bytes()
-        selection = json.loads(raw.decode("utf-8"))
-    except (OSError, UnicodeDecodeError, ValueError) as exc:
-        raise IntegrityError("source selection release JSON is invalid") from exc
-    if not isinstance(selection, dict) or raw != canonical_bytes(selection) + b"\n":
-        raise IntegrityError("source selection release is not canonical JSON")
-    selection_id = selection.pop("selection_manifest_id", None)
-    if (
-        selection_id != sha256_json(selection)
-        or selection_id != manifest.metadata["selection_manifest_id"]
-        or selection.get("source_snapshot_id") != snapshot.source_snapshot_id
-    ):
-        raise IntegrityError("source selection release content address is invalid")
-    selection["selection_manifest_id"] = selection_id
-    resolved = resolve_foundation_selection(selection, snapshot=snapshot)
-    if resolved.query_manifest_id != manifest.metadata["query_manifest_id"]:
-        raise IntegrityError("source selection query manifest identity is invalid")
+    """Load and fully verify a selection while retaining the legacy return API."""
+
+    selection, _ = load_source_selection_with_resolution(
+        receipt,
+        snapshot=snapshot,
+        boundary=boundary,
+    )
     return selection
 
 
@@ -599,8 +677,11 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--repository-root", type=Path, required=True)
     parser.add_argument("--source-contract", type=Path, required=True)
-    parser.add_argument("--source-snapshot-root", type=Path, required=True)
+    parser.add_argument("--source-dbn-manifest", type=Path, required=True)
     parser.add_argument("--catalog", type=Path, required=True)
+    parser.add_argument(
+        "--anomaly-acceptance-manifest", type=Path, action="append", default=[]
+    )
     parser.add_argument("--execute", action="store_true")
     args = parser.parse_args(argv)
     if not args.execute:
@@ -623,13 +704,15 @@ def main(argv: list[str] | None = None) -> int:
     boundary.assert_active_path(
         args.source_contract, purpose="source contract", subtree="configs"
     )
-    snapshot = PublishedSourceSnapshot.open(
-        args.source_snapshot_root, boundary=boundary
-    )
+    snapshot = PublishedSourceSnapshot.open(args.source_dbn_manifest, boundary=boundary)
     catalog = boundary.assert_active_path(
         args.catalog,
         purpose="verified DBN catalog",
         subtree="state/source_selection",
+    )
+    acceptance_receipts = tuple(
+        VerifiedReleaseReceipt.from_manifest(path, boundary)
+        for path in args.anomaly_acceptance_manifest
     )
     operation = OperationReceipt.issue_local(
         boundary,
@@ -638,26 +721,23 @@ def main(argv: list[str] | None = None) -> int:
         scope={
             "catalog_path": catalog.name,
             "catalog_sha256": sha256_file(catalog),
-            "source_snapshot_id": snapshot.source_snapshot_id,
+            "anomaly_acceptance_release_ids_sha256": sha256_json(
+                sorted(receipt.release_id for receipt in acceptance_receipts)
+            ),
+            "source_dbn_release_id": snapshot.source_release_id,
         },
     )
     publisher = AtomicPublisher(
-        boundary.active_root
-        / "data"
-        / "vault"
-        / ".staging"
-        / "releases"
-        / "source_selection",
-        boundary.active_root / "data" / "vault" / "releases",
-        boundary.active_root / "state" / "locks" / "source-selection.lock",
         boundary=boundary,
         operation_receipt=operation,
+        lock_path=boundary.active_root / "state" / "locks" / "data-publication.lock",
     )
     receipt = publish_catalog_selection(
         catalog,
         snapshot=snapshot,
         boundary=boundary,
         publisher=publisher,
+        acceptance_receipts=acceptance_receipts,
     )
     print(canonical_bytes(receipt.as_dict()).decode("utf-8"))
     return 0

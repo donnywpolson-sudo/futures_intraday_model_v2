@@ -1,15 +1,19 @@
 from __future__ import annotations
 
 import hashlib
+from dataclasses import replace
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
+from types import SimpleNamespace
 from types import MappingProxyType
 
 import pytest
 
-from futures_rebuild.canonical import canonical_bytes, sha256_json
-from futures_rebuild.errors import IntegrityError
+from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
+from futures_rebuild.data_layout import PhasePublisher as AtomicPublisher
+from futures_rebuild.errors import ContractError, IntegrityError
+from futures_rebuild.foundation.coverage import StatusResearchScopePolicy
 from futures_rebuild.foundation.market_state import (
     AsOfStatisticsLedger,
     AsOfStatusLedger,
@@ -27,7 +31,6 @@ from futures_rebuild.foundation.selection import (
     resolve_foundation_selection,
 )
 from futures_rebuild.foundation.snapshot import PublishedSourceSnapshot, SnapshotFile
-from futures_rebuild.release import AtomicPublisher
 from futures_rebuild.source_symbology import build_query_contract
 
 
@@ -55,7 +58,7 @@ def _status(
         publisher_id=1,
         instrument_id=123,
         instrument_id_date_utc=datetime.fromtimestamp(
-            ts_event_ns // 1_000_000_000, tz=timezone.utc
+            received // 1_000_000_000, tz=timezone.utc
         ).date().isoformat(),
         ts_event_ns=ts_event_ns,
         ts_recv_ns=received,
@@ -83,14 +86,15 @@ def _stat(
     price_nano: int = 5_000_000_000_000,
     quantity: int = 100,
 ) -> StatisticsRecordV1:
+    received_date = datetime.fromtimestamp(
+        ts_recv_ns // 1_000_000_000, tz=timezone.utc
+    ).date().isoformat()
     return StatisticsRecordV1(
         dataset="GLBX.MDP3",
         market="ES",
         publisher_id=1,
         instrument_id=123,
-        instrument_id_date_utc=datetime.fromtimestamp(
-            ts_event_ns // 1_000_000_000, tz=timezone.utc
-        ).date().isoformat(),
+        instrument_id_date_utc=received_date,
         ts_event_ns=ts_event_ns,
         ts_recv_ns=ts_recv_ns,
         ts_ref_ns=START_NS,
@@ -157,6 +161,85 @@ def test_status_asof_is_bitemporal_and_never_backward_fills_poison() -> None:
         decision_at_ns=START_NS + DAY_NS + 1,
     )
     assert reused_next_date.status_disposition == "STATUS_UNRESOLVED"
+
+
+def test_status_visibility_uses_receive_time_and_preserves_cross_clock_skew() -> None:
+    future_exchange_clock = _status(
+        0,
+        ts_event_ns=START_NS + 10_000,
+        ts_recv_ns=START_NS + 10,
+        action="HALT",
+        is_trading="NO",
+        is_quoting="NO",
+    )
+    decision = AsOfStatusLedger((future_exchange_clock,)).as_of(
+        dataset="GLBX.MDP3",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc=START_DATE,
+        decision_at_ns=START_NS + 20,
+    )
+    assert decision.status_disposition == "STATUS_HALTED"
+    assert decision.status_ts_event_ns > START_NS + 20
+    assert decision.status_ts_recv_ns <= START_NS + 20
+
+    crossing = _status(
+        1,
+        ts_event_ns=START_NS - 1,
+        ts_recv_ns=START_NS + 1,
+    )
+    crossing_decision = AsOfStatusLedger((crossing,)).as_of(
+        dataset="GLBX.MDP3",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc=START_DATE,
+        decision_at_ns=START_NS + 2,
+    )
+    assert crossing_decision.status_disposition == "STATUS_ELIGIBLE"
+
+
+def test_status_equal_receive_order_is_explicit_and_cross_file_conflicts_fail() -> None:
+    receive_ns = START_NS + 5
+    first = _status(0, ts_recv_ns=receive_ns)
+    terminal = _status(
+        1,
+        ts_recv_ns=receive_ns,
+        action="HALT",
+        is_trading="NO",
+        is_quoting="NO",
+    )
+    same_file = AsOfStatusLedger((terminal, first)).as_of(
+        dataset="GLBX.MDP3",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc=START_DATE,
+        decision_at_ns=receive_ns,
+    )
+    assert same_file.status_disposition == "STATUS_HALTED"
+
+    conflict = replace(
+        terminal,
+        source_file_path="dbn/status/ES/2024/conflict.dbn.zst",
+        source_file_sha256="f" * 64,
+        row_sha256="1" * 64,
+    )
+    with pytest.raises(ContractError, match="equal-receive cross-file"):
+        AsOfStatusLedger((first, conflict))
+
+    duplicate = replace(
+        first,
+        source_file_path="dbn/status/ES/2024/duplicate.dbn.zst",
+        source_file_sha256="e" * 64,
+        row_sha256="2" * 64,
+    )
+    identical = AsOfStatusLedger((first, duplicate)).as_of(
+        dataset="GLBX.MDP3",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc=START_DATE,
+        decision_at_ns=receive_ns,
+    )
+    assert identical.status_disposition == "STATUS_ELIGIBLE"
 
 
 @pytest.mark.parametrize(
@@ -261,22 +344,50 @@ def test_statistics_new_delete_and_unknown_never_become_features() -> None:
     assert unknown.feature_eligible is False
 
 
+def test_statistics_visibility_uses_receive_time_not_provider_event_clock() -> None:
+    roles = StatisticsRolePolicy.from_file(
+        REPO / "configs" / "statistics_foundation_roles.json"
+    )
+    record = _stat(
+        0,
+        update_action="NEW",
+        ts_event_ns=START_NS + 10_000,
+        ts_recv_ns=START_NS + 10,
+    )
+    state = AsOfStatisticsLedger((record,), roles=roles).as_of(
+        dataset="GLBX.MDP3",
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc=START_DATE,
+        stat_type="OPEN_INTEREST",
+        ts_ref_ns=START_NS,
+        decision_at_ns=START_NS + 20,
+    )
+    assert state.state == "NEW_KNOWN"
+
+
 def _snapshot_file(root: Path, relative: str, content: bytes) -> SnapshotFile:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(content)
     return SnapshotFile(
-        root=root,
+        logical_path=f"data/{relative}",
+        physical_path=path,
         relative_path=relative,
         size=len(content),
         sha256=hashlib.sha256(content).hexdigest(),
-        source_snapshot_id="a" * 64,
-        migration_manifest_sha256="b" * 64,
+        source_release_id="a" * 64,
+        source_manifest_sha256="b" * 64,
         files_index_sha256="c" * 64,
     )
 
 
-def _selection_fixture(tmp_path: Path, *, overlap: bool = False):
+def _selection_fixture(
+    tmp_path: Path,
+    *,
+    overlap: bool = False,
+    known_anomalies_sha256: str = "d" * 64,
+):
     root = tmp_path / "snapshot"
     entries = []
     files = {}
@@ -334,9 +445,10 @@ def _selection_fixture(tmp_path: Path, *, overlap: bool = False):
     if overlap:
         add("statistics", "ES", 2024, "2024-06-01", "2025-01-01")
     snapshot = PublishedSourceSnapshot(
-        root=root,
-        receipt=MappingProxyType({"source_snapshot_id": "a" * 64}),
+        manifest_path=root / "manifest.json",
+        receipt=SimpleNamespace(release_id="a" * 64, manifest_sha256="b" * 64),
         files=MappingProxyType(files),
+        files_index_sha256="c" * 64,
     )
     core = {
         "catalog_contract_version": "2.0.0",
@@ -353,8 +465,10 @@ def _selection_fixture(tmp_path: Path, *, overlap: bool = False):
         "files": entries,
         "selection_policy": "EXACT_CONTRACT_ALL_FILES_NO_RECURSIVE_NEWEST",
         "selection_scope": "FILTERED",
-        "source_scope": "VERIFIED_PUBLISHED_SOURCE_SNAPSHOT",
-        "source_snapshot_id": "a" * 64,
+        "source_scope": "VERIFIED_LAYOUT_V2_DBN_RELEASE",
+        "known_anomalies_sha256": known_anomalies_sha256,
+        "source_dbn_manifest_sha256": "b" * 64,
+        "source_dbn_release_id": "a" * 64,
     }
     return {**core, "selection_manifest_id": sha256_json(core)}, snapshot
 
@@ -454,29 +568,61 @@ def test_tracked_coverage_policy_has_nonzero_and_source_gates() -> None:
     assert policy.minimum_statistics_source_market_year_fraction == Decimal("1")
 
 
+def test_tracked_status_research_scope_is_source_defined_and_conservative() -> None:
+    policy = StatusResearchScopePolicy.from_file(
+        REPO / "configs" / "status_research_scope_policy.json"
+    )
+    assert policy.provider_status_launch_month == "2024-07"
+    assert policy.research_interval_start == "2025-01-01"
+    assert (
+        policy.disposition(
+            start="2024-01-01",
+            end="2025-01-01",
+            coverage_passed=True,
+        )
+        == "ABSTAIN_PRE_STATUS_CAPABILITY_EPOCH"
+    )
+    assert (
+        policy.disposition(
+            start="2025-01-01",
+            end="2026-01-01",
+            coverage_passed=True,
+        )
+        == "ELIGIBLE"
+    )
+    assert (
+        policy.disposition(
+            start="2025-01-01",
+            end="2026-01-01",
+            coverage_passed=False,
+        )
+        == "FAIL_STATUS_COVERAGE"
+    )
+    mutated = policy.as_dict()
+    mutated["research_interval_start"] = "2024-07-01"
+    with pytest.raises(ContractError):
+        StatusResearchScopePolicy.from_dict(mutated)
+
+
 def test_verified_catalog_has_one_immutable_publication_phase(
     boundary, operation_factory
 ) -> None:
-    selection, synthetic = _selection_fixture(boundary.active_root / "fixture")
-    snapshot = PublishedSourceSnapshot(
-        root=synthetic.root,
-        receipt=synthetic.receipt,
-        files=synthetic.files,
+    known_anomalies = boundary.active_root / "configs" / "known_anomalies.json"
+    known_anomalies.write_bytes(
+        (REPO / "configs" / "known_anomalies.json").read_bytes()
     )
+    selection, synthetic = _selection_fixture(
+        boundary.active_root / "fixture",
+        known_anomalies_sha256=sha256_file(known_anomalies),
+    )
+    snapshot = synthetic
     catalog = boundary.active_root / "state" / "source_selection" / "catalog.json"
     catalog.parent.mkdir(parents=True, exist_ok=True)
     catalog.write_bytes(canonical_bytes(selection) + b"\n")
     publisher = AtomicPublisher(
-        boundary.active_root
-        / "data"
-        / "vault"
-        / ".staging"
-        / "releases"
-        / "selection",
-        boundary.active_root / "data" / "vault" / "releases",
-        boundary.active_root / "state" / "locks" / "selection.lock",
         boundary=boundary,
         operation_receipt=operation_factory("PUBLISH_RELEASE"),
+        lock_path=boundary.active_root / "state" / "locks" / "selection.lock",
     )
     receipt = publish_catalog_selection(
         catalog,

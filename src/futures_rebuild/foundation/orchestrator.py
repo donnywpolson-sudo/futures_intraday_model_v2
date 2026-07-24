@@ -13,7 +13,6 @@ import os
 import re
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Callable, Mapping
@@ -35,19 +34,22 @@ from ..locking import FileLease
 from ..producer_bridge import (
     DEFINITION_RELEASE_KIND,
     ECONOMICS_RELEASE_KIND,
-    FEATURE_RELEASE_KIND,
     SESSION_RELEASE_KIND,
     CausalFeatureSpec,
     load_actual_contract_definitions,
-    load_actual_contract_economics,
-    load_causal_feature_release,
     load_versioned_session_policy,
     publish_actual_contract_definitions,
     publish_actual_contract_economics,
-    publish_causal_feature_release,
     publish_versioned_session_policy,
+    verify_actual_contract_economics_context,
 )
-from ..release import AtomicPublisher, ReleaseManifest, VerifiedReleaseReceipt
+from ..data_layout import (
+    DataReleaseManifest as ReleaseManifest,
+    DataReleaseReceipt as VerifiedReleaseReceipt,
+    PhasePublisher as AtomicPublisher,
+    verify_data_release_manifest,
+)
+from .coverage import StatusResearchScopePolicy
 from .materialize import (
     CAUSAL_RELEASE_KIND,
     RAW_RELEASE_KIND,
@@ -66,15 +68,17 @@ from .market_state import (
     load_status_eligibility,
     publish_market_state_foundation,
     publish_status_eligibility,
-    status_eligible_decision_keys,
 )
-from .records import datetime_to_ns
+from .resources import (
+    FoundationResourcePolicy,
+    assert_capacity_admission,
+    assert_runtime_capacity,
+)
 from .selection import (
     SELECTION_RELEASE_KIND,
-    load_source_selection,
-    resolve_foundation_selection,
+    load_source_selection_with_resolution,
 )
-from .snapshot import PublishedSourceSnapshot
+from .snapshot import PublishedDbnRelease as PublishedSourceSnapshot
 from .support import (
     POLICY_RELEASE_KIND,
     VerifiedFoundationPolicies,
@@ -82,12 +86,18 @@ from .support import (
 )
 
 
-CHECKPOINT_VERSION = "2.0.0"
+CHECKPOINT_VERSION = "4.0.0"
 FOUNDATION_SET_RELEASE_KIND = "futures_mechanical_foundation_set"
-FOUNDATION_SET_SCHEMA_VERSION = "2.0.0"
+FOUNDATION_SET_SCHEMA_VERSION = "4.0.0"
 OUTCOME_SOURCE_RELEASE_KIND = "futures_outcome_source_input"
 OUTCOME_SOURCE_SCHEMA_VERSION = "1.0.0"
 OUTCOME_SOURCE_ROLE = "LABELABLE_VERIFIED_CAUSAL_BARS_ONLY"
+FEATURE_SOURCE_INPUT_RELEASE_KIND = "futures_feature_source_input"
+FEATURE_SOURCE_INPUT_SCHEMA_VERSION = "1.0.0"
+FEATURE_SOURCE_INPUT_ROLE = "DEFERRED_DETERMINISTIC_BAR_LOCAL_FEATURE_INPUT"
+FEATURE_MATERIALIZATION_DEFERRED_UNTIL = (
+    "SEPARATELY_AUTHORIZED_PREDECLARED_SAMPLE_OR_HYPOTHESIS_CONTRACT"
+)
 OUTCOME_DEFERRED_UNTIL = (
     "SEPARATELY_AUTHORIZED_PREDECLARED_SAMPLE_OR_PREDICTION_CONTRACT"
 )
@@ -102,8 +112,10 @@ _RECEIPT_PHASES = (
 _CLOSURE_MODULES = (
     "boundary.py",
     "canonical.py",
+    "data_layout.py",
     "economics.py",
     "foundation/decoder.py",
+    "foundation/coverage.py",
     "foundation/economics.py",
     "foundation/identity.py",
     "foundation/materialize.py",
@@ -113,25 +125,30 @@ _CLOSURE_MODULES = (
     "foundation/pipeline.py",
     "foundation/policy.py",
     "foundation/records.py",
+    "foundation/resources.py",
     "foundation/selection.py",
     "foundation/snapshot.py",
     "foundation/support.py",
     "identity.py",
+    "inference.py",
     "locking.py",
     "producer_bridge.py",
-    "release.py",
     "session_policy.py",
     "source_symbology.py",
+    "time_contracts.py",
 )
 _CONFIG_FILES = (
     "contract_economics_rules.json",
     "environment.lock.json",
     "foundation_policy.json",
     "foundation_coverage_policy.json",
+    "foundation_resource_policy.json",
     "known_anomalies.json",
     "mechanical_feature_spec.json",
+    "provider_data_epochs.json",
     "session_policy.json",
     "statistics_foundation_roles.json",
+    "status_research_scope_policy.json",
 )
 
 
@@ -223,75 +240,6 @@ def _config_closure(boundary: RepoBoundary) -> dict[str, str]:
     return {name: sha256_file(root / name) for name in _CONFIG_FILES}
 
 
-def _verify_selection_index_bindings(
-    selection: Mapping[str, object], snapshot: PublishedSourceSnapshot
-) -> None:
-    raw_files = selection.get("files")
-    if not isinstance(raw_files, list) or not raw_files:
-        raise IntegrityError("source selection has no exact selected-file index")
-    seen: set[str] = set()
-    for raw in raw_files:
-        if not isinstance(raw, dict):
-            raise IntegrityError("source selection file binding is invalid")
-        declared = raw.get("path")
-        if type(declared) is not str or Path(declared).as_posix() != declared:
-            raise IntegrityError("source selection path is not canonical")
-        try:
-            relative = Path(declared).relative_to(Path("data") / "dbn")
-        except ValueError as exc:
-            raise IntegrityError("source selection path is outside logical data/dbn") from exc
-        snapshot_relative = (Path("dbn") / relative).as_posix()
-        if snapshot_relative in seen:
-            raise IntegrityError("source selection contains a duplicate file binding")
-        seen.add(snapshot_relative)
-        binding = snapshot.file(snapshot_relative)
-        if raw.get("sha256") != binding.sha256 or raw.get("size") != binding.size:
-            raise IntegrityError("source selection differs from the verified snapshot index")
-
-
-def _feature_ready_join_keys(
-    receipt: VerifiedReleaseReceipt, *, boundary: RepoBoundary
-) -> frozenset[tuple[str, int, int]]:
-    manifest = receipt.verify(boundary)
-    if manifest.release_kind != FEATURE_RELEASE_KIND:
-        raise IntegrityError("feature join index requires an exact feature release")
-    path = boundary.active_root / receipt.relative_root / "feature_rows.jsonl"
-    keys: set[tuple[str, int, int]] = set()
-    try:
-        with path.open("rb") as handle:
-            for line in handle:
-                row = json.loads(line.decode("utf-8"))
-                if (
-                    not isinstance(row, dict)
-                    or line != canonical_bytes(row) + b"\n"
-                ):
-                    raise IntegrityError("feature join source is not canonical JSONL")
-                if row.get("status") != "FEATURE_READY":
-                    continue
-                identity_hash = row.get("upstream_foundation_actual_identity_hash")
-                if re.fullmatch(r"[0-9a-f]{64}", str(identity_hash)) is None:
-                    raise IntegrityError("feature join source identity is invalid")
-                key = (
-                    str(identity_hash),
-                    datetime_to_ns(
-                        datetime.fromisoformat(row["bar_event_at"]),
-                        "feature.bar_event_at",
-                    ),
-                    datetime_to_ns(
-                        datetime.fromisoformat(row["decision_at"]),
-                        "feature.decision_at",
-                    ),
-                )
-                if key in keys:
-                    raise IntegrityError("feature join source contains a duplicate key")
-                keys.add(key)
-    except (OSError, UnicodeDecodeError, ValueError, KeyError, TypeError) as exc:
-        raise IntegrityError("feature join source is invalid") from exc
-    if len(keys) != manifest.metadata.get("feature_ready_rows"):
-        raise IntegrityError("feature join source census is invalid")
-    return frozenset(keys)
-
-
 def _checkpoint_payload(core: Mapping[str, object]) -> dict[str, object]:
     return {**core, "checkpoint_id": sha256_json(dict(core))}
 
@@ -301,6 +249,7 @@ def _checkpoint_core(payload: Mapping[str, object]) -> dict[str, object]:
         "checkpoint_id",
         "checkpoint_version",
         "completed",
+        "layout_version",
         "run_contract",
         "run_id",
         "status",
@@ -347,27 +296,21 @@ class FoundationOrchestrator:
             raise ContractError("foundation orchestration requires a non-alpha receipt")
         self.boundary = boundary
         self.batch_rows = batch_rows
+        self.resource_policy = FoundationResourcePolicy.from_file(
+            boundary.active_root / "configs" / "foundation_resource_policy.json"
+        )
         self.publisher = AtomicPublisher(
-            boundary.active_root
-            / "data"
-            / "vault"
-            / ".staging"
-            / "releases"
-            / "foundation",
-            boundary.active_root / "data" / "vault" / "releases",
-            boundary.active_root / "state" / "locks" / "foundation-release.lock",
             boundary=boundary,
             operation_receipt=operation_receipt,
+            lock_path=boundary.active_root / "state" / "locks" / "data-publication.lock",
         )
         self.checkpoint_root = boundary.assert_active_path(
             boundary.active_root
-            / "data"
-            / "vault"
-            / ".staging"
-            / "foundation_runs"
+            / "state"
+            / "foundation_runs_v2"
             / "_boundary_probe",
             purpose="foundation checkpoint root",
-            subtree="data/vault/.staging/foundation_runs",
+            subtree="state/foundation_runs_v2",
         ).parent
 
     def _run_contract(
@@ -421,17 +364,16 @@ class FoundationOrchestrator:
                 }
             )
         receipt = snapshot.receipt
-        required_snapshot_fields = (
-            "files_index_sha256",
-            "manifest_sha256",
-            "source_snapshot_id",
+        manifest = verify_data_release_manifest(
+            snapshot.manifest_path,
+            self.boundary,
+            verify_files=False,
         )
-        if any(
-            type(receipt.get(name)) is not str
-            or re.fullmatch(r"[0-9a-f]{64}", str(receipt.get(name))) is None
-            for name in required_snapshot_fields
+        if (
+            manifest.release_id != receipt.release_id
+            or sha256_file(snapshot.manifest_path) != receipt.manifest_sha256
         ):
-            raise IntegrityError("verified source snapshot identity fields are invalid")
+            raise IntegrityError("source DBN manifest changed after snapshot verification")
         contract = {
             "batch_rows": self.batch_rows,
             "config_closure": _config_closure(self.boundary),
@@ -448,9 +390,9 @@ class FoundationOrchestrator:
             "repository_id": self.boundary.repository_id,
             "selection_manifest_id": selection.get("selection_manifest_id"),
             "source_selection_receipt": selection_receipt.as_dict(),
-            "source_snapshot_files_index_sha256": receipt["files_index_sha256"],
-            "source_snapshot_manifest_sha256": receipt["manifest_sha256"],
-            "source_snapshot_id": snapshot.source_snapshot_id,
+            "source_dbn_files_index_sha256": snapshot.files_index_sha256,
+            "source_dbn_manifest_sha256": receipt.manifest_sha256,
+            "source_dbn_release_id": snapshot.source_release_id,
         }
         if (
             not selected
@@ -469,12 +411,13 @@ class FoundationOrchestrator:
         run_root = self.boundary.assert_active_path(
             self.checkpoint_root / run_id,
             purpose="foundation run checkpoint",
-            subtree="data/vault/.staging/foundation_runs",
+            subtree="state/foundation_runs_v2",
         )
         checkpoint_path = run_root / "checkpoint.json"
         expected_core: dict[str, object] = {
             "checkpoint_version": CHECKPOINT_VERSION,
             "completed": {},
+            "layout_version": "2.0.0",
             "run_contract": dict(run_contract),
             "run_id": run_id,
             "status": "RUNNING",
@@ -488,6 +431,7 @@ class FoundationOrchestrator:
         core = _checkpoint_core(payload)
         if (
             core.get("checkpoint_version") != CHECKPOINT_VERSION
+            or core.get("layout_version") != "2.0.0"
             or core.get("run_id") != run_id
             or core.get("run_contract") != dict(run_contract)
             or core.get("status") not in {"RUNNING", "COMPLETE"}
@@ -514,6 +458,10 @@ class FoundationOrchestrator:
             raise IntegrityError(
                 "foundation implementation or config closure changed during the run"
             )
+        assert_runtime_capacity(
+            volume_path=self.boundary.active_root,
+            policy=self.resource_policy,
+        )
         _atomic_checkpoint(checkpoint_path, _checkpoint_payload(core))
         if after_checkpoint is not None:
             after_checkpoint(phase)
@@ -521,26 +469,54 @@ class FoundationOrchestrator:
     def run(
         self,
         *,
-        source_snapshot_root: Path,
+        source_dbn_manifest: Path,
         source_selection_receipt: VerifiedReleaseReceipt,
         feature_spec: CausalFeatureSpec,
         after_checkpoint: Callable[[str], None] | None = None,
     ) -> FoundationRunResult:
-        snapshot = PublishedSourceSnapshot.open(
-            source_snapshot_root, boundary=self.boundary
+        global_lock = self.boundary.assert_active_path(
+            self.boundary.active_root
+            / "state"
+            / "locks"
+            / "foundation-build.lock",
+            purpose="global foundation build lock",
+            subtree="state/locks",
         )
-        selection = load_source_selection(
+        with FileLease(global_lock):
+            return self._run_exclusive(
+                source_dbn_manifest=source_dbn_manifest,
+                source_selection_receipt=source_selection_receipt,
+                feature_spec=feature_spec,
+                after_checkpoint=after_checkpoint,
+            )
+
+    def _run_exclusive(
+        self,
+        *,
+        source_dbn_manifest: Path,
+        source_selection_receipt: VerifiedReleaseReceipt,
+        feature_spec: CausalFeatureSpec,
+        after_checkpoint: Callable[[str], None] | None = None,
+    ) -> FoundationRunResult:
+        snapshot = PublishedSourceSnapshot.open(source_dbn_manifest, boundary=self.boundary)
+        selection, resolved_selection = load_source_selection_with_resolution(
             source_selection_receipt,
             snapshot=snapshot,
             boundary=self.boundary,
         )
-        resolved_selection = resolve_foundation_selection(
-            selection, snapshot=snapshot
-        )
         intervals = resolved_selection.intervals
-        _verify_selection_index_bindings(selection, snapshot)
+        assert_capacity_admission(
+            volume_path=self.boundary.active_root,
+            selection=selection,
+            policy=self.resource_policy,
+        )
         coverage_policy = FoundationCoveragePolicy.from_file(
             self.boundary.active_root / "configs" / "foundation_coverage_policy.json"
+        )
+        scope_policy = StatusResearchScopePolicy.from_file(
+            self.boundary.active_root
+            / "configs"
+            / "status_research_scope_policy.json"
         )
         statistics_roles = StatisticsRolePolicy.from_file(
             self.boundary.active_root / "configs" / "statistics_foundation_roles.json"
@@ -582,6 +558,7 @@ class FoundationOrchestrator:
                 source_selection_receipt=source_selection_receipt,
                 feature_spec=feature_spec,
                 coverage_policy=coverage_policy,
+                scope_policy=scope_policy,
                 statistics_roles=statistics_roles,
                 checkpoint_path=checkpoint_path,
                 core=core,
@@ -598,6 +575,7 @@ class FoundationOrchestrator:
         source_selection_receipt: VerifiedReleaseReceipt,
         feature_spec: CausalFeatureSpec,
         coverage_policy: FoundationCoveragePolicy,
+        scope_policy: StatusResearchScopePolicy,
         statistics_roles: StatisticsRolePolicy,
         checkpoint_path: Path,
         core: dict[str, object],
@@ -620,7 +598,7 @@ class FoundationOrchestrator:
         source_bound = {
             "selection_manifest_id": selection["selection_manifest_id"],
             "source_selection_receipt_id": source_selection_receipt.receipt_id,
-            "source_snapshot_id": snapshot.source_snapshot_id,
+            "source_dbn_release_id": snapshot.source_release_id,
         }
         if "source_bound" in completed:
             if completed["source_bound"] != source_bound:
@@ -703,8 +681,10 @@ class FoundationOrchestrator:
                 boundary=self.boundary,
                 expected_selection=resolved_selection,
                 expected_source_selection_receipt=source_selection_receipt,
+                expected_policies=policies,
                 expected_coverage_policy=coverage_policy,
                 expected_statistics_roles=statistics_roles,
+                trusted_checkpoint_mtime_ns=checkpoint_path.stat().st_mtime_ns,
             )
         else:
             if any(key in completed for key in ("intervals", "foundation_set")):
@@ -712,6 +692,7 @@ class FoundationOrchestrator:
             market_state_receipt = publish_market_state_foundation(
                 selection=resolved_selection,
                 source_selection_receipt=source_selection_receipt,
+                policies=policies,
                 coverage_policy=coverage_policy,
                 statistics_roles=statistics_roles,
                 publisher=self.publisher,
@@ -722,6 +703,7 @@ class FoundationOrchestrator:
                 boundary=self.boundary,
                 expected_selection=resolved_selection,
                 expected_source_selection_receipt=source_selection_receipt,
+                expected_policies=policies,
                 expected_coverage_policy=coverage_policy,
                 expected_statistics_roles=statistics_roles,
             )
@@ -750,6 +732,12 @@ class FoundationOrchestrator:
         total_status_unresolved_rows = 0
         total_feature_ready_rows = 0
         total_status_gated_feature_ready_rows = 0
+        research_bar_rows = 0
+        research_status_eligible_rows = 0
+        research_status_resolved_rows = 0
+        research_status_unresolved_rows = 0
+        research_feature_ready_rows = 0
+        research_status_gated_feature_ready_rows = 0
         status_epoch_gates: list[dict[str, object]] = []
         for interval in intervals:
             key = _interval_key(
@@ -829,29 +817,25 @@ class FoundationOrchestrator:
                 phase=f"{key}:feature_input",
                 after_checkpoint=after_checkpoint,
             )
-            loaded_features = load_causal_feature_release(
-                feature_receipt,
-                causal_receipt=causal_receipt,
-                definitions=definitions,
-                economics_registry=economics,
-                policies=policies,
-                session_policy=session_policy,
-                boundary=self.boundary,
-            )
-            eligible_decision_keys = status_eligible_decision_keys(
-                status_eligibility_receipt,
-                causal_receipt=causal_receipt,
-                market_state_receipt=market_state_receipt,
-                boundary=self.boundary,
-            )
-            feature_ready_keys = _feature_ready_join_keys(
+            feature_input = load_feature_source_input(
                 feature_receipt, boundary=self.boundary
             )
-            status_gated_feature_ready_rows = len(
-                feature_ready_keys & eligible_decision_keys
+            status_gated_feature_ready_rows = int(
+                status_contract["eligible_rows"]
             )
             interval_bar_rows = int(status_contract["total_rows"])
-            interval_feature_ready_rows = len(loaded_features.rows)
+            interval_feature_ready_rows = int(
+                feature_input["feature_ready_rows"]
+            )
+            if (
+                feature_input["causal_release_receipt"]
+                != causal_receipt.as_dict()
+                or status_gated_feature_ready_rows
+                > interval_feature_ready_rows
+            ):
+                raise IntegrityError(
+                    "compact status/feature causal census is invalid"
+                )
             interval_status_resolved_fraction = (
                 Decimal(int(status_contract["resolved_status_rows"]))
                 / Decimal(interval_bar_rows)
@@ -864,21 +848,27 @@ class FoundationOrchestrator:
                 if interval_feature_ready_rows
                 else Decimal(0)
             )
-            research_eligible = (
+            interval_coverage_passed = (
                 interval_status_resolved_fraction
                 >= coverage_policy.minimum_status_resolved_decision_fraction
                 and interval_status_gated_feature_fraction
                 >= coverage_policy.minimum_status_gated_feature_ready_fraction
             )
+            in_research_scope = scope_policy.includes_interval(
+                start=interval.start, end=interval.end
+            )
+            research_disposition = scope_policy.disposition(
+                start=interval.start,
+                end=interval.end,
+                coverage_passed=interval_coverage_passed,
+            )
             status_epoch_gate_core: dict[str, object] = {
                 "bar_rows": interval_bar_rows,
                 "feature_ready_rows": interval_feature_ready_rows,
+                "in_research_scope": in_research_scope,
                 "interval_key": key,
-                "research_disposition": (
-                    "ELIGIBLE"
-                    if research_eligible
-                    else "ABSTAIN_STATUS_COVERAGE"
-                ),
+                "research_disposition": research_disposition,
+                "research_scope_policy_hash": scope_policy.policy_hash,
                 "status_gated_feature_ready_fraction": str(
                     interval_status_gated_feature_fraction
                 ),
@@ -934,10 +924,25 @@ class FoundationOrchestrator:
             total_status_unresolved_rows += int(
                 status_contract["unresolved_status_rows"]
             )
-            total_feature_ready_rows += len(loaded_features.rows)
+            total_feature_ready_rows += interval_feature_ready_rows
             total_status_gated_feature_ready_rows += (
                 status_gated_feature_ready_rows
             )
+            if in_research_scope:
+                research_bar_rows += interval_bar_rows
+                research_status_eligible_rows += int(
+                    status_contract["eligible_rows"]
+                )
+                research_status_resolved_rows += int(
+                    status_contract["resolved_status_rows"]
+                )
+                research_status_unresolved_rows += int(
+                    status_contract["unresolved_status_rows"]
+                )
+                research_feature_ready_rows += interval_feature_ready_rows
+                research_status_gated_feature_ready_rows += (
+                    status_gated_feature_ready_rows
+                )
 
             verified_intervals.append(
                 {
@@ -955,7 +960,7 @@ class FoundationOrchestrator:
                     "economics_release_receipt": economics.release_receipt.as_dict(),
                     "end": interval.end,
                     "feature_input_release_receipt": feature_receipt.as_dict(),
-                    "feature_ready_rows": len(loaded_features.rows),
+                    "feature_ready_rows": interval_feature_ready_rows,
                     "interval_key": key,
                     "market": interval.market,
                     "outcome_source_input_release_receipt": (
@@ -982,71 +987,128 @@ class FoundationOrchestrator:
         if set(interval_state) != expected_keys:
             raise IntegrityError("foundation interval dependency closure is incomplete")
 
-        status_resolved_fraction = (
+        archive_status_resolved_fraction = (
             Decimal(total_status_resolved_rows) / Decimal(total_bar_rows)
             if total_bar_rows
             else Decimal(0)
         )
-        status_gated_feature_ready_fraction = (
+        archive_status_gated_feature_ready_fraction = (
             Decimal(total_status_gated_feature_ready_rows)
             / Decimal(total_feature_ready_rows)
             if total_feature_ready_rows
             else Decimal(0)
         )
+        status_resolved_fraction = (
+            Decimal(research_status_resolved_rows) / Decimal(research_bar_rows)
+            if research_bar_rows
+            else Decimal(0)
+        )
+        status_gated_feature_ready_fraction = (
+            Decimal(research_status_gated_feature_ready_rows)
+            / Decimal(research_feature_ready_rows)
+            if research_feature_ready_rows
+            else Decimal(0)
+        )
+        in_scope_gates = [
+            gate for gate in status_epoch_gates if gate["in_research_scope"] is True
+        ]
         if (
-            total_bar_rows < coverage_policy.minimum_bar_rows
-            or total_status_gated_feature_ready_rows
+            research_bar_rows < coverage_policy.minimum_bar_rows
+            or research_status_gated_feature_ready_rows
             < coverage_policy.minimum_status_gated_feature_ready_rows
-            or total_status_eligible_rows
+            or research_status_eligible_rows
             < coverage_policy.minimum_status_eligible_rows
             or total_bar_rows
             != total_status_resolved_rows + total_status_unresolved_rows
+            or research_bar_rows
+            != research_status_resolved_rows + research_status_unresolved_rows
             or status_resolved_fraction
             < coverage_policy.minimum_status_resolved_decision_fraction
             or status_gated_feature_ready_fraction
             < coverage_policy.minimum_status_gated_feature_ready_fraction
-            or not any(
-                gate["research_disposition"] == "ELIGIBLE"
-                for gate in status_epoch_gates
+            or not in_scope_gates
+            or any(
+                gate["research_disposition"] != "ELIGIBLE"
+                for gate in in_scope_gates
             )
+            or Decimal(
+                str(market_state.contract["status_source_market_year_fraction"])
+            )
+            < coverage_policy.minimum_status_source_market_year_fraction
+            or Decimal(
+                str(
+                    market_state.contract[
+                        "statistics_source_market_year_fraction"
+                    ]
+                )
+            )
+            < coverage_policy.minimum_statistics_source_market_year_fraction
         ):
             raise IntegrityError(
                 "foundation nonzero/status coverage gates are not satisfied"
             )
-        coverage_gate = {
+        archive_census_core = {
             "bar_rows": total_bar_rows,
-            "coverage_matrix_id": resolved_selection.coverage_matrix_id,
-            "coverage_policy": coverage_policy.as_dict(),
-            "coverage_policy_hash": coverage_policy.policy_hash,
             "feature_ready_rows": total_feature_ready_rows,
             "missing_status_rows_remain_in_denominator": True,
-            "statistics_feature_use": False,
-            "statistics_source_market_year_fraction": market_state.contract[
-                "statistics_source_market_year_fraction"
-            ],
             "status_eligible_rows": total_status_eligible_rows,
-            "status_epoch_gates": status_epoch_gates,
-            "status_epoch_gates_id": sha256_json(status_epoch_gates),
-            "research_eligible_interval_count": sum(
-                gate["research_disposition"] == "ELIGIBLE"
-                for gate in status_epoch_gates
-            ),
-            "research_abstained_interval_count": sum(
-                gate["research_disposition"] == "ABSTAIN_STATUS_COVERAGE"
-                for gate in status_epoch_gates
+            "status_gated_feature_ready_fraction": str(
+                archive_status_gated_feature_ready_fraction
             ),
             "status_gated_feature_ready_rows": (
                 total_status_gated_feature_ready_rows
             ),
+            "status_resolved_decision_fraction": str(
+                archive_status_resolved_fraction
+            ),
+            "status_resolved_rows": total_status_resolved_rows,
+            "status_unresolved_rows": total_status_unresolved_rows,
+        }
+        archive_census = {
+            **archive_census_core,
+            "archive_census_id": sha256_json(archive_census_core),
+        }
+        coverage_gate = {
+            "archive_census": archive_census,
+            "bar_rows": research_bar_rows,
+            "coverage_matrix_id": resolved_selection.coverage_matrix_id,
+            "coverage_policy": coverage_policy.as_dict(),
+            "coverage_policy_hash": coverage_policy.policy_hash,
+            "feature_ready_rows": research_feature_ready_rows,
+            "missing_status_rows_remain_in_denominator": True,
+            "research_abstained_interval_count": sum(
+                gate["in_research_scope"] is False for gate in status_epoch_gates
+            ),
+            "research_eligible_interval_count": sum(
+                gate["research_disposition"] == "ELIGIBLE"
+                for gate in status_epoch_gates
+            ),
+            "research_failed_interval_count": sum(
+                gate["research_disposition"] == "FAIL_STATUS_COVERAGE"
+                for gate in status_epoch_gates
+            ),
+            "research_scope_interval_count": len(in_scope_gates),
+            "research_scope_policy": scope_policy.as_dict(),
+            "research_scope_policy_hash": scope_policy.policy_hash,
+            "statistics_feature_use": False,
+            "statistics_source_market_year_fraction": market_state.contract[
+                "statistics_source_market_year_fraction"
+            ],
+            "status_eligible_rows": research_status_eligible_rows,
+            "status_epoch_gates": status_epoch_gates,
+            "status_epoch_gates_id": sha256_json(status_epoch_gates),
+            "status_gated_feature_ready_rows": (
+                research_status_gated_feature_ready_rows
+            ),
             "status_gated_feature_ready_fraction": str(
                 status_gated_feature_ready_fraction
             ),
-            "status_resolved_rows": total_status_resolved_rows,
+            "status_resolved_rows": research_status_resolved_rows,
             "status_resolved_decision_fraction": str(status_resolved_fraction),
             "status_source_market_year_fraction": market_state.contract[
                 "status_source_market_year_fraction"
             ],
-            "status_unresolved_rows": total_status_unresolved_rows,
+            "status_unresolved_rows": research_status_unresolved_rows,
         }
 
         foundation_set_core = {
@@ -1085,7 +1147,7 @@ class FoundationOrchestrator:
             "schema_version": FOUNDATION_SET_SCHEMA_VERSION,
             "session_policy_receipt": session_receipt.as_dict(),
             "source_selection_receipt": source_selection_receipt.as_dict(),
-            "source_snapshot_id": snapshot.source_snapshot_id,
+            "source_dbn_release_id": snapshot.source_release_id,
             "wfa_execution_count": 0,
         }
         foundation_set = {
@@ -1103,9 +1165,6 @@ class FoundationOrchestrator:
                 raise IntegrityError("completed foundation-set payload changed")
         else:
             stage = self.publisher.create_stage("foundation_set")
-            (stage / "foundation_set.json").write_bytes(
-                canonical_bytes(foundation_set) + b"\n"
-            )
             dependency_ids = {
                 source_selection_receipt.release_id,
                 policy_receipt.release_id,
@@ -1125,9 +1184,12 @@ class FoundationOrchestrator:
                     dependency_ids.add(str(item[name]["release_id"]))
             manifest = ReleaseManifest.build(
                 stage,
+                phase="foundation",
                 release_kind=FOUNDATION_SET_RELEASE_KIND,
                 schema_version=FOUNDATION_SET_SCHEMA_VERSION,
+                logical_paths={},
                 source_release_ids=tuple(sorted(dependency_ids)),
+                embedded_documents={"foundation_set.json": foundation_set},
                 metadata={
                     "coverage_matrix_id": resolved_selection.coverage_matrix_id,
                     "feature_spec_hash": feature_spec.spec_hash,
@@ -1135,12 +1197,12 @@ class FoundationOrchestrator:
                     "interval_count": len(verified_intervals),
                     "query_manifest_id": resolved_selection.query_manifest_id,
                     "run_id": core["run_id"],
-                    "source_snapshot_id": snapshot.source_snapshot_id,
+                    "source_dbn_release_id": snapshot.source_release_id,
                 },
             )
-            release = self.publisher.publish(stage, manifest)
-            foundation_set_receipt = VerifiedReleaseReceipt.from_release(
-                release, self.boundary
+            manifest_path = self.publisher.publish(stage, manifest)
+            foundation_set_receipt = VerifiedReleaseReceipt.from_manifest(
+                manifest_path, self.boundary
             )
             if (
                 load_foundation_set(foundation_set_receipt, boundary=self.boundary)
@@ -1211,8 +1273,8 @@ class FoundationOrchestrator:
         if (
             report.get("market") != interval.market
             or report.get("year") != interval.year
-            or report.get("source_snapshot_id")
-            != interval.bars.binding.source_snapshot_id
+            or report.get("source_dbn_release_id")
+            != interval.bars.binding.source_release_id
             or report.get("source_selection_release_id") != selection_receipt.release_id
             or report.get("source_definition_file_sha256")
             != interval.definition.binding.sha256
@@ -1356,6 +1418,14 @@ class FoundationOrchestrator:
     ):
         if "economics" in state:
             receipt = _receipt(state["economics"], name=phase)
+            return verify_actual_contract_economics_context(
+                receipt,
+                causal_receipt=causal_receipt,
+                definitions=definitions,
+                policies=policies,
+                session_policy=session_policy,
+                boundary=self.boundary,
+            )
         else:
             if set(state) != {
                 "raw",
@@ -1379,7 +1449,7 @@ class FoundationOrchestrator:
                 phase=phase,
                 after_checkpoint=after_checkpoint,
             )
-        return load_actual_contract_economics(
+        return verify_actual_contract_economics_context(
             receipt,
             causal_receipt=causal_receipt,
             definitions=definitions,
@@ -1403,6 +1473,54 @@ class FoundationOrchestrator:
         phase: str,
         after_checkpoint: Callable[[str], None] | None,
     ) -> VerifiedReleaseReceipt:
+        dependency_receipts = (
+            causal_receipt,
+            definitions.receipt,
+            economics.release_receipt,
+            policies.receipt,
+            session_policy.receipt,
+        )
+        _, causal_report = load_causal_interval(
+            causal_receipt, boundary=self.boundary
+        )
+        dispositions = causal_report.get("disposition_counts")
+        total = causal_report.get("row_count")
+        if (
+            not isinstance(dispositions, dict)
+            or type(total) is not int
+            or total <= 0
+            or any(type(value) is not int or value < 0 for value in dispositions.values())
+            or sum(dispositions.values()) != total
+        ):
+            raise IntegrityError("causal feature-source census is invalid")
+        ready = int(dispositions.get("ELIGIBLE", 0))
+        unresolved = total - ready
+        payload_core = {
+            "bar_local_deterministic": True,
+            "causal_release_receipt": causal_receipt.as_dict(),
+            "definition_release_receipt": definitions.receipt.as_dict(),
+            "economics_release_receipt": economics.release_receipt.as_dict(),
+            "feature_ready_rows": ready,
+            "feature_spec": feature_spec.as_dict(),
+            "feature_spec_hash": feature_spec.spec_hash,
+            "features_materialized": False,
+            "fit_or_global_state": False,
+            "foundation_policy_receipt": policies.receipt.as_dict(),
+            "materialization_deferred_until": (
+                FEATURE_MATERIALIZATION_DEFERRED_UNTIL
+            ),
+            "prediction_ledger_read": False,
+            "role": FEATURE_SOURCE_INPUT_ROLE,
+            "schema_version": FEATURE_SOURCE_INPUT_SCHEMA_VERSION,
+            "session_policy_receipt": session_policy.receipt.as_dict(),
+            "total_upstream_rows": total,
+            "unresolved_upstream_rows": unresolved,
+            "uses_future_outcome": False,
+        }
+        payload = {
+            **payload_core,
+            "feature_source_input_id": sha256_json(payload_core),
+        }
         if "feature_input" in state:
             receipt = _receipt(state["feature_input"], name=phase)
         else:
@@ -1414,15 +1532,46 @@ class FoundationOrchestrator:
                 "economics",
             }:
                 raise IntegrityError("foundation interval skips feature-input phase")
-            receipt = publish_causal_feature_release(
-                causal_receipt=causal_receipt,
-                definitions=definitions,
-                economics_registry=economics,
-                policies=policies,
-                session_policy=session_policy,
-                feature_spec=feature_spec,
-                boundary=self.boundary,
-                publisher=self.publisher,
+            causal_manifest = causal_receipt.verify(self.boundary)
+            causal_root = str(causal_manifest.metadata.get("logical_root", ""))
+            prefix = "data/causally_gated_normalized/"
+            if not causal_root.startswith(prefix):
+                raise IntegrityError(
+                    "feature source input lacks a layout-v2 causal selector"
+                )
+            feature_root = (
+                f"data/features/{feature_spec.spec_hash}/"
+                f"{causal_root.removeprefix(prefix)}"
+            )
+            stage = self.publisher.create_stage("feature_source_input")
+            staged_name = "feature_source_input.json"
+            (stage / staged_name).write_bytes(canonical_bytes(payload) + b"\n")
+            manifest = ReleaseManifest.build(
+                stage,
+                phase="features",
+                release_kind=FEATURE_SOURCE_INPUT_RELEASE_KIND,
+                schema_version=FEATURE_SOURCE_INPUT_SCHEMA_VERSION,
+                logical_paths={
+                    staged_name: f"{feature_root}/{staged_name}"
+                },
+                source_release_ids=tuple(
+                    dependency.release_id for dependency in dependency_receipts
+                ),
+                metadata={
+                    "causal_release_id": causal_receipt.release_id,
+                    "feature_ready_rows": ready,
+                    "feature_source_input_id": payload[
+                        "feature_source_input_id"
+                    ],
+                    "feature_spec_hash": feature_spec.spec_hash,
+                    "role": FEATURE_SOURCE_INPUT_ROLE,
+                    "total_upstream_rows": total,
+                    "unresolved_upstream_rows": unresolved,
+                },
+            )
+            manifest_path = self.publisher.publish(stage, manifest)
+            receipt = VerifiedReleaseReceipt.from_manifest(
+                manifest_path, self.boundary
             )
             state["feature_input"] = receipt.as_dict()
             self._persist(
@@ -1431,15 +1580,11 @@ class FoundationOrchestrator:
                 phase=phase,
                 after_checkpoint=after_checkpoint,
             )
-        load_causal_feature_release(
-            receipt,
-            causal_receipt=causal_receipt,
-            definitions=definitions,
-            economics_registry=economics,
-            policies=policies,
-            session_policy=session_policy,
-            boundary=self.boundary,
-        )
+        observed = load_feature_source_input(receipt, boundary=self.boundary)
+        if observed != payload:
+            raise IntegrityError(
+                "feature source input differs from exact dependencies"
+            )
         return receipt
 
     def _ensure_outcome_source_input(
@@ -1492,14 +1637,23 @@ class FoundationOrchestrator:
                 "feature_input",
             }:
                 raise IntegrityError("foundation interval skips outcome-source phase")
+            causal_manifest = causal_receipt.verify(self.boundary)
+            causal_root = str(causal_manifest.metadata.get("logical_root", ""))
+            prefix = "data/causally_gated_normalized/"
+            if not causal_root.startswith(prefix):
+                raise IntegrityError("outcome source lacks a layout-v2 causal selector")
+            outcome_root = f"data/outcome_sources/{causal_root.removeprefix(prefix)}"
             stage = self.publisher.create_stage("outcome_source_input")
-            (stage / "outcome_source_input.json").write_bytes(
-                canonical_bytes(payload) + b"\n"
-            )
+            staged_name = "outcome_source_input.json"
+            (stage / staged_name).write_bytes(canonical_bytes(payload) + b"\n")
             manifest = ReleaseManifest.build(
                 stage,
+                phase="outcome_sources",
                 release_kind=OUTCOME_SOURCE_RELEASE_KIND,
                 schema_version=OUTCOME_SOURCE_SCHEMA_VERSION,
+                logical_paths={
+                    staged_name: f"{outcome_root}/{staged_name}"
+                },
                 source_release_ids=tuple(
                     receipt.release_id for receipt in dependency_receipts
                 ),
@@ -1509,8 +1663,8 @@ class FoundationOrchestrator:
                     "role": OUTCOME_SOURCE_ROLE,
                 },
             )
-            release = self.publisher.publish(stage, manifest)
-            receipt = VerifiedReleaseReceipt.from_release(release, self.boundary)
+            manifest_path = self.publisher.publish(stage, manifest)
+            receipt = VerifiedReleaseReceipt.from_manifest(manifest_path, self.boundary)
             state["outcome_source_input"] = receipt.as_dict()
             self._persist(
                 checkpoint_path,
@@ -1524,20 +1678,128 @@ class FoundationOrchestrator:
         return receipt
 
 
+def load_feature_source_input(
+    receipt: VerifiedReleaseReceipt, *, boundary: RepoBoundary
+) -> dict[str, object]:
+    manifest = receipt.verify(boundary)
+    if (
+        receipt.phase != "features"
+        or manifest.release_kind != FEATURE_SOURCE_INPUT_RELEASE_KIND
+        or manifest.schema_version != FEATURE_SOURCE_INPUT_SCHEMA_VERSION
+        or len(manifest.files) != 1
+        or Path(manifest.files[0].logical_path).name
+        != "feature_source_input.json"
+        or set(manifest.metadata)
+        != {
+            "causal_release_id",
+            "feature_ready_rows",
+            "feature_source_input_id",
+            "feature_spec_hash",
+            "role",
+            "total_upstream_rows",
+            "unresolved_upstream_rows",
+        }
+        or manifest.metadata.get("role") != FEATURE_SOURCE_INPUT_ROLE
+    ):
+        raise IntegrityError("feature-source release contract is invalid")
+    path = receipt.resolve_unique_filename("feature_source_input.json", boundary)
+    payload = _read_canonical_object(path, description="feature-source input")
+    expected = {
+        "bar_local_deterministic",
+        "causal_release_receipt",
+        "definition_release_receipt",
+        "economics_release_receipt",
+        "feature_ready_rows",
+        "feature_source_input_id",
+        "feature_spec",
+        "feature_spec_hash",
+        "features_materialized",
+        "fit_or_global_state",
+        "foundation_policy_receipt",
+        "materialization_deferred_until",
+        "prediction_ledger_read",
+        "role",
+        "schema_version",
+        "session_policy_receipt",
+        "total_upstream_rows",
+        "unresolved_upstream_rows",
+        "uses_future_outcome",
+    }
+    if set(payload) != expected:
+        raise IntegrityError("feature-source payload schema is invalid")
+    feature_source_input_id = payload.pop("feature_source_input_id", None)
+    spec = CausalFeatureSpec.from_dict(payload.get("feature_spec"))
+    counts = (
+        payload.get("total_upstream_rows"),
+        payload.get("feature_ready_rows"),
+        payload.get("unresolved_upstream_rows"),
+    )
+    if (
+        feature_source_input_id != sha256_json(payload)
+        or feature_source_input_id
+        != manifest.metadata["feature_source_input_id"]
+        or payload.get("schema_version") != FEATURE_SOURCE_INPUT_SCHEMA_VERSION
+        or payload.get("role") != FEATURE_SOURCE_INPUT_ROLE
+        or payload.get("feature_spec_hash") != spec.spec_hash
+        or payload.get("feature_spec_hash")
+        != manifest.metadata["feature_spec_hash"]
+        or payload.get("materialization_deferred_until")
+        != FEATURE_MATERIALIZATION_DEFERRED_UNTIL
+        or payload.get("bar_local_deterministic") is not True
+        or payload.get("features_materialized") is not False
+        or payload.get("fit_or_global_state") is not False
+        or payload.get("uses_future_outcome") is not False
+        or payload.get("prediction_ledger_read") is not False
+        or any(type(value) is not int or value < 0 for value in counts)
+        or counts[0] <= 0
+        or counts[1] + counts[2] != counts[0]
+        or manifest.metadata["total_upstream_rows"] != counts[0]
+        or manifest.metadata["feature_ready_rows"] != counts[1]
+        or manifest.metadata["unresolved_upstream_rows"] != counts[2]
+    ):
+        raise IntegrityError("feature-source identity or safety posture is invalid")
+    receipt_fields = (
+        ("causal_release_receipt", CAUSAL_RELEASE_KIND),
+        ("definition_release_receipt", DEFINITION_RELEASE_KIND),
+        ("economics_release_receipt", ECONOMICS_RELEASE_KIND),
+        ("foundation_policy_receipt", POLICY_RELEASE_KIND),
+        ("session_policy_receipt", SESSION_RELEASE_KIND),
+    )
+    dependencies: list[VerifiedReleaseReceipt] = []
+    for name, expected_kind in receipt_fields:
+        dependency = _receipt(payload.get(name), name=name)
+        dependency.verify(boundary)
+        if dependency.release_kind != expected_kind:
+            raise IntegrityError("feature-source dependency kind is invalid")
+        dependencies.append(dependency)
+    causal = dependencies[0]
+    if (
+        manifest.metadata["causal_release_id"] != causal.release_id
+        or manifest.source_release_ids
+        != tuple(sorted(dependency.release_id for dependency in dependencies))
+    ):
+        raise IntegrityError("feature-source exact dependency closure is invalid")
+    payload["feature_source_input_id"] = feature_source_input_id
+    return payload
+
+
 def load_outcome_source_input(
     receipt: VerifiedReleaseReceipt, *, boundary: RepoBoundary
 ) -> dict[str, object]:
     manifest = receipt.verify(boundary)
     if (
-        manifest.release_kind != OUTCOME_SOURCE_RELEASE_KIND
+        receipt.phase != "outcome_sources"
+        or manifest.release_kind != OUTCOME_SOURCE_RELEASE_KIND
         or manifest.schema_version != OUTCOME_SOURCE_SCHEMA_VERSION
-        or {entry.path for entry in manifest.files} != {"outcome_source_input.json"}
+        or len(manifest.files) != 1
+        or Path(manifest.files[0].logical_path).name
+        != "outcome_source_input.json"
         or set(manifest.metadata)
         != {"causal_release_id", "outcome_source_input_id", "role"}
         or manifest.metadata.get("role") != OUTCOME_SOURCE_ROLE
     ):
         raise IntegrityError("outcome-source release contract is invalid")
-    path = boundary.active_root / receipt.relative_root / "outcome_source_input.json"
+    path = receipt.resolve_unique_filename("outcome_source_input.json", boundary)
     payload = _read_canonical_object(path, description="outcome-source input")
     if set(payload) != {
         "causal_release_receipt",
@@ -1598,7 +1860,8 @@ def load_foundation_set(
     if (
         manifest.release_kind != FOUNDATION_SET_RELEASE_KIND
         or manifest.schema_version != FOUNDATION_SET_SCHEMA_VERSION
-        or {item.path for item in manifest.files} != {"foundation_set.json"}
+        or manifest.files
+        or set(manifest.embedded_documents) != {"foundation_set.json"}
         or set(manifest.metadata)
         != {
             "feature_spec_hash",
@@ -1607,12 +1870,14 @@ def load_foundation_set(
             "interval_count",
             "query_manifest_id",
             "run_id",
-            "source_snapshot_id",
+            "source_dbn_release_id",
         }
     ):
         raise IntegrityError("foundation-set release contract is invalid")
-    path = boundary.active_root / receipt.relative_root / "foundation_set.json"
-    payload = _read_canonical_object(path, description="foundation set")
+    raw_payload = receipt.embedded_document("foundation_set.json", boundary)
+    if not isinstance(raw_payload, dict):
+        raise IntegrityError("foundation-set embedded document is invalid")
+    payload = dict(raw_payload)
     if set(payload) != {
         "alpha_evidence",
         "candidate_eligible",
@@ -1641,7 +1906,7 @@ def load_foundation_set(
         "schema_version",
         "session_policy_receipt",
         "source_selection_receipt",
-        "source_snapshot_id",
+        "source_dbn_release_id",
         "wfa_execution_count",
     }:
         raise IntegrityError("foundation-set payload schema is invalid")
@@ -1658,8 +1923,8 @@ def load_foundation_set(
         or payload.get("query_manifest_id")
         != sha256_json(payload.get("query_manifest"))
         or not isinstance(payload.get("query_mode_census"), list)
-        or payload.get("source_snapshot_id")
-        != manifest.metadata["source_snapshot_id"]
+        or payload.get("source_dbn_release_id")
+        != manifest.metadata["source_dbn_release_id"]
         or payload.get("interval_count") != manifest.metadata["interval_count"]
         or payload.get("dependency_closure_complete") is not True
         or payload.get("provider_call_count") != 0
@@ -1701,7 +1966,7 @@ def load_foundation_set(
         or payload["run_contract"].get("query_mode_census")
         != payload.get("query_mode_census")
         or re.fullmatch(
-            r"[0-9a-f]{64}", str(payload.get("source_snapshot_id"))
+            r"[0-9a-f]{64}", str(payload.get("source_dbn_release_id"))
         )
         is None
     ):
@@ -1713,9 +1978,17 @@ def load_foundation_set(
         coverage_policy = FoundationCoveragePolicy.from_dict(
             payload["coverage_gate"].get("coverage_policy")
         )
+        scope_policy = StatusResearchScopePolicy.from_dict(
+            payload["coverage_gate"].get("research_scope_policy")
+        )
     except ContractError as exc:
         raise IntegrityError("foundation-set coverage policy is invalid") from exc
-    if payload["coverage_gate"].get("coverage_policy_hash") != coverage_policy.policy_hash:
+    if (
+        payload["coverage_gate"].get("coverage_policy_hash")
+        != coverage_policy.policy_hash
+        or payload["coverage_gate"].get("research_scope_policy_hash")
+        != scope_policy.policy_hash
+    ):
         raise IntegrityError("foundation-set coverage policy hash is invalid")
     top_receipts = (
         _receipt(payload.get("source_selection_receipt"), name="source_selection"),
@@ -1737,12 +2010,11 @@ def load_foundation_set(
         dependency_ids.add(dependency.release_id)
     selection_manifest = top_receipts[0].verify(boundary)
     market_state_manifest = top_receipts[3].verify(boundary)
-    market_state_contract = _read_canonical_object(
-        boundary.active_root
-        / top_receipts[3].relative_root
-        / "market_state_contract.json",
-        description="foundation-set market-state contract",
+    market_state_contract = top_receipts[3].embedded_document(
+        "market_state_contract.json", boundary
     )
+    if not isinstance(market_state_contract, dict):
+        raise IntegrityError("foundation-set market-state contract is invalid")
     if (
         selection_manifest.metadata.get("query_manifest_id")
         != payload.get("query_manifest_id")
@@ -1777,7 +2049,7 @@ def load_foundation_set(
         "causal_release_receipt": CAUSAL_RELEASE_KIND,
         "status_eligibility_release_receipt": STATUS_ELIGIBILITY_RELEASE_KIND,
         "economics_release_receipt": ECONOMICS_RELEASE_KIND,
-        "feature_input_release_receipt": FEATURE_RELEASE_KIND,
+        "feature_input_release_receipt": FEATURE_SOURCE_INPUT_RELEASE_KIND,
         "outcome_source_input_release_receipt": OUTCOME_SOURCE_RELEASE_KIND,
     }
     aggregate_bar_rows = 0
@@ -1786,6 +2058,12 @@ def load_foundation_set(
     aggregate_status_gated_feature_ready_rows = 0
     aggregate_status_resolved_rows = 0
     aggregate_status_unresolved_rows = 0
+    research_bar_rows = 0
+    research_feature_ready_rows = 0
+    research_status_eligible_rows = 0
+    research_status_gated_feature_ready_rows = 0
+    research_status_resolved_rows = 0
+    research_status_unresolved_rows = 0
     observed_status_epoch_gates: list[dict[str, object]] = []
     run_contract_intervals = payload["run_contract"].get("intervals")
     if not isinstance(run_contract_intervals, list):
@@ -1871,8 +2149,10 @@ def load_foundation_set(
         expected_gate_keys = {
             "bar_rows",
             "feature_ready_rows",
+            "in_research_scope",
             "interval_key",
             "research_disposition",
+            "research_scope_policy_hash",
             "status_epoch_gate_id",
             "status_gated_feature_ready_fraction",
             "status_gated_feature_ready_rows",
@@ -1898,7 +2178,14 @@ def load_foundation_set(
             status_epoch_gate["status_epoch_gate_id"] != sha256_json(gate_core)
             or status_epoch_gate["interval_key"] != key
             or status_epoch_gate["research_disposition"]
-            not in {"ELIGIBLE", "ABSTAIN_STATUS_COVERAGE"}
+            not in {
+                "ELIGIBLE",
+                "ABSTAIN_PRE_STATUS_CAPABILITY_EPOCH",
+                "FAIL_STATUS_COVERAGE",
+            }
+            or type(status_epoch_gate["in_research_scope"]) is not bool
+            or status_epoch_gate["research_scope_policy_hash"]
+            != scope_policy.policy_hash
             or type(status_epoch_gate["status_source_present"]) is not bool
             or not isinstance(status_epoch_gate["status_query_contract_ids"], list)
             or not isinstance(status_epoch_gate["status_query_mode_ids"], list)
@@ -1959,22 +2246,40 @@ def load_foundation_set(
         feature_manifest = parsed_receipts["feature_input_release_receipt"].verify(
             boundary
         )
+        feature_payload = load_feature_source_input(
+            parsed_receipts["feature_input_release_receipt"], boundary=boundary
+        )
+        expected_feature_dependencies = {
+            "causal_release_receipt": parsed_receipts[
+                "causal_release_receipt"
+            ].as_dict(),
+            "definition_release_receipt": parsed_receipts[
+                "definition_release_receipt"
+            ].as_dict(),
+            "economics_release_receipt": parsed_receipts[
+                "economics_release_receipt"
+            ].as_dict(),
+            "foundation_policy_receipt": top_receipts[1].as_dict(),
+            "session_policy_receipt": top_receipts[2].as_dict(),
+        }
+        if (
+            any(
+                feature_payload[name] != expected
+                for name, expected in expected_feature_dependencies.items()
+            )
+            or feature_payload["feature_spec_hash"]
+            != payload["feature_spec_hash"]
+        ):
+            raise IntegrityError("foundation-set feature-source binding is invalid")
         status_contract = load_status_eligibility(
             parsed_receipts["status_eligibility_release_receipt"],
             causal_receipt=parsed_receipts["causal_release_receipt"],
             market_state_receipt=top_receipts[3],
             boundary=boundary,
         )
-        status_keys = status_eligible_decision_keys(
-            parsed_receipts["status_eligibility_release_receipt"],
-            causal_receipt=parsed_receipts["causal_release_receipt"],
-            market_state_receipt=top_receipts[3],
-            boundary=boundary,
+        observed_status_gated_features = int(
+            status_contract["eligible_rows"]
         )
-        feature_keys = _feature_ready_join_keys(
-            parsed_receipts["feature_input_release_receipt"], boundary=boundary
-        )
-        observed_status_gated_features = len(feature_keys & status_keys)
         if (
             raw_interval["status_eligible_rows"] != status_contract["eligible_rows"]
             or raw_interval["status_resolved_rows"]
@@ -1983,6 +2288,8 @@ def load_foundation_set(
             != status_contract["unresolved_status_rows"]
             or raw_interval["status_gated_feature_ready_rows"]
             != observed_status_gated_features
+            or observed_status_gated_features
+            > int(feature_payload["feature_ready_rows"])
         ):
             raise IntegrityError("foundation-set status census binding is invalid")
         if parsed_receipts[
@@ -2026,13 +2333,17 @@ def load_foundation_set(
             if interval_feature_rows
             else Decimal(0)
         )
-        expected_disposition = (
-            "ELIGIBLE"
-            if interval_resolved_fraction
+        interval_coverage_passed = (
+            interval_resolved_fraction
             >= coverage_policy.minimum_status_resolved_decision_fraction
             and interval_gated_fraction
             >= coverage_policy.minimum_status_gated_feature_ready_fraction
-            else "ABSTAIN_STATUS_COVERAGE"
+        )
+        expected_in_scope = scope_policy.includes_interval(start=start, end=end)
+        expected_disposition = scope_policy.disposition(
+            start=start,
+            end=end,
+            coverage_passed=interval_coverage_passed,
         )
         if (
             status_epoch_gate["bar_rows"] != interval_bar_rows
@@ -2049,6 +2360,7 @@ def load_foundation_set(
             != str(interval_resolved_fraction)
             or status_epoch_gate["status_gated_feature_ready_fraction"]
             != str(interval_gated_fraction)
+            or status_epoch_gate["in_research_scope"] is not expected_in_scope
             or status_epoch_gate["research_disposition"] != expected_disposition
             or status_epoch_gate["status_source_present"] != bool(status_sources)
             or status_epoch_gate["status_query_contract_ids"]
@@ -2064,25 +2376,114 @@ def load_foundation_set(
         )
         aggregate_status_resolved_rows += int(raw_interval["status_resolved_rows"])
         aggregate_status_unresolved_rows += int(raw_interval["status_unresolved_rows"])
+        if expected_in_scope:
+            research_bar_rows += interval_bar_rows
+            research_feature_ready_rows += interval_feature_rows
+            research_status_eligible_rows += int(
+                raw_interval["status_eligible_rows"]
+            )
+            research_status_gated_feature_ready_rows += int(
+                raw_interval["status_gated_feature_ready_rows"]
+            )
+            research_status_resolved_rows += int(
+                raw_interval["status_resolved_rows"]
+            )
+            research_status_unresolved_rows += int(
+                raw_interval["status_unresolved_rows"]
+            )
     if interval_keys != sorted(set(interval_keys)):
         raise IntegrityError("foundation-set intervals are not unique and sorted")
     coverage_gate = payload["coverage_gate"]
     expected_status_resolved_fraction = (
+        Decimal(research_status_resolved_rows) / Decimal(research_bar_rows)
+        if research_bar_rows
+        else Decimal(0)
+    )
+    expected_status_gated_feature_ready_fraction = (
+        Decimal(research_status_gated_feature_ready_rows)
+        / Decimal(research_feature_ready_rows)
+        if research_feature_ready_rows
+        else Decimal(0)
+    )
+    archive_status_resolved_fraction = (
         Decimal(aggregate_status_resolved_rows) / Decimal(aggregate_bar_rows)
         if aggregate_bar_rows
         else Decimal(0)
     )
-    expected_status_gated_feature_ready_fraction = (
+    archive_status_gated_feature_ready_fraction = (
         Decimal(aggregate_status_gated_feature_ready_rows)
         / Decimal(aggregate_feature_ready_rows)
         if aggregate_feature_ready_rows
         else Decimal(0)
     )
+    archive_census_core = {
+        "bar_rows": aggregate_bar_rows,
+        "feature_ready_rows": aggregate_feature_ready_rows,
+        "missing_status_rows_remain_in_denominator": True,
+        "status_eligible_rows": aggregate_status_eligible_rows,
+        "status_gated_feature_ready_fraction": str(
+            archive_status_gated_feature_ready_fraction
+        ),
+        "status_gated_feature_ready_rows": (
+            aggregate_status_gated_feature_ready_rows
+        ),
+        "status_resolved_decision_fraction": str(
+            archive_status_resolved_fraction
+        ),
+        "status_resolved_rows": aggregate_status_resolved_rows,
+        "status_unresolved_rows": aggregate_status_unresolved_rows,
+    }
+    expected_archive_census = {
+        **archive_census_core,
+        "archive_census_id": sha256_json(archive_census_core),
+    }
+    in_scope_gates = [
+        gate
+        for gate in observed_status_epoch_gates
+        if gate["in_research_scope"] is True
+    ]
+    coverage_gate_keys = {
+        "archive_census",
+        "bar_rows",
+        "coverage_matrix_id",
+        "coverage_policy",
+        "coverage_policy_hash",
+        "feature_ready_rows",
+        "missing_status_rows_remain_in_denominator",
+        "research_abstained_interval_count",
+        "research_eligible_interval_count",
+        "research_failed_interval_count",
+        "research_scope_interval_count",
+        "research_scope_policy",
+        "research_scope_policy_hash",
+        "statistics_feature_use",
+        "statistics_source_market_year_fraction",
+        "status_eligible_rows",
+        "status_epoch_gates",
+        "status_epoch_gates_id",
+        "status_gated_feature_ready_fraction",
+        "status_gated_feature_ready_rows",
+        "status_resolved_decision_fraction",
+        "status_resolved_rows",
+        "status_source_market_year_fraction",
+        "status_unresolved_rows",
+    }
     if (
-        coverage_gate.get("bar_rows") != aggregate_bar_rows
-        or coverage_gate.get("feature_ready_rows") != aggregate_feature_ready_rows
+        set(coverage_gate) != coverage_gate_keys
+        or coverage_gate.get("archive_census") != expected_archive_census
+        or coverage_gate.get("coverage_matrix_id")
+        != payload.get("coverage_matrix_id")
+        or coverage_gate.get("missing_status_rows_remain_in_denominator")
+        is not True
+        or coverage_gate.get("statistics_feature_use") is not False
+        or coverage_gate.get("status_source_market_year_fraction")
+        != market_state_contract.get("status_source_market_year_fraction")
+        or coverage_gate.get("statistics_source_market_year_fraction")
+        != market_state_contract.get("statistics_source_market_year_fraction")
+        or coverage_gate.get("bar_rows") != research_bar_rows
+        or coverage_gate.get("feature_ready_rows") != research_feature_ready_rows
         or coverage_gate.get("status_eligible_rows")
-        != aggregate_status_eligible_rows
+        != research_status_eligible_rows
         or coverage_gate.get("status_epoch_gates") != observed_status_epoch_gates
         or coverage_gate.get("status_epoch_gates_id")
         != sha256_json(observed_status_epoch_gates)
@@ -2093,26 +2494,33 @@ def load_foundation_set(
         )
         or coverage_gate.get("research_abstained_interval_count")
         != sum(
-            gate["research_disposition"] == "ABSTAIN_STATUS_COVERAGE"
+            gate["in_research_scope"] is False
             for gate in observed_status_epoch_gates
         )
+        or coverage_gate.get("research_failed_interval_count")
+        != sum(
+            gate["research_disposition"] == "FAIL_STATUS_COVERAGE"
+            for gate in observed_status_epoch_gates
+        )
+        or coverage_gate.get("research_scope_interval_count")
+        != len(in_scope_gates)
         or len(observed_status_epoch_gates) != len(raw_intervals)
-        or not any(
-            gate["research_disposition"] == "ELIGIBLE"
-            for gate in observed_status_epoch_gates
-        )
+        or not in_scope_gates
+        or any(gate["research_disposition"] != "ELIGIBLE" for gate in in_scope_gates)
         or coverage_gate.get("status_gated_feature_ready_rows")
-        != aggregate_status_gated_feature_ready_rows
+        != research_status_gated_feature_ready_rows
         or coverage_gate.get("status_resolved_rows")
-        != aggregate_status_resolved_rows
+        != research_status_resolved_rows
         or coverage_gate.get("status_unresolved_rows")
-        != aggregate_status_unresolved_rows
+        != research_status_unresolved_rows
         or aggregate_bar_rows
         != aggregate_status_resolved_rows + aggregate_status_unresolved_rows
-        or aggregate_bar_rows < coverage_policy.minimum_bar_rows
-        or aggregate_status_eligible_rows
+        or research_bar_rows
+        != research_status_resolved_rows + research_status_unresolved_rows
+        or research_bar_rows < coverage_policy.minimum_bar_rows
+        or research_status_eligible_rows
         < coverage_policy.minimum_status_eligible_rows
-        or aggregate_status_gated_feature_ready_rows
+        or research_status_gated_feature_ready_rows
         < coverage_policy.minimum_status_gated_feature_ready_rows
         or coverage_gate.get("status_resolved_decision_fraction")
         != str(expected_status_resolved_fraction)
@@ -2168,8 +2576,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository-root", type=Path, required=True)
     parser.add_argument("--source-contract", type=Path, required=True)
-    parser.add_argument("--source-snapshot-root", type=Path, required=True)
-    parser.add_argument("--source-selection-release", type=Path, required=True)
+    parser.add_argument("--source-dbn-manifest", type=Path, required=True)
+    parser.add_argument("--source-selection-manifest", type=Path, required=True)
     parser.add_argument("--feature-spec", type=Path, required=True)
     parser.add_argument("--batch-rows", type=int, default=100_000)
     parser.add_argument("--execute", action="store_true")
@@ -2178,23 +2586,51 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("foundation publication requires explicit --execute")
     boundary = _boundary_from_contract(args.repository_root, args.source_contract)
     feature_spec = _load_feature_spec(args.feature_spec, boundary=boundary)
-    snapshot = PublishedSourceSnapshot.open(
-        args.source_snapshot_root, boundary=boundary
+    dbn_receipt = VerifiedReleaseReceipt.from_manifest(
+        args.source_dbn_manifest,
+        boundary,
+        verify_files=False,
     )
-    selection_receipt = VerifiedReleaseReceipt.from_release(
-        args.source_selection_release, boundary
+    if (
+        dbn_receipt.phase != "dbn"
+        or dbn_receipt.release_kind != "futures_phase1a_verified_dbn"
+        or dbn_receipt.schema_version != "1.0.0"
+    ):
+        raise IntegrityError("requested source is not a Phase 1A DBN release")
+    source_dbn_release_id = dbn_receipt.release_id
+    selection_receipt = VerifiedReleaseReceipt.from_manifest(
+        args.source_selection_manifest, boundary
     )
-    selection = load_source_selection(
-        selection_receipt, snapshot=snapshot, boundary=boundary
+    selection_manifest = selection_receipt.verify(boundary)
+    selection_manifest_id = selection_manifest.metadata.get(
+        "selection_manifest_id"
     )
+    acceptance_release_ids = selection_manifest.metadata.get(
+        "anomaly_acceptance_release_ids"
+    )
+    if (
+        selection_manifest.release_kind != SELECTION_RELEASE_KIND
+        or selection_manifest.metadata.get("source_dbn_release_id")
+        != source_dbn_release_id
+        or not isinstance(acceptance_release_ids, list)
+        or any(type(item) is not str for item in acceptance_release_ids)
+        or acceptance_release_ids != sorted(set(acceptance_release_ids))
+        or selection_manifest.source_release_ids
+        != tuple(sorted((source_dbn_release_id, *acceptance_release_ids)))
+        or type(selection_manifest_id) is not str
+        or re.fullmatch(r"[0-9a-f]{64}", selection_manifest_id) is None
+    ):
+        raise IntegrityError(
+            "selection release is not bound to the requested DBN release"
+        )
     operation = OperationReceipt.issue_local(
         boundary,
         operation="PUBLISH_RELEASE",
         classification=OperationClassification.CONTROLLED_REBUILD_NON_ALPHA,
         scope={
             "feature_spec_hash": feature_spec.spec_hash,
-            "selection_manifest_id": str(selection["selection_manifest_id"]),
-            "source_snapshot_id": snapshot.source_snapshot_id,
+            "selection_manifest_id": selection_manifest_id,
+            "source_dbn_release_id": source_dbn_release_id,
         },
     )
     result = FoundationOrchestrator(
@@ -2202,7 +2638,7 @@ def main(argv: list[str] | None = None) -> int:
         operation_receipt=operation,
         batch_rows=args.batch_rows,
     ).run(
-        source_snapshot_root=args.source_snapshot_root,
+        source_dbn_manifest=args.source_dbn_manifest,
         source_selection_receipt=selection_receipt,
         feature_spec=feature_spec,
     )

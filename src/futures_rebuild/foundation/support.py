@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import re
-import shutil
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
 from types import MappingProxyType
@@ -14,18 +13,23 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from ..boundary import RepoBoundary
 from ..canonical import sha256_file, sha256_json
 from ..errors import ContractError, IntegrityError
-from ..release import AtomicPublisher, ReleaseManifest, VerifiedReleaseReceipt
+from ..data_layout import (
+    DataReleaseManifest as ReleaseManifest,
+    DataReleaseReceipt as VerifiedReleaseReceipt,
+    PhasePublisher as AtomicPublisher,
+)
 from ..time_contracts import require_utc
 from .economics import EconomicsRuleBook
 from .policy import FoundationPolicy, KnownAnomalyPolicy
 
 
 POLICY_RELEASE_KIND = "futures_foundation_policy_set"
-POLICY_SCHEMA_VERSION = "1.0.0"
+POLICY_SCHEMA_VERSION = "2.0.0"
 POLICY_FILENAMES = {
     "contract_economics_rules.json",
     "foundation_policy.json",
     "known_anomalies.json",
+    "provider_data_epochs.json",
     "session_policy.json",
 }
 
@@ -58,33 +62,49 @@ class VerifiedFoundationPolicies:
         if (
             manifest.release_kind != POLICY_RELEASE_KIND
             or manifest.schema_version != POLICY_SCHEMA_VERSION
-            or {entry.path for entry in manifest.files} != POLICY_FILENAMES
+            or manifest.files
+            or set(manifest.embedded_documents) != POLICY_FILENAMES
             or set(manifest.metadata) != {
                 "policy_payload_release_id",
                 "policy_set_id",
             }
         ):
             raise IntegrityError("foundation policy release file/kind contract is invalid")
-        root = boundary.active_root / receipt.relative_root
         payload_release_id = manifest.metadata["policy_payload_release_id"]
         if (
             not isinstance(payload_release_id, str)
             or re.fullmatch(r"[0-9a-f]{64}", payload_release_id) is None
         ):
             raise IntegrityError("foundation policy payload release ID is invalid")
-        foundation = FoundationPolicy.from_file(root / "foundation_policy.json")
+        config_root = boundary.active_root / "configs"
+        active_documents: dict[str, object] = {}
+        for name in POLICY_FILENAMES:
+            try:
+                active_documents[name] = json.loads(
+                    (config_root / name).read_text(encoding="utf-8")
+                )
+            except (OSError, ValueError) as exc:
+                raise IntegrityError("active foundation policy JSON is invalid") from exc
+        if dict(manifest.embedded_documents) != active_documents:
+            raise IntegrityError("active foundation policies differ from their release")
+        foundation = FoundationPolicy.from_file(config_root / "foundation_policy.json")
         anomalies = KnownAnomalyPolicy.from_file(
-            root / "known_anomalies.json",
+            config_root / "known_anomalies.json",
             expected_sha256=foundation.known_anomalies_sha256,
         )
-        economics = EconomicsRuleBook.from_file(root / "contract_economics_rules.json")
-        rules = _load_session_rules(root / "session_policy.json")
+        economics = EconomicsRuleBook.from_file(
+            config_root / "contract_economics_rules.json"
+        )
+        rules = _load_session_rules(config_root / "session_policy.json")
         core = {
             "anomalies_sha256": anomalies.policy_hash,
             "economics_rulebook_hash": economics.rulebook_hash,
             "foundation_policy_hash": foundation.policy_hash,
+            "provider_data_epochs_sha256": foundation.provider_data_epochs_sha256,
             "release_id": payload_release_id,
-            "session_policy_sha256": sha256_file(root / "session_policy.json"),
+            "session_policy_sha256": sha256_file(
+                config_root / "session_policy.json"
+            ),
         }
         policy_set_id = sha256_json(core)
         if manifest.metadata["policy_set_id"] != policy_set_id:
@@ -194,27 +214,34 @@ def publish_foundation_policies(
     )
     EconomicsRuleBook.from_file(source_paths["contract_economics_rules.json"])
     _load_session_rules(source_paths["session_policy.json"])
-    stage = publisher.create_stage("foundation_policy")
+    documents: dict[str, object] = {}
     for name, source in source_paths.items():
-        shutil.copyfile(source, stage / name)
+        try:
+            documents[name] = json.loads(source.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise IntegrityError("foundation policy source JSON is invalid") from exc
     after = {name: sha256_file(path) for name, path in source_paths.items()}
-    copied = {name: sha256_file(stage / name) for name in source_paths}
-    if before != after or copied != before:
-        raise IntegrityError("foundation policy source changed or copy hash differed")
+    if before != after:
+        raise IntegrityError("foundation policy source changed during publication")
+    stage = publisher.create_stage("foundation_policy")
     provisional = ReleaseManifest.build(
         stage,
+        phase="controls",
         release_kind=POLICY_RELEASE_KIND,
         schema_version=POLICY_SCHEMA_VERSION,
+        logical_paths={},
+        embedded_documents=documents,
         metadata={},
     )
     core = {
         "anomalies_sha256": before["known_anomalies.json"],
         "economics_rulebook_hash": EconomicsRuleBook.from_file(
-            stage / "contract_economics_rules.json"
+            source_paths["contract_economics_rules.json"]
         ).rulebook_hash,
         "foundation_policy_hash": FoundationPolicy.from_file(
-            stage / "foundation_policy.json"
+            source_paths["foundation_policy.json"]
         ).policy_hash,
+        "provider_data_epochs_sha256": before["provider_data_epochs.json"],
         "release_id": provisional.release_id,
         "session_policy_sha256": before["session_policy.json"],
     }
@@ -224,9 +251,12 @@ def publish_foundation_policies(
     policy_set_id = sha256_json(core)
     manifest = ReleaseManifest.build(
         stage,
+        phase="controls",
         release_kind=POLICY_RELEASE_KIND,
         schema_version=POLICY_SCHEMA_VERSION,
+        logical_paths={},
+        embedded_documents=documents,
         metadata={"policy_set_id": policy_set_id, "policy_payload_release_id": provisional.release_id},
     )
-    release = publisher.publish(stage, manifest)
-    return VerifiedReleaseReceipt.from_release(release, boundary)
+    manifest_path = publisher.publish(stage, manifest)
+    return VerifiedReleaseReceipt.from_manifest(manifest_path, boundary)

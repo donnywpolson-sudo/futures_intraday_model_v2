@@ -12,9 +12,14 @@ from futures_rebuild.boundary import (
     OperationReceipt,
     RepoBoundary,
 )
-from futures_rebuild.canonical import canonical_bytes, sha256_json
+from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
+from futures_rebuild.data_layout import (
+    DataReleaseManifest,
+    DataReleaseReceipt as VerifiedReleaseReceipt,
+    PhasePublisher as AtomicPublisher,
+)
 from futures_rebuild.errors import ContractError, IntegrityError
-from futures_rebuild.foundation.snapshot import PublishedSourceSnapshot
+from futures_rebuild.legacy_evidence_snapshot import PublishedLegacyEvidenceSnapshot as PublishedSourceSnapshot
 from futures_rebuild.legacy_trial_census import (
     EXPERIMENT_LEDGER_PATH,
     FEATURE_REGISTRY_PATH,
@@ -36,7 +41,6 @@ from futures_rebuild.migration import (
     SNAPSHOT_RECEIPT_STATUS,
     SNAPSHOT_RECEIPT_VERSION,
 )
-from futures_rebuild.release import AtomicPublisher, VerifiedReleaseReceipt
 from futures_rebuild.trial import LegacyCensusReceipt
 
 
@@ -403,12 +407,61 @@ def _snapshot(
 
 def _publisher(boundary, operation_factory) -> AtomicPublisher:
     return AtomicPublisher(
-        boundary.active_root / "data" / "vault" / ".staging" / "releases" / "census",
-        boundary.active_root / "data" / "vault" / "releases",
-        boundary.active_root / "state" / "locks" / "census.lock",
         boundary=boundary,
         operation_receipt=operation_factory("PUBLISH_RELEASE"),
+        lock_path=boundary.active_root / "state" / "locks" / "data-publication.lock",
     )
+
+
+def _archive_receipt(
+    boundary,
+    operation_factory,
+    snapshot: PublishedSourceSnapshot,
+    *,
+    bound_snapshot_id: str | None = None,
+) -> VerifiedReleaseReceipt:
+    publisher = _publisher(boundary, operation_factory)
+    stage = publisher.create_stage("archive_evidence")
+    snapshot_receipt = snapshot.root / "SOURCE_SNAPSHOT_RECEIPT.json"
+    files = [
+        {
+            "path": (
+                f"source_snapshots/{bound_snapshot_id or snapshot.source_snapshot_id}/"
+                "SOURCE_SNAPSHOT_RECEIPT.json"
+            ),
+            "sha256": sha256_file(snapshot_receipt),
+            "size": snapshot_receipt.stat().st_size,
+        }
+    ]
+    archive_core = {
+        "archive_root": str(boundary.active_root / "synthetic_archive"),
+        "files": files,
+        "source_root": str(snapshot.root.parent.parent),
+        "status": "COMPLETE_VERIFIED_COPY_ONLY",
+        "total_bytes": files[0]["size"],
+        "total_files": len(files),
+        "tree_sha256": sha256_json(files),
+    }
+    archive_document = {
+        **archive_core,
+        "archive_receipt_id": sha256_json(archive_core),
+    }
+    manifest = DataReleaseManifest.build(
+        stage,
+        phase="migration",
+        release_kind="futures_layout_v1_vault_archive_receipt",
+        schema_version="1.0.0",
+        embedded_documents={"archive_receipt": archive_document},
+        metadata={
+            "archive_receipt_id": archive_document["archive_receipt_id"],
+            "status": archive_document["status"],
+            "total_bytes": archive_document["total_bytes"],
+            "total_files": archive_document["total_files"],
+            "tree_sha256": archive_document["tree_sha256"],
+        },
+    )
+    path = publisher.publish(stage, manifest)
+    return VerifiedReleaseReceipt.from_manifest(path, boundary)
 
 
 def _source_contract(boundary, *, downloads_authorized: bool = False) -> Path:
@@ -437,15 +490,25 @@ def test_census_is_canonical_immutable_unresolved_and_snapshot_bound(
 ) -> None:
     snapshot, _ = _snapshot(boundary=boundary, monkeypatch=monkeypatch)
     publisher = _publisher(boundary, operation_factory)
+    archive_receipt = _archive_receipt(boundary, operation_factory, snapshot)
 
     receipt = publish_legacy_trial_census(
-        snapshot=snapshot, boundary=boundary, publisher=publisher
+        snapshot=snapshot,
+        source_archive_receipt=archive_receipt,
+        boundary=boundary,
+        publisher=publisher,
     )
     loaded = load_legacy_trial_census(
-        receipt, snapshot=snapshot, boundary=boundary
+        receipt,
+        snapshot=snapshot,
+        source_archive_receipt=archive_receipt,
+        boundary=boundary,
     )
     repeated = publish_legacy_trial_census(
-        snapshot=snapshot, boundary=boundary, publisher=publisher
+        snapshot=snapshot,
+        source_archive_receipt=archive_receipt,
+        boundary=boundary,
+        publisher=publisher,
     )
     census_receipt = LegacyCensusReceipt.from_release(receipt, boundary)
 
@@ -489,9 +552,11 @@ def test_census_fails_on_duplicate_provenance_rows(
         monkeypatch=monkeypatch,
         duplicate_target_row=True,
     )
+    archive_receipt = _archive_receipt(boundary, operation_factory, snapshot)
     with pytest.raises(IntegrityError, match="duplicate provenance rows"):
         publish_legacy_trial_census(
             snapshot=snapshot,
+            source_archive_receipt=archive_receipt,
             boundary=boundary,
             publisher=_publisher(boundary, operation_factory),
         )
@@ -501,10 +566,12 @@ def test_census_fails_on_tamper_and_missing_core_evidence(
     boundary, operation_factory, monkeypatch
 ) -> None:
     snapshot, _ = _snapshot(boundary=boundary, monkeypatch=monkeypatch)
+    archive_receipt = _archive_receipt(boundary, operation_factory, snapshot)
     snapshot.file(_fixture_destination(TARGET_STATUSES_PATH)).path.write_bytes(b"{}\n")
     with pytest.raises(IntegrityError, match="snapshot"):
         publish_legacy_trial_census(
             snapshot=snapshot,
+            source_archive_receipt=archive_receipt,
             boundary=boundary,
             publisher=_publisher(boundary, operation_factory),
         )
@@ -518,9 +585,30 @@ def test_census_fails_when_authorized_contract_substitutes_a_core_ledger(
         monkeypatch=monkeypatch,
         omit_manifest_binding=FEATURE_STATUSES_PATH,
     )
+    archive_receipt = _archive_receipt(boundary, operation_factory, snapshot)
     with pytest.raises(IntegrityError, match="missing, duplicated, or unexpected"):
         publish_legacy_trial_census(
             snapshot=snapshot,
+            source_archive_receipt=archive_receipt,
+            boundary=boundary,
+            publisher=_publisher(boundary, operation_factory),
+        )
+
+
+def test_census_rejects_archive_without_exact_snapshot_binding(
+    boundary, operation_factory, monkeypatch
+) -> None:
+    snapshot, _ = _snapshot(boundary=boundary, monkeypatch=monkeypatch)
+    archive_receipt = _archive_receipt(
+        boundary,
+        operation_factory,
+        snapshot,
+        bound_snapshot_id="a" * 64,
+    )
+    with pytest.raises(IntegrityError, match="exact source snapshot receipt"):
+        publish_legacy_trial_census(
+            snapshot=snapshot,
+            source_archive_receipt=archive_receipt,
             boundary=boundary,
             publisher=_publisher(boundary, operation_factory),
         )
@@ -569,10 +657,11 @@ def test_cli_defaults_to_read_only_canonical_assessment(
 
 
 def test_cli_publish_is_explicit_controlled_non_alpha_and_stays_untrusted(
-    boundary, monkeypatch, capsys
+    boundary, operation_factory, monkeypatch, capsys
 ) -> None:
     snapshot, _ = _snapshot(boundary=boundary, monkeypatch=monkeypatch)
     source_contract = _source_contract(boundary)
+    archive_receipt = _archive_receipt(boundary, operation_factory, snapshot)
     observed: dict[str, object] = {}
     original_issue = OperationReceipt.issue_local
 
@@ -612,6 +701,8 @@ def test_cli_publish_is_explicit_controlled_non_alpha_and_stays_untrusted(
             str(source_contract),
             "--source-snapshot-root",
             str(snapshot.root),
+            "--source-archive-manifest",
+            str(boundary.active_root / archive_receipt.manifest_path),
             "--publish",
         ]
     )
@@ -634,6 +725,7 @@ def test_cli_publish_is_explicit_controlled_non_alpha_and_stays_untrusted(
         "source_contract_sha256": hashlib.sha256(
             source_contract.read_bytes()
         ).hexdigest(),
+        "source_archive_release_id": archive_receipt.release_id,
         "source_snapshot_id": snapshot.source_snapshot_id,
         "status": "INVALID_TRIAL_CENSUS_UNRESOLVED",
         "trusted_gate": "false",

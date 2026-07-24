@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 import json
+from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import databento_dbn as dbn
 import pytest
 
+import futures_rebuild.foundation.materialize as materialize_module
+import futures_rebuild.foundation.parquet as parquet_module
 from futures_rebuild.boundary import RepoBoundary
 from futures_rebuild.boundary import OperationClassification, OperationReceipt
-from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
+from futures_rebuild.canonical import sha256_file
+from futures_rebuild.data_layout import (
+    DataReleaseManifest,
+    PhasePublisher as AtomicPublisher,
+)
 from futures_rebuild.errors import ContractError, IntegrityError
 from futures_rebuild.foundation import (
     EconomicsRuleBook,
@@ -29,12 +36,15 @@ from futures_rebuild.foundation.materialize import (
     materialize_causal_interval,
     materialize_raw_interval,
 )
-from futures_rebuild.foundation.parquet import iter_raw_bars, read_definitions
+from futures_rebuild.foundation.parquet import (
+    iter_raw_bars,
+    read_definitions,
+    write_causal_bars,
+)
 from futures_rebuild.foundation.support import (
     VerifiedFoundationPolicies,
     publish_foundation_policies,
 )
-from futures_rebuild.release import AtomicPublisher
 from futures_rebuild.source_symbology import build_query_contract
 
 
@@ -75,8 +85,11 @@ def _definition_bytes(*, symbol: str = "ES.FUT") -> bytes:
     record = dbn.InstrumentDefMsg(
         publisher_id=1,
         instrument_id=123,
-        ts_event=START_NS,
-        ts_recv=START_NS + 1,
+        # The provider event and index clocks are intentionally independent.
+        ts_event=START_NS + 1,
+        ts_recv=START_NS,
+        activation=START_NS - 86_400_000_000_000,
+        expiration=END_NS,
         min_price_increment=250_000_000,
         display_factor=1_000_000_000,
         raw_symbol="ESZ4",
@@ -120,43 +133,43 @@ def _bar_bytes(*, symbol: str = "ES.v.0") -> bytes:
 
 def _snapshot(tmp_path: Path) -> tuple[PublishedSourceSnapshot, RepoBoundary]:
     active = tmp_path / "active"
+    active.mkdir(parents=True)
+    boundary = RepoBoundary(active)
+    operation = OperationReceipt.issue_local(
+        boundary,
+        operation="PUBLISH_RELEASE",
+        classification=OperationClassification.SYNTHETIC_MECHANICS_ONLY,
+    )
+    publisher = AtomicPublisher(
+        boundary=boundary,
+        operation_receipt=operation,
+        lock_path=active / "state" / "locks" / "dbn.lock",
+    )
+    stage = publisher.create_stage("dbn")
     payloads = {
         "dbn/definition/ES/2024/2024-01-01_2025-01-01.dbn.zst": _definition_bytes(),
         "dbn/definition/ES/2024/2024-01-01_2025-01-01.dbn.zst.manifest.json": b"{}\n",
         "dbn/ohlcv_1m/ES/2024/2024-01-01_2025-01-01.dbn.zst": _bar_bytes(),
         "dbn/ohlcv_1m/ES/2024/2024-01-01_2025-01-01.dbn.zst.manifest.json": b"{}\n",
     }
-    files = [
-        {
-            "path": path,
-            "sha256": __import__("hashlib").sha256(content).hexdigest(),
-            "size": len(content),
-        }
-        for path, content in sorted(payloads.items())
-    ]
-    semantics = {
-        "approval_id": "c" * 64,
-        "files": files,
-        "files_index_sha256": sha256_json(files),
-        "inventory_sha256": "b" * 64,
-        "manifest_sha256": "a" * 64,
-        "migration_implementation_sha256": "d" * 64,
-        "receipt_version": "1.0.0",
-        "status": "COMPLETE_VERIFIED_IMMUTABLE",
-        "total_bytes": sum(item["size"] for item in files),
-        "total_files": len(files),
-        "user_authorization_id": "e" * 64,
-    }
-    receipt = {**semantics, "source_snapshot_id": sha256_json(semantics)}
-    root = active / "data" / "vault" / "source_snapshots" / receipt["source_snapshot_id"]
+    logical_paths: dict[str, str] = {}
+    staged_paths: dict[str, str] = {}
     for relative, content in payloads.items():
-        target = root / Path(relative)
+        target = stage / Path(relative)
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
-    (root / "SOURCE_SNAPSHOT_RECEIPT.json").write_bytes(canonical_bytes(receipt) + b"\n")
-    active.mkdir(parents=True, exist_ok=True)
-    boundary = RepoBoundary(active)
-    return PublishedSourceSnapshot.open(root, boundary=boundary), boundary
+        logical = f"data/{relative}"
+        logical_paths[relative] = logical
+        staged_paths[logical] = relative
+    manifest = DataReleaseManifest.build(
+        stage,
+        phase="dbn",
+        release_kind="futures_phase1a_verified_dbn",
+        schema_version="1.0.0",
+        logical_paths=logical_paths,
+    )
+    manifest_path = publisher.publish(stage, manifest, staged_paths=staged_paths)
+    return PublishedSourceSnapshot.open(manifest_path, boundary=boundary), boundary
 
 
 def _bindings(snapshot: PublishedSourceSnapshot):
@@ -196,9 +209,14 @@ def test_offline_dbn_decode_retains_exact_nanoseconds_and_provenance(tmp_path: P
     )
 
     assert len(definitions) == len(bars) == 1
-    assert definitions[0].ts_recv_ns == START_NS + 1
+    assert definitions[0].ts_recv_ns == START_NS
+    assert definitions[0].ts_event_ns == START_NS + 1
+    assert definitions[0].ts_recv_ns < definitions[0].ts_event_ns
+    assert definitions[0].instrument_id_date_utc == "2024-01-01"
+    assert definitions[0].activation_ns == START_NS - 86_400_000_000_000
+    assert definitions[0].expiration_ns == END_NS
     assert bars[0].event_at_ns == START_NS
-    assert definitions[0].source_release_id == snapshot.source_snapshot_id
+    assert definitions[0].source_release_id == snapshot.source_release_id
     assert definitions[0].source_file_sha256 == sha256_file(definition_binding.path)
     assert bars[0].source_file_path.startswith("dbn/ohlcv_1m/ES/2024/")
     assert definitions[0].row_sha256 != bars[0].row_sha256
@@ -263,12 +281,116 @@ def test_causal_bar_uses_actual_instrument_economics_and_exact_availability(tmp_
     assert result.disposition.value == "ELIGIBLE"
 
 
+def test_definition_replay_is_same_day_receive_ordered_and_intrabar_fail_closed(
+    tmp_path: Path,
+) -> None:
+    snapshot, _ = _snapshot(tmp_path)
+    definition_binding, bar_binding = _bindings(snapshot)
+    definition = next(
+        iter_definitions(
+            definition_binding,
+            market="ES",
+            expected_query_contract=_query("definition"),
+            batch_rows=1,
+        )
+    )
+    bar = next(
+        iter_bars(
+            bar_binding,
+            market="ES",
+            expected_query_contract=_query("ohlcv-1m"),
+            batch_rows=1,
+        )
+    )
+    decision = datetime(2024, 1, 1, 0, 1, 5, tzinfo=timezone.utc)
+
+    next_day = replace(
+        definition,
+        instrument_id_date_utc="2024-01-02",
+        ts_recv_ns=START_NS + 86_400_000_000_000,
+        row_ordinal=1,
+        row_sha256="1" * 64,
+    )
+    with pytest.raises(ContractError, match="same-day"):
+        DefinitionIndex((next_day,)).resolve(bar, decision_at=decision)
+
+    intrabar = replace(
+        definition,
+        ts_recv_ns=START_NS + 30_000_000_000,
+        security_update_action="MODIFY",
+        raw_symbol="ESZ4_CHANGED",
+        row_ordinal=1,
+        row_sha256="2" * 64,
+    )
+    with pytest.raises(ContractError, match="after bar start"):
+        DefinitionIndex((definition, intrabar)).resolve(bar, decision_at=decision)
+
+    tombstone = replace(
+        definition,
+        security_update_action="DELETE",
+        row_ordinal=1,
+        row_sha256="3" * 64,
+    )
+    with pytest.raises(ContractError, match="deleted"):
+        DefinitionIndex((definition, tombstone)).resolve(bar, decision_at=decision)
+
+
+def test_definition_equal_receive_cross_file_conflict_and_lifecycle_fail_closed(
+    tmp_path: Path,
+) -> None:
+    snapshot, _ = _snapshot(tmp_path)
+    definition_binding, bar_binding = _bindings(snapshot)
+    definition = next(
+        iter_definitions(
+            definition_binding,
+            market="ES",
+            expected_query_contract=_query("definition"),
+            batch_rows=1,
+        )
+    )
+    bar = next(
+        iter_bars(
+            bar_binding,
+            market="ES",
+            expected_query_contract=_query("ohlcv-1m"),
+            batch_rows=1,
+        )
+    )
+    decision = datetime(2024, 1, 1, 0, 1, 5, tzinfo=timezone.utc)
+    conflict = replace(
+        definition,
+        raw_symbol="CONFLICT",
+        source_file_path="dbn/definition/ES/2024/conflict.dbn.zst",
+        source_file_sha256="4" * 64,
+        row_sha256="5" * 64,
+    )
+    with pytest.raises(ContractError, match="equal-receive cross-file"):
+        DefinitionIndex((definition, conflict)).resolve(bar, decision_at=decision)
+
+    inactive = replace(
+        definition,
+        activation_ns=START_NS + 1,
+        row_sha256="6" * 64,
+    )
+    with pytest.raises(ContractError, match="does not cover"):
+        DefinitionIndex((inactive,)).resolve(bar, decision_at=decision)
+
+
+def test_reported_definition_lifecycle_epoch_is_quarantined() -> None:
+    policy = FoundationPolicy.from_file(REPO / "configs" / "foundation_policy.json")
+    quarantined_ns = int(
+        datetime(2016, 1, 1, tzinfo=timezone.utc).timestamp() * 1_000_000_000
+    )
+    with pytest.raises(ContractError, match="quarantined"):
+        policy.assert_definition_lifecycle_trusted(quarantined_ns)
+
+
 def test_snapshot_and_decoder_fail_closed_on_mutation_or_metadata_drift(tmp_path: Path):
     snapshot, _ = _snapshot(tmp_path)
     _, bar_binding = _bindings(snapshot)
     original = bar_binding.path.read_bytes()
     bar_binding.path.write_bytes(original + b"x")
-    with pytest.raises(IntegrityError, match="accepted index"):
+    with pytest.raises(IntegrityError, match="central manifest"):
         list(
             iter_bars(
                 bar_binding,
@@ -313,8 +435,14 @@ def test_economics_rulebook_treats_mutable_urls_as_non_authoritative_and_fails_o
         market="ES",
         publisher_id=1,
         instrument_id=123,
+        instrument_id_date_utc="2024-01-01",
         ts_event_ns=START_NS,
         ts_recv_ns=START_NS + 1,
+        activation_ns=START_NS - 86_400_000_000_000,
+        expiration_ns=END_NS,
+        security_update_action="ADD",
+        instrument_class="FUTURE",
+        security_type="FUT",
         raw_symbol="ESZ4",
         exchange="XCME",
         currency="USD",
@@ -325,6 +453,7 @@ def test_economics_rulebook_treats_mutable_urls_as_non_authoritative_and_fails_o
         source_manifest_sha256="b" * 64,
         source_file_path="dbn/definition/ES/2024/example.dbn.zst",
         source_file_sha256="c" * 64,
+        row_ordinal=0,
         row_sha256="d" * 64,
     )
     with pytest.raises(ContractError, match="economics fail closed"):
@@ -342,11 +471,9 @@ def test_phase1b_materialization_is_release_bound_and_reproducible(tmp_path: Pat
         classification=OperationClassification.SYNTHETIC_MECHANICS_ONLY,
     )
     publisher = AtomicPublisher(
-        boundary.active_root / "data" / "vault" / ".staging" / "releases" / "phase1b",
-        boundary.active_root / "data" / "vault" / "releases",
-        boundary.active_root / "state" / "locks" / "phase1b.lock",
         boundary=boundary,
         operation_receipt=operation,
+        lock_path=boundary.active_root / "state" / "locks" / "phase1b.lock",
     )
     kwargs = {
         "definition_binding": definition_binding,
@@ -372,7 +499,9 @@ def test_phase1b_materialization_is_release_bound_and_reproducible(tmp_path: Pat
     assert loaded.interval_receipt["learned_or_outcome_informed_transform_count"] == 0
 
 
-def test_phase2_causal_release_consumes_only_verified_raw_and_policy_releases(tmp_path: Path):
+def test_phase2_causal_release_consumes_only_verified_raw_and_policy_releases(
+    tmp_path: Path, monkeypatch
+):
     snapshot, boundary = _snapshot(tmp_path)
     definition_binding, bar_binding = _bindings(snapshot)
     config_root = boundary.active_root / "configs"
@@ -381,6 +510,7 @@ def test_phase2_causal_release_consumes_only_verified_raw_and_policy_releases(tm
         "contract_economics_rules.json",
         "foundation_policy.json",
         "known_anomalies.json",
+        "provider_data_epochs.json",
         "session_policy.json",
     ):
         (config_root / name).write_bytes((REPO / "configs" / name).read_bytes())
@@ -390,11 +520,9 @@ def test_phase2_causal_release_consumes_only_verified_raw_and_policy_releases(tm
         classification=OperationClassification.SYNTHETIC_MECHANICS_ONLY,
     )
     publisher = AtomicPublisher(
-        boundary.active_root / "data" / "vault" / ".staging" / "releases" / "causal",
-        boundary.active_root / "data" / "vault" / "releases",
-        boundary.active_root / "state" / "locks" / "causal.lock",
         boundary=boundary,
         operation_receipt=operation,
+        lock_path=boundary.active_root / "state" / "locks" / "causal.lock",
     )
     policy_receipt = publish_foundation_policies(
         boundary=boundary,
@@ -416,11 +544,32 @@ def test_phase2_causal_release_consumes_only_verified_raw_and_policy_releases(tm
         publisher=publisher,
         batch_rows=1,
     )
+    monkeypatch.setattr(
+        materialize_module,
+        "read_raw_bar_audit",
+        lambda *_args, **_kwargs: pytest.fail(
+            "same-process raw publication must reuse its producer census"
+        ),
+    )
+    monkeypatch.setattr(
+        materialize_module,
+        "read_definition_audit",
+        lambda *_args, **_kwargs: pytest.fail(
+            "same-process definition publication must reuse its producer census"
+        ),
+    )
     causal_receipt = materialize_causal_interval(
         raw_receipt=raw_receipt,
         policies=policies,
         publisher=publisher,
         batch_rows=1,
+    )
+    monkeypatch.setattr(
+        materialize_module,
+        "read_causal_bar_census",
+        lambda *_args, **_kwargs: pytest.fail(
+            "same-process causal publication must reuse its producer census"
+        ),
     )
     bars_path, report = load_causal_interval(causal_receipt, boundary=boundary)
     assert bars_path.is_file()
@@ -428,3 +577,21 @@ def test_phase2_causal_release_consumes_only_verified_raw_and_policy_releases(tm
     assert report["disposition_counts"] == {"ELIGIBLE": 1}
     assert report["prediction_in_coverage_denominator_rows"] == 1
     assert report["learned_or_outcome_informed_transform_count"] == 0
+
+    loaded_raw = load_raw_interval(raw_receipt, boundary=boundary)
+    reference_path = tmp_path / "reference-causal-bars.parquet"
+    monkeypatch.setattr(
+        parquet_module,
+        "_fast_causal_batch",
+        lambda *_args, **_kwargs: None,
+    )
+    reference_census = write_causal_bars(
+        raw_bars_path=loaded_raw.bars_path,
+        definitions_path=loaded_raw.definitions_path,
+        policies=policies,
+        source_raw_release_id=raw_receipt.release_id,
+        output=reference_path,
+        batch_rows=1,
+    )
+    assert reference_census == (1, {"ELIGIBLE": 1}, {"GLBX_MDP3_CAPTURE_TIME": 1})
+    assert reference_path.read_bytes() == bars_path.read_bytes()

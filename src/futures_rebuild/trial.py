@@ -13,6 +13,12 @@ from datetime import datetime
 from enum import Enum
 from pathlib import Path
 
+from .archive import (
+    ARCHIVE_RELEASE_KIND,
+    ARCHIVE_SCHEMA_VERSION,
+    archive_snapshot_receipt_entry,
+    validate_archive_receipt_document,
+)
 from .boundary import (
     OperationClassification,
     OperationReceipt,
@@ -21,7 +27,6 @@ from .boundary import (
 from .canonical import (
     assert_plain_file,
     canonical_bytes,
-    contained_path,
     fsync_directory,
     is_linklike,
     sha256_file,
@@ -30,7 +35,7 @@ from .canonical import (
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
 from .clock import ProductionClock, TrustedClock, require_trusted_clock
 from .locking import FileLease
-from .release import VerifiedReleaseReceipt
+from .data_layout import MANIFEST_ROOT, DataReleaseReceipt as VerifiedReleaseReceipt
 from .time_contracts import require_utc
 
 
@@ -39,7 +44,7 @@ _TRIAL_EVENT_ROOT = Path("state/trial_events")
 _TRIAL_LOCK_PATH = Path("state/locks/trial_events.lock")
 _TRIAL_HEAD_PATH = Path("state/trial_heads/head.json")
 _TRIAL_REGISTRY_ROOT = Path("state/trial_registry")
-_EVALUATION_ROOT = Path("data/vault/releases")
+_EVALUATION_ROOT = MANIFEST_ROOT
 
 
 def _canonical_active_path(
@@ -102,143 +107,98 @@ class LegacyCensusReceipt:
         cls, release_receipt: VerifiedReleaseReceipt, boundary: RepoBoundary
     ) -> "LegacyCensusReceipt":
         manifest = release_receipt.verify(boundary)
-        if manifest.release_kind != "legacy_trial_census" or {
-            entry.path for entry in manifest.files
-        } != {"legacy_census.json"}:
-            raise IntegrityError("legacy census release content is invalid")
-        path = boundary.active_root / release_receipt.relative_root / "legacy_census.json"
-        try:
-            raw = path.read_bytes()
-            payload = json.loads(raw.decode("utf-8"))
-        except (OSError, UnicodeDecodeError, ValueError) as exc:
-            raise IntegrityError("legacy census JSON is invalid") from exc
-        if manifest.schema_version == "2.0.0":
-            from .legacy_trial_census import (
-                INDETERMINATE_COUNT_STATE,
-                LEGACY_CENSUS_SCHEMA_VERSION,
-                UNRESOLVED_STATUS,
-                validate_legacy_trial_census_payload,
-            )
-
-            if not isinstance(payload, dict) or raw != canonical_bytes(payload) + b"\n":
-                raise IntegrityError("canonical legacy census JSON is not canonical")
-            canonical = validate_legacy_trial_census_payload(payload)
-            expected_metadata = {
-                "census_sha256",
-                "exact_count_state",
-                "source_evidence_sha256",
-                "source_snapshot_id",
-                "status",
-                "trusted_gate",
-            }
-            source_snapshot_id = str(canonical["source_snapshot_id"])
-            if (
-                manifest.schema_version != LEGACY_CENSUS_SCHEMA_VERSION
-                or set(manifest.metadata) != expected_metadata
-                or manifest.source_release_ids != (source_snapshot_id,)
-                or manifest.metadata["census_sha256"]
-                != canonical["census_sha256"]
-                or manifest.metadata["exact_count_state"]
-                != INDETERMINATE_COUNT_STATE
-                or manifest.metadata["source_evidence_sha256"]
-                != canonical["source_evidence_sha256"]
-                or manifest.metadata["source_snapshot_id"] != source_snapshot_id
-                or manifest.metadata["status"] != UNRESOLVED_STATUS
-                or manifest.metadata["trusted_gate"] is not False
-            ):
-                raise IntegrityError("canonical legacy census release is invalid")
-            status = str(canonical["status"])
-            observed_floor = canonical["observed_attempt_floor"]
-            penalty_count = canonical["preregistered_penalty_count"]
-            census_hash = str(canonical["census_sha256"])
-            rationale_hash = str(canonical["rationale_sha256"])
-            source_hash = str(canonical["source_evidence_sha256"])
-            exact_count_state = str(canonical["exact_count_state"])
-            trusted_gate = canonical["trusted_gate"]
-            unresolved = canonical["unresolved_references"]
-            if (
-                type(observed_floor) is not int
-                or type(penalty_count) is not int
-                or type(trusted_gate) is not bool
-                or not isinstance(unresolved, list)
-            ):
-                raise IntegrityError("canonical legacy census fields are invalid")
-            core = {
-                "census_sha256": census_hash,
-                "exact_count_state": exact_count_state,
-                "observed_attempt_floor": observed_floor,
-                "preregistered_penalty_count": penalty_count,
-                "rationale_sha256": rationale_hash,
-                "release_receipt_id": release_receipt.receipt_id,
-                "source_evidence_sha256": source_hash,
-                "source_snapshot_id": source_snapshot_id,
-                "status": status,
-                "trusted_gate": trusted_gate,
-                "unresolved_reference_count": len(unresolved),
-            }
-            return cls(
-                release_receipt=release_receipt,
-                status=status,
-                observed_attempt_floor=observed_floor,
-                preregistered_penalty_count=penalty_count,
-                census_sha256=census_hash,
-                rationale_sha256=rationale_hash,
-                source_evidence_sha256=source_hash,
-                receipt_id=sha256_json(core),
-                boundary=boundary,
-                exact_count_state=exact_count_state,
-                trusted_gate=trusted_gate,
-                source_snapshot_id=source_snapshot_id,
-                unresolved_reference_count=len(unresolved),
-            )
-        if not isinstance(payload, dict) or set(payload) != {
-            "census_sha256",
-            "observed_attempt_floor",
-            "preregistered_penalty_count",
-            "rationale_sha256",
-            "source_evidence_sha256",
-            "status",
-        }:
-            raise IntegrityError("legacy census schema is invalid")
-        status = str(payload["status"])
-        observed_floor = payload["observed_attempt_floor"]
-        penalty_count = payload["preregistered_penalty_count"]
-        census_hash = str(payload["census_sha256"])
-        rationale_hash = str(payload["rationale_sha256"])
-        source_hash = str(payload["source_evidence_sha256"])
         if (
-            status not in {
-                "CONSERVATIVE_PENALTY_PREREGISTERED",
-                "INVALID_TRIAL_CENSUS_UNRESOLVED",
-            }
-            or isinstance(observed_floor, bool)
-            or not isinstance(observed_floor, int)
-            or observed_floor < 0
-            or isinstance(penalty_count, bool)
-            or not isinstance(penalty_count, int)
-            or penalty_count < 0
-            or any(
-                re.fullmatch(r"[0-9a-f]{64}", value) is None
-                for value in (census_hash, rationale_hash, source_hash)
-            )
-            or (
-                status == "CONSERVATIVE_PENALTY_PREREGISTERED"
-                and penalty_count <= observed_floor
-            )
-            or (
-                status == "INVALID_TRIAL_CENSUS_UNRESOLVED"
-                and penalty_count != 0
-            )
+            release_receipt.phase != "evidence"
+            or manifest.release_kind != "legacy_trial_census"
+            or manifest.schema_version != "3.0.0"
+            or manifest.files
+            or set(manifest.embedded_documents)
+            != {"legacy_census.json", "source_archive_receipt.json"}
         ):
-            raise IntegrityError("legacy census fields are invalid")
+            raise IntegrityError("legacy census release content is invalid")
+        payload = release_receipt.embedded_document("legacy_census.json", boundary)
+        archive_payload = release_receipt.embedded_document(
+            "source_archive_receipt.json", boundary
+        )
+        if not isinstance(payload, dict) or not isinstance(archive_payload, dict):
+            raise IntegrityError("legacy census embedded evidence is invalid")
+        archive_receipt = VerifiedReleaseReceipt.from_dict(archive_payload)
+        archive_manifest = archive_receipt.verify(boundary)
+        if (
+            archive_receipt.phase != "migration"
+            or archive_manifest.release_kind != ARCHIVE_RELEASE_KIND
+            or archive_manifest.schema_version != ARCHIVE_SCHEMA_VERSION
+            or archive_manifest.files
+            or set(archive_manifest.embedded_documents) != {"archive_receipt"}
+            or manifest.source_release_ids != (archive_receipt.release_id,)
+        ):
+            raise IntegrityError("legacy census archive evidence is invalid")
+        archive_document = archive_receipt.embedded_document(
+            "archive_receipt", boundary
+        )
+        validate_archive_receipt_document(archive_document)
+        from .legacy_trial_census import (
+            INDETERMINATE_COUNT_STATE,
+            LEGACY_CENSUS_SCHEMA_VERSION,
+            UNRESOLVED_STATUS,
+            validate_legacy_trial_census_payload,
+        )
+
+        canonical = validate_legacy_trial_census_payload(payload)
+        expected_metadata = {
+            "census_sha256",
+            "exact_count_state",
+            "source_evidence_sha256",
+            "source_archive_release_id",
+            "source_snapshot_id",
+            "status",
+            "trusted_gate",
+        }
+        source_snapshot_id = str(canonical["source_snapshot_id"])
+        archive_snapshot_receipt_entry(archive_document, source_snapshot_id)
+        if (
+            manifest.schema_version != LEGACY_CENSUS_SCHEMA_VERSION
+            or set(manifest.metadata) != expected_metadata
+            or manifest.metadata["census_sha256"] != canonical["census_sha256"]
+            or manifest.metadata["exact_count_state"]
+            != INDETERMINATE_COUNT_STATE
+            or manifest.metadata["source_evidence_sha256"]
+            != canonical["source_evidence_sha256"]
+            or manifest.metadata["source_archive_release_id"]
+            != archive_receipt.release_id
+            or manifest.metadata["source_snapshot_id"] != source_snapshot_id
+            or manifest.metadata["status"] != UNRESOLVED_STATUS
+            or manifest.metadata["trusted_gate"] is not False
+        ):
+            raise IntegrityError("canonical legacy census release is invalid")
+        status = str(canonical["status"])
+        observed_floor = canonical["observed_attempt_floor"]
+        penalty_count = canonical["preregistered_penalty_count"]
+        census_hash = str(canonical["census_sha256"])
+        rationale_hash = str(canonical["rationale_sha256"])
+        source_hash = str(canonical["source_evidence_sha256"])
+        exact_count_state = str(canonical["exact_count_state"])
+        trusted_gate = canonical["trusted_gate"]
+        unresolved = canonical["unresolved_references"]
+        if (
+            type(observed_floor) is not int
+            or type(penalty_count) is not int
+            or type(trusted_gate) is not bool
+            or not isinstance(unresolved, list)
+        ):
+            raise IntegrityError("canonical legacy census fields are invalid")
         core = {
             "census_sha256": census_hash,
+            "exact_count_state": exact_count_state,
             "observed_attempt_floor": observed_floor,
             "preregistered_penalty_count": penalty_count,
             "rationale_sha256": rationale_hash,
             "release_receipt_id": release_receipt.receipt_id,
             "source_evidence_sha256": source_hash,
+            "source_snapshot_id": source_snapshot_id,
             "status": status,
+            "trusted_gate": trusted_gate,
+            "unresolved_reference_count": len(unresolved),
         }
         return cls(
             release_receipt=release_receipt,
@@ -250,6 +210,10 @@ class LegacyCensusReceipt:
             source_evidence_sha256=source_hash,
             receipt_id=sha256_json(core),
             boundary=boundary,
+            exact_count_state=exact_count_state,
+            trusted_gate=trusted_gate,
+            source_snapshot_id=source_snapshot_id,
+            unresolved_reference_count=len(unresolved),
         )
 
     def verify(self) -> None:
@@ -276,6 +240,7 @@ class ExperimentCharter:
     multiplicity_family_id: str
     multiplicity_family_rule_hash: str
     holdout_policy_hash: str
+    robustness_policy_hash: str
     outcome_unlock_at: datetime
     evaluation_classification: EvaluationClassification
 
@@ -341,6 +306,7 @@ class ExperimentCharter:
             self.cost_policy_hash,
             self.multiplicity_family_rule_hash,
             self.holdout_policy_hash,
+            self.robustness_policy_hash,
         )
         if any(
             type(value) is not str
@@ -411,6 +377,7 @@ class ExperimentCharter:
             "multiplicity_family_rule_hash": self.multiplicity_family_rule_hash,
             "outcome_unlock_at": self.outcome_unlock_at.isoformat(),
             "primary_metric": self.primary_metric,
+            "robustness_policy_hash": self.robustness_policy_hash,
             "target_policy_hash": self.target_policy_hash,
         }
 
@@ -438,6 +405,7 @@ class ExperimentCharter:
             "outcome_unlock_at",
             "primary_metric",
             "release_role_bindings",
+            "robustness_policy_hash",
             "target_policy_hash",
         }
         if (
@@ -501,6 +469,7 @@ class ExperimentCharter:
                     "multiplicity_family_rule_hash"
                 ],
                 holdout_policy_hash=payload["holdout_policy_hash"],
+                robustness_policy_hash=payload["robustness_policy_hash"],
                 outcome_unlock_at=datetime.fromisoformat(payload["outcome_unlock_at"]),
                 evaluation_classification=EvaluationClassification(
                     payload["evaluation_classification"]
@@ -1202,13 +1171,17 @@ class EvaluationFirewall:
         if len(matches) != 1:
             raise UnauthorizedOperation("release is not listed in the registered charter")
         manifest = matches[0].verify(boundary)
-        release_root = boundary.active_root / matches[0].relative_root
-        if release_root.parent.resolve(strict=False) != permit.evaluation_root.resolve(
+        manifest_path = boundary.active_root / matches[0].manifest_path
+        if manifest_path.parent.parent.resolve(strict=False) != permit.evaluation_root.resolve(
             strict=False
         ):
-            raise UnauthorizedOperation("release is outside the chartered evaluation root")
-        candidate = contained_path(release_root, relative_path)
-        if relative_path not in {entry.path for entry in manifest.files}:
+            raise UnauthorizedOperation("release manifest is outside the chartered root")
+        logical_paths = {entry.logical_path for entry in manifest.files}
+        if relative_path in logical_paths:
+            candidate = matches[0].resolve_file(relative_path, boundary)
+        elif "/" not in relative_path and "\\" not in relative_path:
+            candidate = matches[0].resolve_unique_filename(relative_path, boundary)
+        else:
             raise UnauthorizedOperation("path is not a payload in the verified release")
         assert_plain_file(candidate)
         return candidate

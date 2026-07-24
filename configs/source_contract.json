@@ -1,5 +1,5 @@
 {
-  "contract_version": "1.0.0",
+  "contract_version": "2.0.0",
   "provider": {
     "name": "Databento",
     "dataset": "GLBX.MDP3",
@@ -14,6 +14,29 @@
   "overlap_resolution_contract": "configs/dbn_overlap_resolutions.json",
   "known_anomalies_contract": "configs/known_anomalies.json",
   "known_anomalies_sha256": "eb7c83bf69d1c7a1b57878a66ac86581fc5d1572e252db7f48e6dedc4e49f923",
+  "data_layout": {
+    "layout_version": "2.0.0",
+    "layout_contract_path": "configs/data_layout_contract.json",
+    "layout_contract_sha256": "0e69ae80a2a3150a08c5bc785d046667195483e96923acaeb85450770a9564b1",
+    "manifest_root": "manifests/data_releases",
+    "staging_root": "state/data_publication_staging",
+    "phase1b_logical_template": "data/raw/{market}/{year}/{interval}/{filename}",
+    "phase1b_physical_template": "data/raw/{market}/{year}/{interval}/{release-id}/{filename}",
+    "phase2_logical_template": "data/causally_gated_normalized/{market}/{year}/{interval}/{filename}",
+    "phase2_physical_template": "data/causally_gated_normalized/{market}/{year}/{interval}/{release-id}/{filename}"
+  },
+  "canonical_dbn_release": {
+    "phase": "dbn",
+    "release_id": "9e5a9f2a405e50b0cda6702b67506b0951b057500781d37c45171da3967e9b51",
+    "release_kind": "futures_phase1a_verified_dbn",
+    "schema_version": "1.0.0",
+    "manifest_path": "manifests/data_releases/dbn/9e5a9f2a405e50b0cda6702b67506b0951b057500781d37c45171da3967e9b51.json",
+    "manifest_sha256": "9aa763faad136f06d5dc15cae09abcd1cc63eab0a070dd102b25872eed9d2555",
+    "dbn_files": 4020,
+    "sidecar_files": 4020,
+    "combined_files": 8040,
+    "combined_bytes": 25007876004
+  },
   "continuous_contract_policy": {
     "bar_identity_authority": "ACTUAL_INSTRUMENT_ID_FROM_BAR",
     "mapping_interval_end_fields_feature_eligible": false,
@@ -38,8 +61,8 @@
     {"id": "dbn_statistics", "path": "data/dbn/statistics", "role": "immutable_provider_source_and_canonical_research_input", "schema": "statistics", "expected_dbn_files": 568},
     {"id": "dbn_status", "path": "data/dbn/status", "role": "immutable_provider_source_and_canonical_research_input", "schema": "status", "expected_dbn_files": 565},
     {"id": "dbn_trades", "path": "data/dbn/trades", "role": "immutable_provider_source_diagnostic", "schema": "trades", "expected_dbn_files": 67},
-    {"id": "phase1b_raw", "path": "data/raw", "role": "comparison_only_regenerate_in_v2", "layout": "{market}/{year}"},
-    {"id": "phase2_causal", "path": "data/causally_gated_normalized", "role": "comparison_only_regenerate_in_v2", "layout": "{market}/{year}"}
+    {"id": "phase1b_raw", "path": "data/raw", "role": "regenerate_from_pinned_dbn_release_only", "logical_layout": "{market}/{year}/{interval}/{filename}", "physical_layout": "{market}/{year}/{interval}/{release-id}/{filename}"},
+    {"id": "phase2_causal", "path": "data/causally_gated_normalized", "role": "regenerate_from_pinned_phase1b_release_only", "logical_layout": "{market}/{year}/{interval}/{filename}", "physical_layout": "{market}/{year}/{interval}/{release-id}/{filename}"}
   ],
   "required_row_fields": [
     "event_at",

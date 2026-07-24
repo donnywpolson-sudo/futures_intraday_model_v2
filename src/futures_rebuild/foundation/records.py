@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
+from functools import lru_cache
 from pathlib import PurePosixPath
 from typing import Mapping
 
@@ -16,7 +17,11 @@ from ..time_contracts import require_utc
 NANO = Decimal("1000000000")
 INT64_NULL = 2**63 - 1
 INT32_NULL = 2**31 - 1
+UINT64_NULL = 2**64 - 1
 EPOCH_UTC = datetime(1970, 1, 1, tzinfo=timezone.utc)
+EPOCH_UTC_DATE = date(1970, 1, 1)
+DAY_NS = 86_400_000_000_000
+MAX_SUPPORTED_UTC_NS_EXCLUSIVE = 253_402_300_800_000_000_000
 
 
 def exact_int(value: object, name: str, *, nonnegative: bool = False) -> int:
@@ -52,14 +57,44 @@ def datetime_to_ns(value: datetime, name: str) -> int:
 def ns_to_datetime(value: int, name: str) -> datetime:
     """Expose a UTC datetime while retaining exact nanoseconds on the record."""
 
-    raw = exact_int(value, name, nonnegative=True)
+    raw = validate_timestamp_ns(value, name)
+    return _datetime_from_ns(raw)
+
+
+@lru_cache(maxsize=65_536)
+def _datetime_from_ns(raw: int) -> datetime:
     seconds, nanoseconds = divmod(raw, 1_000_000_000)
     try:
         return datetime.fromtimestamp(seconds, tz=timezone.utc).replace(
             microsecond=nanoseconds // 1_000
         )
     except (OverflowError, OSError, ValueError) as exc:
-        raise ContractError(f"{name} is outside the supported UTC range") from exc
+        raise ContractError("timestamp is outside the supported UTC range") from exc
+
+
+def validate_timestamp_ns(value: int, name: str) -> int:
+    """Validate a UTC nanosecond timestamp without constructing a datetime."""
+
+    raw = exact_int(value, name, nonnegative=True)
+    if raw in {0, UINT64_NULL} or raw >= MAX_SUPPORTED_UTC_NS_EXCLUSIVE:
+        raise ContractError(f"{name} is undefined or outside the supported UTC range")
+    return raw
+
+
+@lru_cache(maxsize=16_384)
+def _utc_date_day(value: str) -> int:
+    try:
+        parsed = date.fromisoformat(value)
+    except (TypeError, ValueError) as exc:
+        raise ContractError("provider index date is not a canonical UTC date") from exc
+    if parsed.isoformat() != value:
+        raise ContractError("provider index date is not canonical")
+    return (parsed - EPOCH_UTC_DATE).days
+
+
+def _assert_index_date(value: str, timestamp_ns: int, name: str) -> None:
+    if _utc_date_day(value) != timestamp_ns // DAY_NS:
+        raise ContractError(f"{name} differs from the provider index UTC date")
 
 
 @dataclass(frozen=True)
@@ -68,8 +103,14 @@ class ProviderDefinition:
     market: str
     publisher_id: int
     instrument_id: int
+    instrument_id_date_utc: str
     ts_event_ns: int
     ts_recv_ns: int
+    activation_ns: int
+    expiration_ns: int
+    security_update_action: str
+    instrument_class: str
+    security_type: str
     raw_symbol: str
     exchange: str
     currency: str
@@ -80,13 +121,17 @@ class ProviderDefinition:
     source_manifest_sha256: str
     source_file_path: str
     source_file_sha256: str
+    row_ordinal: int
     row_sha256: str
 
     def __post_init__(self) -> None:
-        exact_int(self.ts_event_ns, "definition.ts_event_ns", nonnegative=True)
-        exact_int(self.ts_recv_ns, "definition.ts_recv_ns", nonnegative=True)
-        if self.ts_recv_ns < self.ts_event_ns:
-            raise ContractError("definition receive time precedes effective time")
+        # These clocks have independent authorities.  Preserve both exactly;
+        # causal resolution separately requires effective and received times.
+        validate_timestamp_ns(self.ts_event_ns, "definition.ts_event_ns")
+        validate_timestamp_ns(self.ts_recv_ns, "definition.ts_recv_ns")
+        exact_int(self.activation_ns, "definition.activation_ns", nonnegative=True)
+        exact_int(self.expiration_ns, "definition.expiration_ns", nonnegative=True)
+        exact_int(self.row_ordinal, "definition.row_ordinal", nonnegative=True)
         for name, value in (
             ("publisher_id", self.publisher_id),
             ("instrument_id", self.instrument_id),
@@ -103,8 +148,16 @@ class ProviderDefinition:
             or not self.exchange
             or self.currency != "USD"
             or not self.unit_of_measure
+            or not self.security_update_action
+            or not self.instrument_class
+            or not self.security_type
         ):
             raise ContractError("definition identity/unit fields are invalid")
+        _assert_index_date(
+            self.instrument_id_date_utc,
+            self.ts_recv_ns,
+            "definition.instrument_id_date_utc",
+        )
         for digest in (
             self.source_release_id,
             self.source_manifest_sha256,
@@ -129,6 +182,18 @@ class ProviderDefinition:
     @property
     def ts_recv(self) -> datetime:
         return ns_to_datetime(self.ts_recv_ns, "definition.ts_recv_ns")
+
+    @property
+    def activation(self) -> datetime | None:
+        if self.activation_ns in {0, UINT64_NULL}:
+            return None
+        return ns_to_datetime(self.activation_ns, "definition.activation_ns")
+
+    @property
+    def expiration(self) -> datetime | None:
+        if self.expiration_ns in {0, UINT64_NULL}:
+            return None
+        return ns_to_datetime(self.expiration_ns, "definition.expiration_ns")
 
     @property
     def min_tick(self) -> Decimal:
@@ -168,7 +233,7 @@ class ProviderBar:
     row_sha256: str
 
     def __post_init__(self) -> None:
-        exact_int(self.event_at_ns, "bar.event_at_ns", nonnegative=True)
+        validate_timestamp_ns(self.event_at_ns, "bar.event_at_ns")
         if self.dataset != "GLBX.MDP3" or not self.market:
             raise ContractError("bar dataset/market is invalid")
         for name, value in (
@@ -248,12 +313,7 @@ def _validate_market_state_lineage(
         exact_int(value, name)
         if value <= 0:
             raise ContractError("market-state identity IDs must be positive")
-    try:
-        parsed_date = date.fromisoformat(instrument_id_date_utc)
-    except (TypeError, ValueError) as exc:
-        raise ContractError("market-state UTC identity date is invalid") from exc
-    if parsed_date.isoformat() != instrument_id_date_utc:
-        raise ContractError("market-state UTC identity date is not canonical")
+    _utc_date_day(instrument_id_date_utc)
     exact_int(row_ordinal, "row_ordinal", nonnegative=True)
     for digest in (
         source_release_id,
@@ -277,8 +337,9 @@ def _validate_market_state_lineage(
 class StatusRecordV1:
     """Exact as-received Databento instrument-status record.
 
-    All provider state is preserved as a named value.  Eligibility is a
-    separate deterministic decision and is never inferred while decoding.
+    All provider state is preserved as a named value. ``ts_recv`` is the
+    provider index timestamp, while ``ts_event`` is an unadjusted exchange
+    clock retained for audit only. Causal visibility is ordered by ``ts_recv``.
     """
 
     dataset: str
@@ -315,10 +376,8 @@ class StatusRecordV1:
             row_ordinal=self.row_ordinal,
             row_sha256=self.row_sha256,
         )
-        exact_int(self.ts_event_ns, "status.ts_event_ns", nonnegative=True)
-        exact_int(self.ts_recv_ns, "status.ts_recv_ns", nonnegative=True)
-        if self.ts_recv_ns < self.ts_event_ns:
-            raise ContractError("status receive time precedes event time")
+        validate_timestamp_ns(self.ts_event_ns, "status.ts_event_ns")
+        validate_timestamp_ns(self.ts_recv_ns, "status.ts_recv_ns")
         for name, value in (
             ("action", self.action),
             ("reason", self.reason),
@@ -329,10 +388,11 @@ class StatusRecordV1:
         ):
             if type(value) is not str or not value:
                 raise ContractError(f"status {name} is invalid")
-        if self.instrument_id_date_utc != ns_to_datetime(
-            self.ts_event_ns, "status.ts_event_ns"
-        ).date().isoformat():
-            raise ContractError("status identity date differs from ts_event UTC date")
+        _assert_index_date(
+            self.instrument_id_date_utc,
+            self.ts_recv_ns,
+            "status.instrument_id_date_utc",
+        )
 
     @property
     def record_id(self) -> str:
@@ -428,16 +488,17 @@ class StatisticsRecordV1:
             ("flags", self.flags, True),
         ):
             exact_int(value, f"statistics.{name}", nonnegative=nonnegative)
-        if self.ts_recv_ns < self.ts_event_ns:
-            raise ContractError("statistics receive time precedes event time")
+        validate_timestamp_ns(self.ts_event_ns, "statistics.ts_event_ns")
+        validate_timestamp_ns(self.ts_recv_ns, "statistics.ts_recv_ns")
         if type(self.stat_type) is not str or not self.stat_type:
             raise ContractError("statistics type is invalid")
         if type(self.update_action) is not str or not self.update_action:
             raise ContractError("statistics update action is invalid")
-        if self.instrument_id_date_utc != ns_to_datetime(
-            self.ts_event_ns, "statistics.ts_event_ns"
-        ).date().isoformat():
-            raise ContractError("statistics identity date differs from ts_event UTC date")
+        _assert_index_date(
+            self.instrument_id_date_utc,
+            self.ts_recv_ns,
+            "statistics.instrument_id_date_utc",
+        )
 
     @property
     def record_id(self) -> str:
