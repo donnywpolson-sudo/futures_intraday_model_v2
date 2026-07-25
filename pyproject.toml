@@ -36,6 +36,8 @@ futures-successor-inventory = "futures_rebuild.successor_inventory:main"
 futures-successor-migrate = "futures_rebuild.successor_migration:main"
 futures-pipeline = "futures_rebuild.pipeline:main"
 futures-live-cockpit = "futures_rebuild.live_cockpit.app:main"
+futures-retirement-audit = "futures_rebuild.retirement:main"
+futures-meta-audit = "futures_rebuild.meta_audit:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

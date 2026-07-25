@@ -101,6 +101,20 @@ python -m futures_rebuild.pipeline --output reports/pipeline_audit/smoke.json sm
 
 Outputs are create-only. Choose a new path for each run.
 
+## Audit commands
+
+```powershell
+futures-master-audit --invocation <frozen-invocation.json>
+futures-meta-audit --suite-evidence <full-suite-receipt.json>
+futures-retirement-audit
+```
+
+The Master Audit classifies one exact target without granting authority. The
+Meta Audit checks its independently derived threat registry, Master coverage,
+stage mappings, executable test nodes, and full-suite receipt. The retirement
+audit verifies standalone closure without resolving or opening an external
+repository.
+
 ## Cockpit workflow
 
 ```powershell

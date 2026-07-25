@@ -61,11 +61,16 @@ a frozen invocation:
 
 ```powershell
 futures-master-audit --invocation configs/master_audit_v3/invocation.example.json
+futures-meta-audit
+futures-retirement-audit
 ```
 
 The example intentionally fails closed while the checked-in universe approval
 is pending or required evidence is absent. `META_MASTER_AUDIT.md` defines the
-independent blind-first review of the Master Audit itself.
+independent blind-first review of the Master Audit itself. `futures-meta-audit`
+checks its frozen threat coverage against the Master, stage matrix, executable
+test nodes, and an exact full-suite receipt. `futures-retirement-audit` proves
+standalone closure without opening an external repository.
 
 ## Futures Live Cockpit
 

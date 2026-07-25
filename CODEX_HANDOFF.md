@@ -23,6 +23,14 @@
 - Cockpit unit/fake-provider/all-market tests, initial packaged self-check,
   secret scan, and installer `-WhatIf` passed. No provider smoke, installation,
   or shortcut change has occurred.
+- Full pinned-environment validation passed at milestone commit `3330d55`:
+  431 passed and one optional Node-only formatter test skipped.
+- `futures-meta-audit` has 12 blind-first threat controls with zero unresolved
+  Critical/High or P0/P1 structural gaps; it awaits a final clean-HEAD
+  full-suite receipt.
+- `futures-retirement-audit` never opens the legacy root and currently blocks
+  on the pending successor, final audits, steady-state public entrypoints, and
+  retirement conditions.
 
 ## Next actions
 
