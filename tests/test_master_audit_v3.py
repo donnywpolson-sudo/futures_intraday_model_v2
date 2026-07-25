@@ -35,6 +35,29 @@ def test_checked_in_provisional_universe_fails_closed() -> None:
     }
 
 
+def test_active_target_states_use_steady_state_vocabulary() -> None:
+    matrix = json.loads(
+        (
+            ROOT
+            / "configs"
+            / "master_audit_v3"
+            / "stage_requirement_matrix.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert "REBUILD_COMPLETE" not in matrix["target_states"]
+    assert {
+        "FOUNDATION_READY",
+        "HISTORICAL_RESEARCH_READY",
+        "OBSERVATION_COCKPIT_READY",
+    }.issubset(matrix["target_states"])
+    cockpit_required = set(
+        matrix["target_states"]["OBSERVATION_COCKPIT_READY"]
+    )
+    assert {f"G8.S{index}" for index in range(5, 13)}.issubset(
+        cockpit_required
+    )
+
+
 def test_checked_in_universe_preserves_frozen_tiers_and_cohort_roles() -> None:
     universe = json.loads(
         (ROOT / "configs" / "research_universe_contract.json").read_text(
@@ -58,7 +81,7 @@ def test_checked_in_universe_preserves_frozen_tiers_and_cohort_roles() -> None:
 def _approved_fixture(tmp_path: Path) -> tuple[Path, dict]:
     (tmp_path / "docs").mkdir()
     (tmp_path / "configs" / "master_audit_v3").mkdir(parents=True)
-    shutil.copyfile(ROOT / "docs" / "MASTER_AUDIT_V3.md", tmp_path / "docs" / "MASTER_AUDIT_V3.md")
+    shutil.copyfile(ROOT / "MASTER_AUDIT.md", tmp_path / "MASTER_AUDIT.md")
     shutil.copyfile(
         ROOT / "configs" / "master_audit_v3" / "stage_requirement_matrix.json",
         tmp_path / "configs" / "master_audit_v3" / "stage_requirement_matrix.json",
@@ -79,7 +102,7 @@ def _approved_fixture(tmp_path: Path) -> tuple[Path, dict]:
     invocation = _load_example()
     invocation["audit_id"] = "SYNTHETIC-APPROVED-UNIVERSE"
     for name, relative in {
-        "specification": "docs/MASTER_AUDIT_V3.md",
+        "specification": "MASTER_AUDIT.md",
         "stage_matrix": "configs/master_audit_v3/stage_requirement_matrix.json",
         "universe_contract": "configs/research_universe_contract.json",
     }.items():
@@ -106,7 +129,7 @@ def _approved_fixture(tmp_path: Path) -> tuple[Path, dict]:
         (tmp_path / "configs" / "master_audit_v3" / "stage_requirement_matrix.json").read_text(
             encoding="utf-8"
         )
-    )["target_states"]["REBUILD_COMPLETE"]
+    )["target_states"]["FOUNDATION_READY"]
     invocation["check_results"] = [
         {
             "subcheck_id": subcheck_id,

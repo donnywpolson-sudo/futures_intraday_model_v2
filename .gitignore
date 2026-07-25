@@ -7,6 +7,12 @@ __pycache__/
 .coverage
 .venv/
 .codex/
+.env
+.env.*
+api.env
+databento.env
+!.env.example
+!*.env.example
 build/
 dist/
 futures_intraday_model_v2_data_archive/

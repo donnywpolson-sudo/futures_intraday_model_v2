@@ -30,6 +30,7 @@ from ..canonical import (
     sha256_json,
 )
 from ..errors import ContractError, IntegrityError
+from ..source_contract import legacy_roots_from_contract
 from ..locking import FileLease
 from ..producer_bridge import (
     DEFINITION_RELEASE_KIND,
@@ -2559,7 +2560,7 @@ def _boundary_from_contract(repository_root: Path, source_contract: Path) -> Rep
         raise ContractError("source contract must be a JSON object")
     boundary = RepoBoundary(
         Path(str(payload["active_repository"])),
-        legacy_roots=(Path(str(payload["legacy_repository"])),),
+        legacy_roots=legacy_roots_from_contract(payload),
         foreign_roots=(
             Path.home() / "Desktop" / "US_stocks_swing_model",
             Path.home() / "Desktop" / "US_stocks_swing_model_v2",

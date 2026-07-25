@@ -7,11 +7,17 @@ name = "futures-intraday-model-v2"
 version = "0.1.0"
 description = "Deterministic, causal futures research foundation"
 requires-python = "==3.11.9"
-dependencies = ["numpy==2.4.4"]
+dependencies = ["numpy==2.4.4", "PyYAML==6.0.3"]
 
 [project.optional-dependencies]
 test = ["pytest==9.0.3"]
 vault = ["databento==0.78.0"]
+cockpit = [
+    "databento==0.78.0",
+    "pandas==3.0.3",
+    "pywebview==6.2.1",
+]
+package = ["PyInstaller==6.21.0"]
 
 [project.scripts]
 futures-migrate = "futures_rebuild.migration:main"
@@ -26,6 +32,10 @@ futures-layout-migration = "futures_rebuild.phase1a_layout:main"
 futures-dbn-flat-layout = "futures_rebuild.dbn_flat_layout:main"
 futures-dbn-flat-cutover = "futures_rebuild.dbn_flat_cutover:main"
 futures-verify-vault-archive = "futures_rebuild.archive:main"
+futures-successor-inventory = "futures_rebuild.successor_inventory:main"
+futures-successor-migrate = "futures_rebuild.successor_migration:main"
+futures-pipeline = "futures_rebuild.pipeline:main"
+futures-live-cockpit = "futures_rebuild.live_cockpit.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -53,8 +53,9 @@ _STATUS_PRECEDENCE = {
 }
 
 TARGET_STATES = (
-    "REBUILD_COMPLETE",
+    "FOUNDATION_READY",
     "HISTORICAL_RESEARCH_READY",
+    "OBSERVATION_COCKPIT_READY",
     "CANDIDATE_SEALED",
     "PROSPECTIVE_EVIDENCE_PENDING",
     "PROSPECTIVE_PASS",
@@ -64,7 +65,16 @@ TARGET_STATES = (
 )
 
 UNIVERSE_OWNED_SUBCHECKS = frozenset(
-    {"G1.S2", "G1.S3", "G2.S2", "G5.S1", "G5.S5", "G6.S1", "G6.S2"}
+    {
+        "G1.S2",
+        "G1.S3",
+        "G2.S2",
+        "G5.S1",
+        "G5.S5",
+        "G6.S1",
+        "G6.S2",
+        "G8.S6",
+    }
 )
 
 

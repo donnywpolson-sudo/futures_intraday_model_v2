@@ -13,6 +13,7 @@ from .boundary import OperationClassification, OperationReceipt, RepoBoundary
 from .canonical import canonical_bytes, sha256_file, sha256_json
 from .data_layout import DataReleaseManifest, DataReleaseReceipt, PhasePublisher
 from .errors import ContractError, IntegrityError
+from .source_contract import legacy_roots_from_contract
 
 if TYPE_CHECKING:
     from .foundation.snapshot import PublishedDbnRelease
@@ -383,7 +384,7 @@ def _boundary_from_contract(repository_root: Path, source_contract: Path) -> Rep
         raise ContractError("source contract must be a JSON object")
     boundary = RepoBoundary(
         Path(str(payload["active_repository"])),
-        legacy_roots=(Path(str(payload["legacy_repository"])),),
+        legacy_roots=legacy_roots_from_contract(payload),
         foreign_roots=(
             Path.home() / "Desktop" / "US_stocks_swing_model",
             Path.home() / "Desktop" / "US_stocks_swing_model_v2",

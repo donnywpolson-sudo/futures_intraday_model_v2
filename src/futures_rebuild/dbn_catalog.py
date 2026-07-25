@@ -31,6 +31,7 @@ from .canonical import (
 )
 from .boundary import RepoBoundary
 from .errors import ContractError, IntegrityError
+from .source_contract import legacy_roots_from_contract
 from .data_layout import (
     LAYOUT_VERSION,
     MANIFEST_ROOT,
@@ -1240,7 +1241,7 @@ def main(argv: list[str] | None = None) -> int:
     contract_payload = json.loads(args.source_contract.read_text(encoding="utf-8"))
     boundary = RepoBoundary(
         Path(str(contract_payload["active_repository"])),
-        legacy_roots=(Path(str(contract_payload["legacy_repository"])),),
+        legacy_roots=legacy_roots_from_contract(contract_payload),
         foreign_roots=(
             Path.home() / "Desktop" / "US_stocks_swing_model",
             Path.home() / "Desktop" / "US_stocks_swing_model_v2",

@@ -13,6 +13,7 @@ from ..anomaly_acceptance import assert_anomaly_materialization_eligible
 from ..boundary import OperationClassification, OperationReceipt, RepoBoundary
 from ..canonical import assert_plain_file, canonical_bytes, sha256_file, sha256_json
 from ..errors import ContractError, IntegrityError
+from ..source_contract import legacy_roots_from_contract
 from ..data_layout import (
     DataReleaseManifest as ReleaseManifest,
     DataReleaseReceipt as VerifiedReleaseReceipt,
@@ -694,7 +695,7 @@ def main(argv: list[str] | None = None) -> int:
         raise ContractError("source contract must be an object")
     boundary = RepoBoundary(
         Path(str(contract["active_repository"])),
-        legacy_roots=(Path(str(contract["legacy_repository"])),),
+        legacy_roots=legacy_roots_from_contract(contract),
         foreign_roots=(
             Path.home() / "Desktop" / "US_stocks_swing_model",
             Path.home() / "Desktop" / "US_stocks_swing_model_v2",

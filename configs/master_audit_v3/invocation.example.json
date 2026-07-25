@@ -3,15 +3,15 @@
   "classification": "NON_AUTHORIZING_EVIDENCE_CLASSIFICATION",
   "mode": "EVIDENCE_ONLY",
   "audit_id": "EXAMPLE-STRUCTURAL-ONLY",
-  "target_state": "REBUILD_COMPLETE",
-  "allowed_paths": ["docs", "configs", "reports"],
+  "target_state": "FOUNDATION_READY",
+  "allowed_paths": ["MASTER_AUDIT.md", "docs", "configs", "reports"],
   "specification": {
-    "path": "docs/MASTER_AUDIT_V3.md",
-    "sha256": "7a10c9cb84e4d401f078b4d8a35398014b819384037e6a4d334a3e237de69fca"
+    "path": "MASTER_AUDIT.md",
+    "sha256": "f9fc7c68b06bf239a63675a1cb05d8397d0fde66ef9844cf93caa6e023565fbd"
   },
   "stage_matrix": {
     "path": "configs/master_audit_v3/stage_requirement_matrix.json",
-    "sha256": "12b11973fa20a5d722f045374ebd7285576a33011fc212aa4736313fbc40d2a8"
+    "sha256": "d2af1c382b4d289706b6e1149b52437d20f68283b9428dd78d1981c765f7975d"
   },
   "universe_contract": {
     "path": "configs/research_universe_contract.json",

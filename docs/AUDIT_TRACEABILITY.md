@@ -1,5 +1,8 @@
 # Audit traceability
 
+This is supporting implementation history, not an audit authority. Root
+`MASTER_AUDIT.md` and its frozen stage matrix control new classifications.
+
 Every release blocker maps to an enforceable contract and acceptance evidence. `M1` means implemented in the deterministic core; later gates remain blocked.
 
 | Audit finding | Required correction | Implementation | Acceptance evidence | State |
@@ -26,7 +29,7 @@ Every release blocker maps to an enforceable contract and acceptance evidence. `
 | Recursive newest selection can substitute source files | All exact files selected; uncontracted duplicate logical coverage fails | `dbn_catalog.py` | ambiguous-coverage test | M2A |
 | Retrospective mapping intervals expose future roll ends | Bar instrument ID is authoritative; mappings reconciliation-only | `identity.py`, `dbn_catalog.py` | future-mapping mutation invariant | M2A |
 | Databento instrument IDs can be reused across publishers or dates | Composite dataset/publisher/instrument/UTC-namespace-date identity plus separate exchange-session date and as-of definition provenance | `identity.py`, schemas | composite identity and future-definition mutation tests | M2A |
-| Legacy cockpit can be mistaken for trusted live inference | Pin as non-active generated evidence; never port or execute | migration manifest, M2A plan | exact size/hash migration gate | M2A |
+| Observation cockpit can be mistaken for trusted inference or trading | Reimplement under v2 ownership with no order dependency, explicit abstention, exact package closure, gated live smoke, and rollback | `futures_rebuild.live_cockpit`, root Master Audit G8 | 41-market, fake-provider, self-check, package, secret, live-smoke, and rollback evidence | Offline pass; live smoke pending |
 | Existing Phase 1B to Phase 2 evidence is structurally inconsistent | Regenerate against canonical promoted identities; zero waivers | M2 data gate | Zero-error reconciliation report | Blocked |
 | Missing/no-trade, sessions, DST, halt, limit, expiry and roll behavior | Explicit causal fixtures and policies | M2/M3 data code | Adversarial data suite | Blocked |
 | Row-level samples exaggerate evidence | Date/session clusters, purged nested WFA, block/HAC uncertainty | M4 research engine | Synthetic statistical validation | Blocked |

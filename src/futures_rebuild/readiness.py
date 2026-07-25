@@ -34,6 +34,7 @@ from .boundary import (
 )
 from .canonical import assert_plain_file, canonical_bytes, sha256_file, sha256_json
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
+from .source_contract import legacy_roots_from_contract
 from .foundation.orchestrator import (
     FOUNDATION_SET_RELEASE_KIND,
     load_foundation_set,
@@ -541,7 +542,7 @@ def _verify_dependency_lock(root: Path) -> str:
         or closure.get("requirements_path") != "requirements.sha256.lock"
         or closure.get("requirements_sha256")
         != sha256_file(root / "requirements.sha256.lock")
-        or closure.get("install_policy") != "--require-hashes --only-binary=:all:"
+        or closure.get("install_policy") != "--require-hashes"
     ):
         raise IntegrityError("environment lock does not bind the complete package closure")
     for package, version in packages.items():
@@ -2030,12 +2031,11 @@ def load_historical_research_ready(
 def _cli_boundary(repository_root: Path, source_contract: Path) -> RepoBoundary:
     contract = _read_json_object(source_contract, description="source contract")
     active = contract.get("active_repository")
-    legacy = contract.get("legacy_repository")
-    if type(active) is not str or not active or type(legacy) is not str or not legacy:
+    if type(active) is not str or not active:
         raise ContractError("source contract repository boundaries are invalid")
     boundary = RepoBoundary(
         Path(active),
-        legacy_roots=(Path(legacy),),
+        legacy_roots=legacy_roots_from_contract(contract),
         foreign_roots=(
             Path.home() / "Desktop" / "US_stocks_swing_model",
             Path.home() / "Desktop" / "US_stocks_swing_model_v2",

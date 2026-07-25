@@ -1,124 +1,164 @@
-# Project outline
+# Futures intraday research project
 
-## Goal
+## Objective
 
-Build an independent, reproducible, bias-resistant futures research and manual
-decision-support system from approved, hash-verified local data and causal/as-of
-releases. Historical WFA/OOS, candidate sealing, and prospective inference
-advance only through separate authorization and evidence gates. The rebuild
-itself makes no alpha or trading claim, and automatic execution remains out of
-scope.
+Operate a reproducible, point-in-time, bias-resistant research system over the
+approved 41-market GLBX.MDP3 universe, with immutable data releases, explicit
+trial accounting, chronological validation, net economics, locked
+holdout/forward cohorts, and an observation-only live cockpit. Automatic order
+execution is outside this project's scope.
 
-## Status vocabulary
+## Source-of-truth roles
 
-1. `REBUILD_IN_PROGRESS` - code, copied inputs, foundation, or required publications remain incomplete.
-2. `REBUILD_COMPLETE` - the approved local copy, authoritative v2 foundation, recovery, reproducibility, coverage, and closure gates have passed and an immutable receipt has been published.
-3. `HISTORICAL_RESEARCH_READY` - mechanical non-alpha prerequisites have passed; this is not real-history authority, an alpha claim, or candidate readiness.
-4. `CANDIDATE_SEALED` - a separately authorized candidate is immutable after approved historical discovery gates.
-5. `PROSPECTIVE_EVIDENCE_PENDING`, `PROSPECTIVE_PASS`, `PROSPECTIVE_FAIL`, or `PROSPECTIVE_INCONCLUSIVE` - outcomes for a sealed candidate only.
-6. `MANUAL_DECISION_SUPPORT_READY` - fit-free inference, monitoring, abstention, and shadow gates pass; this is still not automatic execution.
+- `AGENTS.md`: durable project policy and approval boundaries.
+- `PROJECT_OUTLINE.md`: authoritative workflow, commands, gates, outputs, and
+  stop conditions.
+- `CODEX_HANDOFF.md`: current multi-step continuation state.
+- `README.md`: installation and operator orientation.
+- `MASTER_AUDIT.md` and `META_MASTER_AUDIT.md`: canonical project-state and
+  audit-quality specifications.
+- `configs/research_universe_contract.json`: canonical markets, cohorts,
+  admission, and approval receipt.
+- `configs/alpha_tiered.yaml`: operational profile view.
+- `configs/source_contract.json`: accepted immutable source-family boundary.
+- `configs/*.json` and `configs/*.yaml`: sessions, identity, costs, coverage,
+  pipeline, audit, and packaging contracts.
+- `manifests/**`: immutable release, approval, selection, and provenance
+  metadata.
+- `state/trial_registry/**`: pre-outcome trial declarations and attempt
+  genealogy.
 
-Current status: `REBUILD_IN_PROGRESS`.
+## Profile ladder
 
-The pre-copy code and synthetic/adversarial tests are complete. Local copy, real foundation construction, and readiness publication remain pending.
+Profiles are defined by `configs/alpha_tiered.yaml` and checked against the
+canonical universe.
 
-## Non-negotiable boundaries
+- `tier_0`: ES engineering smoke only; never alpha evidence.
+- `tier_1_research`: core discovery/replication profile. Approved cohort rules
+  determine selection eligibility.
+- `tier_1_holdout` and `tier_1_forward`: locked core validation.
+- `tier_2_research`: broader balanced-market replication.
+- `tier_2_holdout` and `tier_2_forward`: locked balanced validation.
+- `tier_3_research`: all 41 markets. Report the 38 traditional markets
+  separately from BTC, ETH, and PA; satellite/frontier results cannot rescue
+  traditional-universe failure.
+- `tier_3_holdout` and `tier_3_forward`: locked full-universe validation.
+- `all_raw`: source inventory only, never research evidence.
 
-- Preserve the legacy repository unchanged.
-- Reuse the existing local Databento DBNs only through exact, approved, hash-verified copy. Do not download or call a provider.
-- Treat legacy Phase 1B and Phase 2 as comparison-only evidence. Regenerated v2 releases are the only authoritative downstream inputs.
-- Treat the legacy cockpit executable as non-active evidence only; never execute it.
-- Preserve exact logical legacy source paths, sizes, and hashes when short aliases are required for Windows path safety.
-- Keep failed legacy alpha, ORAC, and distributional research lines closed.
-- Keep real-history WFA/OOS, candidate sealing, trading, destructive cutover, and pushing behind separate authorization.
+Profiles can narrow but cannot silently expand the universe, change admission
+or selection eligibility, or unlock holdout/forward data.
 
-## Authoritative data and research flow
+## Phase 1A-11 workflow
 
-```text
-approved local DBN hash-copy
-  -> immutable verified DBN source snapshot
-  -> v2 Phase 1B actual-contract raw releases
-  -> v2 Phase 2 causal/as-of-available releases
-  -> independent feature releases and separate outcome-source releases
-  -> separately authorized WFA/OOS research
-  -> separately authorized sealed candidate
-  -> prospective fit-free inference
+| Phase | Purpose | V2 interface | Main output |
+| --- | --- | --- | --- |
+| 1A | Preflight exact provider requests; ingest and verify immutable DBN/sidecar pairs | `futures-pipeline phase1a` | DBN release manifests and acquisition evidence |
+| 1B | Convert accepted DBNs and independently reconcile rows, schemas, definitions, hashes, and sidecars | `futures-pipeline phase1b` | immutable raw releases and ingest reports |
+| 2 | Build point-in-time causal, session-normalized, actual-contract data | `futures-pipeline phase2` | causal foundation releases |
+| 3 | Build outcomes with explicit entry lag, horizon, maturity, and unresolved states | `futures-pipeline phase3` | separate labeled/outcome-source releases |
+| 4 | Build leakage-audited causal feature matrices without outcome access | `futures-pipeline phase4` | immutable feature releases |
+| 5 | Freeze nested chronological split plans with purge and embargo | `futures-pipeline phase5` | split-plan manifests |
+| 6 | Run separately approved WFA builders and materialize OOS predictions | `futures-pipeline phase6` | sealed prediction releases |
+| 7 | Audit saved prediction identity, coverage, abstention, and signal quality | `futures-pipeline phase7` | prediction-audit reports |
+| 8 | Evaluate net economics, baselines, portfolio/risk, and promotion eligibility | `futures-pipeline phase8` | model-selection and risk reports |
+| 9 | Run bounded registered robustness, negative-control, and statistical-validity tests | `futures-pipeline phase9` | research-audit reports |
+| 10 | Seal an explicitly approved candidate and its complete serving bundle | `futures-pipeline phase10` | immutable candidate bundle/receipt |
+| 11 | Guard one authorized locked-holdout or forward evaluation using only the sealed bundle | `futures-pipeline phase11` | guarded evaluation evidence |
+
+The public CLI defaults to generated synthetic mechanics. Synthetic mode
+executes the complete dependency order while retaining zero provider, alpha,
+prediction, sealing, holdout, and order authority. Any production adapter must
+check the corresponding exact receipt before reading protected data or writing
+an authoritative artifact.
+
+## Runnable commands
+
+From the repository root in the pinned Python 3.11.9 environment:
+
+```powershell
+futures-pipeline list
+futures-pipeline validate-profiles
+futures-pipeline --output reports/pipeline_audit/synthetic-phase1a-11.json smoke
+futures-pipeline phase1a
+futures-pipeline phase1b
+futures-pipeline phase2
+futures-pipeline phase3
+futures-pipeline phase4
+futures-pipeline phase5
+futures-pipeline phase6
+futures-pipeline phase7
+futures-pipeline phase8
+futures-pipeline phase9
+futures-pipeline phase10
+futures-pipeline phase11
 ```
 
-No legacy research artifact, comparison parquet, executable, or coordination document may bypass this flow.
+The global options precede the subcommand when using the module directly:
 
-## Milestones
+```powershell
+python -m futures_rebuild.pipeline --output reports/pipeline_audit/smoke.json smoke
+```
 
-### M0 - Constitution and traceability (complete)
+Outputs are create-only. Choose a new path for each run.
 
-- Freeze source roles, claims, causal timing, actual-contract identity, immutability, authorization, and exit gates.
-- Bind every accepted source and evidence file to an exact logical path, size, and hash.
-- Separate evidence, comparison inputs, authoritative inputs, feature inputs, outcomes, predictions, and execution authority.
+## Cockpit workflow
 
-### M1 - Pre-copy implementation and synthetic proof (complete)
+```powershell
+futures-live-cockpit --self-check
+futures-live-cockpit --demo
+futures-live-cockpit --live-smoke --approval <approved-receipt.json>
+powershell -NoProfile -File scripts/build_live_cockpit.ps1
+powershell -NoProfile -File scripts/install_live_cockpit.ps1 -Upgrade -WhatIf
+```
 
-- Exact resumable copy-only migration with inventory, approval, checkpoint, recovery, and snapshot publication contracts.
-- Offline DBN catalog with deterministic selection and exact overlap resolution.
-- V2 Phase 1B and Phase 2 materialization with actual-contract and causal availability lineage.
-- As-received status/statistics ledgers and fail-closed eligibility.
-- Independent feature and outcome-source releases.
-- Production-shaped, execution-disabled historical capability.
-- Production-derived legacy census and non-authorizing readiness receipts/CLI.
-- Synthetic/adversarial validation of mechanics, mutation failure, recovery, isolation, and closure binding.
+The normal UI is observation-only and may read live GLBX.MDP3 data through the
+v2-local credential locator. A provider-backed smoke requires its exact durable
+approval. Installation/shortcut cutover follows only after dependency, package,
+self-check, demo, all-market, and approved bounded live-smoke evidence pass.
 
-M1 completion does not imply that any real input was copied or that a milestone receipt may be published.
+## Approval gates
 
-### M2 - Controlled local source copy (approved; execution pending)
+Separate approvals are required for:
 
-- Preserve the independently reproduced exact inventory and the checked-in approval bound to both manifest and source-inventory hashes.
-- Hash-copy only approved local inputs without overwrite, links, moves, or legacy mutation.
-- Publish an immutable source snapshot and reverify its complete tree, hashes, totals, and receipt.
-- Keep the eight Databento DBN families authoritative; retain legacy Phase 1B/Phase 2 only under comparison paths.
-- Keep `FuturesLiveCockpit.exe` evidence-only and unexecuted.
+1. a provider request or download, bound to provider, dataset, symbols, dates,
+   schema, request count, cost ceiling, and destinations;
+2. copy migration, bound to source/destination mapping hashes, bytes, parent
+   release, exclusions, and rollback;
+3. each real-history trial or WFA/OOS program, after an immutable trial
+   declaration;
+4. prediction materialization;
+5. candidate sealing;
+6. holdout or forward access;
+7. bounded provider-backed cockpit smoke;
+8. paper, shadow, or live trading and every order path;
+9. remote push; and
+10. destructive deletion or cutover.
 
-### M3 - Authoritative v2 foundation (pending)
+Approval for one class never authorizes another.
 
-- Catalog only the verified copied DBN snapshot.
-- Regenerate v2 Phase 1B and Phase 2; do not promote legacy comparison parquet.
-- Materialize status/statistics as-of records, features, and separate outcome-source releases.
-- Preserve missing/unknown status as `STATUS_UNRESOLVED`, deny eligibility, and retain the row in coverage denominators.
-- Prove future source or roll changes cannot alter earlier rows or eligibility.
-- Preserve a complete archive census across every selected interval, including
-  pre-status-capability rows and their unresolved dispositions.
-- Apply the unchanged production thresholds only to the hash-bound research
-  scope beginning `2025-01-01`, the first complete UTC year after Databento
-  introduced CME status in July 2024. Every selected interval from that date
-  forward must pass; earlier intervals remain preserved and explicitly abstain.
-- Pass all research-scope production coverage gates:
-  - at least 1,000,000 bars;
-  - at least 100,000 status-eligible rows;
-  - at least 100,000 status-gated feature-ready rows;
-  - at least 95% status-resolved decisions;
-  - at least 95% status-gated feature-ready coverage;
-  - at least 99% status market-year coverage;
-  - 100% statistics market-year coverage.
+## Acceptance standards
 
-### M4 - Mechanical readiness publication (pending)
+- Every accepted market-year is exact-schema, hash, provenance, session,
+  identity, and source-availability verified.
+- Unknown/missing states remain in coverage denominators and are ineligible.
+- Features, outcomes, predictions, and evaluation are separate immutable
+  capabilities and releases.
+- Every real-data attempt has a pre-outcome registry record and finite stop rule.
+- Costs, dependence, market/family concentration, traditional/satellite
+  separation, baselines, negative controls, and portfolio risk are explicit.
+- Holdout and forward cohorts remain physically and procedurally locked.
+- The cockpit exposes exactly the approved 41 markets, has no order path, keeps
+  secrets outside Git/packages/installations, handles failures visibly, bounds
+  cache/state, creates no autostart, and has verified shortcut rollback.
+- The project works with external repositories unavailable.
+- `FOUNDATION_READY`, `HISTORICAL_RESEARCH_READY`, and
+  `OBSERVATION_COCKPIT_READY` each require a `SUPPORTABLE` Master Audit result.
+- Meta Audit closure requires no unresolved Critical/High or P0/P1 deficiency.
 
-- Publish `REBUILD_COMPLETE` only after the real foundation and all exact closures pass.
-- Bind `HISTORICAL_RESEARCH_READY` to the full capability, Git, dependency, foundation, isolation, synthetic-test, and census closures.
-- Preserve census status `INVALID_TRIAL_CENSUS_UNRESOLVED`, exact count `INDETERMINATE`, observed floor 39, penalty 0, and `trusted_gate: false`.
-- Make receipt language explicit that readiness is mechanical only, with no alpha, candidate, live, trust, or real-history authority.
+## Stop conditions
 
-### M5 - Separately authorized historical WFA/OOS (not authorized)
-
-- Require a new predeclared program, external real-history authorization, trusted pre-outcome anchor, frozen trial/multiplicity policy, and finite stop rules.
-- Use nested chronological WFA/OOS, purging by information interval, dependence-aware uncertainty, actual costs, negative controls, and independent required sleeves.
-- Do not rescue the closed legacy alpha, ORAC, or distributional lines.
-- A failed or inconclusive result closes the program; it does not become a candidate.
-
-### M6 - Candidate and prospective operation (not authorized)
-
-- Require separate candidate authorization after passed historical gates.
-- Seal an immutable bundle and append predictions before outcomes.
-- Keep prospective inference incapable of fitting, changing thresholds, placing orders, or silently refreshing a bundle.
-- Automatic futures execution remains out of scope.
-
-## Current stop line
-
-Proceed only through reviewed inventory, approved local hash-copy, authoritative foundation construction, and mechanical readiness publication. Do not download data, run real-history WFA/OOS, seal a candidate, push externally, or trade.
+Stop before the boundary when an approval is missing, a hash or schema is stale,
+an input is incomplete or ambiguous, an immutable destination exists, a profile
+drifts, a secret may be exposed, a real trial is unregistered, a holdout could
+be disclosed, an order path is reachable, or rollback cannot be proven. Report
+the exact rejected item and smallest missing approval or input.

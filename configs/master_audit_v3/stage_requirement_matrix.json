@@ -1,9 +1,10 @@
 {
   "schema_version": "systematic_futures_audit/3.0.0",
-  "registry_id": "V2-MASTER-AUDIT-STAGE-MATRIX-3.0.0",
+  "registry_id": "V2-MASTER-AUDIT-STAGE-MATRIX-3.1.0",
   "target_states": {
-    "REBUILD_COMPLETE": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3"],
+    "FOUNDATION_READY": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3", "G3.S1", "G3.S2", "G3.S3", "G8.S1", "G8.S2", "G8.S4"],
     "HISTORICAL_RESEARCH_READY": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3", "G3.S1", "G3.S2", "G3.S3", "G4.S1", "G4.S2", "G4.S3", "G4.S4"],
+    "OBSERVATION_COCKPIT_READY": ["G1.S1", "G1.S2", "G1.S3", "G2.S2", "G8.S2", "G8.S4", "G8.S5", "G8.S6", "G8.S7", "G8.S8", "G8.S9", "G8.S10", "G8.S11", "G8.S12"],
     "CANDIDATE_SEALED": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3", "G3.S1", "G3.S2", "G3.S3", "G4.S1", "G4.S2", "G4.S3", "G4.S4", "G5.S1", "G5.S2", "G5.S3", "G5.S4", "G5.S5", "G6.S1", "G6.S2", "G7.S1", "G7.S2", "G7.S3", "G7.S4", "G7.S5", "G7.S6", "G7.S7"],
     "PROSPECTIVE_EVIDENCE_PENDING": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3", "G3.S1", "G3.S2", "G3.S3", "G4.S1", "G4.S2", "G4.S3", "G4.S4", "G5.S1", "G5.S2", "G5.S3", "G5.S4", "G5.S5", "G6.S1", "G6.S2", "G7.S1", "G7.S2", "G7.S3", "G7.S4", "G7.S5", "G7.S6", "G7.S7", "G8.S1", "G8.S2", "G8.S3", "G8.S4"],
     "PROSPECTIVE_PASS": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3", "G3.S1", "G3.S2", "G3.S3", "G4.S1", "G4.S2", "G4.S3", "G4.S4", "G5.S1", "G5.S2", "G5.S3", "G5.S4", "G5.S5", "G6.S1", "G6.S2", "G7.S1", "G7.S2", "G7.S3", "G7.S4", "G7.S5", "G7.S6", "G7.S7", "G8.S1", "G8.S2", "G8.S3", "G8.S4"],
@@ -57,7 +58,15 @@
       {"subcheck_id": "G8.S1", "title": "STAGE_CAPABILITY_AND_SERVING_PARITY"},
       {"subcheck_id": "G8.S2", "title": "MONITORING_AND_CHANGE_DETECTION"},
       {"subcheck_id": "G8.S3", "title": "ORDER_STATE_INVARIANTS_AND_OPERATIONAL_RECOVERY"},
-      {"subcheck_id": "G8.S4", "title": "CHANGE_CONTROL_INDEPENDENT_VALIDATION_AND_AUDIT_TRAIL"}
+      {"subcheck_id": "G8.S4", "title": "CHANGE_CONTROL_INDEPENDENT_VALIDATION_AND_AUDIT_TRAIL"},
+      {"subcheck_id": "G8.S5", "title": "COCKPIT_DEPENDENCY_AND_ASSET_INTEGRITY"},
+      {"subcheck_id": "G8.S6", "title": "COCKPIT_APPROVED_41_MARKET_CONFIGURATION"},
+      {"subcheck_id": "G8.S7", "title": "COCKPIT_SECRET_ISOLATION_AND_CREDENTIAL_LOCATION"},
+      {"subcheck_id": "G8.S8", "title": "COCKPIT_OBSERVATION_ONLY_AND_NO_ORDER_PATH"},
+      {"subcheck_id": "G8.S9", "title": "COCKPIT_PROVIDER_FAILURE_AND_ABSTENTION"},
+      {"subcheck_id": "G8.S10", "title": "COCKPIT_PACKAGING_ASSETS_AND_LICENSES"},
+      {"subcheck_id": "G8.S11", "title": "COCKPIT_STATE_CACHE_AND_CLEAN_SHUTDOWN_RECOVERY"},
+      {"subcheck_id": "G8.S12", "title": "COCKPIT_SHORTCUT_CUTOVER_AND_ROLLBACK"}
     ]}
   ]
 }

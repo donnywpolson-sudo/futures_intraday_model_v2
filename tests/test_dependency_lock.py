@@ -31,7 +31,7 @@ def test_dependency_lock_receipt_matches_exact_files_and_running_environment() -
     assert runtime["implementation"] == platform.python_implementation()
     assert runtime["platform"] == sys.platform
     assert runtime["python"] == platform.python_version()
-    assert len(runtime["packages"]) == 32
+    assert len(runtime["packages"]) == 45
     assert runtime["packages"] == {
         package: importlib.metadata.version(package)
         for package in runtime["packages"]
@@ -48,28 +48,29 @@ def test_dependency_lock_receipt_matches_exact_files_and_running_environment() -
         for line in hashed_text.splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
-    assert len(unhashed) == len(hashed) == 32
-    assert len(set(unhashed)) == 32
+    assert len(unhashed) == len(hashed) == 45
+    assert len(set(unhashed)) == 45
     assert [line.split(" --hash=", 1)[0] for line in hashed] == unhashed
     assert all(
         re.fullmatch(r"[^\s=]+==[^\s=]+ --hash=sha256:[0-9a-f]{64}", line)
         for line in hashed
     )
-    target_wheels = [
-        line.removeprefix("# target-wheel: ")
+    target_artifacts = [
+        line.split(": ", 1)[1]
         for line in hashed_text.splitlines()
-        if line.startswith("# target-wheel: ")
+        if line.startswith(("# target-wheel: ", "# target-sdist: "))
     ]
-    assert len(target_wheels) == 32 and len(set(target_wheels)) == 32
-    assert all(name.endswith(".whl") for name in target_wheels)
+    assert len(target_artifacts) == 45 and len(set(target_artifacts)) == 45
+    assert sum(name.endswith(".whl") for name in target_artifacts) == 44
+    assert target_artifacts.count("proxy_tools-0.1.0.tar.gz") == 1
 
     environment = json.loads(
         (root / "configs" / "environment.lock.json").read_text(encoding="utf-8")
     )
     closure = environment["complete_binary_closure"]
     assert closure == {
-        "install_policy": "--require-hashes --only-binary=:all:",
-        "package_count": 32,
+        "install_policy": "--require-hashes",
+        "package_count": 45,
         "requirements_path": "requirements.sha256.lock",
         "requirements_sha256": sha256_file(root / "requirements.sha256.lock"),
     }
@@ -78,7 +79,7 @@ def test_dependency_lock_receipt_matches_exact_files_and_running_environment() -
             encoding="utf-8"
         )
     )
-    assert offline["package_count"] == 32
+    assert offline["package_count"] == 45
     assert offline["requirements_sha256"] == sha256_file(
         root / "requirements.sha256.lock"
     )

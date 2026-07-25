@@ -1,0 +1,10 @@
+{
+  "schema_version": "futures_live_cockpit_smoke_approval/1.0.0",
+  "status": "PENDING_APPROVAL",
+  "operation": "RUN_BOUNDED_OBSERVATION_ONLY_DATABENTO_SMOKE",
+  "plan_id": "a9cb3396f321ebcba5bcc3b7b18aecff233801c241e4cb833a72fab3a2c6c814",
+  "plan_sha256": null,
+  "approved_at": null,
+  "user_authorization_id": null,
+  "approval_receipt_id": null
+}
