@@ -35,7 +35,10 @@ def pytest_configure(config: pytest.Config) -> None:
         anchor = Path.cwd().anchor
         if not anchor:
             raise RuntimeError("cannot determine the Windows test-drive anchor")
-        token = f"fv2t-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        # Keep the collision-resistant token no longer than the old
+        # ``fv2t-{pid}`` form: several foundation fixtures intentionally build
+        # paths close to the legacy Windows MAX_PATH boundary.
+        token = f"f{os.getpid():x}{uuid.uuid4().hex[:4]}"
         candidate = Path(anchor) / token
         try:
             candidate.mkdir()
