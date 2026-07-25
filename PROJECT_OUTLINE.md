@@ -105,7 +105,8 @@ Outputs are create-only. Choose a new path for each run.
 
 ```powershell
 futures-master-audit --invocation <frozen-invocation.json>
-futures-meta-audit --suite-evidence <full-suite-receipt.json>
+.\.venv\Scripts\python.exe -m pytest -q --junitxml=.pytest_tmp/full-suite.xml
+futures-meta-audit --junitxml .pytest_tmp/full-suite.xml --suite-evidence-output .pytest_tmp/full-suite-evidence.json
 futures-retirement-audit
 ```
 

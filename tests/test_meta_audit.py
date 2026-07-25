@@ -5,7 +5,11 @@ import subprocess
 from pathlib import Path
 
 from futures_rebuild.canonical import sha256_file, sha256_json
-from futures_rebuild.meta_audit import EVIDENCE_SCHEMA, run_meta_audit
+from futures_rebuild.meta_audit import (
+    EVIDENCE_SCHEMA,
+    build_suite_evidence,
+    run_meta_audit,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,6 +28,8 @@ def _suite_evidence(tmp_path: Path) -> Path:
             for node_id in control["tests"]
         }
     )
+    test_files.append("tests/conftest.py")
+    test_files = sorted(set(test_files))
     head = subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=ROOT,
@@ -34,7 +40,10 @@ def _suite_evidence(tmp_path: Path) -> Path:
     core = {
         "schema_version": EVIDENCE_SCHEMA,
         "status": "PASS",
-        "command": r".\.venv\Scripts\python.exe -m pytest -q",
+        "command": (
+            r".\.venv\Scripts\python.exe -m pytest -q "
+            "--junitxml=.pytest_tmp/full-suite.xml"
+        ),
         "git_head": head,
         "passed": 1,
         "failed": 0,
@@ -94,3 +103,24 @@ def test_stale_test_hash_blocks_meta_support(tmp_path: Path) -> None:
 
     assert report["classification"] == "INSUFFICIENT_EVIDENCE"
     assert report["suite_evidence_reason"] == "SUITE_TEST_FILE_DRIFT"
+
+
+def test_junit_builder_derives_exact_counts_and_hashes(tmp_path: Path) -> None:
+    junit = tmp_path / "full-suite.xml"
+    junit.write_text(
+        '<?xml version="1.0" encoding="utf-8"?>'
+        '<testsuites><testsuite name="pytest" errors="0" failures="0" '
+        'skipped="1" tests="10"/></testsuites>',
+        encoding="utf-8",
+    )
+
+    evidence = build_suite_evidence(ROOT, junit_xml_path=junit)
+
+    assert evidence["status"] == "PASS"
+    assert evidence["passed"] == 9
+    assert evidence["failed"] == 0
+    assert evidence["errors"] == 0
+    assert evidence["skipped"] == 1
+    assert evidence["evidence_id"] == sha256_json(
+        {key: value for key, value in evidence.items() if key != "evidence_id"}
+    )

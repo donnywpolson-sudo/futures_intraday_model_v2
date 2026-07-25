@@ -7,6 +7,7 @@ import ast
 import json
 import re
 import subprocess
+import xml.etree.ElementTree as ET
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
@@ -103,7 +104,11 @@ def _validate_suite_evidence(
     if (
         payload.get("schema_version") != EVIDENCE_SCHEMA
         or payload.get("status") != "PASS"
-        or payload.get("command") != ".\\.venv\\Scripts\\python.exe -m pytest -q"
+        or payload.get("command")
+        != (
+            ".\\.venv\\Scripts\\python.exe -m pytest -q "
+            "--junitxml=.pytest_tmp/full-suite.xml"
+        )
         or payload.get("git_head") != _git_head(root)
         or type(payload.get("passed")) is not int
         or payload.get("passed", 0) < 1
@@ -122,6 +127,92 @@ def _validate_suite_evidence(
         if not path.is_file() or sha256_file(path) != expected:
             return False, "SUITE_TEST_FILE_DRIFT"
     return True, "FULL_SUITE_EVIDENCE_VERIFIED"
+
+
+def _required_test_files(coverage: Mapping[str, Any]) -> set[str]:
+    controls = coverage.get("controls")
+    if type(controls) is not list:
+        raise MetaAuditError("coverage controls are missing")
+    result: set[str] = set()
+    for control in controls:
+        if type(control) is not dict or type(control.get("tests")) is not list:
+            raise MetaAuditError("coverage test mappings are invalid")
+        for node_id in control["tests"]:
+            if type(node_id) is not str or "::" not in node_id:
+                raise MetaAuditError("coverage test node is invalid")
+            result.add(node_id.split("::", 1)[0])
+    result.add("tests/conftest.py")
+    return result
+
+
+def build_suite_evidence(
+    repository_root: Path,
+    *,
+    junit_xml_path: Path,
+) -> dict[str, Any]:
+    """Build an exact suite receipt from pytest's machine-generated JUnit XML."""
+
+    root = repository_root.resolve(strict=True)
+    coverage = _load_object(
+        root / "configs" / "meta_master_audit_coverage.json",
+        "Meta Audit coverage",
+    )
+    resolved_junit = junit_xml_path.resolve(strict=True)
+    try:
+        junit_relative = resolved_junit.relative_to(root).as_posix()
+    except ValueError:
+        junit_relative = "[external]"
+    try:
+        xml_root = ET.parse(resolved_junit).getroot()
+    except (OSError, ET.ParseError) as exc:
+        raise MetaAuditError("JUnit evidence is not readable XML") from exc
+    suites = (
+        [xml_root]
+        if xml_root.tag.rsplit("}", 1)[-1] == "testsuite"
+        else [
+            item
+            for item in xml_root
+            if item.tag.rsplit("}", 1)[-1] == "testsuite"
+        ]
+    )
+    if not suites:
+        raise MetaAuditError("JUnit evidence contains no test suite")
+
+    def total(attribute: str) -> int:
+        try:
+            return sum(int(suite.attrib.get(attribute, "0")) for suite in suites)
+        except ValueError as exc:
+            raise MetaAuditError("JUnit counts are invalid") from exc
+
+    tests = total("tests")
+    failures = total("failures")
+    errors = total("errors")
+    skipped = total("skipped")
+    passed = tests - failures - errors - skipped
+    if tests < 1 or min(passed, failures, errors, skipped) < 0:
+        raise MetaAuditError("JUnit count closure is invalid")
+    head = _git_head(root)
+    if head is None:
+        raise MetaAuditError("Git HEAD cannot be resolved")
+    required_files = _required_test_files(coverage)
+    core = {
+        "schema_version": EVIDENCE_SCHEMA,
+        "status": "PASS" if failures == 0 and errors == 0 else "FAIL",
+        "command": (
+            r".\.venv\Scripts\python.exe -m pytest -q "
+            f"--junitxml={junit_relative}"
+        ),
+        "git_head": head,
+        "passed": passed,
+        "failed": failures,
+        "errors": errors,
+        "skipped": skipped,
+        "test_file_sha256": {
+            relative: sha256_file(root / relative)
+            for relative in sorted(required_files)
+        },
+    }
+    return {**core, "evidence_id": sha256_json(core)}
 
 
 def run_meta_audit(
@@ -238,6 +329,7 @@ def run_meta_audit(
                 "missing_test_nodes": missing_tests,
             }
         )
+    required_test_files.add("tests/conftest.py")
 
     suite_pass = False
     suite_reason = "FULL_SUITE_EVIDENCE_NOT_SUPPLIED"
@@ -311,11 +403,39 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repository-root", type=Path, default=Path.cwd())
     parser.add_argument("--suite-evidence", type=Path)
+    parser.add_argument("--junitxml", type=Path)
+    parser.add_argument("--suite-evidence-output", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args(argv)
     try:
+        suite_evidence = args.suite_evidence
+        if args.junitxml is not None:
+            if args.suite_evidence is not None or args.suite_evidence_output is None:
+                raise MetaAuditError(
+                    "--junitxml requires --suite-evidence-output and cannot "
+                    "be combined with --suite-evidence"
+                )
+            if args.suite_evidence_output.is_absolute():
+                raise MetaAuditError(
+                    "suite evidence output must be repository-relative"
+                )
+            suite_evidence = (
+                args.repository_root.resolve(strict=True)
+                / args.suite_evidence_output
+            )
+            _write_new(
+                suite_evidence,
+                build_suite_evidence(
+                    args.repository_root,
+                    junit_xml_path=args.junitxml,
+                ),
+            )
+        elif args.suite_evidence_output is not None:
+            raise MetaAuditError(
+                "--suite-evidence-output is valid only with --junitxml"
+            )
         report = run_meta_audit(
-            args.repository_root, suite_evidence_path=args.suite_evidence
+            args.repository_root, suite_evidence_path=suite_evidence
         )
         if args.output:
             if args.output.is_absolute():

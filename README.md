@@ -61,7 +61,8 @@ a frozen invocation:
 
 ```powershell
 futures-master-audit --invocation configs/master_audit_v3/invocation.example.json
-futures-meta-audit
+.\.venv\Scripts\python.exe -m pytest -q --junitxml=.pytest_tmp/full-suite.xml
+futures-meta-audit --junitxml .pytest_tmp/full-suite.xml --suite-evidence-output .pytest_tmp/full-suite-evidence.json
 futures-retirement-audit
 ```
 

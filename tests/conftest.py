@@ -1,5 +1,6 @@
 import json
 import os
+import uuid
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from pathlib import Path
@@ -34,7 +35,14 @@ def pytest_configure(config: pytest.Config) -> None:
         anchor = Path.cwd().anchor
         if not anchor:
             raise RuntimeError("cannot determine the Windows test-drive anchor")
-        config.option.basetemp = str(Path(anchor) / f"fv2t-{os.getpid()}")
+        token = f"fv2t-{os.getpid()}-{uuid.uuid4().hex[:8]}"
+        candidate = Path(anchor) / token
+        try:
+            candidate.mkdir()
+        except OSError:
+            candidate = Path.cwd() / ".pytest_tmp" / token
+            candidate.mkdir(parents=True)
+        config.option.basetemp = str(candidate)
 
 
 @pytest.fixture
