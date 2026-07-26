@@ -20,20 +20,13 @@ cockpit = [
 package = ["PyInstaller==6.21.0"]
 
 [project.scripts]
-futures-migrate = "futures_rebuild.migration:main"
 futures-dbn-catalog = "futures_rebuild.dbn_catalog:main"
 futures-accept-anomalies = "futures_rebuild.anomaly_acceptance:main"
 futures-publish-selection = "futures_rebuild.foundation.selection:main"
 futures-foundation-build = "futures_rebuild.foundation.orchestrator:main"
-futures-legacy-census = "futures_rebuild.legacy_trial_census:main"
 futures-readiness = "futures_rebuild.readiness:main"
 futures-master-audit = "futures_rebuild.audit.__main__:main"
-futures-layout-migration = "futures_rebuild.phase1a_layout:main"
-futures-dbn-flat-layout = "futures_rebuild.dbn_flat_layout:main"
-futures-dbn-flat-cutover = "futures_rebuild.dbn_flat_cutover:main"
 futures-verify-vault-archive = "futures_rebuild.archive:main"
-futures-successor-inventory = "futures_rebuild.successor_inventory:main"
-futures-successor-migrate = "futures_rebuild.successor_migration:main"
 futures-pipeline = "futures_rebuild.pipeline:main"
 futures-live-cockpit = "futures_rebuild.live_cockpit.app:main"
 futures-retirement-audit = "futures_rebuild.retirement:main"

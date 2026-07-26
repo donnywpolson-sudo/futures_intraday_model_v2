@@ -1,5 +1,18 @@
 # Futures research operating rules
 
+## Working defaults
+
+- Keep work focused on the latest request. Search before opening broad file
+  sets and prefer small, safe, reviewable changes.
+- Inspect the repository root and `git status --short` before edits. Preserve
+  unrelated user changes, accepted releases, credentials, lockfiles, runtime
+  state, and generated evidence.
+- Plan first for broad, expensive, destructive, provider-backed, or
+  trust-changing work. Ask only when an undiscoverable choice would materially
+  change the result.
+- Treat `CODEX_HANDOFF.md` as mutable continuation state, never as proof.
+  Reconcile it against current files, manifests, command evidence, and Git.
+
 ## Project boundary
 
 - This repository is the complete operational home for the futures research
@@ -27,8 +40,25 @@
 - `configs/alpha_tiered.yaml`: validated operational profile view; never an
   admission or holdout authority.
 - `configs/source_contract.json`: allowed immutable source families and roots.
+- `configs/**`: durable pipeline, identity, session, economics, audit, and
+  packaging contracts.
 - `manifests/**`: durable content-addressed release, approval, and provenance
   evidence.
+- `state/trial_registry/**`: pre-outcome trial declarations and attempt
+  genealogy.
+
+## Protected project surfaces
+
+- Preserve the public commands registered in `pyproject.toml`, exact schemas,
+  canonical serialization, release publication rules, repository boundary
+  checks, approval receipts, universe/profile contracts, and audit semantics.
+- The internal package remains `src/futures_rebuild` for compatibility. Do not
+  perform an unrelated namespace-wide rename.
+- Feature, outcome, prediction, evaluation, candidate, and holdout capabilities
+  remain physically and procedurally separate.
+- Do not move, rename, delete, or replace an active contract or interface while
+  a hash-bound run depends on it. A successor requires an explicit migration
+  boundary, compatibility plan where needed, and fresh validation.
 
 ## Safety and authorization
 
@@ -48,6 +78,22 @@
   new installed version passes its approved verification and rollback test. Do
   not create auto-start behavior.
 
+## Bounded execution
+
+Before any provider request, broad data build, real-history run, model/WFA
+operation, prediction write, candidate or holdout action, installation,
+shortcut change, or other expensive mutation, bind:
+
+- the exact command family and authority class;
+- maximum markets, years, requests, files, rows, bytes, sessions, and duration;
+- immutable inputs, expected outputs, log/report paths, and tracking policy;
+- forbidden actions, rollback boundary, stop condition, and evidence needed to
+  continue.
+
+If the required scope or approval is absent, stale, mismatched, or already
+consumed, stop before the boundary. Approval for one authority class never
+authorizes another.
+
 ## Research integrity
 
 - Existing historical data and observed results are discovery evidence.
@@ -59,9 +105,15 @@
 - Feature builders cannot read outcome, label, prediction-score, or evaluation
   paths. Inference cannot fit, read outcomes, refresh a bundle, place an order,
   or suppress an abstention.
+- Labels require explicit entry lag, horizon, maturity, and unresolved-state
+  semantics. Splits are chronological and nested; transforms fit on training
+  folds only; purge and embargo prevent horizon overlap.
 - Profiles may narrow the approved universe. They cannot admit a market, change
   selection eligibility, unlock holdout/forward cohorts, or use satellite
   results to rescue traditional-universe failure.
+- Model-trust evidence requires complete trial genealogy, simple baselines,
+  negative controls, multiplicity handling, net costs, dependence-aware
+  uncertainty, portfolio/risk review, and finite stop rules.
 - Missing, stale, mismatched, incomplete, ambiguous, or future-known inputs fail
   closed before evaluation or publication. Observation/inference may instead
   return an explicit reasoned abstention without a score or trade.
@@ -76,6 +128,19 @@
 - Resolve `DATABENTO_API_KEY` from the ignored v2-local `api.env` (or an explicit
   environment variable) without logging it. The credential must not be copied
   into an installation or package.
+
+## Evidence, review, and failure handling
+
+- Prefer primary evidence: exact files, schemas, manifests, hashes, command
+  output, and independently reproduced calculations.
+- Distinguish `Verified`, `Inferred`, `Assumed`, and `Not established`. Do not
+  present inference, absence, warnings, synthetic mechanics, gross-only results,
+  or producer assertions as readiness or model-trust evidence.
+- Preserve contradictions, negative results, stopped branches, exclusions,
+  limitations, and failed attempts. A renamed model, new directory, or expanded
+  universe does not reset trial history.
+- Report the exact rejected item and the smallest missing approval, input, or
+  evidence when a gate fails.
 
 ## Validation and completion
 

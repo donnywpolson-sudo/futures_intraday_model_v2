@@ -19,20 +19,32 @@ def _load_example() -> dict:
     )
 
 
-def test_checked_in_provisional_universe_fails_closed() -> None:
-    report = run_audit(ROOT, _load_example())
+def test_checked_in_approved_universe_without_receipt_evidence_fails_closed() -> None:
+    with pytest.raises(AuditContractError, match="approval receipt evidence"):
+        run_audit(ROOT, _load_example())
+
+
+def test_checked_in_self_hashed_approval_receipt_is_valid_evidence() -> None:
+    invocation = _load_example()
+    approval_path = (
+        ROOT / "configs" / "eight_market_successor_migration_approval.json"
+    )
+    approval = json.loads(approval_path.read_text(encoding="utf-8"))
+    invocation["evidence"] = [
+        {
+            "evidence_id": approval["approval_receipt_id"],
+            "path": "configs/eight_market_successor_migration_approval.json",
+            "sha256": sha256_file(approval_path),
+            "bytes": approval_path.stat().st_size,
+            "safe_to_read": True,
+            "limitations": [],
+        }
+    ]
+
+    report = run_audit(ROOT, invocation)
+
+    assert report["universe_contract_approved"] is True
     assert report["target_state_decision"] == "INSUFFICIENT_EVIDENCE"
-    assert report["logical_exit_code"] == 11
-    assert report["universe_contract_approved"] is False
-    by_id = {item["subcheck_id"]: item for item in report["subchecks"]}
-    assert by_id["G2.S2"]["reason"] == "UNIVERSE_CONTRACT_PENDING_APPROVAL"
-    assert report["authority"] == {
-        "publishes_readiness": False,
-        "authorizes_real_history": False,
-        "authorizes_holdout_access": False,
-        "authorizes_candidate_sealing": False,
-        "authorizes_trading": False,
-    }
 
 
 def test_active_target_states_use_steady_state_vocabulary() -> None:

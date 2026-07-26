@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import replace
 from datetime import date, datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 
 import databento_dbn as dbn
@@ -10,6 +11,7 @@ import pytest
 
 import futures_rebuild.foundation.materialize as materialize_module
 import futures_rebuild.foundation.parquet as parquet_module
+import futures_rebuild.producer_bridge as producer_bridge_module
 from futures_rebuild.boundary import RepoBoundary
 from futures_rebuild.boundary import OperationClassification, OperationReceipt
 from futures_rebuild.canonical import sha256_file
@@ -460,6 +462,123 @@ def test_economics_rulebook_treats_mutable_urls_as_non_authoritative_and_fails_o
         EconomicsRuleBook.from_file(
             REPO / "configs" / "contract_economics_rules.json"
         ).resolve("ES", definition)
+
+
+@pytest.mark.parametrize(
+    (
+        "market",
+        "unit_qty",
+        "min_tick_nano",
+        "point_value",
+        "tick_value",
+        "quote_convention",
+    ),
+    [
+        ("6N", 100_000, 50_000, "100000", "5", "USD_PER_NZD"),
+        ("6S", 125_000, 50_000, "125000", "6.25", "USD_PER_CHF"),
+        ("BTC", 5, 5_000_000_000, "5", "25", "USD_PER_BITCOIN"),
+        ("ETH", 50, 500_000_000, "50", "25", "USD_PER_ETHER"),
+        ("GF", 50_000, 25_000_000, "500", "12.5", "CENTS_PER_POUND"),
+        ("PA", 100, 500_000_000, "100", "50", "USD_PER_TROY_OUNCE"),
+        ("PL", 50, 100_000_000, "50", "5", "USD_PER_TROY_OUNCE"),
+        ("ZQ", 4_167, 2_500_000, "4167", "10.4175", "USD_PER_IMM_INDEX_POINT"),
+    ],
+)
+def test_eight_market_successor_economics_are_provider_quantity_bound(
+    market: str,
+    unit_qty: int,
+    min_tick_nano: int,
+    point_value: str,
+    tick_value: str,
+    quote_convention: str,
+) -> None:
+    payload = json.loads(
+        (REPO / "configs" / "research_universe_contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    rulebook = EconomicsRuleBook.from_file(
+        REPO / "configs" / "contract_economics_rules.json"
+    )
+    approved_markets = {
+        symbol for tier in payload["tiers"] for symbol in tier["symbols"]
+    }
+    assert set(rulebook.rules) == approved_markets
+
+    definition = ProviderDefinition(
+        dataset="GLBX.MDP3",
+        market=market,
+        publisher_id=1,
+        instrument_id=123,
+        instrument_id_date_utc="2024-01-01",
+        ts_event_ns=START_NS,
+        ts_recv_ns=START_NS + 1,
+        activation_ns=START_NS - 86_400_000_000_000,
+        expiration_ns=END_NS,
+        security_update_action="ADD",
+        instrument_class="FUTURE",
+        security_type="FUT",
+        raw_symbol=f"{market}Z5",
+        exchange="XCME",
+        currency="USD",
+        min_price_increment_nano=min_tick_nano,
+        unit_of_measure_qty_nano=unit_qty * 1_000_000_000,
+        unit_of_measure="PROVIDER_BOUND",
+        source_release_id=(
+            "086282eaef7b36a61626f88d93d06c93"
+            "b87c1cb3407c936d065d0d1b9d98599e"
+        ),
+        source_manifest_sha256=(
+            "c2584d5e1a65103f8651a871de6f704a"
+            "c31ec2c2f7ec5c2e1a941aae6a4dc8fd"
+        ),
+        source_file_path=(
+            f"dbn/definition/{market}/2025/"
+            "2025-01-01_2026-01-01.dbn.zst"
+        ),
+        source_file_sha256="c" * 64,
+        row_ordinal=0,
+        row_sha256="d" * 64,
+    )
+    resolved = rulebook.resolve(market, definition)
+    assert resolved.point_value == Decimal(point_value)
+    assert resolved.tick_value == Decimal(tick_value)
+    assert resolved.quote_convention == quote_convention
+
+    with pytest.raises(ContractError, match="contradicts the pinned market rule"):
+        rulebook.resolve(
+            market,
+            replace(
+                definition,
+                unit_of_measure_qty_nano=(unit_qty + 1) * 1_000_000_000,
+                row_sha256="e" * 64,
+            ),
+        )
+
+
+def test_economics_asset_classes_cover_the_exact_41_market_universe() -> None:
+    universe = json.loads(
+        (REPO / "configs" / "research_universe_contract.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    approved = {
+        symbol for tier in universe["tiers"] for symbol in tier["symbols"]
+    }
+    assert set(producer_bridge_module._ASSET_CLASSES) == approved
+    assert {
+        market: producer_bridge_module._ASSET_CLASSES[market]
+        for market in sorted({"6N", "6S", "BTC", "ETH", "GF", "PA", "PL", "ZQ"})
+    } == {
+        "6N": "FX",
+        "6S": "FX",
+        "BTC": "CRYPTO",
+        "ETH": "CRYPTO",
+        "GF": "AGRICULTURE",
+        "PA": "METALS",
+        "PL": "METALS",
+        "ZQ": "RATES",
+    }
 
 
 def test_phase1b_materialization_is_release_bound_and_reproducible(tmp_path: Path):

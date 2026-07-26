@@ -19,6 +19,7 @@ from futures_rebuild.foundation.market_state import (
     AsOfStatusLedger,
     FoundationCoveragePolicy,
     StatisticsRolePolicy,
+    _research_scope_status_coverage,
 )
 from futures_rebuild.foundation.records import (
     INT64_NULL,
@@ -566,6 +567,57 @@ def test_tracked_coverage_policy_has_nonzero_and_source_gates() -> None:
     assert policy.minimum_status_resolved_decision_fraction >= Decimal("0.95")
     assert policy.minimum_status_source_market_year_fraction >= Decimal("0.99")
     assert policy.minimum_statistics_source_market_year_fraction == Decimal("1")
+
+
+def test_research_scope_source_gate_retains_pre_scope_missing_status() -> None:
+    selection = SimpleNamespace(
+        intervals=(
+            SimpleNamespace(
+                market="ES",
+                year=2024,
+                start="2024-01-01",
+                end="2025-01-01",
+            ),
+            SimpleNamespace(
+                market="ES",
+                year=2025,
+                start="2025-01-01",
+                end="2026-01-01",
+            ),
+        ),
+        status_files=(SimpleNamespace(market="ES", year=2025),),
+        coverage_matrix=(
+            {
+                "market": "ES",
+                "year": 2024,
+                "required_for_bar_foundation": True,
+            },
+            {
+                "market": "ES",
+                "year": 2025,
+                "required_for_bar_foundation": True,
+            },
+        ),
+    )
+    policy = StatusResearchScopePolicy.from_dict(
+        {
+            "alignment": (
+                "FIRST_COMPLETE_UTC_YEAR_AFTER_PROVIDER_STATUS_LAUNCH_MONTH"
+            ),
+            "policy_version": "1.0.0",
+            "pre_scope_disposition": "ABSTAIN_PRE_STATUS_CAPABILITY_EPOCH",
+            "provider_status_launch_month": "2024-07",
+            "require_all_selected_intervals_at_or_after_start": True,
+            "research_interval_start": "2025-01-01",
+            "source_urls": [
+                "https://databento.com/blog/status-schema-cme",
+                "https://databento.com/docs/schemas-and-data-formats/status",
+            ],
+        }
+    )
+    assert _research_scope_status_coverage(
+        selection, scope_policy=policy
+    ) == (1, 1, Decimal("1"), 1)
 
 
 def test_tracked_status_research_scope_is_source_defined_and_conservative() -> None:

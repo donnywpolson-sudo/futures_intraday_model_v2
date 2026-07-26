@@ -142,7 +142,8 @@
       "matrix_subchecks": ["G8.S10", "G8.S11", "G8.S12"],
       "tests": [
         "tests/live/test_live_cockpit.py::test_corrupt_cache_is_preserved_and_rebuilt",
-        "tests/live/test_live_cockpit.py::test_packaged_windowed_self_check_uses_exit_code_without_stdout"
+        "tests/live/test_live_cockpit.py::test_packaged_windowed_self_check_uses_exit_code_without_stdout",
+        "tests/live/test_live_cockpit_cutover.py::test_cutover_requires_exact_passing_package_bound_result"
       ]
     },
     {

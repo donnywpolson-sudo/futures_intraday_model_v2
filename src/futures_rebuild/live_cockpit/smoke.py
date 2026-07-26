@@ -15,6 +15,8 @@ from pathlib import Path
 from types import ModuleType
 from typing import Any, Mapping, TextIO
 
+from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
+
 from .feed import (
     DEFAULT_CONTINUOUS_SUFFIX,
     DEFAULT_DATASET,
@@ -27,6 +29,7 @@ from .credentials import CredentialLocatorError, resolve_cockpit_api_key_source
 from .engine import LiveCockpitEngine, MAX_RENDER_HZ
 from .approval import (
     LiveSmokeApprovalError,
+    validate_live_smoke_plan,
     verify_live_smoke_approval,
 )
 
@@ -34,6 +37,7 @@ from .approval import (
 SMOKE_DURATION_SECONDS = 120.0
 SMOKE_MARKET = "ES"
 INCONCLUSIVE_EXIT_CODE = 3
+RESULT_SCHEMA = "futures_live_cockpit_smoke_result/1.0.0"
 
 
 @dataclass(frozen=True)
@@ -119,6 +123,30 @@ def _subscription_plan() -> dict[str, Any]:
         "historical_replay": False,
         "cache": False,
         "reconnect": False,
+    }
+
+
+def _verify_package_runtime(plan: Mapping[str, Any]) -> dict[str, Any]:
+    scope = plan["scope"]
+    frozen = bool(getattr(sys, "frozen", False))
+    if frozen is not scope["runtime_frozen"]:
+        raise LiveSmokeApprovalError(
+            "provider-backed cockpit smoke requires the approved frozen runtime"
+        )
+    try:
+        executable = Path(sys.executable).resolve(strict=True)
+    except OSError as exc:
+        raise LiveSmokeApprovalError(
+            "approved cockpit executable is not readable"
+        ) from exc
+    executable_hash = sha256_file(executable)
+    if executable_hash != scope["prepared_executable_sha256"]:
+        raise LiveSmokeApprovalError(
+            "provider-backed cockpit smoke runtime hash differs from the approved package"
+        )
+    return {
+        "frozen": frozen,
+        "executable_sha256": executable_hash,
     }
 
 
@@ -270,6 +298,10 @@ def run_smoke(
             "log_path": str(log_path),
             "log_retained": status != "PASS",
             "approval_receipt_id": approval_receipt_id,
+            "runtime": {
+                "frozen": bool(getattr(sys, "frozen", False)),
+                "executable_sha256": sha256_file(Path(sys.executable).resolve()),
+            },
         }
     )
     log.write("smoke_result", summary)
@@ -292,23 +324,78 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--plan", type=Path, required=True)
     parser.add_argument("--approval", type=Path, required=True)
+    parser.add_argument("--result-output", type=Path, required=True)
     return parser
 
 
 def main(argv: list[str] | None = None, *, stdout: TextIO | None = sys.stdout) -> int:
     args = build_arg_parser().parse_args(argv)
+    plan_path = args.plan.resolve(strict=True)
+    approval_path = args.approval.resolve(strict=True)
     try:
         approval_id = verify_live_smoke_approval(
-            plan_path=args.plan.resolve(strict=True),
-            approval_path=args.approval.resolve(strict=True),
+            plan_path=plan_path,
+            approval_path=approval_path,
         )
-    except (LiveSmokeApprovalError, OSError) as exc:
+        plan = validate_live_smoke_plan(
+            json.loads(plan_path.read_text(encoding="utf-8"))
+        )
+        expected_relative = Path(str(plan["scope"]["result_output_relative"]))
+        result_output = args.result_output.resolve(strict=False)
+        expected_output = (Path.cwd().resolve() / expected_relative).resolve(
+            strict=False
+        )
+        if result_output != expected_output:
+            raise LiveSmokeApprovalError(
+                "live-smoke result output differs from the approved relative path"
+            )
+        if result_output.exists():
+            raise LiveSmokeApprovalError(
+                "live-smoke result output already exists; no overwrite is allowed"
+            )
+        _verify_package_runtime(plan)
+    except (LiveSmokeApprovalError, OSError, UnicodeError, json.JSONDecodeError) as exc:
         if stdout is not None:
             print(f"BLOCKED: {exc}", file=stdout)
         return 2
     result = run_smoke(approval_receipt_id=approval_id)
+    runtime = result.summary.get("runtime")
+    runtime_matches = (
+        type(runtime) is dict
+        and runtime.get("frozen") is plan["scope"]["runtime_frozen"]
+        and runtime.get("executable_sha256")
+        == plan["scope"]["prepared_executable_sha256"]
+    )
+    if not runtime_matches:
+        result.summary["status"] = "FAIL"
+        result.summary["reasons"] = [
+            *list(result.summary.get("reasons", [])),
+            "runtime executable does not match the approved prepared package",
+        ]
+        result = SmokeResult(status="FAIL", exit_code=1, summary=result.summary)
+    core = {
+        "schema_version": RESULT_SCHEMA,
+        "status": result.status,
+        "plan_id": plan["plan_id"],
+        "plan_sha256": sha256_file(plan_path),
+        "approval_receipt_id": approval_id,
+        "completed_at": _utc_text(),
+        "result_output_relative": expected_relative.as_posix(),
+        "summary": result.summary,
+    }
+    receipt = {**core, "result_id": sha256_json(core)}
+    result_output.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with result_output.open("xb") as stream:
+            stream.write(canonical_bytes(receipt) + b"\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+    except OSError as exc:
+        if stdout is not None:
+            print(f"FAIL: could not publish live-smoke result: {exc}", file=stdout)
+        return 1
     if stdout is not None:
-        print(json.dumps(result.summary, sort_keys=True), file=stdout)
+        print(json.dumps(receipt, sort_keys=True), file=stdout)
     return result.exit_code
 
 

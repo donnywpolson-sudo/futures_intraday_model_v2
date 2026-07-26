@@ -28,6 +28,63 @@ execution is outside this project's scope.
 - `state/trial_registry/**`: pre-outcome trial declarations and attempt
   genealogy.
 
+## Research discipline
+
+- Establish source integrity, provenance, timestamp availability, actual
+  contract identity, sessions, rolls, and economics before interpreting a
+  model result.
+- Never change targets, features, thresholds, markets, costs, or evaluation
+  rules because a locked or observed result looks favorable.
+- Preserve negative results, warnings, exclusions, failed attempts, and stopped
+  branches in the trial genealogy.
+- Compare complex candidates against simple causal baselines under the same
+  split, cost, position, and risk rules.
+- Synthetic runs verify mechanics only. They do not establish alpha, historical
+  readiness, executable economics, or permission to access protected data.
+
+## Data manifest and rule index
+
+This section is the first lookup point; it does not duplicate contract
+authority.
+
+- `configs/source_contract.json` declares the only source families and roots
+  that may be discovered.
+- `configs/research_universe_contract.json` controls point-in-time market
+  admission, cohorts, and eligibility.
+- `configs/alpha_tiered.yaml` is a validated profile view of that universe.
+- Foundation coverage, status-scope, session, identity, and economics contracts
+  define acceptance for the causal foundation.
+- `manifests/data_releases/**` contains content-addressed release descriptors;
+  accepted payloads live in v2-owned immutable release roots.
+- `state/trial_registry/**` declares every real-data attempt before outcomes are
+  read. Run checkpoints and leases are recovery state, not readiness proof.
+- `MASTER_AUDIT.md` and `configs/master_audit_v3/**` define evidence
+  classification; they grant no execution authority.
+
+## Active layout
+
+```text
+configs/                         durable contracts and operational profiles
+data/vault/                      immutable v2-owned source snapshots/releases
+data/dbn/                        accepted DBN source-family view
+data/raw/                        Phase 1B immutable raw releases
+data/causally_gated_normalized/  Phase 2 causal/session-normalized releases
+data/outcome_sources/            outcome-capability inputs kept from features
+data/outcomes/                   Phase 3 outcome releases
+data/features/                   Phase 4 feature releases
+data/predictions/                separately authorized Phase 6 OOS releases
+data/evaluations/                separately authorized Phase 7-9 evidence
+manifests/                       release, approval, and provenance metadata
+src/futures_rebuild/             v2-native implementation
+state/                           checkpoints, leases, ledgers, trial registry
+tests/                           contract, synthetic, failure, and package tests
+```
+
+Staging, repair, cache, report, and recovery roots are evidence or working
+state, never active inputs unless a content-addressed release and its governing
+contract explicitly admit them. Other repositories and absolute external paths
+are not active roots.
+
 ## Profile ladder
 
 Profiles are defined by `configs/alpha_tiered.yaml` and checked against the
@@ -70,6 +127,38 @@ executes the complete dependency order while retaining zero provider, alpha,
 prediction, sealing, holdout, and order authority. Any production adapter must
 check the corresponding exact receipt before reading protected data or writing
 an authoritative artifact.
+
+## Non-negotiable data rules
+
+- Raw DBNs and accepted release bytes are immutable. Corrections publish a new
+  release; they never overwrite an accepted one.
+- Every file is bound by canonical path, byte count, SHA-256, schema,
+  provenance, query semantics, and release identity before use.
+- Actual instrument identity and point-in-time definition lineage are
+  authoritative. Continuous symbols are selection references, never executable
+  contract identity.
+- Phase 1B preserves source event semantics. Phase 2 is the first phase allowed
+  to apply causal session normalization, explicit missing/degraded states, and
+  trainability gates.
+- Missing, sparse, degraded, unresolved, and partially decoded states remain in
+  coverage denominators. They cannot become trainable through a global waiver.
+- Feature builders may not discover or read outcome, label, prediction, or
+  evaluation releases. Generated data from another repository is never an
+  authoritative input.
+- Every research artifact must trace to exact source, universe, config, trial,
+  implementation, and upstream release identities.
+
+## Label, feature, and split rules
+
+- Labels declare decision time, entry lag, horizon, maturity, unresolved-state
+  behavior, and the exact outcome-source capability they consume.
+- Features use only information available by their decision timestamp; as-of
+  joins, update frequency, lookback, warmup, missingness, and drift policy are
+  explicit.
+- Chronological splits are nested and never shuffled. Purge and embargo cover
+  overlapping label horizons; all fitted transforms use training rows only.
+- Holdout and forward cohorts cannot drive feature, target, market, cost,
+  threshold, model, or policy selection.
 
 ## Runnable commands
 
@@ -121,15 +210,18 @@ repository.
 ```powershell
 futures-live-cockpit --self-check
 futures-live-cockpit --demo
-futures-live-cockpit --live-smoke --approval <approved-receipt.json>
+futures-live-cockpit --live-smoke --approval <approved-receipt.json> --result-output reports/live_cockpit/bounded_live_smoke_result_attempt_2.json
 powershell -NoProfile -File scripts/build_live_cockpit.ps1
 powershell -NoProfile -File scripts/install_live_cockpit.ps1 -Upgrade -WhatIf
+powershell -NoProfile -File scripts/activate_live_cockpit.ps1 -PreparedInstallPath <prepared-version> -LiveSmokeResult reports/live_cockpit/bounded_live_smoke_result_attempt_2.json -WhatIf
 ```
 
 The normal UI is observation-only and may read live GLBX.MDP3 data through the
 v2-local credential locator. A provider-backed smoke requires its exact durable
-approval. Installation/shortcut cutover follows only after dependency, package,
-self-check, demo, all-market, and approved bounded live-smoke evidence pass.
+approval. Preparation installs and self-checks an isolated version without
+changing shortcuts. Shortcut activation follows only after dependency, package,
+self-check, demo, all-market, and exact package-bound approved live-smoke
+evidence pass.
 
 ## Approval gates
 
@@ -151,6 +243,38 @@ Separate approvals are required for:
 
 Approval for one class never authorizes another.
 
+## Evaluation and model-trust standard
+
+Before a model-trust, promotion, or sealing claim, require:
+
+- exact raw/foundation coverage, causal identity, sessions, rolls, labels,
+  features, and split evidence;
+- an immutable pre-outcome trial declaration covering targets, features,
+  models, seeds, hyperparameter budget, thresholds, costs, sizing, metrics,
+  multiplicity, stopped branches, and finite stop rules;
+- flat/no-trade, cost-only, simple trend, simple mean-reversion, and relevant
+  causal regime/liquidity baselines under identical evaluation rules;
+- gross-to-net PnL conservation, fees, spread/slippage/delay, carry/roll,
+  capacity, margin/liquidation, concentration, shared liquidity, and portfolio
+  interaction;
+- dependence-aware uncertainty, effective independent breadth, temporal and
+  parameter stability, negative controls, multiple-testing adjustment, and
+  traditional-versus-satellite reporting;
+- Phase 7 prediction integrity, Phase 8 economics/portfolio/risk review, and
+  Phase 9 statistical/adversarial evidence with all blockers preserved.
+
+Passing a metric, a broad row count, or a favorable satellite result cannot
+substitute for these gates.
+
+## Bounded execution policy
+
+Any provider request, broad build, data mutation, real-history evaluation,
+WFA/model operation, prediction write, candidate/holdout action, package
+installation, live smoke, shortcut change, or destructive operation requires a
+plan that binds the exact command family, immutable inputs, approval receipt,
+scope ceilings, duration, outputs/logs, forbidden actions, rollback, and stop
+condition. If any binding is missing or stale, do not start.
+
 ## Acceptance standards
 
 - Every accepted market-year is exact-schema, hash, provenance, session,
@@ -169,6 +293,14 @@ Approval for one class never authorizes another.
 - `FOUNDATION_READY`, `HISTORICAL_RESEARCH_READY`, and
   `OBSERVATION_COCKPIT_READY` each require a `SUPPORTABLE` Master Audit result.
 - Meta Audit closure requires no unresolved Critical/High or P0/P1 deficiency.
+
+## Reporting standard
+
+Label material claims as `Verified`, `Inferred`, `Assumed`, or
+`Not established`. Each report names its exact scope, evidence paths and hashes,
+config/trial identity, command, result, limitations, stale-risk, and next gate.
+Never present gross-only, synthetic, warning, failed, inferred, or incomplete
+evidence as alpha, promotion, holdout, cockpit, paper, or live readiness.
 
 ## Stop conditions
 

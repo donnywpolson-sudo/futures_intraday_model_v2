@@ -6,7 +6,8 @@ import pytest
 
 from futures_rebuild.canonical import sha256_json
 from futures_rebuild.data_layout import DataFileEntry, DataReleaseManifest
-from futures_rebuild.errors import UnauthorizedOperation
+from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
+from futures_rebuild.foundation.snapshot import _validate_successor_receipt
 from futures_rebuild.successor_migration import (
     APPROVAL_SCHEMA,
     OPERATION,
@@ -70,6 +71,31 @@ def _parent() -> DataReleaseManifest:
     )
 
 
+def _successor_for_snapshot_gate() -> tuple[DataReleaseManifest, DataReleaseManifest]:
+    parent = _parent()
+    successor = _successor_manifest(
+        parent=parent, inventory=_inventory(), approval_id="e" * 64
+    )
+    embedded = {
+        "phase1a_receipt": {
+            **successor.embedded_documents["phase1a_receipt"],
+            "total_bytes": sum(item.size for item in successor.files),
+            "total_files": len(successor.files),
+        }
+    }
+    core = {**successor.core_dict(), "embedded_documents": embedded}
+    return parent, DataReleaseManifest(
+        release_id=sha256_json(core),
+        phase=successor.phase,
+        release_kind=successor.release_kind,
+        schema_version=successor.schema_version,
+        source_release_ids=successor.source_release_ids,
+        files=successor.files,
+        embedded_documents=embedded,
+        metadata=successor.metadata,
+    )
+
+
 def test_candidate_inventory_becomes_exact_unique_942_file_closure() -> None:
     entries = _inventory_entries(_inventory())
     assert len(entries) == 942
@@ -113,6 +139,35 @@ def test_successor_manifest_is_parent_plus_candidate_and_non_alpha() -> None:
         successor.embedded_documents["phase1a_receipt"]["status"]
         == "COMPLETE_VERIFIED_IMMUTABLE_SUCCESSOR"
     )
+
+
+def test_successor_snapshot_gate_rejects_parent_file_replacement() -> None:
+    parent, successor = _successor_for_snapshot_gate()
+    _validate_successor_receipt(successor, parent)
+    files = list(successor.files)
+    parent_path = parent.files[0].logical_path
+    index = next(
+        position
+        for position, entry in enumerate(files)
+        if entry.logical_path == parent_path
+    )
+    files[index] = DataFileEntry(parent_path, files[index].size, "a" * 64)
+    core = {
+        **successor.core_dict(),
+        "files": [item.as_dict() for item in sorted(files)],
+    }
+    tampered = DataReleaseManifest(
+        release_id=sha256_json(core),
+        phase=successor.phase,
+        release_kind=successor.release_kind,
+        schema_version=successor.schema_version,
+        source_release_ids=successor.source_release_ids,
+        files=tuple(sorted(files)),
+        embedded_documents=successor.embedded_documents,
+        metadata=successor.metadata,
+    )
+    with pytest.raises(IntegrityError, match="strict superset"):
+        _validate_successor_receipt(tampered, parent)
 
 
 def test_contract_templates_bind_release_and_approval_placeholders() -> None:

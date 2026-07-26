@@ -11,6 +11,7 @@ def _text(relative: str) -> str:
 def test_root_operational_documents_are_steady_state_and_v2_owned() -> None:
     documents = [
         "AGENTS.md",
+        "CODEX_HANDOFF.md",
         "PROJECT_OUTLINE.md",
         "README.md",
         "MASTER_AUDIT.md",
@@ -19,7 +20,8 @@ def test_root_operational_documents_are_steady_state_and_v2_owned() -> None:
     combined = "\n".join(_text(path) for path in documents)
     assert "REBUILD_COMPLETE" not in combined
     assert "REBUILD_IN_PROGRESS" not in combined
-    assert r"C:\Users\donny\Desktop\futures_intraday_model" not in combined
+    legacy_root_prefix = r"C:\Users\donny\Desktop\futures_intraday_model" + "\\"
+    assert legacy_root_prefix not in combined
     assert "FOUNDATION_READY" in combined
     assert "OBSERVATION_COCKPIT_READY" in combined
 
@@ -68,3 +70,46 @@ def test_master_audit_explicitly_covers_cockpit_false_pass_paths() -> None:
         "credential filenames",
     ):
         assert required.lower() in master.lower()
+
+
+def test_project_outline_preserves_steady_state_research_runbook_concepts() -> None:
+    outline = _text("PROJECT_OUTLINE.md")
+    for required in (
+        "Research discipline",
+        "Data manifest and rule index",
+        "Active layout",
+        "Profile ladder",
+        "Phase 1A-11 workflow",
+        "Non-negotiable data rules",
+        "Label, feature, and split rules",
+        "Evaluation and model-trust standard",
+        "Bounded execution policy",
+        "Reporting standard",
+        "Stop conditions",
+    ):
+        assert f"## {required}" in outline
+    assert "scripts.phase" not in outline
+    assert "src/futures_rebuild/" in outline
+
+
+def test_root_git_hygiene_protects_text_contracts_secrets_and_heavy_data() -> None:
+    attributes = _text(".gitattributes")
+    ignore = _text(".gitignore").splitlines()
+    for text_format in ("*.md", "*.py", "*.json", "*.yaml", "*.ps1"):
+        assert f"{text_format} text eol=lf" in attributes
+    for binary_format in ("*.dbn", "*.parquet", "*.zst", "*.sqlite"):
+        assert f"{binary_format} -text" in attributes
+    for protected_diff in (".env -diff", ".env.* -diff", "api.env -diff"):
+        assert protected_diff in attributes
+    for ignored in (
+        ".env",
+        ".env.*",
+        "api.env",
+        "databento.env",
+        "credentials/",
+        "secrets/",
+        "state/lock_recovery/",
+        "*.parquet",
+        "*.dbn",
+    ):
+        assert ignored in ignore

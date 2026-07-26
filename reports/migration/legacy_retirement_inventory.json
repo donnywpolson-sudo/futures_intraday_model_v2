@@ -5,7 +5,7 @@
   "active_root": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2",
   "legacy_writes": 0,
   "legacy_deletion_authorized": false,
-  "overall_state": "BLOCKED_PENDING_SUCCESSOR_AND_COCKPIT_CUTOVER",
+  "overall_state": "BLOCKED_PENDING_COCKPIT_CUTOVER_AUDITS_AND_CLEAN_HEAD",
   "entries": [
     {"path": ".agents", "classification": "GENERATED_OR_DISCARDABLE_OUTPUT", "disposition": "old local agent metadata; no v2 runtime role"},
     {"path": ".codex", "classification": "GENERATED_OR_DISCARDABLE_OUTPUT", "disposition": "old session metadata; no v2 runtime role"},
@@ -23,7 +23,7 @@
     {"path": "build", "classification": "GENERATED_OR_DISCARDABLE_OUTPUT", "disposition": "old cockpit build intermediates; v2 rebuilds from v2-owned source"},
     {"path": "CODEX_HANDOFF.md", "classification": "MIGRATED_FUNCTIONALITY", "disposition": "replaced by concise v2 continuation state"},
     {"path": "configs", "classification": "MIGRATED_FUNCTIONALITY", "disposition": "required operating semantics rewritten as v2 contracts; historical approvals cannot authorize v2"},
-    {"path": "data", "classification": "IMMUTABLE_EVIDENCE_RETAINED_ELSEWHERE", "disposition": "4,020 accepted pairs already have a v2 immutable release; 471 candidate pairs remain a blocker until the approved successor is copied and reverified"},
+    {"path": "data", "classification": "IMMUTABLE_EVIDENCE_RETAINED_ELSEWHERE", "disposition": "all 4,491 accepted DBNs and 4,491 sidecars are verified in the immutable 41-market v2 successor release; no legacy data path has a runtime role"},
     {"path": "dist", "classification": "GENERATED_OR_DISCARDABLE_OUTPUT", "disposition": "old installed cockpit bytes are rollback evidence until v2 cutover succeeds"},
     {"path": "docs", "classification": "IMMUTABLE_EVIDENCE_RETAINED_ELSEWHERE", "disposition": "historical narrative only; root v2 documents are authoritative"},
     {"path": "error.log", "classification": "GENERATED_OR_DISCARDABLE_OUTPUT", "disposition": "legacy runtime log; not imported"},

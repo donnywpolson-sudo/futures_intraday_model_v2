@@ -1,6 +1,6 @@
 # Systematic Futures Research Master Audit
 
-Version: 3.1.0
+Version: 3.2.0
 Classification: `NON_AUTHORIZING_EVIDENCE_CLASSIFICATION`
 Mode: `EVIDENCE_ONLY`
 
@@ -15,6 +15,25 @@ a readiness receipt.
 The machine classifier is `futures-master-audit`. Every invocation must bind
 this file, the stage matrix, the research-universe contract, and every evidence
 item by exact size and SHA-256.
+
+## Invocation contract and frozen hash domains
+
+One invocation requests exactly one target state and freezes:
+
+- the clean committed Git identity and declared repository boundary;
+- this specification and
+  `configs/master_audit_v3/stage_requirement_matrix.json`;
+- the canonical source, universe, profile, session, identity, economics, and
+  dependency contracts relevant to the target;
+- every release manifest, receipt, trial declaration, package inventory,
+  shortcut record, test receipt, and other admitted evidence item;
+- auditor implementation/configuration identities, runtime class, command
+  budget, and output destination.
+
+Hash domains are explicit and non-overlapping. A file cannot silently serve as
+both evidence and authority, an operational profile cannot replace the
+universe contract, and a producer receipt cannot replace independent
+replication. Any mutation after freezing invalidates the affected claim.
 
 ## Active target states
 
@@ -66,6 +85,28 @@ holdout rows, call a provider, publish readiness, seal a candidate, or place an
 order. Domain results must be supplied as evidence-referenced subcheck records.
 A claimed `PASS` or `FAIL` without evidence is invalid.
 
+## Evidence, registry, and applicability
+
+Use one canonical evidence index per invocation. Each evidence record has one
+identity, relative path, byte count, SHA-256, provenance, safety disposition,
+limitations, and every claim reference that consumes it. Duplicate aliases,
+dangling references, undeclared bytes, unsafe paths, or contradictory
+identities are precheck failures.
+
+Evidence strength descends from independently reproduced primary bytes and
+calculations, to verified immutable manifests/receipts, to producer reports,
+then to prose assertions. Weaker evidence cannot overrule contradictory
+stronger evidence. Test success establishes only the behavior actually tested.
+
+Evidence state and check status are separate:
+
+- evidence may be `VERIFIED`, `CONTRADICTED`, `UNSAFE`, `STALE`, `MISSING`, or
+  `UNREVIEWED`;
+- applicability must be positively established from the frozen target matrix;
+  absence of evidence never makes a required check not applicable;
+- reused evidence is allowed only when its exact identity, semantics,
+  limitations, and authoritative owner satisfy every consuming subcheck.
+
 ## Status and decision semantics
 
 Subcheck statuses are `PASS`, `FAIL`, `ERROR`, `MISSING_EVIDENCE`, `UNKNOWN`,
@@ -82,6 +123,26 @@ then `NOT_APPLICABLE`.
 
 Logical exit codes are 0 for supportable, 10 for blocked, 11 for insufficient
 evidence, 12 for a precheck error, and 13 for a fatal auditor failure.
+
+## Six audit stages
+
+The stage order is cumulative; a later stage never erases an earlier blocker.
+
+1. Freeze the invocation, immutable snapshot, capability matrix, and blind
+   threat discovery.
+2. Evaluate G1-G3 for integrity, point-in-time causality, identity, and
+   feature/label/split isolation.
+3. Evaluate G4-G5 for complete selection accounting and dependence-aware net
+   OOS evidence.
+4. Evaluate G6 for sealed holdout escrow and disclosure control.
+5. Evaluate G7 for execution economics, portfolio interaction, capacity, and
+   pathwise survival.
+6. Evaluate G8, cumulative target requirements, reporting, recovery, and the
+   final non-authorizing decision.
+
+Only stages and subchecks required by the frozen target may be marked
+applicable. Earlier-stage evidence remains required when a later target depends
+on it.
 
 ## Eight gates
 
@@ -149,7 +210,7 @@ verify all of the following:
 - bounded provider error handling and prediction-panel abstention;
 - state/cache bounds, corrupt-state recovery, clean shutdown, and no autostart;
 - packaged self-check, demo smoke, and one separately approved bounded live
-  smoke; and
+  smoke with a create-only result bound to the exact frozen executable; and
 - exact Desktop/Start Menu shortcut targets plus a tested rollback to the prior
   installation.
 
@@ -189,12 +250,34 @@ Every audit implementation and invocation must fail closed for at least:
 - holdout discovery or access without a separate exact approval; and
 - operation with a required external repository or mutable legacy path.
 
+## Runtime and stopping rules
+
+- Read only frozen, declared, safe paths. Do not follow links, discover sibling
+  repositories, execute project code, import provider clients, or materialize a
+  protected artifact.
+- Stop the affected claim on a stale hash, schema mismatch, duplicate authority,
+  unsafe path, missing approval, contradictory primary evidence, undeclared
+  capability, or exhausted command budget.
+- Preserve partial evidence and errors, but never convert an interrupted or
+  incomplete check into a pass.
+- Auditor failure and precheck failure are distinct from a domain failure.
+  Reports must retain the logical exit category and the smallest missing or
+  contradicted requirement.
+
 ## Outputs and authority
 
 The canonical output contains the target, decision, gate and subcheck statuses,
 verified evidence identities, universe approval state, limitations, and logical
 exit code. It must state that it grants no provider, research, holdout,
 candidate, prediction, trading, or publication authority.
+
+The machine result uses schema `systematic_futures_audit/3.0.0` and includes:
+`audit_id`, `target_state`, `target_state_decision`, `logical_exit_code`,
+`universe_contract_approved`, ordered `gate_statuses`, normalized `subchecks`,
+the verified evidence index, and an explicit all-false authority envelope.
+Every subcheck record carries its gate/subcheck identity, status, reason,
+evidence references, and limitations. The human report must reconcile exactly
+to the machine result rather than restating a more favorable conclusion.
 
 A green test suite or copied files alone cannot satisfy this audit. The evidence
 must support the requested state, and the Meta Audit must find no unresolved

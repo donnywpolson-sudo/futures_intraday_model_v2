@@ -1,20 +1,69 @@
+# Python environments, caches, and local tooling
 __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
 .pytest_tmp/
+.t/
 .pytest_root_*/
 .coverage
 .venv/
+venv/
+.hypothesis/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
 .codex/
+
+# OS and editor state
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Local secrets and credentials
 .env
 .env.*
 api.env
 databento.env
 !.env.example
 !*.env.example
+!.env.template
+!*.env.template
+databento_api_key*
+.databento_api_key*
+credentials/
+secrets/
+*.key
+*.pem
+
+# Build and packaging output
 build/
 dist/
+*.log
+*.pkg
+*.pyz
+*.toc
+
+# Heavy generated file formats outside declared immutable release roots
+*.arrow
+*.dbn
+*.duckdb
+*.feather
+*.h5
+*.hdf5
+*.joblib
+*.npy
+*.npz
+*.parquet
+*.pickle
+*.pkl
+*.sqlite
+*.sqlite3
+*.zst
+
+# V2-owned immutable and generated data roots
 futures_intraday_model_v2_data_archive/
 data/vault/.staging/*
 data/vault/releases/*
@@ -37,6 +86,8 @@ manifests/data_releases/*
 state/data_publication_staging/*
 state/data_cutover/
 state/foundation_runs_v2/*
+state/foundation_successors/*
+state/lock_recovery/
 state/lease_recovery/
 state/run_logs/
 state/msr/*
@@ -53,4 +104,6 @@ state/source_selection/*
 !state/source_selection/.gitkeep
 bundles/*
 !bundles/.gitkeep
+reports/foundation_successor/*.stdout.jsonl
+reports/live_cockpit/bounded_live_smoke_result.json
 *.tmp

@@ -1,5 +1,5 @@
 {
-  "rules_version": "1.2.0",
+  "rules_version": "1.3.0",
   "dataset": "GLBX.MDP3",
   "currency": "USD",
   "valid_from": "2010-01-01",
@@ -15,7 +15,7 @@
     "DATABENTO_DEFINITION_GLBX_MDP3": {
       "authoritative": true,
       "binding": "EXACT_LAYOUT_V2_DBN_RELEASE_LOGICAL_DEFINITION_PATH_AND_PROVIDER_EVENT_TIME",
-      "locator": "manifests/data_releases/dbn/9e5a9f2a405e50b0cda6702b67506b0951b057500781d37c45171da3967e9b51.json#data/dbn/definition/{market}/{year}/{filename}",
+      "locator": "manifests/data_releases/dbn/086282eaef7b36a61626f88d93d06c93b87c1cb3407c936d065d0d1b9d98599e.json#data/dbn/definition/{market}/{year}/{filename}",
       "role": "ACTUAL_CONTRACT_QUANTITY_TICK_CURRENCY_AND_EFFECTIVE_IDENTITY"
     },
     "CME_CONTRACT_SPECIFICATIONS": {"authoritative":false,"binding":"MUTABLE_PUBLIC_REFERENCE_NOT_TRUST_EVIDENCE","locator":"https://www.cmegroup.com/education/courses/introduction-to-futures/learn-about-contract-specifications","role":"HUMAN_REVIEW_ONLY"},
@@ -26,7 +26,11 @@
     "CME_METALS_SPEC": {"authoritative":false,"binding":"MUTABLE_PUBLIC_REFERENCE_NOT_TRUST_EVIDENCE","locator":"https://www.cmegroup.com/education/articles-and-reports/trading-comex-gold-and-silver","role":"HUMAN_REVIEW_ONLY"},
     "CME_AG_STANDARD_TICKS": {"authoritative":false,"binding":"MUTABLE_PUBLIC_REFERENCE_NOT_TRUST_EVIDENCE","locator":"https://www.cmegroup.com/articles/faqs/faq-micro-agriculture-futures.html","role":"HUMAN_REVIEW_ONLY"},
     "CME_RATES_SPEC": {"authoritative":false,"binding":"MUTABLE_PUBLIC_REFERENCE_NOT_TRUST_EVIDENCE","locator":"https://www.cmegroup.com/articles/2026/introduction-to-interest-rates-products.html","role":"HUMAN_REVIEW_ONLY"},
-    "CME_SOFR_SPEC": {"authoritative":false,"binding":"MUTABLE_PUBLIC_REFERENCE_NOT_TRUST_EVIDENCE","locator":"https://www.cmegroup.com/education/articles-and-reports/understanding-sofr-futures","role":"HUMAN_REVIEW_ONLY"}
+    "CME_SOFR_SPEC": {"authoritative":false,"binding":"MUTABLE_PUBLIC_REFERENCE_NOT_TRUST_EVIDENCE","locator":"https://www.cmegroup.com/education/articles-and-reports/understanding-sofr-futures","role":"HUMAN_REVIEW_ONLY"},
+    "CME_CRYPTO_SPEC": {"authoritative":false,"binding":"MUTABLE_PUBLIC_REFERENCE_NOT_TRUST_EVIDENCE","locator":"https://www.cmegroup.com/articles/faqs/frequently-asked-questions-cryptocurrency-futures.html","role":"HUMAN_REVIEW_ONLY"},
+    "CME_LIVESTOCK_SPEC": {"authoritative":false,"binding":"MUTABLE_PUBLIC_REFERENCE_NOT_TRUST_EVIDENCE","locator":"https://www.cmegroup.com/education/lessons/live-cattle-product-overview","role":"HUMAN_REVIEW_ONLY"},
+    "CME_PLATINUM_PALLADIUM_SPEC": {"authoritative":false,"binding":"MUTABLE_PUBLIC_REFERENCE_NOT_TRUST_EVIDENCE","locator":"https://www.cmegroup.com/articles/faqs/metals-weekly-options.html","role":"HUMAN_REVIEW_ONLY"},
+    "CME_FED_FUNDS_SPEC": {"authoritative":false,"binding":"MUTABLE_PUBLIC_REFERENCE_NOT_TRUST_EVIDENCE","locator":"https://www.cmegroup.com/articles/2024/understanding-yield-futures.html","role":"HUMAN_REVIEW_ONLY"}
   },
   "rules": [
     {"market":"6A","point_value":"100000","expected_unit_qty":"100000","quote_convention":"USD_PER_AUD","source_ids":["CME_FX_PRODUCT_GUIDE","DATABENTO_DEFINITION_GLBX_MDP3"]},
@@ -35,9 +39,14 @@
     {"market":"6E","point_value":"125000","expected_unit_qty":"125000","quote_convention":"USD_PER_EUR","source_ids":["CME_FX_PRODUCT_GUIDE","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"6J","point_value":"12500000","expected_unit_qty":"12500000","quote_convention":"USD_PER_JPY","source_ids":["CME_FX_PRODUCT_GUIDE","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"6M","point_value":"500000","expected_unit_qty":"500000","quote_convention":"USD_PER_MXN","source_ids":["CME_FX_LINK","DATABENTO_DEFINITION_GLBX_MDP3"]},
+    {"market":"6N","point_value":"100000","expected_unit_qty":"100000","quote_convention":"USD_PER_NZD","source_ids":["CME_FX_PRODUCT_GUIDE","DATABENTO_DEFINITION_GLBX_MDP3"]},
+    {"market":"6S","point_value":"125000","expected_unit_qty":"125000","quote_convention":"USD_PER_CHF","source_ids":["CME_FX_PRODUCT_GUIDE","DATABENTO_DEFINITION_GLBX_MDP3"]},
+    {"market":"BTC","point_value":"5","expected_unit_qty":"5","quote_convention":"USD_PER_BITCOIN","source_ids":["CME_CRYPTO_SPEC","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"CL","point_value":"1000","expected_unit_qty":"1000","quote_convention":"USD_PER_BARREL","source_ids":["CME_WTI_SPEC","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"ES","point_value":"50","expected_unit_qty":"50","quote_convention":"USD_PER_INDEX_POINT","source_ids":["CME_EQUITY_MULTIPLIERS","DATABENTO_DEFINITION_GLBX_MDP3"]},
+    {"market":"ETH","point_value":"50","expected_unit_qty":"50","quote_convention":"USD_PER_ETHER","source_ids":["CME_CRYPTO_SPEC","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"GC","point_value":"100","expected_unit_qty":"100","quote_convention":"USD_PER_TROY_OUNCE","source_ids":["CME_METALS_SPEC","DATABENTO_DEFINITION_GLBX_MDP3"]},
+    {"market":"GF","point_value":"500","expected_unit_qty":"50000","quote_convention":"CENTS_PER_POUND","source_ids":["CME_LIVESTOCK_SPEC","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"HE","point_value":"400","expected_unit_qty":"40000","quote_convention":"CENTS_PER_POUND","source_ids":["CME_CONTRACT_SPECIFICATIONS","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"HG","point_value":"25000","expected_unit_qty":"25000","quote_convention":"USD_PER_POUND","source_ids":["CME_CONTRACT_SPECIFICATIONS","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"HO","point_value":"42000","expected_unit_qty":"42000","quote_convention":"USD_PER_GALLON","source_ids":["CME_CONTRACT_SPECIFICATIONS","DATABENTO_DEFINITION_GLBX_MDP3"]},
@@ -45,6 +54,8 @@
     {"market":"LE","point_value":"400","expected_unit_qty":"40000","quote_convention":"CENTS_PER_POUND","source_ids":["CME_CONTRACT_SPECIFICATIONS","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"NG","point_value":"10000","expected_unit_qty":"10000","quote_convention":"USD_PER_MMBTU","source_ids":["CME_CONTRACT_SPECIFICATIONS","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"NQ","point_value":"20","expected_unit_qty":"20","quote_convention":"USD_PER_INDEX_POINT","source_ids":["CME_EQUITY_MULTIPLIERS","DATABENTO_DEFINITION_GLBX_MDP3"]},
+    {"market":"PA","point_value":"100","expected_unit_qty":"100","quote_convention":"USD_PER_TROY_OUNCE","source_ids":["CME_PLATINUM_PALLADIUM_SPEC","DATABENTO_DEFINITION_GLBX_MDP3"]},
+    {"market":"PL","point_value":"50","expected_unit_qty":"50","quote_convention":"USD_PER_TROY_OUNCE","source_ids":["CME_PLATINUM_PALLADIUM_SPEC","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"RB","point_value":"42000","expected_unit_qty":"42000","quote_convention":"USD_PER_GALLON","source_ids":["CME_CONTRACT_SPECIFICATIONS","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"RTY","point_value":"50","expected_unit_qty":"50","quote_convention":"USD_PER_INDEX_POINT","source_ids":["CME_EQUITY_MULTIPLIERS","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"SI","point_value":"5000","expected_unit_qty":"5000","quote_convention":"USD_PER_TROY_OUNCE","source_ids":["CME_METALS_SPEC","DATABENTO_DEFINITION_GLBX_MDP3"]},
@@ -59,6 +70,7 @@
     {"market":"ZL","point_value":"600","expected_unit_qty":"60000","quote_convention":"CENTS_PER_POUND","source_ids":["CME_AG_STANDARD_TICKS","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"ZM","point_value":"100","expected_unit_qty":"100","quote_convention":"USD_PER_SHORT_TON","source_ids":["CME_AG_STANDARD_TICKS","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"ZN","point_value":"1000","expected_unit_qty":"100000","quote_convention":"PERCENT_OF_PAR","source_ids":["CME_RATES_SPEC","DATABENTO_DEFINITION_GLBX_MDP3"]},
+    {"market":"ZQ","point_value":"4167","expected_unit_qty":"4167","quote_convention":"USD_PER_IMM_INDEX_POINT","source_ids":["CME_FED_FUNDS_SPEC","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"ZS","point_value":"50","expected_unit_qty":"5000","quote_convention":"CENTS_PER_BUSHEL","source_ids":["CME_AG_STANDARD_TICKS","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"ZT","point_value":"2000","expected_unit_qty":"200000","quote_convention":"PERCENT_OF_PAR","source_ids":["CME_RATES_SPEC","DATABENTO_DEFINITION_GLBX_MDP3"]},
     {"market":"ZW","point_value":"50","expected_unit_qty":"5000","quote_convention":"CENTS_PER_BUSHEL","source_ids":["CME_AG_STANDARD_TICKS","DATABENTO_DEFINITION_GLBX_MDP3"]}

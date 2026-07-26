@@ -6,11 +6,12 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 if (-not $BuildRoot) {
-    $BuildRoot = Join-Path $PSScriptRoot '..\dist\FuturesLiveCockpit'
+    $BuildRoot = Join-Path $repoRoot 'dist\FuturesLiveCockpit'
 }
 if (-not $CredentialFile) {
-    $CredentialFile = Join-Path $PSScriptRoot '..\api.env'
+    $CredentialFile = Join-Path $repoRoot 'api.env'
 }
 
 function Assert-ChildPath {
@@ -20,10 +21,46 @@ function Assert-ChildPath {
     )
     $parentFull = [IO.Path]::GetFullPath($Parent).TrimEnd('\') + '\'
     $childFull = [IO.Path]::GetFullPath($Child)
-    if (-not $childFull.StartsWith($parentFull, [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not $childFull.StartsWith(
+        $parentFull,
+        [StringComparison]::OrdinalIgnoreCase
+    )) {
         throw "Path escapes the installation root: $childFull"
     }
     return $childFull
+}
+
+function Read-ShortcutRecord {
+    param(
+        [Parameter(Mandatory = $true)][object]$Shell,
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+    $shortcut = $Shell.CreateShortcut($Path)
+    return [ordered]@{
+        Path = [IO.Path]::GetFullPath($Path)
+        TargetPath = $shortcut.TargetPath
+        WorkingDirectory = $shortcut.WorkingDirectory
+        Description = $shortcut.Description
+        Arguments = $shortcut.Arguments
+        IconLocation = $shortcut.IconLocation
+        WindowStyle = $shortcut.WindowStyle
+    }
+}
+
+function Get-Sha256Hex {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path
+    )
+    $stream = [IO.File]::OpenRead($Path)
+    $hasher = [Security.Cryptography.SHA256]::Create()
+    try {
+        $digest = $hasher.ComputeHash($stream)
+        return ([BitConverter]::ToString($digest) -replace '-', '').ToLowerInvariant()
+    }
+    finally {
+        $hasher.Dispose()
+        $stream.Dispose()
+    }
 }
 
 $resolvedBuildRoot = (Resolve-Path -LiteralPath $BuildRoot).Path
@@ -32,75 +69,88 @@ $sourceExe = Join-Path $resolvedBuildRoot 'FuturesLiveCockpit.exe'
 if (-not (Test-Path -LiteralPath $sourceExe -PathType Leaf)) {
     throw "Packaged executable not found: $sourceExe"
 }
-if (-not (Test-Path -LiteralPath (Join-Path $resolvedBuildRoot '_internal') -PathType Container)) {
+if (-not (Test-Path -LiteralPath (
+    Join-Path $resolvedBuildRoot '_internal'
+) -PathType Container)) {
     throw "Packaged runtime directory not found under: $resolvedBuildRoot"
 }
 if (-not (Test-Path -LiteralPath $resolvedCredentialFile -PathType Leaf)) {
-    throw "Credential file not found."
+    throw 'Credential file not found.'
 }
 
-$version = (Get-Item -LiteralPath $sourceExe).LastWriteTimeUtc.ToString('yyyyMMdd-HHmmss')
+$bundledPlan = Join-Path (
+    $resolvedBuildRoot
+) '_internal\configs\live_cockpit_smoke_plan.json'
+if (-not (Test-Path -LiteralPath $bundledPlan -PathType Leaf)) {
+    throw "Packaged live-smoke plan not found: $bundledPlan"
+}
+$planHash = Get-Sha256Hex -Path $bundledPlan
+$version = (
+    (Get-Item -LiteralPath $sourceExe).LastWriteTimeUtc.ToString(
+        'yyyyMMdd-HHmmss'
+    ) + '-' + $planHash.Substring(0, 8).ToLowerInvariant()
+)
 $installRoot = [IO.Path]::GetFullPath(
     (Join-Path $env:LOCALAPPDATA 'Programs\FuturesLiveCockpit')
 )
-$installPath = Join-Path $installRoot $version
-$stagingPath = Join-Path $installRoot (
-    ".${version}.staging-$PID-$([Guid]::NewGuid().ToString('N'))"
+$installPath = Assert-ChildPath -Parent $installRoot -Child (
+    Join-Path $installRoot $version
 )
-$installPath = Assert-ChildPath -Parent $installRoot -Child $installPath
-$stagingPath = Assert-ChildPath -Parent $installRoot -Child $stagingPath
+$stagingPath = Assert-ChildPath -Parent $installRoot -Child (
+    Join-Path $installRoot (
+        ".${version}.staging-$PID-$([Guid]::NewGuid().ToString('N'))"
+    )
+)
 if (Test-Path -LiteralPath $installPath) {
     throw "Version is already installed: $installPath"
 }
 
-$startMenuDirectory = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs'
-$startMenuShortcut = Join-Path $startMenuDirectory 'Futures Live Cockpit.lnk'
-$desktopShortcut = Join-Path ([Environment]::GetFolderPath('Desktop')) 'Futures Live Cockpit.lnk'
-$startupShortcut = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Startup\Futures Live Cockpit.lnk'
-$shortcutPaths = @($startMenuShortcut, $desktopShortcut)
+$startMenuDirectory = Join-Path (
+    $env:APPDATA
+) 'Microsoft\Windows\Start Menu\Programs'
+$shortcutPaths = @(
+    (Join-Path $startMenuDirectory 'Futures Live Cockpit.lnk'),
+    (Join-Path ([Environment]::GetFolderPath('Desktop')) (
+        'Futures Live Cockpit.lnk'
+    ))
+)
+$startupShortcut = Join-Path (
+    $env:APPDATA
+) 'Microsoft\Windows\Start Menu\Programs\Startup\Futures Live Cockpit.lnk'
 if (Test-Path -LiteralPath $startupShortcut) {
-    throw "Refusing to overwrite existing rollout path: $startupShortcut"
+    throw "Refusing to proceed while an auto-start shortcut exists: $startupShortcut"
 }
 
-$previousShortcuts = @{}
-$existingShortcuts = @($shortcutPaths | Where-Object { Test-Path -LiteralPath $_ })
-if ($Upgrade) {
-    if ($existingShortcuts.Count -ne $shortcutPaths.Count) {
-        throw 'Upgrade requires both existing cockpit shortcuts.'
-    }
-    $existingShell = New-Object -ComObject WScript.Shell
-    foreach ($existingPath in $shortcutPaths) {
-        $existing = $existingShell.CreateShortcut($existingPath)
-        Assert-ChildPath -Parent $installRoot -Child $existing.TargetPath | Out-Null
-        if ([IO.Path]::GetFileName($existing.TargetPath) -ne 'FuturesLiveCockpit.exe') {
-            throw "Existing shortcut is not cockpit-owned: $existingPath"
-        }
-        $previousShortcuts[$existingPath] = [ordered]@{
-            TargetPath = $existing.TargetPath
-            WorkingDirectory = $existing.WorkingDirectory
-            Description = $existing.Description
-            Arguments = $existing.Arguments
-            IconLocation = $existing.IconLocation
-            WindowStyle = $existing.WindowStyle
-        }
-    }
+$existingShortcuts = @(
+    $shortcutPaths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }
+)
+if ($Upgrade -and $existingShortcuts.Count -ne $shortcutPaths.Count) {
+    throw 'Upgrade preparation requires both existing cockpit shortcuts.'
 }
-elseif ($existingShortcuts.Count -gt 0) {
-    foreach ($existingPath in $existingShortcuts) {
-        throw "Refusing to overwrite existing rollout path: $existingPath"
+if (-not $Upgrade -and $existingShortcuts.Count -gt 0) {
+    throw 'Use -Upgrade when cockpit shortcuts already exist.'
+}
+
+$shell = New-Object -ComObject WScript.Shell
+$shortcutRecords = @()
+foreach ($shortcutPath in $existingShortcuts) {
+    $record = Read-ShortcutRecord -Shell $shell -Path $shortcutPath
+    Assert-ChildPath -Parent $installRoot -Child $record.TargetPath | Out-Null
+    if ([IO.Path]::GetFileName($record.TargetPath) -ne 'FuturesLiveCockpit.exe') {
+        throw "Existing shortcut is not cockpit-owned: $shortcutPath"
     }
+    $shortcutRecords += $record
 }
 
 if (-not $PSCmdlet.ShouldProcess(
     $installPath,
-    $(if ($Upgrade) { 'Upgrade Futures Live Cockpit and replace verified shortcuts' } else { 'Install Futures Live Cockpit and create shortcuts' })
+    'Prepare isolated Futures Live Cockpit version without changing shortcuts'
 )) {
     return [pscustomobject]@{
-        Action = $(if ($Upgrade) { 'WouldUpgrade' } else { 'WouldInstall' })
+        Action = 'WouldPrepare'
         InstalledPath = $installPath
         CredentialFile = $resolvedCredentialFile
-        StartMenuShortcut = $startMenuShortcut
-        DesktopShortcut = $desktopShortcut
+        ShortcutsChanged = $false
         AutoStartCreated = $false
     }
 }
@@ -108,15 +158,12 @@ if (-not $PSCmdlet.ShouldProcess(
 $installRootExisted = Test-Path -LiteralPath $installRoot
 $stagingCreated = $false
 $finalCreated = $false
-$createdShortcuts = [Collections.Generic.List[string]]::new()
-$shortcutsUpdated = $false
-
 try {
     New-Item -ItemType Directory -Path $installRoot -Force | Out-Null
     New-Item -ItemType Directory -Path $stagingPath | Out-Null
     $stagingCreated = $true
     foreach ($item in Get-ChildItem -LiteralPath $resolvedBuildRoot -Force) {
-        Copy-Item -LiteralPath $item.FullName -Destination $stagingPath -Recurse -Force
+        Copy-Item -LiteralPath $item.FullName -Destination $stagingPath -Recurse
     }
 
     $forbiddenFiles = @(
@@ -125,22 +172,37 @@ try {
     )
     $forbiddenDirectories = @(
         Get-ChildItem -LiteralPath $stagingPath -Recurse -Force -Directory |
-            Where-Object { $_.Name -eq 'secrets' }
+            Where-Object { $_.Name -in @('credentials', 'secrets') }
     )
     if ($forbiddenFiles.Count -gt 0 -or $forbiddenDirectories.Count -gt 0) {
-        throw 'Packaged build unexpectedly contains credential files or directories.'
+        throw 'Packaged build unexpectedly contains credential material.'
     }
 
-    $locatorPath = Join-Path $stagingPath 'credential-source.json'
-    $locatorJson = [ordered]@{
+    $utf8NoBom = New-Object Text.UTF8Encoding($false)
+    $locator = [ordered]@{
         schema = 'futures_live_cockpit_credential_source_v1'
         api_env_path = $resolvedCredentialFile
-    } | ConvertTo-Json -Compress
-    $utf8NoBom = New-Object Text.UTF8Encoding($false)
-    [IO.File]::WriteAllText($locatorPath, $locatorJson, $utf8NoBom)
+    }
+    [IO.File]::WriteAllText(
+        (Join-Path $stagingPath 'credential-source.json'),
+        ($locator | ConvertTo-Json -Compress),
+        $utf8NoBom
+    )
+    $rollback = [ordered]@{
+        schema = 'futures_live_cockpit_shortcut_rollback/1.0.0'
+        captured_at_utc = [DateTime]::UtcNow.ToString('o')
+        shortcuts = $shortcutRecords
+        startup_shortcut_absent = $true
+    }
+    [IO.File]::WriteAllText(
+        (Join-Path $stagingPath 'rollback-shortcuts.json'),
+        ($rollback | ConvertTo-Json -Depth 6 -Compress),
+        $utf8NoBom
+    )
 
     $stagedExe = Join-Path $stagingPath 'FuturesLiveCockpit.exe'
-    $selfCheck = Start-Process -FilePath $stagedExe -ArgumentList '--self-check' -WindowStyle Hidden -PassThru
+    $selfCheck = Start-Process -FilePath $stagedExe `
+        -ArgumentList '--self-check' -WindowStyle Hidden -PassThru
     if (-not $selfCheck.WaitForExit(60000)) {
         Stop-Process -Id $selfCheck.Id -Force -ErrorAction SilentlyContinue
         throw 'Packaged self-check exceeded 60 seconds.'
@@ -152,74 +214,40 @@ try {
     Move-Item -LiteralPath $stagingPath -Destination $installPath
     $stagingCreated = $false
     $finalCreated = $true
-    $installedExe = Join-Path $installPath 'FuturesLiveCockpit.exe'
-    $installedLocator = Join-Path $installPath 'credential-source.json'
 
-    $shell = New-Object -ComObject WScript.Shell
-    foreach ($shortcutPath in $shortcutPaths) {
-        $shortcut = $shell.CreateShortcut($shortcutPath)
-        $shortcut.TargetPath = $installedExe
-        $shortcut.WorkingDirectory = $installPath
-        $shortcut.Description = 'Observation-only futures chart cockpit'
-        $shortcut.Save()
-        if (-not $Upgrade) {
-            $createdShortcuts.Add($shortcutPath)
-        }
-        $verified = $shell.CreateShortcut($shortcutPath)
+    foreach ($record in $shortcutRecords) {
+        $observed = Read-ShortcutRecord -Shell $shell -Path $record.Path
         if (
             -not [string]::Equals(
-                [IO.Path]::GetFullPath($verified.TargetPath),
-                [IO.Path]::GetFullPath($installedExe),
+                [IO.Path]::GetFullPath($observed.TargetPath),
+                [IO.Path]::GetFullPath($record.TargetPath),
                 [StringComparison]::OrdinalIgnoreCase
             ) -or
             -not [string]::Equals(
-                [IO.Path]::GetFullPath($verified.WorkingDirectory),
-                [IO.Path]::GetFullPath($installPath),
+                [IO.Path]::GetFullPath($observed.WorkingDirectory),
+                [IO.Path]::GetFullPath($record.WorkingDirectory),
                 [StringComparison]::OrdinalIgnoreCase
             )
         ) {
-            throw "Shortcut verification failed: $shortcutPath"
+            throw "Shortcut changed during preparation: $($record.Path)"
         }
     }
-    $shortcutsUpdated = $Upgrade
-
     if (Test-Path -LiteralPath $startupShortcut) {
         throw 'Unexpected auto-start shortcut was created.'
     }
 
     [pscustomobject]@{
-        Action = $(if ($Upgrade) { 'Upgraded' } else { 'Installed' })
+        Action = 'Prepared'
         InstalledPath = $installPath
-        CredentialLocator = $installedLocator
-        StartMenuShortcut = $startMenuShortcut
-        DesktopShortcut = $desktopShortcut
+        CredentialLocator = Join-Path $installPath 'credential-source.json'
+        RollbackMetadata = Join-Path $installPath 'rollback-shortcuts.json'
         PackagedSelfCheckExitCode = $selfCheck.ExitCode
         CredentialCopied = $false
+        ShortcutsChanged = $false
         AutoStartCreated = $false
     }
 }
 catch {
-    if ($Upgrade -and $shortcutsUpdated -or ($Upgrade -and $previousShortcuts.Count -gt 0)) {
-        $restoreShell = New-Object -ComObject WScript.Shell
-        foreach ($shortcutPath in $shortcutPaths) {
-            if ($previousShortcuts.ContainsKey($shortcutPath)) {
-                $prior = $previousShortcuts[$shortcutPath]
-                $shortcut = $restoreShell.CreateShortcut($shortcutPath)
-                $shortcut.TargetPath = $prior.TargetPath
-                $shortcut.WorkingDirectory = $prior.WorkingDirectory
-                $shortcut.Description = $prior.Description
-                $shortcut.Arguments = $prior.Arguments
-                $shortcut.IconLocation = $prior.IconLocation
-                $shortcut.WindowStyle = $prior.WindowStyle
-                $shortcut.Save()
-            }
-        }
-    }
-    foreach ($shortcutPath in $createdShortcuts) {
-        if (Test-Path -LiteralPath $shortcutPath) {
-            Remove-Item -LiteralPath $shortcutPath -Force
-        }
-    }
     if ($finalCreated -and (Test-Path -LiteralPath $installPath)) {
         Assert-ChildPath -Parent $installRoot -Child $installPath | Out-Null
         Remove-Item -LiteralPath $installPath -Recurse -Force

@@ -74,17 +74,31 @@ _SESSION_CONFIG = "session_policy.json"
 
 _ASSET_CLASSES: Mapping[str, str] = MappingProxyType(
     {
-        **{market: "FX" for market in ("6A", "6B", "6C", "6E", "6J", "6M")},
+        **{
+            market: "FX"
+            for market in ("6A", "6B", "6C", "6E", "6J", "6M", "6N", "6S")
+        },
+        **{market: "CRYPTO" for market in ("BTC", "ETH")},
         **{market: "ENERGY" for market in ("CL", "HO", "NG", "RB")},
         **{market: "EQUITY_INDEX" for market in ("ES", "NQ", "RTY", "YM")},
-        **{market: "METALS" for market in ("GC", "HG", "SI")},
+        **{market: "METALS" for market in ("GC", "HG", "PA", "PL", "SI")},
         **{
             market: "AGRICULTURE"
-            for market in ("HE", "KE", "LE", "ZC", "ZL", "ZM", "ZS", "ZW")
+            for market in ("GF", "HE", "KE", "LE", "ZC", "ZL", "ZM", "ZS", "ZW")
         },
         **{
             market: "RATES"
-            for market in ("SR1", "SR3", "TN", "UB", "ZB", "ZF", "ZN", "ZT")
+            for market in (
+                "SR1",
+                "SR3",
+                "TN",
+                "UB",
+                "ZB",
+                "ZF",
+                "ZN",
+                "ZQ",
+                "ZT",
+            )
         },
     }
 )

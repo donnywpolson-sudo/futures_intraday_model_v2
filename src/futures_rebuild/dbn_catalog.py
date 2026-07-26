@@ -74,7 +74,11 @@ RECEIVE_TIME_COVERAGE_SCHEMAS = {
     "trades",
 }
 DATE_RANGE_NAME = re.compile(
-    r"^(?P<start>\d{4}-\d{2}-\d{2})_(?P<end>\d{4}-\d{2}-\d{2})\.dbn\.zst$"
+    r"^(?P<start>\d{4}-\d{2}-\d{2})_(?P<end>\d{4}-\d{2}-\d{2})"
+    r"(?P<variant>\.parent)?\.dbn\.zst$"
+)
+DIAGNOSTIC_PARENT_DISPOSITION = (
+    "DIAGNOSTIC_PARENT_QUERY_IDENTITY_ONLY_NOT_FOUNDATION_ELIGIBLE"
 )
 REQUIRED_ANOMALIES = {
     ("KE", 2019),
@@ -170,8 +174,14 @@ def _validate_layout_v2_source_contract(
         "combined_files": len(manifest.files),
         "combined_bytes": sum(item.size for item in manifest.files),
     }
+    contract_version = contract.get("contract_version")
+    repository_boundary_is_valid = contract_version == "2.0.0" or (
+        contract_version == "2.1.0"
+        and contract.get("legacy_repository") is None
+        and contract.get("external_repository_access") == "FORBIDDEN"
+    )
     if (
-        contract.get("contract_version") != "2.0.0"
+        not repository_boundary_is_valid
         or contract.get("active_repository") != str(boundary.active_root)
         or not isinstance(provider, dict)
         or provider
@@ -747,12 +757,19 @@ def validate_dbn_pair(
         raise IntegrityError(
             f"schema directory {schema_dir} disagrees with {expected_schema}"
         )
+    is_diagnostic_parent = match.group("variant") == ".parent"
     query_stype_in, query_symbols = require_allowed_query_symbology(
         schema=expected_schema,
         market=market,
         stype_in=payload.get("stype_in"),
         symbols=payload.get("symbols_requested"),
+        allow_diagnostic_parent=is_diagnostic_parent,
     )
+    if is_diagnostic_parent and query_stype_in != "parent":
+        raise IntegrityError(
+            f"diagnostic .parent DBN lacks parent query symbology: "
+            f"{relative.as_posix()}"
+        )
     if payload.get("stype_out") != "instrument_id":
         raise IntegrityError(
             f"sidecar output symbology mismatch for {relative.as_posix()}"
@@ -854,12 +871,17 @@ def validate_dbn_pair(
         end=match.group("end"),
         stype_in=query_stype_in,
         symbols=query_symbols,
+        allow_diagnostic_parent=is_diagnostic_parent,
     )
     core = {
         "actual_identity_authority": "DATASET_PUBLISHER_INSTRUMENT_INSTRUMENT_ID_DATE_UTC_EXCHANGE_SESSION_DATE_PLUS_AS_OF_DEFINITION",
         "continuous_selection_rule": "V_PREVIOUS_DAY_VOLUME_RANK_0",
         "continuous_metadata_mapping_policy": "RECONCILIATION_ONLY_NEVER_CAUSAL_FEATURE_OR_ELIGIBILITY",
-        "coverage_disposition": "AUTHORITATIVE_INTERVAL",
+        "coverage_disposition": (
+            DIAGNOSTIC_PARENT_DISPOSITION
+            if is_diagnostic_parent
+            else "AUTHORITATIVE_INTERVAL"
+        ),
         "coverage_timestamp_field": coverage_timestamp_field,
         "dataset": DATASET,
         "decode": decoded,
@@ -1002,6 +1024,7 @@ def build_source_selection_manifest(
     overlap_resolutions = _load_overlap_resolutions(overlap_contract_path)
     used_overlap_resolution_ids: set[str] = set()
     applied_overlap_resolutions: list[dict[str, object]] = []
+    diagnostic_entries: list[dict[str, object]] = []
     entries: list[dict[str, object]] = []
     coverage_intervals: dict[
         tuple[str, str, str], list[tuple[date, date, dict[str, object]]]
@@ -1047,6 +1070,7 @@ def build_source_selection_manifest(
                     "selected families exceed the explicit full-scan resource ceiling"
                 )
         family_entries: list[dict[str, object]] = []
+        family_diagnostics: list[dict[str, object]] = []
         for dbn_path, logical_path in path_bindings:
             sidecar_binding = (
                 dbn_release.file(
@@ -1066,6 +1090,18 @@ def build_source_selection_manifest(
                 scan_to_end=scan_to_end,
             )
             validated["family"] = str(family["id"])
+            if validated["coverage_disposition"] == DIAGNOSTIC_PARENT_DISPOSITION:
+                core_without_validation = {
+                    key: value
+                    for key, value in validated.items()
+                    if key != "validation_sha256"
+                }
+                validated["validation_sha256"] = sha256_json(
+                    core_without_validation
+                )
+                family_diagnostics.append(validated)
+                diagnostic_entries.append(validated)
+                continue
             if (str(validated["market"]), int(validated["year"])) in anomaly_families:
                 validated["coverage_disposition"] = "QUARANTINED_PENDING_REVALIDATION"
                 core_without_validation = {
@@ -1107,6 +1143,7 @@ def build_source_selection_manifest(
                 "coverage_start_min": min(
                     (str(item["start"]) for item in family_entries), default=None
                 ),
+                "diagnostic_parent_file_count": len(family_diagnostics),
                 "family": family["id"],
                 "file_count": len(family_entries),
                 "markets": sorted({str(item["market"]) for item in family_entries}),
@@ -1135,6 +1172,7 @@ def build_source_selection_manifest(
         "catalog_contract_version": CATALOG_CONTRACT_VERSION,
         "dataset": DATASET,
         "decoder_version": databento.__version__,
+        "diagnostic_files": diagnostic_entries,
         "families": family_summaries,
         "files": entries,
         "overlap_resolution_contract_sha256": (

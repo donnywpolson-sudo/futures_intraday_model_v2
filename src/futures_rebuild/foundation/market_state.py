@@ -39,6 +39,7 @@ from ..data_layout import (
     verify_data_release_manifest,
 )
 from .decoder import iter_statistics, iter_statuses
+from .coverage import StatusResearchScopePolicy
 from .materialize import CAUSAL_RELEASE_KIND, load_causal_interval
 from .records import INT64_NULL, StatisticsRecordV1, StatusRecordV1
 from .selection import ResolvedFoundationSelection, SelectedFamilyFile
@@ -46,8 +47,8 @@ from .support import VerifiedFoundationPolicies
 
 
 MARKET_STATE_RELEASE_KIND = "futures_status_statistics_foundation"
-MARKET_STATE_SCHEMA_VERSION = "3.0.0"
-MARKET_STATE_RESUME_VERSION = "1.0.0"
+MARKET_STATE_SCHEMA_VERSION = "3.1.0"
+MARKET_STATE_RESUME_VERSION = "1.1.0"
 MARKET_STATE_ATTEMPT_CAP = 4
 STATUS_ELIGIBILITY_RELEASE_KIND = "futures_status_asof_eligibility"
 STATUS_ELIGIBILITY_SCHEMA_VERSION = "2.0.0"
@@ -775,6 +776,7 @@ def _market_state_resume_contract(
     source_selection_manifest_id: str,
     policies: VerifiedFoundationPolicies,
     coverage_policy: FoundationCoveragePolicy,
+    scope_policy: StatusResearchScopePolicy,
     statistics_roles: StatisticsRolePolicy,
     batch_rows: int,
 ) -> dict[str, object]:
@@ -797,6 +799,7 @@ def _market_state_resume_contract(
         "foundation_policy_set_id": policies.policy_set_id,
         "query_manifest_id": selection.query_manifest_id,
         "resume_version": MARKET_STATE_RESUME_VERSION,
+        "research_scope_policy_hash": scope_policy.policy_hash,
         "source_bindings_sha256": sha256_json(source_bindings),
         "source_selection_manifest_id": source_selection_manifest_id,
         "source_selection_receipt": source_selection_receipt.as_dict(),
@@ -1733,6 +1736,36 @@ def _source_coverage(
     )
 
 
+def _research_scope_status_coverage(
+    selection: ResolvedFoundationSelection,
+    *,
+    scope_policy: StatusResearchScopePolicy,
+) -> tuple[int, int, Decimal, int]:
+    required = {
+        (item.market, item.year)
+        for item in selection.intervals
+        if scope_policy.includes_interval(start=item.start, end=item.end)
+    }
+    if not required:
+        raise IntegrityError("foundation selection has no research-scope market/year")
+    status = {
+        (item.market, item.year) for item in selection.status_files
+    }
+    present = len(status & required)
+    all_required = {
+        (str(row["market"]), int(row["year"]))
+        for row in selection.coverage_matrix
+        if row["required_for_bar_foundation"] is True
+    }
+    pre_scope_missing = len((all_required - required) - status)
+    return (
+        len(required),
+        present,
+        Decimal(present) / Decimal(len(required)),
+        pre_scope_missing,
+    )
+
+
 def _assert_manifest_matches_market_state_outputs(
     manifest: ReleaseManifest,
     *,
@@ -1768,6 +1801,7 @@ def _recover_published_market_state_receipt(
     source_selection_manifest_id: str,
     policies: VerifiedFoundationPolicies,
     coverage_policy: FoundationCoveragePolicy,
+    scope_policy: StatusResearchScopePolicy,
     statistics_roles: StatisticsRolePolicy,
     publisher: AtomicPublisher,
 ) -> VerifiedReleaseReceipt | None:
@@ -1812,6 +1846,8 @@ def _recover_published_market_state_receipt(
             raise IntegrityError("published market-state contract is absent")
         if (
             contract.get("coverage_policy_hash") != coverage_policy.policy_hash
+            or contract.get("research_scope_policy_hash")
+            != scope_policy.policy_hash
             or contract.get("statistics_role_policy_hash")
             != statistics_roles.policy_hash
             or contract.get("source_selection_receipt_id")
@@ -1836,6 +1872,7 @@ def publish_market_state_foundation(
     source_selection_receipt: VerifiedReleaseReceipt,
     policies: VerifiedFoundationPolicies,
     coverage_policy: FoundationCoveragePolicy,
+    scope_policy: StatusResearchScopePolicy,
     statistics_roles: StatisticsRolePolicy,
     publisher: AtomicPublisher,
     batch_rows: int = 100_000,
@@ -1860,8 +1897,15 @@ def publish_market_state_foundation(
     denominator, status_present, statistics_present, status_fraction, statistics_fraction = (
         _source_coverage(selection)
     )
+    (
+        research_denominator,
+        research_status_present,
+        research_status_fraction,
+        pre_scope_missing_status,
+    ) = _research_scope_status_coverage(selection, scope_policy=scope_policy)
     if (
-        status_fraction < coverage_policy.minimum_status_source_market_year_fraction
+        research_status_fraction
+        < coverage_policy.minimum_status_source_market_year_fraction
         or statistics_fraction
         < coverage_policy.minimum_statistics_source_market_year_fraction
     ):
@@ -1872,6 +1916,7 @@ def publish_market_state_foundation(
         source_selection_manifest_id=source_selection_manifest_id,
         policies=policies,
         coverage_policy=coverage_policy,
+        scope_policy=scope_policy,
         statistics_roles=statistics_roles,
         publisher=publisher,
     )
@@ -1883,6 +1928,7 @@ def publish_market_state_foundation(
         source_selection_manifest_id=source_selection_manifest_id,
         policies=policies,
         coverage_policy=coverage_policy,
+        scope_policy=scope_policy,
         statistics_roles=statistics_roles,
         batch_rows=batch_rows,
     )
@@ -1941,6 +1987,18 @@ def publish_market_state_foundation(
         "foundation_policy_release_receipt_id": policies.receipt.receipt_id,
         "foundation_policy_set_id": policies.policy_set_id,
         "provider_data_epochs_sha256": policies.foundation.provider_data_epochs_sha256,
+        "pre_scope_missing_status_market_year_count": pre_scope_missing_status,
+        "research_scope_policy": scope_policy.as_dict(),
+        "research_scope_policy_hash": scope_policy.policy_hash,
+        "research_scope_status_source_market_year_count": (
+            research_status_present
+        ),
+        "research_scope_status_source_market_year_denominator": (
+            research_denominator
+        ),
+        "research_scope_status_source_market_year_fraction": str(
+            research_status_fraction
+        ),
         "required_market_year_count": denominator,
         "query_manifest_id": selection.query_manifest_id,
         "query_mode_census": list(selection.query_mode_census),
@@ -1965,6 +2023,9 @@ def publish_market_state_foundation(
         "status_timestamp_census_sha256": sha256_json(status_timestamp_census),
         "status_source_market_year_count": status_present,
         "status_source_market_year_fraction": str(status_fraction),
+        "status_source_gate_basis": (
+            "ALL_RESEARCH_SCOPE_MARKET_YEARS_REQUIRED_PRE_SCOPE_MISSING_RETAINED"
+        ),
     }
     contract = {**contract_core, "market_state_foundation_id": sha256_json(contract_core)}
     manifest = ReleaseManifest.build(
@@ -2170,6 +2231,7 @@ def load_market_state_foundation(
     expected_source_selection_receipt: VerifiedReleaseReceipt,
     expected_policies: VerifiedFoundationPolicies,
     expected_coverage_policy: FoundationCoveragePolicy,
+    expected_scope_policy: StatusResearchScopePolicy,
     expected_statistics_roles: StatisticsRolePolicy,
     trusted_checkpoint_mtime_ns: int | None = None,
 ) -> LoadedMarketStateFoundation:
@@ -2315,6 +2377,22 @@ def load_market_state_foundation(
             raise IntegrityError(
                 "checkpointed market-state census is invalid"
             ) from exc
+    (
+        expected_denominator,
+        expected_status_present,
+        expected_statistics_present,
+        expected_status_fraction,
+        expected_statistics_fraction,
+    ) = _source_coverage(expected_selection)
+    (
+        expected_research_denominator,
+        expected_research_status_present,
+        expected_research_status_fraction,
+        expected_pre_scope_missing_status,
+    ) = _research_scope_status_coverage(
+        expected_selection,
+        scope_policy=expected_scope_policy,
+    )
     core = {key: value for key, value in contract.items() if key != "market_state_foundation_id"}
     expected_paths = {
         *(str(item["output_path"]) for item in status_outputs),
@@ -2337,6 +2415,12 @@ def load_market_state_foundation(
             "query_manifest_id",
             "query_mode_census",
             "provider_data_epochs_sha256",
+            "pre_scope_missing_status_market_year_count",
+            "research_scope_policy",
+            "research_scope_policy_hash",
+            "research_scope_status_source_market_year_count",
+            "research_scope_status_source_market_year_denominator",
+            "research_scope_status_source_market_year_fraction",
             "schema_version",
             "selected_file_count",
             "source_selection_receipt_id",
@@ -2356,6 +2440,7 @@ def load_market_state_foundation(
             "status_timestamp_census_sha256",
             "status_source_market_year_count",
             "status_source_market_year_fraction",
+            "status_source_gate_basis",
         }
         or contract["market_state_foundation_id"] != sha256_json(core)
         or contract["market_state_foundation_id"]
@@ -2370,6 +2455,27 @@ def load_market_state_foundation(
         != expected_selection.query_manifest_id
         or contract["coverage_policy"] != expected_coverage_policy.as_dict()
         or contract["coverage_policy_hash"] != expected_coverage_policy.policy_hash
+        or contract["research_scope_policy"] != expected_scope_policy.as_dict()
+        or contract["research_scope_policy_hash"] != expected_scope_policy.policy_hash
+        or contract["status_source_gate_basis"]
+        != "ALL_RESEARCH_SCOPE_MARKET_YEARS_REQUIRED_PRE_SCOPE_MISSING_RETAINED"
+        or contract["schema_version"] != MARKET_STATE_SCHEMA_VERSION
+        or contract["required_market_year_count"] != expected_denominator
+        or contract["status_source_market_year_count"] != expected_status_present
+        or contract["status_source_market_year_fraction"]
+        != str(expected_status_fraction)
+        or contract["statistics_source_market_year_count"]
+        != expected_statistics_present
+        or contract["statistics_source_market_year_fraction"]
+        != str(expected_statistics_fraction)
+        or contract["research_scope_status_source_market_year_count"]
+        != expected_research_status_present
+        or contract["research_scope_status_source_market_year_denominator"]
+        != expected_research_denominator
+        or contract["research_scope_status_source_market_year_fraction"]
+        != str(expected_research_status_fraction)
+        or contract["pre_scope_missing_status_market_year_count"]
+        != expected_pre_scope_missing_status
         or contract["statistics_role_policy"] != expected_statistics_roles.as_dict()
         or contract["statistics_role_policy_hash"] != expected_statistics_roles.policy_hash
         or contract["feature_eligible_statistic_types"] != []

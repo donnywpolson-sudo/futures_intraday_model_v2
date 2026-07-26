@@ -10,7 +10,12 @@ from typing import Mapping
 
 from ..boundary import RepoBoundary
 from ..canonical import sha256_file, sha256_json
-from ..data_layout import DataReleaseReceipt, verify_data_release_manifest
+from ..data_layout import (
+    DataReleaseManifest,
+    DataReleaseReceipt,
+    manifest_relative_path,
+    verify_data_release_manifest,
+)
 from ..errors import ContractError, IntegrityError
 
 
@@ -30,6 +35,82 @@ SCHEMA_DIRECTORIES = MappingProxyType(
 DBN_NAME = re.compile(
     r"^(?P<start>\d{4}-\d{2}-\d{2})_(?P<end>\d{4}-\d{2}-\d{2})\.dbn\.zst$"
 )
+SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def _validate_successor_receipt(
+    manifest: DataReleaseManifest,
+    parent: DataReleaseManifest,
+) -> None:
+    """Require an exact immutable parent-plus-new-files successor."""
+
+    if len(manifest.source_release_ids) != 1:
+        raise IntegrityError("Phase 1A successor must identify one exact parent")
+    parent_id = manifest.source_release_ids[0]
+    receipt = manifest.embedded_documents.get("phase1a_receipt")
+    expected_receipt_keys = {
+        "approval_receipt_id",
+        "parent_release_id",
+        "source_inventory_id",
+        "status",
+        "total_bytes",
+        "total_files",
+    }
+    if (
+        not isinstance(receipt, dict)
+        or set(receipt) != expected_receipt_keys
+        or receipt.get("status") != "COMPLETE_VERIFIED_IMMUTABLE_SUCCESSOR"
+        or receipt.get("parent_release_id") != parent_id
+        or not isinstance(receipt.get("approval_receipt_id"), str)
+        or SHA256.fullmatch(str(receipt["approval_receipt_id"])) is None
+        or not isinstance(receipt.get("source_inventory_id"), str)
+        or SHA256.fullmatch(str(receipt["source_inventory_id"])) is None
+        or receipt.get("total_files") != len(manifest.files)
+        or receipt.get("total_bytes") != sum(item.size for item in manifest.files)
+        or dict(manifest.metadata)
+        != {
+            "approval_receipt_id": receipt["approval_receipt_id"],
+            "parent_release_id": parent_id,
+            "source_inventory_id": receipt["source_inventory_id"],
+        }
+        or parent.release_id != parent_id
+        or parent.phase != manifest.phase
+        or parent.release_kind != manifest.release_kind
+        or parent.schema_version != manifest.schema_version
+    ):
+        raise IntegrityError("Phase 1A successor receipt or parent binding is invalid")
+    parent_files = {item.logical_path: item for item in parent.files}
+    successor_files = {item.logical_path: item for item in manifest.files}
+    if (
+        len(successor_files) <= len(parent_files)
+        or any(successor_files.get(path) != entry for path, entry in parent_files.items())
+    ):
+        raise IntegrityError("Phase 1A successor is not an immutable strict superset")
+
+
+def _verify_phase1a_lineage(
+    manifest: DataReleaseManifest,
+    *,
+    boundary: RepoBoundary,
+    visited: frozenset[str] = frozenset(),
+) -> None:
+    if manifest.release_id in visited:
+        raise IntegrityError("Phase 1A release lineage contains a cycle")
+    if not manifest.source_release_ids:
+        return
+    if len(visited) >= 32:
+        raise IntegrityError("Phase 1A release lineage is unreasonably deep")
+    if len(manifest.source_release_ids) != 1:
+        raise IntegrityError("Phase 1A successor must identify one exact parent")
+    parent_id = manifest.source_release_ids[0]
+    parent_path = boundary.active_root / manifest_relative_path("dbn", parent_id)
+    parent = verify_data_release_manifest(parent_path, boundary, verify_files=False)
+    _validate_successor_receipt(manifest, parent)
+    _verify_phase1a_lineage(
+        parent,
+        boundary=boundary,
+        visited=visited | {manifest.release_id},
+    )
 
 
 @dataclass(frozen=True)
@@ -74,9 +155,9 @@ class PublishedDbnRelease:
             or manifest.release_kind != DBN_RELEASE_KIND
             or manifest.schema_version != "1.0.0"
             or not manifest.files
-            or manifest.source_release_ids
         ):
             raise IntegrityError("source DBN manifest is not the accepted Phase 1A release")
+        _verify_phase1a_lineage(manifest, boundary=boundary)
         # The manifest and every file were verified immediately above.  Building
         # the content-addressed receipt must not repeat the same multi-gigabyte
         # hash pass.

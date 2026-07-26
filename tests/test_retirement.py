@@ -24,8 +24,9 @@ def test_current_classifier_fails_closed_without_opening_legacy_root() -> None:
     assert report["classification"] == "LEGACY_RETIREMENT_BLOCKED"
     assert report["legacy_root_opened"] is False
     by_id = {item["check_id"]: item for item in report["checks"]}
-    assert by_id["SOURCE_CONTRACT_STANDALONE_41_MARKET"]["status"] == "FAIL"
-    assert by_id["APPROVED_41_MARKET_UNIVERSE"]["status"] == "FAIL"
+    assert by_id["SOURCE_CONTRACT_STANDALONE_41_MARKET"]["status"] == "PASS"
+    assert by_id["APPROVED_41_MARKET_UNIVERSE"]["status"] == "PASS"
+    assert by_id["NO_PUBLIC_MIGRATION_OR_LEGACY_ENTRYPOINTS"]["status"] == "PASS"
     assert by_id["NO_LEGACY_RUNTIME_IMPORTS"]["status"] == "PASS"
     assert report["authority"]["legacy_delete_authorized"] is False
 

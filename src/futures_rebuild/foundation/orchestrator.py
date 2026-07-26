@@ -90,6 +90,7 @@ from .support import (
 CHECKPOINT_VERSION = "4.0.0"
 FOUNDATION_SET_RELEASE_KIND = "futures_mechanical_foundation_set"
 FOUNDATION_SET_SCHEMA_VERSION = "4.0.0"
+FOUNDATION_SUCCESSOR_SCHEMA_VERSION = "5.0.0"
 OUTCOME_SOURCE_RELEASE_KIND = "futures_outcome_source_input"
 OUTCOME_SOURCE_SCHEMA_VERSION = "1.0.0"
 OUTCOME_SOURCE_ROLE = "LABELABLE_VERIFIED_CAUSAL_BARS_ONLY"
@@ -129,6 +130,8 @@ _CLOSURE_MODULES = (
     "foundation/resources.py",
     "foundation/selection.py",
     "foundation/snapshot.py",
+    "foundation/successor.py",
+    "foundation/successor_contract.py",
     "foundation/support.py",
     "identity.py",
     "inference.py",
@@ -216,6 +219,47 @@ def _receipt(payload: object, *, name: str) -> VerifiedReleaseReceipt:
         return VerifiedReleaseReceipt.from_dict(payload)
     except IntegrityError as exc:
         raise IntegrityError(f"{name} checkpoint receipt is invalid") from exc
+
+
+def _source_family_coverage_passes(
+    contract: Mapping[str, object],
+    *,
+    coverage_policy: FoundationCoveragePolicy,
+) -> bool:
+    """Gate research scope while preserving the complete archive census."""
+
+    try:
+        archive_status_fraction = Decimal(
+            str(contract["status_source_market_year_fraction"])
+        )
+        research_status_fraction = Decimal(
+            str(contract["research_scope_status_source_market_year_fraction"])
+        )
+        statistics_fraction = Decimal(
+            str(contract["statistics_source_market_year_fraction"])
+        )
+    except (KeyError, TypeError, ValueError) as exc:
+        raise IntegrityError(
+            "foundation source-family coverage contract is invalid"
+        ) from exc
+    fractions = (
+        archive_status_fraction,
+        research_status_fraction,
+        statistics_fraction,
+    )
+    if any(
+        not value.is_finite() or value < Decimal(0) or value > Decimal(1)
+        for value in fractions
+    ):
+        raise IntegrityError(
+            "foundation source-family coverage fraction is invalid"
+        )
+    return (
+        research_status_fraction
+        >= coverage_policy.minimum_status_source_market_year_fraction
+        and statistics_fraction
+        >= coverage_policy.minimum_statistics_source_market_year_fraction
+    )
 
 
 def _interval_key(market: str, year: int, start: str, end: str) -> str:
@@ -684,6 +728,7 @@ class FoundationOrchestrator:
                 expected_source_selection_receipt=source_selection_receipt,
                 expected_policies=policies,
                 expected_coverage_policy=coverage_policy,
+                expected_scope_policy=scope_policy,
                 expected_statistics_roles=statistics_roles,
                 trusted_checkpoint_mtime_ns=checkpoint_path.stat().st_mtime_ns,
             )
@@ -695,6 +740,7 @@ class FoundationOrchestrator:
                 source_selection_receipt=source_selection_receipt,
                 policies=policies,
                 coverage_policy=coverage_policy,
+                scope_policy=scope_policy,
                 statistics_roles=statistics_roles,
                 publisher=self.publisher,
                 batch_rows=self.batch_rows,
@@ -706,6 +752,7 @@ class FoundationOrchestrator:
                 expected_source_selection_receipt=source_selection_receipt,
                 expected_policies=policies,
                 expected_coverage_policy=coverage_policy,
+                expected_scope_policy=scope_policy,
                 expected_statistics_roles=statistics_roles,
             )
             completed["market_state"] = market_state_receipt.as_dict()
@@ -1032,18 +1079,10 @@ class FoundationOrchestrator:
                 gate["research_disposition"] != "ELIGIBLE"
                 for gate in in_scope_gates
             )
-            or Decimal(
-                str(market_state.contract["status_source_market_year_fraction"])
+            or not _source_family_coverage_passes(
+                market_state.contract,
+                coverage_policy=coverage_policy,
             )
-            < coverage_policy.minimum_status_source_market_year_fraction
-            or Decimal(
-                str(
-                    market_state.contract[
-                        "statistics_source_market_year_fraction"
-                    ]
-                )
-            )
-            < coverage_policy.minimum_statistics_source_market_year_fraction
         ):
             raise IntegrityError(
                 "foundation nonzero/status coverage gates are not satisfied"
@@ -1095,6 +1134,11 @@ class FoundationOrchestrator:
             "statistics_source_market_year_fraction": market_state.contract[
                 "statistics_source_market_year_fraction"
             ],
+            "research_scope_status_source_market_year_fraction": (
+                market_state.contract[
+                    "research_scope_status_source_market_year_fraction"
+                ]
+            ),
             "status_eligible_rows": research_status_eligible_rows,
             "status_epoch_gates": status_epoch_gates,
             "status_epoch_gates_id": sha256_json(status_epoch_gates),
@@ -1858,28 +1902,34 @@ def load_foundation_set(
     receipt: VerifiedReleaseReceipt, *, boundary: RepoBoundary
 ) -> dict[str, object]:
     manifest = receipt.verify(boundary)
+    supported_schema_versions = {
+        FOUNDATION_SET_SCHEMA_VERSION,
+        FOUNDATION_SUCCESSOR_SCHEMA_VERSION,
+    }
+    expected_metadata = {
+        "feature_spec_hash",
+        "coverage_matrix_id",
+        "foundation_set_id",
+        "interval_count",
+        "query_manifest_id",
+        "run_id",
+        "source_dbn_release_id",
+    }
+    if manifest.schema_version == FOUNDATION_SUCCESSOR_SCHEMA_VERSION:
+        expected_metadata.add("successor_provenance_id")
     if (
         manifest.release_kind != FOUNDATION_SET_RELEASE_KIND
-        or manifest.schema_version != FOUNDATION_SET_SCHEMA_VERSION
+        or manifest.schema_version not in supported_schema_versions
         or manifest.files
         or set(manifest.embedded_documents) != {"foundation_set.json"}
-        or set(manifest.metadata)
-        != {
-            "feature_spec_hash",
-            "coverage_matrix_id",
-            "foundation_set_id",
-            "interval_count",
-            "query_manifest_id",
-            "run_id",
-            "source_dbn_release_id",
-        }
+        or set(manifest.metadata) != expected_metadata
     ):
         raise IntegrityError("foundation-set release contract is invalid")
     raw_payload = receipt.embedded_document("foundation_set.json", boundary)
     if not isinstance(raw_payload, dict):
         raise IntegrityError("foundation-set embedded document is invalid")
     payload = dict(raw_payload)
-    if set(payload) != {
+    expected_payload_keys = {
         "alpha_evidence",
         "candidate_eligible",
         "coverage_gate",
@@ -1909,13 +1959,16 @@ def load_foundation_set(
         "source_selection_receipt",
         "source_dbn_release_id",
         "wfa_execution_count",
-    }:
+    }
+    if manifest.schema_version == FOUNDATION_SUCCESSOR_SCHEMA_VERSION:
+        expected_payload_keys.add("successor_provenance")
+    if set(payload) != expected_payload_keys:
         raise IntegrityError("foundation-set payload schema is invalid")
     foundation_set_id = payload.pop("foundation_set_id", None)
     if (
         foundation_set_id != sha256_json(payload)
         or foundation_set_id != manifest.metadata["foundation_set_id"]
-        or payload.get("schema_version") != FOUNDATION_SET_SCHEMA_VERSION
+        or payload.get("schema_version") != manifest.schema_version
         or payload.get("run_id") != manifest.metadata["run_id"]
         or payload.get("feature_spec_hash") != manifest.metadata["feature_spec_hash"]
         or payload.get("coverage_matrix_id") != manifest.metadata["coverage_matrix_id"]
@@ -1970,6 +2023,14 @@ def load_foundation_set(
             r"[0-9a-f]{64}", str(payload.get("source_dbn_release_id"))
         )
         is None
+        or (
+            manifest.schema_version == FOUNDATION_SUCCESSOR_SCHEMA_VERSION
+            and (
+                not isinstance(payload.get("successor_provenance"), dict)
+                or payload["successor_provenance"].get("successor_provenance_id")
+                != manifest.metadata.get("successor_provenance_id")
+            )
+        )
     ):
         raise IntegrityError("foundation-set content address or safety posture is invalid")
     feature_spec = CausalFeatureSpec.from_dict(payload.get("feature_spec"))
@@ -2034,6 +2095,45 @@ def load_foundation_set(
         or len(raw_intervals) != payload.get("interval_count")
     ):
         raise IntegrityError("foundation-set interval collection is invalid")
+    interval_markets_by_key = {
+        str(item.get("interval_key")): str(item.get("market"))
+        for item in raw_intervals
+        if isinstance(item, dict)
+    }
+    if len(interval_markets_by_key) != len(raw_intervals):
+        raise IntegrityError("foundation-set interval identity collection is invalid")
+    interval_policy_pairs: dict[
+        str, tuple[VerifiedReleaseReceipt, VerifiedReleaseReceipt]
+    ] = {}
+    if manifest.schema_version == FOUNDATION_SUCCESSOR_SCHEMA_VERSION:
+        from .successor_contract import (
+            REBUILT_MARKETS,
+            verify_foundation_successor_provenance,
+        )
+
+        successor_provenance = payload.get("successor_provenance")
+        assert isinstance(successor_provenance, dict)
+        interval_policy_pairs = verify_foundation_successor_provenance(
+            successor_provenance,
+            boundary=boundary,
+            selection_receipt=top_receipts[0],
+            interval_markets_by_key=interval_markets_by_key,
+        )
+        if any(
+            interval_policy_pairs[market]
+            != (top_receipts[1], top_receipts[2])
+            for market in REBUILT_MARKETS
+        ):
+            raise IntegrityError(
+                "foundation successor top-level policy is not the rebuilt component"
+            )
+        unique_component_pairs = {
+            (policy.release_id, session.release_id): (policy, session)
+            for policy, session in interval_policy_pairs.values()
+        }
+        for policy_receipt, session_receipt in unique_component_pairs.values():
+            dependency_ids.add(policy_receipt.release_id)
+            dependency_ids.add(session_receipt.release_id)
     interval_keys: list[str] = []
     receipt_fields = (
         "raw_release_receipt",
@@ -2226,6 +2326,12 @@ def load_foundation_set(
             parsed_receipts["outcome_source_input_release_receipt"],
             boundary=boundary,
         )
+        interval_policy_receipt, interval_session_receipt = (
+            interval_policy_pairs.get(
+                str(market),
+                (top_receipts[1], top_receipts[2]),
+            )
+        )
         expected_outcome_dependencies = {
             "causal_release_receipt": parsed_receipts[
                 "causal_release_receipt"
@@ -2236,8 +2342,8 @@ def load_foundation_set(
             "economics_release_receipt": parsed_receipts[
                 "economics_release_receipt"
             ].as_dict(),
-            "foundation_policy_receipt": top_receipts[1].as_dict(),
-            "session_policy_receipt": top_receipts[2].as_dict(),
+            "foundation_policy_receipt": interval_policy_receipt.as_dict(),
+            "session_policy_receipt": interval_session_receipt.as_dict(),
         }
         if any(
             outcome_payload[name] != expected
@@ -2260,8 +2366,8 @@ def load_foundation_set(
             "economics_release_receipt": parsed_receipts[
                 "economics_release_receipt"
             ].as_dict(),
-            "foundation_policy_receipt": top_receipts[1].as_dict(),
-            "session_policy_receipt": top_receipts[2].as_dict(),
+            "foundation_policy_receipt": interval_policy_receipt.as_dict(),
+            "session_policy_receipt": interval_session_receipt.as_dict(),
         }
         if (
             any(
@@ -2457,6 +2563,7 @@ def load_foundation_set(
         "research_scope_interval_count",
         "research_scope_policy",
         "research_scope_policy_hash",
+        "research_scope_status_source_market_year_fraction",
         "statistics_feature_use",
         "statistics_source_market_year_fraction",
         "status_eligible_rows",
@@ -2481,6 +2588,10 @@ def load_foundation_set(
         != market_state_contract.get("status_source_market_year_fraction")
         or coverage_gate.get("statistics_source_market_year_fraction")
         != market_state_contract.get("statistics_source_market_year_fraction")
+        or coverage_gate.get("research_scope_status_source_market_year_fraction")
+        != market_state_contract.get(
+            "research_scope_status_source_market_year_fraction"
+        )
         or coverage_gate.get("bar_rows") != research_bar_rows
         or coverage_gate.get("feature_ready_rows") != research_feature_ready_rows
         or coverage_gate.get("status_eligible_rows")
@@ -2531,12 +2642,10 @@ def load_foundation_set(
         != str(expected_status_gated_feature_ready_fraction)
         or expected_status_gated_feature_ready_fraction
         < coverage_policy.minimum_status_gated_feature_ready_fraction
-        or Decimal(str(coverage_gate.get("status_source_market_year_fraction")))
-        < coverage_policy.minimum_status_source_market_year_fraction
-        or Decimal(
-            str(coverage_gate.get("statistics_source_market_year_fraction"))
+        or not _source_family_coverage_passes(
+            coverage_gate,
+            coverage_policy=coverage_policy,
         )
-        < coverage_policy.minimum_statistics_source_market_year_fraction
     ):
         raise IntegrityError("foundation-set aggregate coverage census is invalid")
     if tuple(sorted(dependency_ids)) != manifest.source_release_ids:

@@ -20,6 +20,7 @@ from futures_rebuild.foundation.orchestrator import (
     OUTCOME_DEFERRED_UNTIL,
     OUTCOME_SOURCE_ROLE,
     FoundationOrchestrator,
+    _source_family_coverage_passes,
     load_feature_source_input,
     load_foundation_set,
     load_outcome_source_input,
@@ -369,6 +370,42 @@ def _orchestrator(boundary, operation_factory) -> FoundationOrchestrator:
         operation_receipt=operation_factory("PUBLISH_RELEASE"),
         batch_rows=1,
     )
+
+
+def test_source_family_gate_uses_research_scope_and_retains_archive_census() -> None:
+    policy = market_state_module.FoundationCoveragePolicy.from_file(
+        REPO / "configs" / "foundation_coverage_policy.json"
+    )
+    contract = {
+        "status_source_market_year_fraction": (
+            "0.9692307692307692307692307692"
+        ),
+        "research_scope_status_source_market_year_fraction": "1",
+        "statistics_source_market_year_fraction": "1",
+    }
+    assert _source_family_coverage_passes(
+        contract,
+        coverage_policy=policy,
+    )
+
+    below_research_gate = {
+        **contract,
+        "research_scope_status_source_market_year_fraction": "0.98",
+    }
+    assert not _source_family_coverage_passes(
+        below_research_gate,
+        coverage_policy=policy,
+    )
+
+    missing_research_scope = dict(contract)
+    del missing_research_scope[
+        "research_scope_status_source_market_year_fraction"
+    ]
+    with pytest.raises(IntegrityError, match="coverage contract is invalid"):
+        _source_family_coverage_passes(
+            missing_research_scope,
+            coverage_policy=policy,
+        )
 
 
 def test_new_run_resolves_selection_once_and_capacity_failure_writes_no_checkpoint(

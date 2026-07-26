@@ -50,6 +50,26 @@ def test_query_epoch_mismatch_fails_closed(schema, stype_in, symbols) -> None:
         )
 
 
+def test_continuous_family_parent_query_requires_explicit_diagnostic_flag() -> None:
+    assert require_allowed_query_symbology(
+        schema="ohlcv-1m",
+        market="ES",
+        stype_in="parent",
+        symbols=["ES.FUT"],
+        allow_diagnostic_parent=True,
+    ) == ("parent", ("ES.FUT",))
+    contract = build_query_contract(
+        schema="ohlcv-1m",
+        market="ES",
+        start="2024-01-01",
+        end="2025-01-01",
+        stype_in="parent",
+        symbols=["ES.FUT"],
+        allow_diagnostic_parent=True,
+    )
+    assert contract["stype_in"] == "parent"
+
+
 def test_query_contract_is_content_addressed_to_exact_interval() -> None:
     first = build_query_contract(
         schema="status",

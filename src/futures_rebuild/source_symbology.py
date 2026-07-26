@@ -50,6 +50,7 @@ def require_allowed_query_symbology(
     market: str,
     stype_in: object,
     symbols: object,
+    allow_diagnostic_parent: bool = False,
 ) -> tuple[str, tuple[str, ...]]:
     """Validate and normalize one source query epoch without inference."""
 
@@ -60,8 +61,15 @@ def require_allowed_query_symbology(
     normalized_symbols = tuple(symbols)
     if any(type(symbol) is not str for symbol in normalized_symbols):
         raise IntegrityError("DBN query symbols must be exact strings")
+    if type(allow_diagnostic_parent) is not bool:
+        raise ContractError("diagnostic-parent authorization flag must be boolean")
     observed = (stype_in, normalized_symbols)
-    if observed not in allowed_query_symbologies(schema, market):
+    diagnostic_parent = ("parent", (f"{market}.FUT",))
+    if observed not in allowed_query_symbologies(schema, market) and not (
+        allow_diagnostic_parent
+        and schema in _CONTINUOUS_ONLY_SCHEMAS
+        and observed == diagnostic_parent
+    ):
         raise IntegrityError("DBN query symbology differs from its schema/market contract")
     return observed
 
@@ -74,6 +82,7 @@ def build_query_contract(
     end: str,
     stype_in: object,
     symbols: object,
+    allow_diagnostic_parent: bool = False,
 ) -> dict[str, object]:
     """Build one content-addressed, exact acquisition-query contract."""
 
@@ -82,6 +91,7 @@ def build_query_contract(
         market=market,
         stype_in=stype_in,
         symbols=symbols,
+        allow_diagnostic_parent=allow_diagnostic_parent,
     )
     try:
         start_date = date.fromisoformat(start)

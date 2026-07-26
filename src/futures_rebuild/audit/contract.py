@@ -13,7 +13,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping
 
-from futures_rebuild.canonical import contained_path, sha256_file
+from futures_rebuild.canonical import contained_path, sha256_file, sha256_json
 from futures_rebuild.errors import ContractError, IntegrityError
 
 
@@ -272,6 +272,29 @@ def _worst(statuses: list[AuditStatus]) -> AuditStatus:
     return max(applicable, key=_STATUS_PRECEDENCE.__getitem__)
 
 
+def _approval_receipt_is_bound(
+    root: Path,
+    evidence: VerifiedEvidence,
+    approval_id: str,
+) -> bool:
+    """Accept a direct content hash or a self-hashed canonical receipt."""
+
+    if evidence.sha256 == approval_id:
+        return True
+    try:
+        payload = _load_json(root / evidence.path, "universe approval receipt")
+    except AuditContractError:
+        return False
+    if payload.get("approval_receipt_id") != approval_id:
+        return False
+    core = {
+        key: value
+        for key, value in payload.items()
+        if key != "approval_receipt_id"
+    }
+    return sha256_json(core) == approval_id
+
+
 def run_audit(root: Path, invocation_payload: object) -> dict[str, Any]:
     """Validate one frozen invocation and return a non-authorizing classification."""
 
@@ -330,7 +353,11 @@ def run_audit(root: Path, invocation_payload: object) -> dict[str, Any]:
     if universe_approved:
         approval_id = universe["approval_receipt_id"]
         approval_evidence = evidence.get(approval_id)
-        if approval_evidence is None or approval_evidence.sha256 != approval_id:
+        if approval_evidence is None or not _approval_receipt_is_bound(
+            root,
+            approval_evidence,
+            approval_id,
+        ):
             raise AuditContractError(
                 "approved universe is not bound to its exact approval receipt evidence"
             )

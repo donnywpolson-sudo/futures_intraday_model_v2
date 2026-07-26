@@ -4,7 +4,7 @@
     {"path": "configs/environment.lock.json", "sha256": "2898a93ac5e008eeaf9af486736dfe4ff6f1f506a782e26a14faef42221de321"},
     {"path": "configs/offline_vault_environment.lock.json", "sha256": "5526ab0fabddebf04b15d7b6abd1985764339f7613e92db5323c06e7fe26c386"},
     {"path": "configs/runtime_wheel_lock.json", "sha256": "81f1a418cbf30d70b1dc534a467b7a97b8e86f7ea343651a8044a03d573db38b"},
-    {"path": "pyproject.toml", "sha256": "822555b91494f6f28a676129249fe322f3316632640f8619cfda6a359aaba236"},
+    {"path": "pyproject.toml", "sha256": "cf67b2e49db3ee07241a0faa3dc1130ddb85f239bb27ec6b2f97a032b14658f6"},
     {"path": "requirements-runtime.lock", "sha256": "f4ca6ace170462a3d59012b43e78e3b3ddabb334a6e73f8b1022c53d586a0cc8"},
     {"path": "requirements.lock", "sha256": "cb4261758faeff85558413a4da1625081937d9cca3545cf776c63393cf6203d5"},
     {"path": "requirements.sha256.lock", "sha256": "681440477df36c528a01e6aca94a92b0555d7cf5aada94dcb61b7f9288cb6d04"}
@@ -61,5 +61,5 @@
       "zstandard": "0.25.0"
     }
   },
-  "receipt_id": "ab7da881e04a91f7ee3c18ddeeb3f627dc4847596ac41b80c80743e0c5c6b9b7"
+  "receipt_id": "1948be63abba920fbfaf3649c0c2c0cc2a181f140e6dc330c943d8655878eb71"
 }

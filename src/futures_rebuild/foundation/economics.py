@@ -16,6 +16,57 @@ from ..errors import ContractError, IntegrityError
 from .records import ProviderDefinition
 
 
+_RULEBOOK_VERSION = "1.3.0"
+_AUTHORITATIVE_DBN_RELEASE_ID = (
+    "086282eaef7b36a61626f88d93d06c93b87c1cb3407c936d065d0d1b9d98599e"
+)
+_APPROVED_MARKETS = frozenset(
+    {
+        "6A",
+        "6B",
+        "6C",
+        "6E",
+        "6J",
+        "6M",
+        "6N",
+        "6S",
+        "BTC",
+        "CL",
+        "ES",
+        "ETH",
+        "GC",
+        "GF",
+        "HE",
+        "HG",
+        "HO",
+        "KE",
+        "LE",
+        "NG",
+        "NQ",
+        "PA",
+        "PL",
+        "RB",
+        "RTY",
+        "SI",
+        "SR1",
+        "SR3",
+        "TN",
+        "UB",
+        "YM",
+        "ZB",
+        "ZC",
+        "ZF",
+        "ZL",
+        "ZM",
+        "ZN",
+        "ZQ",
+        "ZS",
+        "ZT",
+        "ZW",
+    }
+)
+
+
 @dataclass(frozen=True)
 class EconomicsRule:
     market: str
@@ -80,7 +131,7 @@ class EconomicsRuleBook:
         if (
             not isinstance(payload, dict)
             or set(payload) != expected
-            or payload.get("rules_version") != "1.2.0"
+            or payload.get("rules_version") != _RULEBOOK_VERSION
             or payload.get("dataset") != "GLBX.MDP3"
             or payload.get("currency") != "USD"
             or payload.get("forbidden_authorities")
@@ -127,7 +178,7 @@ class EconomicsRuleBook:
             or databento_source.get("locator")
             != (
                 "manifests/data_releases/dbn/"
-                "9e5a9f2a405e50b0cda6702b67506b0951b057500781d37c45171da3967e9b51.json"
+                f"{_AUTHORITATIVE_DBN_RELEASE_ID}.json"
                 "#data/dbn/definition/{market}/{year}/{filename}"
             )
             or any(
@@ -180,8 +231,10 @@ class EconomicsRuleBook:
             parsed[market] = EconomicsRule(
                 market, point, expected_qty, quote, source_ids
             )
-        if len(parsed) != 33:
-            raise IntegrityError("economics rulebook must cover exactly 33 declared markets")
+        if frozenset(parsed) != _APPROVED_MARKETS:
+            raise IntegrityError(
+                "economics rulebook must cover exactly the approved 41 markets"
+            )
         return cls(
             MappingProxyType(parsed),
             frozenset(sources),

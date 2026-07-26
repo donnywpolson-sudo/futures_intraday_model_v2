@@ -43,7 +43,7 @@ def pytest_configure(config: pytest.Config) -> None:
         try:
             candidate.mkdir()
         except OSError:
-            candidate = Path.cwd() / ".pytest_tmp" / token
+            candidate = Path.cwd() / ".t" / token
             candidate.mkdir(parents=True)
         config.option.basetemp = str(candidate)
 

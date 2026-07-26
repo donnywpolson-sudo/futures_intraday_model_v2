@@ -1906,6 +1906,35 @@ def test_self_check_fails_closed_for_invalid_installed_credential_locator(
     assert result["provider_connection_opened"] is False
 
 
+def test_self_check_returns_bounded_failure_when_state_probe_is_denied(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    program_files = tmp_path / "program-files"
+    (program_files / "Microsoft" / "EdgeWebView" / "Application" / "123.0").mkdir(
+        parents=True
+    )
+    original_open = Path.open
+
+    def deny_probe(path: Path, *args, **kwargs):
+        if path.name.startswith("self-check-"):
+            raise PermissionError("synthetic state directory denial")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", deny_probe)
+    result = self_check(
+        env={
+            "LOCALAPPDATA": str(tmp_path / "local"),
+            "PROGRAMFILES(X86)": str(program_files),
+            "PROGRAMFILES": str(tmp_path / "program-files-64"),
+        }
+    )
+
+    assert result["status"] == "FAIL"
+    assert result["cache_writeable"] is False
+    assert result["cache_error"] == "synthetic state directory denial"
+    assert result["provider_connection_opened"] is False
+
+
 def test_packaged_windowed_self_check_uses_exit_code_without_stdout(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

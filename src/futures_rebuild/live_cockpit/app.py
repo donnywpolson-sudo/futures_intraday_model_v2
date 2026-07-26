@@ -7,9 +7,9 @@ import importlib.util
 import json
 import os
 import sys
-import tempfile
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Any, Mapping
 
@@ -177,9 +177,9 @@ def self_check(*, env: Mapping[str, str] | None = None) -> dict[str, Any]:
     probe_path: Path | None = None
     try:
         state_root.mkdir(parents=True, exist_ok=True)
-        with tempfile.NamedTemporaryFile(dir=state_root, prefix="self-check-", delete=False) as probe:
+        probe_path = state_root / f"self-check-{uuid.uuid4().hex}.tmp"
+        with probe_path.open("xb") as probe:
             probe.write(b"ok")
-            probe_path = Path(probe.name)
         cache_writeable = probe_path.read_bytes() == b"ok"
     except OSError as exc:
         cache_error = str(exc)
@@ -467,6 +467,14 @@ def build_arg_parser() -> argparse.ArgumentParser:
         type=Path,
         help="Exact live-smoke approval receipt; valid only with --live-smoke.",
     )
+    parser.add_argument(
+        "--result-output",
+        type=Path,
+        help=(
+            "Create-only hash-bound smoke result path; valid only with "
+            "--live-smoke."
+        ),
+    )
     return parser
 
 
@@ -505,6 +513,8 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("--self-check, --demo, and --live-smoke are mutually exclusive")
     if args.approval is not None and not args.live_smoke:
         raise SystemExit("--approval is valid only with --live-smoke")
+    if args.result_output is not None and not args.live_smoke:
+        raise SystemExit("--result-output is valid only with --live-smoke")
     if args.self_check:
         result = self_check()
         # PyInstaller's windowed bootloader sets stdout to None. The exit code
@@ -517,6 +527,10 @@ def main(argv: list[str] | None = None) -> int:
             raise SystemExit(
                 "BLOCKED: --live-smoke requires an exact --approval receipt"
             )
+        if args.result_output is None:
+            raise SystemExit(
+                "BLOCKED: --live-smoke requires an exact --result-output path"
+            )
         from .smoke import main as smoke_main
 
         return smoke_main(
@@ -525,6 +539,8 @@ def main(argv: list[str] | None = None) -> int:
                 str(ROOT / "configs" / "live_cockpit_smoke_plan.json"),
                 "--approval",
                 str(args.approval),
+                "--result-output",
+                str(args.result_output),
             ]
         )
 

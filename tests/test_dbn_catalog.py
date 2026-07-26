@@ -166,15 +166,16 @@ def _write_custom_pair(
     records: list[dbn.OHLCVMsg],
     market: str = "ES",
     year: int = 2026,
+    stype_in: str = "continuous",
 ) -> Path:
-    symbol = f"{market}.v.0"
+    symbol = f"{market}.FUT" if stype_in == "parent" else f"{market}.v.0"
     folder = repository / "data" / "dbn" / "ohlcv_1m" / market / str(year)
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / filename
     metadata = dbn.Metadata(
         "GLBX.MDP3",
         metadata_start,
-        dbn.SType.CONTINUOUS,
+        dbn.SType.PARENT if stype_in == "parent" else dbn.SType.CONTINUOUS,
         dbn.SType.INSTRUMENT_ID,
         dbn.Schema.OHLCV_1M,
         symbols=[symbol],
@@ -182,7 +183,10 @@ def _write_custom_pair(
     )
     encoded = metadata.encode() + b"".join(bytes(record) for record in records)
     path.write_bytes(zstandard.ZstdCompressor().compress(encoded))
-    start, end = filename.removesuffix(".dbn.zst").split("_")
+    coverage_name = filename.removesuffix(".parent.dbn.zst")
+    if coverage_name == filename:
+        coverage_name = filename.removesuffix(".dbn.zst")
+    start, end = coverage_name.split("_")
     sidecar = {
         "vendor": "databento",
         "dataset": "GLBX.MDP3",
@@ -197,7 +201,7 @@ def _write_custom_pair(
         "file_size_bytes": path.stat().st_size,
         "file_sha256": sha256_file(path),
         "request_status": "ok",
-        "stype_in": "continuous",
+        "stype_in": stype_in,
         "stype_out": "instrument_id",
     }
     Path(f"{path}.manifest.json").write_text(json.dumps(sidecar), encoding="utf-8")
@@ -831,6 +835,52 @@ def test_exact_hash_pinned_overlap_selects_broad_and_preserves_redundant(tmp_pat
         )
 
 
+def test_parent_suffix_is_validated_but_excluded_from_foundation_selection(
+    tmp_path,
+) -> None:
+    record = dbn.OHLCVMsg(
+        dbn.RType.OHLCV_1M,
+        1,
+        100,
+        START_NS,
+        1000000000,
+        1100000000,
+        900000000,
+        1050000000,
+        10,
+    )
+    legacy = tmp_path / "legacy"
+    _write_custom_pair(
+        legacy,
+        filename="2026-01-01_2026-01-02.dbn.zst",
+        metadata_start=START_NS,
+        metadata_end=END_NS,
+        records=[record],
+    )
+    _write_custom_pair(
+        legacy,
+        filename="2026-01-01_2026-01-02.parent.dbn.zst",
+        metadata_start=START_NS,
+        metadata_end=END_NS,
+        records=[record],
+        stype_in="parent",
+    )
+    boundary, contract, anomalies = _catalog_context(tmp_path, legacy)
+    result = build_source_selection_manifest(
+        legacy,
+        contract,
+        boundary=boundary,
+        known_anomaly_contract_path=anomalies,
+    )
+    assert len(result["files"]) == 1
+    assert len(result["diagnostic_files"]) == 1
+    diagnostic = result["diagnostic_files"][0]
+    assert diagnostic["coverage_disposition"] == (
+        "DIAGNOSTIC_PARENT_QUERY_IDENTITY_ONLY_NOT_FOUNDATION_ELIGIBLE"
+    )
+    assert diagnostic["query_stype_in"] == "parent"
+
+
 def test_catalog_binds_verified_layout_v2_dbn_manifest(tmp_path) -> None:
     legacy = tmp_path / "legacy"
     source = _write_pair(legacy)
@@ -933,6 +983,18 @@ def test_catalog_binds_verified_layout_v2_dbn_manifest(tmp_path) -> None:
     )
     assert result["source_scope"] == "VERIFIED_LAYOUT_V2_DBN_RELEASE"
     assert result["source_dbn_release_id"] == manifest.release_id
+    contract_payload["contract_version"] = "2.1.0"
+    contract_payload["legacy_repository"] = None
+    contract_payload["external_repository_access"] = "FORBIDDEN"
+    source_contract.write_text(json.dumps(contract_payload), encoding="utf-8")
+    retired_result = build_source_selection_manifest(
+        project,
+        source_contract,
+        boundary=boundary,
+        known_anomaly_contract_path=anomalies,
+        source_dbn_manifest_path=dbn_manifest_path,
+    )
+    assert retired_result["source_dbn_release_id"] == manifest.release_id
     payload_path = dbn_receipt.resolve_file(f"{logical_root}/{filename}", boundary)
     payload_path.write_bytes(payload_path.read_bytes() + b"tamper")
     with pytest.raises(IntegrityError, match="failed verification"):
