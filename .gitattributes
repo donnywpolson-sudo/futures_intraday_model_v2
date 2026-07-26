@@ -1,0 +1,57 @@
+# Keep source and operational documents stable on Windows worktrees.
+* text=auto eol=lf
+
+# Project text formats.
+*.css text eol=lf
+*.csv text eol=lf
+*.html text eol=lf
+*.js text eol=lf
+*.json text eol=lf
+*.jsonl text eol=lf
+*.md text eol=lf
+*.ps1 text eol=lf
+*.py text eol=lf
+*.spec text eol=lf
+*.toml text eol=lf
+*.txt text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+
+# Root operational contracts.
+AGENTS.md text eol=lf
+CODEX_HANDOFF.md text eol=lf
+MASTER_AUDIT.md text eol=lf
+META_MASTER_AUDIT.md text eol=lf
+PROJECT_OUTLINE.md text eol=lf
+README.md text eol=lf
+
+# Prevent forced credential diffs from displaying local secret values.
+.env -diff
+.env.* -diff
+api.env -diff
+databento.env -diff
+
+# Binary data, model, package, and image formats.
+*.arrow -text
+*.dbn -text
+*.duckdb -text
+*.exe -text
+*.feather -text
+*.h5 -text
+*.hdf5 -text
+*.ico -text
+*.joblib -text
+*.npy -text
+*.npz -text
+*.parquet -text
+*.pickle -text
+*.pkl -text
+*.pkg -text
+*.png -text
+*.pyc -text
+*.pyz -text
+*.sqlite -text
+*.sqlite3 -text
+*.whl -text
+*.zst -text
+*.zip -text

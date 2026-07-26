@@ -1,0 +1,16 @@
+{
+  "lock_version": "1.0.0",
+  "platform": "win32",
+  "python": "3.11",
+  "artifacts": [
+    {
+      "filename": "numpy-2.4.4-cp311-cp311-win_amd64.whl",
+      "package": "numpy",
+      "sha256": "6bbe4eb67390b0a0265a2c25458f6b90a409d5d069f1041e6aff1e27e3d9a79e",
+      "size": 12614257,
+      "source": "https://files.pythonhosted.org/packages/bd/63/05d193dbb4b5eec1eca73822d80da98b511f8328ad4ae3ca4caf0f4db91d/numpy-2.4.4-cp311-cp311-win_amd64.whl",
+      "version": "2.4.4",
+      "wheel_tag": "cp311-cp311-win_amd64"
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools==82.0.1"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "futures-intraday-model-v2"
+version = "0.1.0"
+description = "Deterministic, causal futures research foundation"
+requires-python = "==3.11.9"
+dependencies = ["numpy==2.4.4", "PyYAML==6.0.3"]
+
+[project.optional-dependencies]
+test = ["pytest==9.0.3"]
+vault = ["databento==0.78.0"]
+cockpit = [
+    "databento==0.78.0",
+    "pandas==3.0.3",
+    "pywebview==6.2.1",
+]
+package = ["PyInstaller==6.21.0"]
+
+[project.scripts]
+futures-dbn-catalog = "futures_rebuild.dbn_catalog:main"
+futures-accept-anomalies = "futures_rebuild.anomaly_acceptance:main"
+futures-publish-selection = "futures_rebuild.foundation.selection:main"
+futures-calendar = "futures_rebuild.calendar_cli:main"
+futures-foundation-build = "futures_rebuild.foundation.orchestrator:main"
+futures-readiness = "futures_rebuild.readiness:main"
+futures-master-audit = "futures_rebuild.audit.__main__:main"
+futures-verify-vault-archive = "futures_rebuild.archive:main"
+futures-pipeline = "futures_rebuild.pipeline:main"
+futures-live-cockpit = "futures_rebuild.live_cockpit.app:main"
+futures-retirement-audit = "futures_rebuild.retirement:main"
+futures-meta-audit = "futures_rebuild.meta_audit:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config"
+testpaths = ["tests"]
+pythonpath = ["src"]

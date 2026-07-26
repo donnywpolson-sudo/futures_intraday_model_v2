@@ -1,0 +1,1 @@
+{"entry_delay_seconds":60,"feature_names":["bar_body_fraction","bar_return","intrabar_range_fraction","volume"],"formulas":{"bar_body_fraction":"(close_nano-open_nano)/open_nano","bar_return":"close_nano/open_nano-1","intrabar_range_fraction":"(high_nano-low_nano)/open_nano","volume":"exact_nonnegative_volume"},"label_horizon_seconds":300,"spec_version":"1.0.0"}

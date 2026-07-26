@@ -1,0 +1,491 @@
+{
+  "schema_version": 1,
+  "contract_version": "2.1.0-robustness-monitoring",
+  "project": "futures_intraday_model_v2",
+  "contract_status": "IMPLEMENTED_SYNTHETICALLY_VALIDATED_DATA_FOUNDATION_ABSENT",
+  "independence": {
+    "common_interpreter_allowed": true,
+    "byte_identical_provenance_preserving_source_copies_allowed": true,
+    "shared_mutable_data_paths": false,
+    "shared_mutable_environment": false,
+    "shared_trial_artifact_or_state_paths": false,
+    "required_distinct_evidence": [
+      "repository_root",
+      "git_directory",
+      "environment_lock_hash",
+      "dataset_release_id",
+      "trial_ledger_path",
+      "bundle_path",
+      "readiness_receipt"
+    ],
+    "no_cross_import_test_required": true,
+    "no_cross_write_test_required": true,
+    "external_outcome_informed_idea_exposure_must_be_ledgered": true
+  },
+  "authorization": {
+    "this_contract_grants_execution_authority": false,
+    "external_authorization_receipt_required": true,
+    "external_authorization_security": {
+      "algorithm": "RSASSA-PKCS1-v1_5-SHA256",
+      "pinned_public_key_id": "USER_GATED_REBUILD_AUTHORITY_V1",
+      "private_key_present_in_repository": false,
+      "future_signing_method": "one_time_external_off_repo_authority_tooling_or_explicit_key_rotation",
+      "content_hash_without_valid_signature_authorizes": false,
+      "public_key_replacement_requires_code_and_commit_closure_change": true
+    },
+    "migration_approval_is_candidate_or_history_authorization": false,
+    "current_controlled_rebuild_receipt_allows": [
+      "approved_hash_copy",
+      "non_alpha_data_validation",
+      "synthetic_fixture_model_fitting",
+      "synthetic_fixture_wfa"
+    ],
+    "synthetic_results_count_as_alpha_evidence": false,
+    "hard_pauses_requiring_new_user_authorization": [
+      "paid_databento_download",
+      "real_history_hypothesis_or_wfa_execution",
+      "candidate_sealing",
+      "destructive_cutover",
+      "external_push",
+      "trading",
+      "legacy_repository_write"
+    ],
+    "legacy_repositories_read_only": true
+  },
+  "readiness": {
+    "target_state": "HISTORICAL_RESEARCH_READY",
+    "current_state": "SYNTHETIC_CONTRACTS_PASS_DATA_FOUNDATION_NOT_BUILT",
+    "ready": false,
+    "readiness_is_execution_authority": false,
+    "document_or_config_creation_marks_ready": false,
+    "required_upstream_state": "ACCEPTED_DBN_TO_VALIDATED_ACTUAL_CONTRACT_TO_CAUSAL_HANDOFF",
+    "legacy_trial_census_required": true,
+    "synthetic_and_adversarial_contract_tests_required": true
+  },
+  "source_roles": {
+    "authoritative_history": "approved_hashed_local_dbn_vault",
+    "legacy_raw": "comparison_only",
+    "legacy_causally_gated_normalized": "comparison_only",
+    "comparison_sources_may_be_promoted": false,
+    "immutable_successor_releases_only": true,
+    "query_manifest_required": true,
+    "query_symbology_role": "PROVENANCE_ONLY_NEVER_FEATURE",
+    "mixed_status_statistics_query_epochs_explicit": true,
+    "paid_download_implied_or_authorized_by_readiness": false
+  },
+  "trial_ledger": {
+    "scope": "all_outcome_informed_attempts_in_this_project",
+    "storage_contract": "append_only_sha256_hash_chained_immutable_json_event_files",
+    "implemented_event_types": [
+      "DECLARED",
+      "PRE_OUTCOME_ANCHORED"
+    ],
+    "future_required_research_lifecycle_transitions": [
+      "DECLARED",
+      "BUILT",
+      "OUTER_EVALUATED",
+      "OUTER_SCREEN_PASS",
+      "HOLDOUT_SPEC_FROZEN",
+      "HOLDOUT_ACCESSED",
+      "HOLDOUT_PASS",
+      "CLOSED"
+    ],
+    "future_holdout_access_transition_must_be_conditional": true,
+    "implemented_event_fields": [
+      "sequence",
+      "previous_event_hash",
+      "event_hash",
+      "event_time_utc",
+      "charter_id",
+      "counted_trial_number",
+      "multiplicity_family_id",
+      "multiplicity_family_rule_hash",
+      "event_type",
+      "authorization_receipt_id",
+      "legacy_census_receipt_id"
+    ],
+    "append_contract": {
+      "lock_protected": true,
+      "atomic": true,
+      "sequence_or_hash_mismatch_fails_closed": true,
+      "whole_chain_rewrite_allowed": false
+    },
+    "pre_outcome_anchor": {
+      "required": true,
+      "immutable_receipt": true,
+      "binds": [
+        "charter_id_including_release_and_policy_hashes_and_outcome_unlock_at",
+        "legacy_census_receipt_id",
+        "multiplicity_family_id",
+        "multiplicity_family_rule_hash",
+        "pinned_authority_signature",
+        "trusted_event_time_utc"
+      ]
+    },
+    "legacy_trial_census": {
+      "machine_readable_required": true,
+      "uncertain_attempts_count_conservatively": true,
+      "manual_plot_or_report_exposure_counts": true,
+      "exact_resolution_claim_allowed_for_current_legacy_evidence": false,
+      "unresolved_status": "INVALID_TRIAL_CENSUS_UNRESOLVED",
+      "executable_conservative_status": "CONSERVATIVE_PENALTY_PREREGISTERED",
+      "required_conservative_fields": [
+        "observed_attempt_floor",
+        "preregistered_penalty_count",
+        "rationale_sha256",
+        "source_evidence_sha256"
+      ],
+      "penalty_must_strictly_exceed_observed_floor": true
+    },
+    "same_historical_outcomes_cannot_reset_multiplicity": true,
+    "semantic_change_after_evaluation_requires_new_trial": true,
+    "family_assignment_must_predate_outcome_access": true,
+    "overlap_or_shared_ancestry_may_reduce_trial_count_by_family_split": false
+  },
+  "sample_contract": {
+    "required_fields": [
+      "sample_id",
+      "hypothesis_id",
+      "sleeve_id",
+      "dataset",
+      "publisher_id",
+      "utc_trading_date",
+      "instrument_id",
+      "raw_symbol",
+      "definition_release_id",
+      "definition_manifest_sha256",
+      "definition_row_id",
+      "session_id",
+      "source_release_id",
+      "feature_window_start",
+      "feature_available_at",
+      "decision_at",
+      "intended_entry_at",
+      "label_start_at",
+      "label_end_at",
+      "intended_exit_at",
+      "contract_multiplier",
+      "minimum_tick",
+      "tick_value",
+      "currency",
+      "expiration_asof",
+      "outcome_status"
+    ],
+    "actual_contract_key": [
+      "dataset",
+      "publisher_id",
+      "utc_trading_date",
+      "instrument_id"
+    ],
+    "continuous_symbol_role": "selector_only",
+    "continuous_selection_rule": "V_PREVIOUS_DAY_VOLUME_RANK_0",
+    "continuous_selection_basis": "previous_trading_day_volume",
+    "continuous_prices": "original_unadjusted",
+    "actual_contract_segment_key": [
+      "dataset",
+      "publisher_id",
+      "instrument_id",
+      "raw_symbol",
+      "exchange"
+    ],
+    "contract_segment_key_includes_utc_or_session_date": false,
+    "required_time_order": "feature_window_start <= feature_available_at <= decision_at < intended_entry_at = label_start_at < label_end_at = intended_exit_at",
+    "bar_event_timestamp_semantics": "interval_start",
+    "bar_availability": "interval_end_plus_pinned_conservative_publication_latency",
+    "ohlcv_provider_ts_recv_exists": false,
+    "archive_or_source_retrieval_time_recorded_separately": true,
+    "same_bar_close_fill_allowed": false,
+    "missing_bar_semantics": "NO_REPORTED_TRADE_BAR",
+    "implicit_forward_fill_allowed": false,
+    "missing_entry_exit_or_path_deleted_after_outcome_access": false,
+    "missing_outcomes_remain_in_coverage_denominator": true,
+    "unexpected_future_contract_change_status": "ROLL_UNRESOLVED",
+    "cross_contract_return_or_pnl_without_explicit_multileg_economics_allowed": false,
+    "insufficient_outcome_coverage_status": "INCONCLUSIVE_OUTCOME_COVERAGE",
+    "retrospective_mapping_endpoints_allowed_for_selection": false
+  },
+  "purge_embargo": {
+    "interval_convention": "half_open",
+    "purge_rule": "remove_train_sample_when_train_label_interval_intersects_any_validation_or_test_label_interval",
+    "embargo_unit": "exchange_session",
+    "minimum_embargo_sessions": 1,
+    "embargo_rule": "max_one_session_or_longest_holding_interval_rounded_up_to_sessions",
+    "row_count_embargo_allowed": false,
+    "zero_post_purge_overlap_required": true
+  },
+  "nested_wfa": {
+    "outer": {
+      "method": "expanding_rolling_origin",
+      "initial_train_sessions": 504,
+      "test_sessions": 63,
+      "step_sessions": 63,
+      "minimum_folds": 8,
+      "minimum_distinct_oos_sessions": 504,
+      "sealed_final_holdout_sessions": 252
+    },
+    "inner": {
+      "method": "chronological_rolling_origin",
+      "folds": 4,
+      "validation_sessions": 42,
+      "purge_and_embargo_required": true
+    },
+    "outer_test_may_select_or_tune": false,
+    "scheduled_parameter_refit_requires_matured_labels": true,
+    "hyperparameters_frozen_before_outer_test": true,
+    "insufficient_schedule_status": "INCONCLUSIVE_DATA_LENGTH",
+    "final_holdout": {
+      "outer_oos_role": "screen_only",
+      "specification_frozen_before_unlock": true,
+      "one_time_access": true,
+      "outer_and_holdout_reported_separately": true,
+      "pooled_for_selection": false,
+      "failure_closes_trial": true,
+      "retune_rescue_retry_or_reuse_allowed": false,
+      "successor_may_claim_exposed_dates_as_fresh_holdout": false,
+      "pass_authorizes_candidate_sealing": false,
+      "state_machine": [
+        "DECLARED",
+        "BUILT",
+        "OUTER_EVALUATED",
+        "OUTER_SCREEN_PASS_OR_CLOSED",
+        "HOLDOUT_SPEC_FROZEN",
+        "HOLDOUT_ACCESSED_ONCE",
+        "HOLDOUT_PASS_OR_CLOSED"
+      ]
+    }
+  },
+  "fold_local_fit_audit": {
+    "fit_sample_ids_must_be_recorded": true,
+    "test_id_intersection_allowed": false,
+    "fit_required_for": [
+      "imputation",
+      "winsorization",
+      "scaling",
+      "volatility_normalization",
+      "feature_selection",
+      "dimensionality_reduction",
+      "calibration",
+      "class_weighting",
+      "resampling",
+      "risk_scaling",
+      "position_sizing"
+    ],
+    "global_deterministic_lags_allowed_only_with_causal_lineage": true
+  },
+  "uncertainty": {
+    "primary_observation": "complete_exchange_session_portfolio_return",
+    "trade_rows_treated_as_independent": false,
+    "confidence_level": 0.95,
+    "primary_test": "one_sided_mean_net_edge_greater_than_zero",
+    "hac_lag_rule": "max(overlap_lag,floor(4*(T/100)^(2/9)))",
+    "bootstrap": {
+      "method": "stationary_session_block",
+      "resamples": 10000,
+      "seed_source": "trial_id_hash",
+      "required_sensitivity_sessions": [5, 10, 20],
+      "resample_complete_sessions": true
+    },
+    "minimum_clusters_per_required_dimension": 30,
+    "insufficient_clusters_status": "INCONCLUSIVE_CLUSTER_COUNT"
+  },
+  "multiple_testing": {
+    "family_scope": [
+      "every_tested_sleeve",
+      "every_direction",
+      "every_horizon",
+      "every_primary_metric",
+      "every_candidate_baseline_contrast",
+      "every_negative_control"
+    ],
+    "family_rule_hash_must_predate_outcome_access": true,
+    "baseline_selection": "inner_fold_only_or_all_baselines_jointly_adjusted",
+    "outcome_informed_metric_substitution_allowed": false,
+    "dsr": {
+      "required": true,
+      "minimum_probability": 0.95,
+      "trial_count": "raw_count_of_all_outcome_informed_alternatives_in_information_family",
+      "input": "outer_oos_net_session_returns"
+    },
+    "romano_wolf": {
+      "required_for_joint_candidate_baseline_comparisons": true,
+      "maximum_adjusted_one_sided_p": 0.05,
+      "resampling_unit": "complete_exchange_session"
+    },
+    "pbo": {
+      "minimum_comparable_configurations": 10,
+      "minimum_even_equal_contiguous_chronological_blocks": 8,
+      "block_count_pinned_before_access": true,
+      "enumeration": "all_S_choose_S_over_2_in_sample_combinations_with_complement_oos",
+      "selection_statistic": "predeclared_stress_cost_sharpe",
+      "tie_rule": "deterministic_midrank",
+      "logit_input": "selected_configuration_oos_percentile_rank",
+      "pbo_definition": "fraction_of_selected_configuration_oos_rank_logits_below_zero",
+      "matrix": "common_session_stress_cost_returns",
+      "missing_session_zero_fill_allowed": false,
+      "pass_maximum": 0.2,
+      "inconclusive_maximum": 0.5,
+      "greater_than_inconclusive_maximum_status": "FAIL_BACKTEST_OVERFIT",
+      "insufficient_genuine_single_configuration_status": "NOT_APPLICABLE",
+      "not_applicable_receives_positive_credit": false,
+      "diagnostic_may_replace_chronological_wfa": false,
+      "missing_tried_variant_matrix_status": "INVALID_MISSING_TRIAL_EVIDENCE"
+    }
+  },
+  "costs": {
+    "gross_pnl_formula": "side*contracts*(exit_price-entry_price)*contract_multiplier",
+    "required_components": [
+      "broker_commission",
+      "exchange_and_regulatory_fees",
+      "spread_ticks",
+      "adverse_slippage_ticks",
+      "impact_ticks"
+    ],
+    "observed_spread_requires_causal_top_of_book": true,
+    "scenarios": {
+      "zero_cost": {
+        "promotion_eligible": false,
+        "minimum_round_trip_ticks": 0
+      },
+      "base": {
+        "promotion_eligible": false,
+        "fees_required": true,
+        "minimum_round_trip_ticks": 1
+      },
+      "stress": {
+        "promotion_eligible": true,
+        "fees_required": true,
+        "minimum_round_trip_ticks": 2,
+        "minimum_spread_slippage_multiple_of_base": 2
+      },
+      "extreme": {
+        "promotion_eligible": false,
+        "fees_required": true,
+        "minimum_round_trip_ticks": 4,
+        "minimum_spread_slippage_multiple_of_base": 4
+      }
+    },
+    "stress_pass_required": true,
+    "cost_monotonicity_required": true
+  },
+  "baselines": [
+    "FLAT_ZERO",
+    "FOLD_LOCAL_MARKET_SESSION_UNCONDITIONAL",
+    "PREVIOUS_BAR_SIGN_MOMENTUM",
+    "PREVIOUS_BAR_SIGN_REVERSAL",
+    "RISK_MATCHED_ALWAYS_LONG_INTRADAY_WHERE_MEANINGFUL"
+  ],
+  "negative_controls": [
+    "WHOLE_SESSION_CIRCULAR_LABEL_SHIFT",
+    "DETERMINISTIC_RANDOM_FEATURE",
+    "TRAINING_ONLY_PERMUTED_MARKET_IDENTITY",
+    "FUTURE_DATA_CANARY_REJECTED_BEFORE_FIT"
+  ],
+  "sleeves": {
+    "key_fields": [
+      "hypothesis_id",
+      "market_root",
+      "session_window",
+      "holding_horizon",
+      "direction"
+    ],
+    "independent_gate_required": true,
+    "aggregate_may_hide_failure": false,
+    "combination_or_weight_selection_is_new_trial": true
+  },
+  "power": {
+    "mees_required_before_outer_evaluation": true,
+    "design_alternative_strictly_greater_than_mees_required": true,
+    "training_only_centered_session_residuals": true,
+    "stationary_block_simulations": 5000,
+    "minimum_power": 0.8,
+    "below_minimum_status": "INCONCLUSIVE_DATA_OR_POWER"
+  },
+  "robustness": {
+    "policy_hash_must_be_bound_to_trial_and_evaluation": true,
+    "temporal_concentration": {
+      "minimum_outer_folds": 8,
+      "minimum_positive_fold_fraction": 0.625,
+      "every_leave_one_fold_out_weighted_mean_gt_zero": true,
+      "applies_to_each_required_sleeve_and_primary_aggregate": true
+    },
+    "stability": {
+      "seed_count": 5,
+      "seeds_derived_from_trial_id": true,
+      "deterministic_repeat_requires_identical_artifact_and_prediction_hashes": true,
+      "variant_manifest_frozen_before_outer_access": true,
+      "every_variant_in_trial_ledger_and_multiplicity_family": true,
+      "minimum_positive_variant_fraction": 0.8,
+      "minimum_median_effect_retention": 0.5,
+      "variant_selection_after_outer_access_allowed": false
+    },
+    "valid_instability_status": "INCONCLUSIVE_ROBUSTNESS",
+    "malformed_or_incomplete_binding_status": "INVALID"
+  },
+  "prospective_monitoring": {
+    "policy_path": "configs/prospective_monitoring_policy.json",
+    "policy_and_reference_hashes_bound_to_bundle": true,
+    "records_append_only_and_bundle_bound": true,
+    "paused_or_invalid_requires_abstention": true,
+    "pending_blocks_manual_decision_support_ready": true,
+    "automatic_retraining_retuning_source_substitution_or_resume": false
+  },
+  "binding_gate": {
+    "decision_order": [
+      "INVALID",
+      "INCONCLUSIVE_DATA_OR_POWER",
+      "FAIL_NO_EDGE",
+      "FAIL_NOT_ECONOMIC",
+      "INCONCLUSIVE_EFFECT",
+      "FAIL_MULTIPLICITY_OR_CONTROL",
+      "INCONCLUSIVE_ROBUSTNESS",
+      "PASS_HISTORICAL_SCREEN"
+    ],
+    "INVALID": "lineage_leakage_timing_role_ledger_cost_or_evidence_failure",
+    "INCONCLUSIVE_DATA_OR_POWER": "power_below_0_80_or_insufficient_clusters_folds_active_observations_or_outcome_coverage",
+    "FAIL_NO_EDGE": "confidence_upper_bound_lte_zero",
+    "FAIL_NOT_ECONOMIC": "after_no_edge_rule_confidence_upper_bound_lte_mees",
+    "INCONCLUSIVE_EFFECT": "confidence_interval_intersects_mees",
+    "FAIL_MULTIPLICITY_OR_CONTROL": "effect_bound_passes_but_adjusted_test_dsr_pbo_cost_baseline_sleeve_or_control_fails",
+    "INCONCLUSIVE_ROBUSTNESS": "valid_effect_is_temporally_concentrated_or_seed_or_parameter_fragile",
+    "PASS_HISTORICAL_SCREEN": {
+      "multiplicity_adjusted_one_sided_95pct_lower_bound_gt_mees": true,
+      "romano_wolf_adjusted_p_lte": 0.05,
+      "dsr_probability_gte": 0.95,
+      "pbo_policy_satisfied_when_applicable": true,
+      "stress_cost_pass": true,
+      "all_required_sleeves_baselines_and_controls_pass": true,
+      "robustness_gate_pass": true,
+      "candidate_sealed": false,
+      "authorizes_only": "eligibility_for_separate_candidate_sealing_decision"
+    }
+  },
+  "role_isolation": {
+    "roles": [
+      "splitter",
+      "builder",
+      "evaluator"
+    ],
+    "builder_outer_label_access": false,
+    "evaluator_training_module_import": false,
+    "evaluator_fit_calls_allowed": 0,
+    "prediction_manifest_must_precede_label_unlock": true,
+    "evaluation_report_binds_all_input_hashes": true,
+    "holdout_access_receipt": "one_time_append_only",
+    "holdout_receipt_binds_frozen_spec_and_pre_unlock_ledger_head": true,
+    "repeated_holdout_access_is_fatal": true,
+    "process_isolation_claims_independent_human_judgment": false
+  },
+  "research_basis": [
+    "https://doi.org/10.1186/1471-2105-7-91",
+    "https://www.jmlr.org/papers/v11/cawley10a.html",
+    "https://doi.org/10.1093/biomet/81.2.351",
+    "https://doi.org/10.1016/S0304-4076(00)00030-0",
+    "https://doi.org/10.2307/1913610",
+    "https://doi.org/10.1080/01621459.1994.10476870",
+    "https://doi.org/10.1111/j.1468-0262.2005.00615.x",
+    "https://www.davidhbailey.com/dhbpapers/deflated-sharpe.pdf",
+    "https://doi.org/10.21314/JCF.2016.322",
+    "https://databento.com/docs/schemas-and-data-formats",
+    "https://databento.com/docs/standards-and-conventions/symbology"
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "schema_version": "1.0.0",
+  "project": "futures_intraday_model_v2",
+  "status": "SYNTHETIC_MECHANICS_VALIDATED_ONLY",
+  "authority": {
+    "alpha_evidence": false,
+    "candidate_eligible": false,
+    "historical_research_ready": false,
+    "real_history_execution_authorized": false,
+    "candidate_sealing_authorized": false
+  },
+  "outcome_generation": {
+    "label_method_id": "ACTUAL_CONTRACT_EVENT_OPEN_TO_EVENT_OPEN_1M_V1",
+    "source_role": "VERIFIED_PHASE2_CAUSAL_INTERVAL_ONLY",
+    "bar_grid_nanoseconds": 60000000000,
+    "entry_price": "EXACT_EVENT_OPEN",
+    "exit_price": "EXACT_EVENT_OPEN",
+    "requires_tick_valid_prices": true,
+    "requires_one_resolved_eligible_row_per_grid_event": true,
+    "requires_one_exchange_session": true,
+    "missing_or_ambiguous_status": "MISSING_SOURCE",
+    "cross_contract_status": "ROLL_UNRESOLVED",
+    "unresolved_rows_remain_in_prediction_census": true
+  },
+  "research_roles": {
+    "splitter": "OWNS_LABELS_AND_EMITS_BUILDER_PACKET_WITHOUT_OUTER_LABELS",
+    "builder": "INNER_ONLY_SELECTION_FOLD_LOCAL_SCALING_POSITIVE_RIDGE_OUTER_FREEZE",
+    "evaluator": "FROZEN_PREDICTIONS_ONLY_ZERO_FIT_NO_BUILDER_IMPORT",
+    "artifact_format": "FUTURES_TRUSTED_LINEAR_FORECAST_V1"
+  },
+  "synthetic_controls": [
+    "RECOVER_KNOWN_SIGNAL",
+    "REJECT_NOISE_AS_AUTHORITY",
+    "OUTER_LABEL_MUTATION_CANNOT_CHANGE_FIRST_FOLD_BUILD",
+    "REJECT_FUTURE_FEATURE_CANARY_BEFORE_LINEAR_ALGEBRA",
+    "REJECT_PREDICTION_ARTIFACT_AND_PARITY_TAMPER",
+    "PRESERVE_MISSING_AND_ROLL_UNRESOLVED_DENOMINATORS"
+  ],
+  "not_implemented_or_not_executed": [
+    "REAL_HISTORY_FEATURE_OUTCOME_TO_RESEARCH_DATASET_ASSEMBLY",
+    "REAL_HISTORY_HYPOTHESIS_OR_WFA_EXECUTION",
+    "SESSION_PORTFOLIO_HAC_OR_BLOCK_BOOTSTRAP_INFERENCE",
+    "DSR_ROMANO_WOLF_OR_PBO_BINDING_GATES",
+    "STRESS_COST_AND_SLEEVE_GATES",
+    "ONE_TIME_FINAL_HOLDOUT_ACCESS",
+    "CANDIDATE_SEALING",
+    "ALPHA_CLAIM"
+  ]
+}
