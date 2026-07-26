@@ -75,6 +75,14 @@
   receipt while independently verifying the receipt file hash; 14 targeted
   Master/Meta tests pass after that change. Therefore the full suite must be
   rerun once more after live closure before final Meta Audit publication.
+- The completed offline implementation was committed locally, without a push,
+  as milestone `544ebbb6eff8fd37e3f13c220b27d9225ebbb596`
+  (`Complete 41-market foundation and prepare cockpit cutover`). Immediately
+  before that commit, the exact staged content passed the fresh full suite:
+  471 passed, 1 Node-only skip, 0 failed, and 0 errors in 395.9 seconds.
+  Runtime foundation checkpoints, batch stdout logs, installed/package output,
+  DBNs, and the ignored credential were excluded. A final suite is still
+  required after the approved smoke/cutover state is recorded.
 - Synthetic Phase 1A-11 evidence is complete at
   `reports/pipeline/synthetic_phase1a_11.json`, run ID
   `c1f4680580e74d16fe5e99a99debe2193fb3d8679dfed64338e272c9dc4d0c62`;
