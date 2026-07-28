@@ -6,7 +6,10 @@ import shutil
 import stat
 import subprocess
 import uuid
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -14,6 +17,12 @@ import futures_rebuild.readiness as readiness_module
 from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
 from futures_rebuild.boundary import RepoBoundary
 from futures_rebuild.errors import IntegrityError
+from futures_rebuild.exchange_calendar import (
+    CME_TIMEZONE,
+    active_pointer_payload,
+    diff_exchange_calendars,
+    publish_calendar_index,
+)
 from futures_rebuild.legacy_trial_census import publish_legacy_trial_census
 from futures_rebuild.historical_capability import build_foundation_research_blueprint
 from futures_rebuild.readiness import (
@@ -50,6 +59,11 @@ from tests.test_foundation_orchestrator import _setup as _foundation_setup
 from tests.test_legacy_trial_census import (
     _archive_receipt as _legacy_archive_receipt,
     _snapshot as _legacy_census_snapshot,
+)
+from tests.test_exchange_calendar import (
+    _activation as _calendar_activation,
+    _publish_calendar,
+    _regular_session,
 )
 
 
@@ -197,10 +211,51 @@ def _census(
 def _prerequisites(boundary, operation_factory, monkeypatch):
     _install_readiness_closure(boundary)
     snapshot, selection, spec = _foundation_setup(boundary, operation_factory)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
+    today = now.astimezone(ZoneInfo(CME_TIMEZONE)).date()
+    calendar_end = today + timedelta(days=89)
+    sessions = []
+    trade_date = date(2024, 1, 1)
+    while trade_date <= calendar_end:
+        sessions.append(_regular_session(trade_date.isoformat()))
+        trade_date += timedelta(days=1)
+    calendar_receipt, calendar = _publish_calendar(
+        boundary,
+        operation_factory,
+        sessions=sessions,
+        retrieved_at_utc=now.isoformat().replace("+00:00", "Z"),
+    )
+    calendar_diff = diff_exchange_calendars(None, calendar)
+    activation = _calendar_activation(
+        calendar_release_id=calendar_receipt.release_id,
+        predecessor_index_release_id=None,
+        diff_report_id=str(calendar_diff["diff_report_id"]),
+        approved_at_utc=(
+            (now + timedelta(minutes=1))
+            .isoformat()
+            .replace("+00:00", "Z")
+        ),
+    )
+    calendar_index_receipt = publish_calendar_index(
+        candidate_calendar_receipt=calendar_receipt,
+        activation_approval=activation,
+        publisher=_publisher(boundary, operation_factory, "calendar-index"),
+        expected_markets=("ES",),
+        freshness_at=now,
+    )
+    active_pointer = active_pointer_payload(
+        calendar_index_receipt,
+        activation_approval_receipt_id=str(activation["approval_receipt_id"]),
+        activated_at_utc=str(activation["approved_at"]),
+    )
+    (
+        boundary.active_root / "configs" / "active_exchange_calendar.json"
+    ).write_bytes(canonical_bytes(active_pointer) + b"\n")
     foundation = _foundation_orchestrator(boundary, operation_factory).run(
         source_dbn_manifest=snapshot.manifest_path,
         source_selection_receipt=selection,
         feature_spec=spec,
+        calendar_index_receipt=calendar_index_receipt,
     ).foundation_set_receipt
     census = _census(boundary, operation_factory, monkeypatch)
     _commit_fixture_repo(boundary.active_root)
@@ -219,6 +274,14 @@ def _prerequisites(boundary, operation_factory, monkeypatch):
     synthetic = prerequisites.synthetic_test_evidence_receipt
     engine = prerequisites.engine_registration_receipt
     isolation = prerequisites.isolation_evidence_receipt
+    # These tests exercise the general readiness publication contract with a
+    # compact synthetic schema-v6 fixture.  Schema-v7 empirical-observability
+    # binding is covered separately by the fail-closed legacy-schema test.
+    monkeypatch.setattr(
+        readiness_module,
+        "_calendar_readiness_codes",
+        lambda _foundation, *, boundary: (),
+    )
     return foundation, synthetic, engine, isolation, census, publisher
 
 
@@ -429,6 +492,59 @@ def test_all_absent_inputs_return_blockers_without_writes(
     assert not (
         boundary.active_root / "manifests" / "data_releases" / "readiness"
     ).exists()
+
+
+def test_legacy_foundation_is_classified_historical_observability_contract_not_bound(
+    boundary, monkeypatch
+) -> None:
+    monkeypatch.setattr(
+        readiness_module,
+        "load_foundation_set",
+        lambda _receipt, *, boundary: {
+            "run_contract": {"repository_id": boundary.repository_id},
+            "schema_version": "5.0.0",
+        },
+    )
+    monkeypatch.setattr(
+        readiness_module,
+        "build_foundation_research_blueprint",
+        lambda _receipt, *, boundary: object(),
+    )
+    monkeypatch.setattr(
+        readiness_module,
+        "committed_git_closure",
+        lambda _root: {"git_closure_id": "0" * 64},
+    )
+    monkeypatch.setattr(readiness_module, "_safety_contract", lambda _boundary: {})
+    monkeypatch.setattr(
+        readiness_module,
+        "load_exchange_calendar_policy",
+        lambda _path: {},
+    )
+    legacy_receipt = SimpleNamespace(
+        release_kind=readiness_module.FOUNDATION_SET_RELEASE_KIND
+    )
+    assessment = assess_readiness(
+        boundary=boundary,
+        foundation_set_receipt=legacy_receipt,
+        engine_registration_receipt=None,
+        isolation_evidence_receipt=None,
+        legacy_census_release_receipt=None,
+    )
+    assert {
+        (blocker.state, blocker.code) for blocker in assessment.blockers
+    }.issuperset(
+        {
+            (
+                "REBUILD_COMPLETE",
+                "HISTORICAL_OBSERVABILITY_CONTRACT_NOT_BOUND",
+            ),
+            (
+                "HISTORICAL_RESEARCH_READY",
+                "HISTORICAL_OBSERVABILITY_CONTRACT_NOT_BOUND",
+            ),
+        }
+    )
 
 
 def test_tampered_legacy_census_returns_blocker_without_readiness_writes(

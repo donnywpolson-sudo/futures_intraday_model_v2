@@ -24,6 +24,7 @@ import sys
 import tempfile
 import zipfile
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Mapping, Sequence
 
@@ -36,8 +37,19 @@ from .canonical import assert_plain_file, canonical_bytes, sha256_file, sha256_j
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
 from .source_contract import legacy_roots_from_contract
 from .foundation.orchestrator import (
+    FOUNDATION_OBSERVABILITY_SCHEMA_VERSION,
     FOUNDATION_SET_RELEASE_KIND,
     load_foundation_set,
+)
+from .exchange_calendar import (
+    load_exchange_calendar_policy,
+)
+from .foundation.historical_observability import (
+    CALENDAR_CLAIM as EMPIRICAL_CALENDAR_CLAIM,
+    EVIDENCE_BASIS as HISTORICAL_OBSERVABILITY_EVIDENCE_BASIS,
+    READINESS_BLOCKER as HISTORICAL_OBSERVABILITY_CONTRACT_NOT_BOUND,
+    UNCERTAINTY_RULE as HISTORICAL_OBSERVABILITY_UNCERTAINTY_RULE,
+    load_historical_observability_policy,
 )
 from .historical_capability import (
     build_foundation_research_blueprint,
@@ -83,6 +95,7 @@ ENGINE_SEED_MODULES = (
 ENGINE_CONFIG_PATHS = (
     "configs/dependency_lock_receipt.json",
     "configs/environment.lock.json",
+    "configs/exchange_calendar_policy.json",
     "configs/historical_capability.json",
     "configs/research_readiness_contract.json",
     "configs/synthetic_research_engine.json",
@@ -1595,6 +1608,43 @@ def _safety_contract(boundary: RepoBoundary) -> dict[str, object]:
     }
 
 
+def _calendar_readiness_codes(
+    foundation: Mapping[str, object],
+    *,
+    boundary: RepoBoundary,
+) -> tuple[str, ...]:
+    if (
+        foundation.get("schema_version")
+        != FOUNDATION_OBSERVABILITY_SCHEMA_VERSION
+    ):
+        return (HISTORICAL_OBSERVABILITY_CONTRACT_NOT_BOUND,)
+    load_exchange_calendar_policy(
+        boundary.active_root / "configs" / "exchange_calendar_policy.json"
+    )
+    policy = load_historical_observability_policy(
+        boundary.active_root / "configs" / "historical_observability_policy.json"
+    )
+    coverage = foundation.get("historical_observability_coverage")
+    if (
+        not isinstance(coverage, Mapping)
+        or coverage.get("calendar_claim") != EMPIRICAL_CALENDAR_CLAIM
+        or coverage.get("evidence_basis")
+        != HISTORICAL_OBSERVABILITY_EVIDENCE_BASIS
+        or coverage.get("uncertainty_rule")
+        != HISTORICAL_OBSERVABILITY_UNCERTAINTY_RULE
+        or coverage.get("interval_count") != policy["interval_count"]
+        or coverage.get("market_count") != policy["market_count"]
+        or coverage.get("research_scope_market_year_count")
+        != policy["research_scope_market_year_count"]
+        or foundation.get("predecessor_foundation_release_id")
+        != policy["predecessor_foundation_release_id"]
+    ):
+        raise IntegrityError(
+            "historical-observability foundation binding is invalid"
+        )
+    return ()
+
+
 def assess_readiness(
     *,
     boundary: RepoBoundary,
@@ -1621,6 +1671,14 @@ def assess_readiness(
             or run_contract.get("repository_id") != boundary.repository_id
         ):
             raise IntegrityError("foundation set belongs to a different repository")
+        for code in _calendar_readiness_codes(
+            foundation,
+            boundary=boundary,
+        ):
+            blockers.extend(
+                ReadinessBlocker(state, code)
+                for state in both_states
+            )
     engine: dict[str, object] | None = None
     if engine_registration_receipt is None:
         blockers.append(
@@ -1678,6 +1736,9 @@ def assess_readiness(
             for state in both_states
         )
     _safety_contract(boundary)
+    load_exchange_calendar_policy(
+        boundary.active_root / "configs" / "exchange_calendar_policy.json"
+    )
     return ReadinessAssessment(tuple(sorted(set(blockers))))
 
 
@@ -1901,6 +1962,15 @@ def load_rebuild_complete(
     isolation = _receipt_from(payload["isolation_evidence_receipt"])
     test_evidence = _receipt_from(payload["synthetic_test_evidence_receipt"])
     blueprint = build_foundation_research_blueprint(foundation, boundary=boundary)
+    foundation_payload = load_foundation_set(foundation, boundary=boundary)
+    calendar_codes = _calendar_readiness_codes(
+        foundation_payload,
+        boundary=boundary,
+    )
+    if calendar_codes:
+        raise IntegrityError(
+            f"REBUILD_COMPLETE calendar gate failed: {calendar_codes[0]}"
+        )
     isolation_payload = load_project_isolation_evidence(isolation, boundary=boundary)
     load_synthetic_test_evidence(test_evidence, boundary=boundary)
     if (

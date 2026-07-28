@@ -13,9 +13,10 @@ import os
 import re
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path
-from typing import Callable, Mapping
+from typing import Callable, Mapping, Sequence
 
 from ..boundary import (
     OperationClassification,
@@ -30,6 +31,19 @@ from ..canonical import (
     sha256_json,
 )
 from ..errors import ContractError, IntegrityError
+from ..exchange_calendar import (
+    COVERAGE_RELEASE_KIND as CALENDAR_COVERAGE_RELEASE_KIND,
+    ELIGIBILITY_RELEASE_KIND as CALENDAR_ELIGIBILITY_RELEASE_KIND,
+    INDEX_RELEASE_KIND as CALENDAR_INDEX_RELEASE_KIND,
+    LoadedFoundationCalendarCoverage,
+    load_calendar_state_eligibility,
+    load_active_calendar_index,
+    load_exchange_calendar_policy,
+    load_foundation_calendar_coverage,
+    publish_calendar_state_eligibility,
+    publish_foundation_calendar_coverage,
+    verify_calendar_freshness,
+)
 from ..source_contract import legacy_roots_from_contract
 from ..locking import FileLease
 from ..producer_bridge import (
@@ -70,6 +84,12 @@ from .market_state import (
     publish_market_state_foundation,
     publish_status_eligibility,
 )
+from .historical_observability import (
+    FOUNDATION_OBSERVABILITY_SCHEMA_VERSION,
+    build_historical_observability_coverage,
+    load_foundation_observability_successor,
+    load_historical_observability_policy,
+)
 from .resources import (
     FoundationResourcePolicy,
     assert_capacity_admission,
@@ -87,15 +107,18 @@ from .support import (
 )
 
 
-CHECKPOINT_VERSION = "4.0.0"
+CHECKPOINT_VERSION = "5.0.0"
 FOUNDATION_SET_RELEASE_KIND = "futures_mechanical_foundation_set"
 FOUNDATION_SET_SCHEMA_VERSION = "4.0.0"
 FOUNDATION_SUCCESSOR_SCHEMA_VERSION = "5.0.0"
+FOUNDATION_CALENDAR_SCHEMA_VERSION = "6.0.0"
 OUTCOME_SOURCE_RELEASE_KIND = "futures_outcome_source_input"
 OUTCOME_SOURCE_SCHEMA_VERSION = "1.0.0"
+OUTCOME_SOURCE_CALENDAR_SCHEMA_VERSION = "2.0.0"
 OUTCOME_SOURCE_ROLE = "LABELABLE_VERIFIED_CAUSAL_BARS_ONLY"
 FEATURE_SOURCE_INPUT_RELEASE_KIND = "futures_feature_source_input"
 FEATURE_SOURCE_INPUT_SCHEMA_VERSION = "1.0.0"
+FEATURE_SOURCE_INPUT_CALENDAR_SCHEMA_VERSION = "2.0.0"
 FEATURE_SOURCE_INPUT_ROLE = "DEFERRED_DETERMINISTIC_BAR_LOCAL_FEATURE_INPUT"
 FEATURE_MATERIALIZATION_DEFERRED_UNTIL = (
     "SEPARATELY_AUTHORIZED_PREDECLARED_SAMPLE_OR_HYPOTHESIS_CONTRACT"
@@ -116,12 +139,15 @@ _CLOSURE_MODULES = (
     "canonical.py",
     "data_layout.py",
     "economics.py",
+    "exchange_calendar.py",
     "foundation/decoder.py",
     "foundation/coverage.py",
     "foundation/economics.py",
     "foundation/identity.py",
+    "foundation/historical_observability.py",
     "foundation/materialize.py",
     "foundation/market_state.py",
+    "foundation/calendar_successor.py",
     "foundation/orchestrator.py",
     "foundation/parquet.py",
     "foundation/pipeline.py",
@@ -144,6 +170,8 @@ _CLOSURE_MODULES = (
 _CONFIG_FILES = (
     "contract_economics_rules.json",
     "environment.lock.json",
+    "exchange_calendar_policy.json",
+    "historical_observability_policy.json",
     "foundation_policy.json",
     "foundation_coverage_policy.json",
     "foundation_resource_policy.json",
@@ -310,12 +338,14 @@ def _phase_count(completed: Mapping[str, object]) -> int:
     count = int("source_bound" in completed)
     count += int("foundation_policy" in completed)
     count += int("session_policy" in completed)
+    count += int("calendar_coverage" in completed)
     count += int("market_state" in completed)
     intervals = completed.get("intervals", {})
     if isinstance(intervals, dict):
         for value in intervals.values():
             if isinstance(value, dict):
                 count += sum(phase in value for phase in _RECEIPT_PHASES)
+                count += int("calendar_eligibility" in value)
                 count += int("outcome_source_input" in value)
     count += int("foundation_set" in completed)
     return count
@@ -330,6 +360,7 @@ class FoundationOrchestrator:
         boundary: RepoBoundary,
         operation_receipt: OperationReceipt,
         batch_rows: int = 100_000,
+        allow_legacy_calendar_unbound: bool = False,
     ) -> None:
         if type(batch_rows) is not int or batch_rows <= 0:
             raise ContractError("foundation batch_rows must be a positive exact integer")
@@ -341,6 +372,9 @@ class FoundationOrchestrator:
             raise ContractError("foundation orchestration requires a non-alpha receipt")
         self.boundary = boundary
         self.batch_rows = batch_rows
+        if type(allow_legacy_calendar_unbound) is not bool:
+            raise ContractError("legacy calendar compatibility flag must be exact")
+        self.allow_legacy_calendar_unbound = allow_legacy_calendar_unbound
         self.resource_policy = FoundationResourcePolicy.from_file(
             boundary.active_root / "configs" / "foundation_resource_policy.json"
         )
@@ -367,6 +401,7 @@ class FoundationOrchestrator:
         intervals: tuple[object, ...],
         resolved_selection: object,
         feature_spec: CausalFeatureSpec,
+        calendar_index_receipt: VerifiedReleaseReceipt | None,
     ) -> dict[str, object]:
         selected: list[dict[str, object]] = []
         for interval in intervals:
@@ -421,6 +456,11 @@ class FoundationOrchestrator:
             raise IntegrityError("source DBN manifest changed after snapshot verification")
         contract = {
             "batch_rows": self.batch_rows,
+            "calendar_index_receipt": (
+                calendar_index_receipt.as_dict()
+                if calendar_index_receipt is not None
+                else None
+            ),
             "config_closure": _config_closure(self.boundary),
             "feature_spec": feature_spec.as_dict(),
             "feature_spec_hash": feature_spec.spec_hash,
@@ -517,6 +557,7 @@ class FoundationOrchestrator:
         source_dbn_manifest: Path,
         source_selection_receipt: VerifiedReleaseReceipt,
         feature_spec: CausalFeatureSpec,
+        calendar_index_receipt: VerifiedReleaseReceipt | None = None,
         after_checkpoint: Callable[[str], None] | None = None,
     ) -> FoundationRunResult:
         global_lock = self.boundary.assert_active_path(
@@ -532,6 +573,7 @@ class FoundationOrchestrator:
                 source_dbn_manifest=source_dbn_manifest,
                 source_selection_receipt=source_selection_receipt,
                 feature_spec=feature_spec,
+                calendar_index_receipt=calendar_index_receipt,
                 after_checkpoint=after_checkpoint,
             )
 
@@ -541,6 +583,7 @@ class FoundationOrchestrator:
         source_dbn_manifest: Path,
         source_selection_receipt: VerifiedReleaseReceipt,
         feature_spec: CausalFeatureSpec,
+        calendar_index_receipt: VerifiedReleaseReceipt | None,
         after_checkpoint: Callable[[str], None] | None = None,
     ) -> FoundationRunResult:
         snapshot = PublishedSourceSnapshot.open(source_dbn_manifest, boundary=self.boundary)
@@ -550,6 +593,35 @@ class FoundationOrchestrator:
             boundary=self.boundary,
         )
         intervals = resolved_selection.intervals
+        if (
+            calendar_index_receipt is None
+            and not self.allow_legacy_calendar_unbound
+        ):
+            raise IntegrityError(
+                "HISTORICAL_OBSERVABILITY_CONTRACT_NOT_BOUND"
+            )
+        if calendar_index_receipt is not None:
+            load_exchange_calendar_policy(
+                self.boundary.active_root
+                / "configs"
+                / "exchange_calendar_policy.json"
+            )
+            expected_calendar_markets = tuple(
+                sorted({str(interval.market) for interval in intervals})
+            )
+            active_calendar_index = load_active_calendar_index(
+                boundary=self.boundary,
+                expected_markets=expected_calendar_markets,
+            )
+            if active_calendar_index.receipt != calendar_index_receipt:
+                raise IntegrityError(
+                    "foundation calendar index is not the active approved index"
+                )
+            verify_calendar_freshness(
+                active_calendar_index,
+                expected_markets=expected_calendar_markets,
+                now=datetime.now(timezone.utc),
+            )
         assert_capacity_admission(
             volume_path=self.boundary.active_root,
             selection=selection,
@@ -581,6 +653,7 @@ class FoundationOrchestrator:
             intervals=intervals,
             resolved_selection=resolved_selection,
             feature_spec=feature_spec,
+            calendar_index_receipt=calendar_index_receipt,
         )
         run_id = sha256_json(run_contract)
         run_lock = self.boundary.assert_active_path(
@@ -602,6 +675,7 @@ class FoundationOrchestrator:
                 resolved_selection=resolved_selection,
                 source_selection_receipt=source_selection_receipt,
                 feature_spec=feature_spec,
+                calendar_index_receipt=calendar_index_receipt,
                 coverage_policy=coverage_policy,
                 scope_policy=scope_policy,
                 statistics_roles=statistics_roles,
@@ -619,6 +693,7 @@ class FoundationOrchestrator:
         resolved_selection: object,
         source_selection_receipt: VerifiedReleaseReceipt,
         feature_spec: CausalFeatureSpec,
+        calendar_index_receipt: VerifiedReleaseReceipt | None,
         coverage_policy: FoundationCoveragePolicy,
         scope_policy: StatusResearchScopePolicy,
         statistics_roles: StatisticsRolePolicy,
@@ -633,6 +708,7 @@ class FoundationOrchestrator:
             "source_bound",
             "foundation_policy",
             "session_policy",
+            "calendar_coverage",
             "market_state",
             "intervals",
             "foundation_set",
@@ -670,7 +746,13 @@ class FoundationOrchestrator:
         else:
             if any(
                 key in completed
-                for key in ("session_policy", "market_state", "intervals", "foundation_set")
+                for key in (
+                    "session_policy",
+                    "calendar_coverage",
+                    "market_state",
+                    "intervals",
+                    "foundation_set",
+                )
             ):
                 raise IntegrityError("foundation checkpoint skips policy phase")
             policy_receipt = publish_foundation_policies(
@@ -698,7 +780,13 @@ class FoundationOrchestrator:
             )
         else:
             if any(
-                key in completed for key in ("market_state", "intervals", "foundation_set")
+                key in completed
+                for key in (
+                    "calendar_coverage",
+                    "market_state",
+                    "intervals",
+                    "foundation_set",
+                )
             ):
                 raise IntegrityError("foundation checkpoint skips session-policy phase")
             session_receipt = publish_versioned_session_policy(
@@ -715,6 +803,57 @@ class FoundationOrchestrator:
                 core,
                 phase="session_policy",
                 after_checkpoint=after_checkpoint,
+            )
+
+        calendar_coverage_receipt: VerifiedReleaseReceipt | None = None
+        calendar_coverage: LoadedFoundationCalendarCoverage | None = None
+        if calendar_index_receipt is not None:
+            if "calendar_coverage" in completed:
+                calendar_coverage_receipt = _receipt(
+                    completed["calendar_coverage"], name="calendar_coverage"
+                )
+                calendar_coverage = load_foundation_calendar_coverage(
+                    calendar_coverage_receipt,
+                    boundary=self.boundary,
+                    expected_intervals=intervals,
+                )
+                if (
+                    calendar_coverage.index.receipt
+                    != calendar_index_receipt
+                ):
+                    raise IntegrityError(
+                        "foundation calendar coverage changed its active index"
+                    )
+            else:
+                if any(
+                    key in completed
+                    for key in ("market_state", "intervals", "foundation_set")
+                ):
+                    raise IntegrityError(
+                        "foundation checkpoint skips calendar-coverage phase"
+                    )
+                calendar_coverage_receipt = publish_foundation_calendar_coverage(
+                    index_receipt=calendar_index_receipt,
+                    intervals=intervals,
+                    publisher=self.publisher,
+                )
+                calendar_coverage = load_foundation_calendar_coverage(
+                    calendar_coverage_receipt,
+                    boundary=self.boundary,
+                    expected_intervals=intervals,
+                )
+                completed["calendar_coverage"] = (
+                    calendar_coverage_receipt.as_dict()
+                )
+                self._persist(
+                    checkpoint_path,
+                    core,
+                    phase="calendar_coverage",
+                    after_checkpoint=after_checkpoint,
+                )
+        elif "calendar_coverage" in completed:
+            raise IntegrityError(
+                "legacy foundation checkpoint unexpectedly binds a calendar"
             )
 
         if "market_state" in completed:
@@ -793,7 +932,7 @@ class FoundationOrchestrator:
             )
             state = interval_state.setdefault(key, {})
             if not isinstance(state, dict) or not set(state).issubset(
-                {*_RECEIPT_PHASES, "outcome_source_input"}
+                {*_RECEIPT_PHASES, "calendar_eligibility", "outcome_source_input"}
             ):
                 raise IntegrityError("foundation interval phase map is invalid")
 
@@ -824,6 +963,20 @@ class FoundationOrchestrator:
                 phase=f"{key}:causal",
                 after_checkpoint=after_checkpoint,
             )
+            calendar_eligibility_receipt: VerifiedReleaseReceipt | None = None
+            if calendar_coverage_receipt is not None:
+                calendar_eligibility_receipt = self._ensure_calendar_eligibility(
+                    state,
+                    causal_receipt=causal_receipt,
+                    coverage_receipt=calendar_coverage_receipt,
+                    market=interval.market,
+                    year=interval.year,
+                    interval_key=key,
+                    checkpoint_path=checkpoint_path,
+                    core=core,
+                    phase=f"{key}:calendar_eligibility",
+                    after_checkpoint=after_checkpoint,
+                )
             status_eligibility_receipt = self._ensure_status_eligibility(
                 state,
                 causal_receipt=causal_receipt,
@@ -859,6 +1012,8 @@ class FoundationOrchestrator:
                 economics=economics,
                 policies=policies,
                 session_policy=session_policy,
+                calendar_coverage_receipt=calendar_coverage_receipt,
+                calendar_eligibility_receipt=calendar_eligibility_receipt,
                 feature_spec=feature_spec,
                 checkpoint_path=checkpoint_path,
                 core=core,
@@ -949,6 +1104,8 @@ class FoundationOrchestrator:
                 economics=economics,
                 policies=policies,
                 session_policy=session_policy,
+                calendar_coverage_receipt=calendar_coverage_receipt,
+                calendar_eligibility_receipt=calendar_eligibility_receipt,
                 checkpoint_path=checkpoint_path,
                 core=core,
                 phase=f"{key}:outcome_source_input",
@@ -999,6 +1156,15 @@ class FoundationOrchestrator:
                     "bar_source_path": interval.bars.binding.relative_path,
                     "bar_source_sha256": interval.bars.binding.sha256,
                     "causal_release_receipt": causal_receipt.as_dict(),
+                    **(
+                        {
+                            "calendar_eligibility_release_receipt": (
+                                calendar_eligibility_receipt.as_dict()
+                            )
+                        }
+                        if calendar_eligibility_receipt is not None
+                        else {}
+                    ),
                     "coverage_disposition": interval.coverage_disposition,
                     "definition_release_receipt": definitions.receipt.as_dict(),
                     "definition_query_contract_id": interval.definition.query_contract_id,
@@ -1154,8 +1320,23 @@ class FoundationOrchestrator:
                 "status_source_market_year_fraction"
             ],
             "status_unresolved_rows": research_status_unresolved_rows,
+            **(
+                {
+                    "calendar_contract_status": "BOUND_AND_ALL_ROWS_OPEN",
+                    "calendar_coverage_receipt_id": (
+                        calendar_coverage_receipt.receipt_id
+                    ),
+                }
+                if calendar_coverage_receipt is not None
+                else {}
+            ),
         }
 
+        foundation_schema_version = (
+            FOUNDATION_CALENDAR_SCHEMA_VERSION
+            if calendar_coverage_receipt is not None
+            else FOUNDATION_SET_SCHEMA_VERSION
+        )
         foundation_set_core = {
             "alpha_evidence": False,
             "candidate_eligible": False,
@@ -1163,6 +1344,15 @@ class FoundationOrchestrator:
             "coverage_gate": coverage_gate,
             "coverage_matrix": list(resolved_selection.coverage_matrix),
             "coverage_matrix_id": resolved_selection.coverage_matrix_id,
+            **(
+                {
+                    "calendar_coverage_receipt": (
+                        calendar_coverage_receipt.as_dict()
+                    )
+                }
+                if calendar_coverage_receipt is not None
+                else {}
+            ),
             "feature_spec": feature_spec.as_dict(),
             "feature_spec_hash": feature_spec.spec_hash,
             "foundation_policy_receipt": policy_receipt.as_dict(),
@@ -1189,7 +1379,7 @@ class FoundationOrchestrator:
             "provider_call_count": 0,
             "run_contract": dict(core["run_contract"]),
             "run_id": core["run_id"],
-            "schema_version": FOUNDATION_SET_SCHEMA_VERSION,
+            "schema_version": foundation_schema_version,
             "session_policy_receipt": session_receipt.as_dict(),
             "source_selection_receipt": source_selection_receipt.as_dict(),
             "source_dbn_release_id": snapshot.source_release_id,
@@ -1216,11 +1406,18 @@ class FoundationOrchestrator:
                 session_receipt.release_id,
                 market_state_receipt.release_id,
             }
+            if calendar_coverage_receipt is not None:
+                dependency_ids.add(calendar_coverage_receipt.release_id)
             for item in verified_intervals:
                 for name in (
                     "raw_release_receipt",
                     "definition_release_receipt",
                     "causal_release_receipt",
+                    *(
+                        ("calendar_eligibility_release_receipt",)
+                        if calendar_coverage_receipt is not None
+                        else ()
+                    ),
                     "status_eligibility_release_receipt",
                     "economics_release_receipt",
                     "feature_input_release_receipt",
@@ -1231,7 +1428,7 @@ class FoundationOrchestrator:
                 stage,
                 phase="foundation",
                 release_kind=FOUNDATION_SET_RELEASE_KIND,
-                schema_version=FOUNDATION_SET_SCHEMA_VERSION,
+                schema_version=foundation_schema_version,
                 logical_paths={},
                 source_release_ids=tuple(sorted(dependency_ids)),
                 embedded_documents={"foundation_set.json": foundation_set},
@@ -1405,6 +1602,57 @@ class FoundationOrchestrator:
             raise IntegrityError("causal checkpoint release has wrong exact upstream IDs")
         return receipt
 
+    def _ensure_calendar_eligibility(
+        self,
+        state: dict[str, object],
+        *,
+        causal_receipt: VerifiedReleaseReceipt,
+        coverage_receipt: VerifiedReleaseReceipt,
+        market: str,
+        year: int,
+        interval_key: str,
+        checkpoint_path: Path,
+        core: dict[str, object],
+        phase: str,
+        after_checkpoint: Callable[[str], None] | None,
+    ) -> VerifiedReleaseReceipt:
+        if "calendar_eligibility" in state:
+            receipt = _receipt(state["calendar_eligibility"], name=phase)
+        else:
+            if set(state) != {"raw", "definitions", "causal"}:
+                raise IntegrityError(
+                    "foundation interval skips calendar-eligibility phase"
+                )
+            receipt = publish_calendar_state_eligibility(
+                causal_receipt=causal_receipt,
+                coverage_receipt=coverage_receipt,
+                market=market,
+                year=year,
+                interval_key=interval_key,
+                publisher=self.publisher,
+            )
+            state["calendar_eligibility"] = receipt.as_dict()
+            self._persist(
+                checkpoint_path,
+                core,
+                phase=phase,
+                after_checkpoint=after_checkpoint,
+            )
+        payload = load_calendar_state_eligibility(
+            receipt,
+            boundary=self.boundary,
+            expected_causal_receipt=causal_receipt,
+            expected_coverage_receipt=coverage_receipt,
+        )
+        if (
+            payload["disposition"] != "ELIGIBLE"
+            or payload["interval_key"] != interval_key
+            or payload["market"] != market
+            or payload["year"] != year
+        ):
+            raise IntegrityError("foundation calendar-state eligibility failed closed")
+        return receipt
+
     def _ensure_status_eligibility(
         self,
         state: dict[str, object],
@@ -1421,7 +1669,10 @@ class FoundationOrchestrator:
         if "status_eligibility" in state:
             receipt = _receipt(state["status_eligibility"], name=phase)
         else:
-            if set(state) != {"raw", "definitions", "causal"}:
+            if set(state) not in (
+                {"raw", "definitions", "causal"},
+                {"raw", "definitions", "causal", "calendar_eligibility"},
+            ):
                 raise IntegrityError(
                     "foundation interval skips status-eligibility phase"
                 )
@@ -1472,12 +1723,10 @@ class FoundationOrchestrator:
                 boundary=self.boundary,
             )
         else:
-            if set(state) != {
-                "raw",
-                "definitions",
-                "causal",
-                "status_eligibility",
-            }:
+            expected = {"raw", "definitions", "causal", "status_eligibility"}
+            if "calendar_eligibility" in state:
+                expected.add("calendar_eligibility")
+            if set(state) != expected:
                 raise IntegrityError("foundation interval skips economics phase")
             receipt = publish_actual_contract_economics(
                 causal_receipt=causal_receipt,
@@ -1512,18 +1761,36 @@ class FoundationOrchestrator:
         economics: object,
         policies: VerifiedFoundationPolicies,
         session_policy: object,
+        calendar_coverage_receipt: VerifiedReleaseReceipt | None,
+        calendar_eligibility_receipt: VerifiedReleaseReceipt | None,
         feature_spec: CausalFeatureSpec,
         checkpoint_path: Path,
         core: dict[str, object],
         phase: str,
         after_checkpoint: Callable[[str], None] | None,
     ) -> VerifiedReleaseReceipt:
+        calendar_bound = (
+            calendar_coverage_receipt is not None
+            and calendar_eligibility_receipt is not None
+        )
+        if (calendar_coverage_receipt is None) != (
+            calendar_eligibility_receipt is None
+        ):
+            raise IntegrityError("feature input has partial calendar binding")
         dependency_receipts = (
             causal_receipt,
             definitions.receipt,
             economics.release_receipt,
             policies.receipt,
             session_policy.receipt,
+            *(
+                (
+                    calendar_coverage_receipt,
+                    calendar_eligibility_receipt,
+                )
+                if calendar_bound
+                else ()
+            ),
         )
         _, causal_report = load_causal_interval(
             causal_receipt, boundary=self.boundary
@@ -1543,6 +1810,18 @@ class FoundationOrchestrator:
         payload_core = {
             "bar_local_deterministic": True,
             "causal_release_receipt": causal_receipt.as_dict(),
+            **(
+                {
+                    "calendar_coverage_receipt": (
+                        calendar_coverage_receipt.as_dict()
+                    ),
+                    "calendar_state_eligibility_receipt": (
+                        calendar_eligibility_receipt.as_dict()
+                    ),
+                }
+                if calendar_bound
+                else {}
+            ),
             "definition_release_receipt": definitions.receipt.as_dict(),
             "economics_release_receipt": economics.release_receipt.as_dict(),
             "feature_ready_rows": ready,
@@ -1556,7 +1835,11 @@ class FoundationOrchestrator:
             ),
             "prediction_ledger_read": False,
             "role": FEATURE_SOURCE_INPUT_ROLE,
-            "schema_version": FEATURE_SOURCE_INPUT_SCHEMA_VERSION,
+            "schema_version": (
+                FEATURE_SOURCE_INPUT_CALENDAR_SCHEMA_VERSION
+                if calendar_bound
+                else FEATURE_SOURCE_INPUT_SCHEMA_VERSION
+            ),
             "session_policy_receipt": session_policy.receipt.as_dict(),
             "total_upstream_rows": total,
             "unresolved_upstream_rows": unresolved,
@@ -1569,13 +1852,16 @@ class FoundationOrchestrator:
         if "feature_input" in state:
             receipt = _receipt(state["feature_input"], name=phase)
         else:
-            if set(state) != {
+            expected_state = {
                 "raw",
                 "definitions",
                 "causal",
                 "status_eligibility",
                 "economics",
-            }:
+            }
+            if calendar_bound:
+                expected_state.add("calendar_eligibility")
+            if set(state) != expected_state:
                 raise IntegrityError("foundation interval skips feature-input phase")
             causal_manifest = causal_receipt.verify(self.boundary)
             causal_root = str(causal_manifest.metadata.get("logical_root", ""))
@@ -1595,7 +1881,11 @@ class FoundationOrchestrator:
                 stage,
                 phase="features",
                 release_kind=FEATURE_SOURCE_INPUT_RELEASE_KIND,
-                schema_version=FEATURE_SOURCE_INPUT_SCHEMA_VERSION,
+                schema_version=(
+                    FEATURE_SOURCE_INPUT_CALENDAR_SCHEMA_VERSION
+                    if calendar_bound
+                    else FEATURE_SOURCE_INPUT_SCHEMA_VERSION
+                ),
                 logical_paths={
                     staged_name: f"{feature_root}/{staged_name}"
                 },
@@ -1641,20 +1931,50 @@ class FoundationOrchestrator:
         economics: object,
         policies: VerifiedFoundationPolicies,
         session_policy: object,
+        calendar_coverage_receipt: VerifiedReleaseReceipt | None,
+        calendar_eligibility_receipt: VerifiedReleaseReceipt | None,
         checkpoint_path: Path,
         core: dict[str, object],
         phase: str,
         after_checkpoint: Callable[[str], None] | None,
     ) -> VerifiedReleaseReceipt:
+        calendar_bound = (
+            calendar_coverage_receipt is not None
+            and calendar_eligibility_receipt is not None
+        )
+        if (calendar_coverage_receipt is None) != (
+            calendar_eligibility_receipt is None
+        ):
+            raise IntegrityError("outcome input has partial calendar binding")
         dependency_receipts = (
             causal_receipt,
             definitions.receipt,
             economics.release_receipt,
             policies.receipt,
             session_policy.receipt,
+            *(
+                (
+                    calendar_coverage_receipt,
+                    calendar_eligibility_receipt,
+                )
+                if calendar_bound
+                else ()
+            ),
         )
         payload_core = {
             "causal_release_receipt": causal_receipt.as_dict(),
+            **(
+                {
+                    "calendar_coverage_receipt": (
+                        calendar_coverage_receipt.as_dict()
+                    ),
+                    "calendar_state_eligibility_receipt": (
+                        calendar_eligibility_receipt.as_dict()
+                    ),
+                }
+                if calendar_bound
+                else {}
+            ),
             "definition_release_receipt": definitions.receipt.as_dict(),
             "deferred_until": OUTCOME_DEFERRED_UNTIL,
             "economics_release_receipt": economics.release_receipt.as_dict(),
@@ -1663,7 +1983,11 @@ class FoundationOrchestrator:
             "outcomes_materialized": False,
             "prediction_ledger_read": False,
             "role": OUTCOME_SOURCE_ROLE,
-            "schema_version": OUTCOME_SOURCE_SCHEMA_VERSION,
+            "schema_version": (
+                OUTCOME_SOURCE_CALENDAR_SCHEMA_VERSION
+                if calendar_bound
+                else OUTCOME_SOURCE_SCHEMA_VERSION
+            ),
             "session_policy_receipt": session_policy.receipt.as_dict(),
         }
         payload = {
@@ -1673,14 +1997,17 @@ class FoundationOrchestrator:
         if "outcome_source_input" in state:
             receipt = _receipt(state["outcome_source_input"], name=phase)
         else:
-            if set(state) != {
+            expected_state = {
                 "raw",
                 "definitions",
                 "causal",
                 "status_eligibility",
                 "economics",
                 "feature_input",
-            }:
+            }
+            if calendar_bound:
+                expected_state.add("calendar_eligibility")
+            if set(state) != expected_state:
                 raise IntegrityError("foundation interval skips outcome-source phase")
             causal_manifest = causal_receipt.verify(self.boundary)
             causal_root = str(causal_manifest.metadata.get("logical_root", ""))
@@ -1695,7 +2022,11 @@ class FoundationOrchestrator:
                 stage,
                 phase="outcome_sources",
                 release_kind=OUTCOME_SOURCE_RELEASE_KIND,
-                schema_version=OUTCOME_SOURCE_SCHEMA_VERSION,
+                schema_version=(
+                    OUTCOME_SOURCE_CALENDAR_SCHEMA_VERSION
+                    if calendar_bound
+                    else OUTCOME_SOURCE_SCHEMA_VERSION
+                ),
                 logical_paths={
                     staged_name: f"{outcome_root}/{staged_name}"
                 },
@@ -1727,10 +2058,17 @@ def load_feature_source_input(
     receipt: VerifiedReleaseReceipt, *, boundary: RepoBoundary
 ) -> dict[str, object]:
     manifest = receipt.verify(boundary)
+    calendar_bound = (
+        manifest.schema_version == FEATURE_SOURCE_INPUT_CALENDAR_SCHEMA_VERSION
+    )
     if (
         receipt.phase != "features"
         or manifest.release_kind != FEATURE_SOURCE_INPUT_RELEASE_KIND
-        or manifest.schema_version != FEATURE_SOURCE_INPUT_SCHEMA_VERSION
+        or manifest.schema_version
+        not in {
+            FEATURE_SOURCE_INPUT_SCHEMA_VERSION,
+            FEATURE_SOURCE_INPUT_CALENDAR_SCHEMA_VERSION,
+        }
         or len(manifest.files) != 1
         or Path(manifest.files[0].logical_path).name
         != "feature_source_input.json"
@@ -1770,6 +2108,13 @@ def load_feature_source_input(
         "unresolved_upstream_rows",
         "uses_future_outcome",
     }
+    if calendar_bound:
+        expected.update(
+            {
+                "calendar_coverage_receipt",
+                "calendar_state_eligibility_receipt",
+            }
+        )
     if set(payload) != expected:
         raise IntegrityError("feature-source payload schema is invalid")
     feature_source_input_id = payload.pop("feature_source_input_id", None)
@@ -1783,7 +2128,7 @@ def load_feature_source_input(
         feature_source_input_id != sha256_json(payload)
         or feature_source_input_id
         != manifest.metadata["feature_source_input_id"]
-        or payload.get("schema_version") != FEATURE_SOURCE_INPUT_SCHEMA_VERSION
+        or payload.get("schema_version") != manifest.schema_version
         or payload.get("role") != FEATURE_SOURCE_INPUT_ROLE
         or payload.get("feature_spec_hash") != spec.spec_hash
         or payload.get("feature_spec_hash")
@@ -1809,6 +2154,17 @@ def load_feature_source_input(
         ("economics_release_receipt", ECONOMICS_RELEASE_KIND),
         ("foundation_policy_receipt", POLICY_RELEASE_KIND),
         ("session_policy_receipt", SESSION_RELEASE_KIND),
+        *(
+            (
+                ("calendar_coverage_receipt", CALENDAR_COVERAGE_RELEASE_KIND),
+                (
+                    "calendar_state_eligibility_receipt",
+                    CALENDAR_ELIGIBILITY_RELEASE_KIND,
+                ),
+            )
+            if calendar_bound
+            else ()
+        ),
     )
     dependencies: list[VerifiedReleaseReceipt] = []
     for name, expected_kind in receipt_fields:
@@ -1818,6 +2174,16 @@ def load_feature_source_input(
             raise IntegrityError("feature-source dependency kind is invalid")
         dependencies.append(dependency)
     causal = dependencies[0]
+    if calendar_bound:
+        coverage = dependencies[-2]
+        eligibility = dependencies[-1]
+        load_foundation_calendar_coverage(coverage, boundary=boundary)
+        load_calendar_state_eligibility(
+            eligibility,
+            boundary=boundary,
+            expected_causal_receipt=causal,
+            expected_coverage_receipt=coverage,
+        )
     if (
         manifest.metadata["causal_release_id"] != causal.release_id
         or manifest.source_release_ids
@@ -1832,10 +2198,17 @@ def load_outcome_source_input(
     receipt: VerifiedReleaseReceipt, *, boundary: RepoBoundary
 ) -> dict[str, object]:
     manifest = receipt.verify(boundary)
+    calendar_bound = (
+        manifest.schema_version == OUTCOME_SOURCE_CALENDAR_SCHEMA_VERSION
+    )
     if (
         receipt.phase != "outcome_sources"
         or manifest.release_kind != OUTCOME_SOURCE_RELEASE_KIND
-        or manifest.schema_version != OUTCOME_SOURCE_SCHEMA_VERSION
+        or manifest.schema_version
+        not in {
+            OUTCOME_SOURCE_SCHEMA_VERSION,
+            OUTCOME_SOURCE_CALENDAR_SCHEMA_VERSION,
+        }
         or len(manifest.files) != 1
         or Path(manifest.files[0].logical_path).name
         != "outcome_source_input.json"
@@ -1846,7 +2219,7 @@ def load_outcome_source_input(
         raise IntegrityError("outcome-source release contract is invalid")
     path = receipt.resolve_unique_filename("outcome_source_input.json", boundary)
     payload = _read_canonical_object(path, description="outcome-source input")
-    if set(payload) != {
+    expected = {
         "causal_release_receipt",
         "definition_release_receipt",
         "deferred_until",
@@ -1859,13 +2232,21 @@ def load_outcome_source_input(
         "role",
         "schema_version",
         "session_policy_receipt",
-    }:
+    }
+    if calendar_bound:
+        expected.update(
+            {
+                "calendar_coverage_receipt",
+                "calendar_state_eligibility_receipt",
+            }
+        )
+    if set(payload) != expected:
         raise IntegrityError("outcome-source payload schema is invalid")
     outcome_source_id = payload.pop("outcome_source_input_id", None)
     if (
         outcome_source_id != sha256_json(payload)
         or outcome_source_id != manifest.metadata["outcome_source_input_id"]
-        or payload.get("schema_version") != OUTCOME_SOURCE_SCHEMA_VERSION
+        or payload.get("schema_version") != manifest.schema_version
         or payload.get("role") != OUTCOME_SOURCE_ROLE
         or payload.get("deferred_until") != OUTCOME_DEFERRED_UNTIL
         or payload.get("labels_materialized") is not False
@@ -1879,6 +2260,17 @@ def load_outcome_source_input(
         ("economics_release_receipt", ECONOMICS_RELEASE_KIND),
         ("foundation_policy_receipt", POLICY_RELEASE_KIND),
         ("session_policy_receipt", SESSION_RELEASE_KIND),
+        *(
+            (
+                ("calendar_coverage_receipt", CALENDAR_COVERAGE_RELEASE_KIND),
+                (
+                    "calendar_state_eligibility_receipt",
+                    CALENDAR_ELIGIBILITY_RELEASE_KIND,
+                ),
+            )
+            if calendar_bound
+            else ()
+        ),
     )
     dependencies: list[VerifiedReleaseReceipt] = []
     for name, expected_kind in receipt_fields:
@@ -1888,6 +2280,16 @@ def load_outcome_source_input(
             raise IntegrityError("outcome-source dependency kind is invalid")
         dependencies.append(dependency)
     causal = dependencies[0]
+    if calendar_bound:
+        coverage = dependencies[-2]
+        eligibility = dependencies[-1]
+        load_foundation_calendar_coverage(coverage, boundary=boundary)
+        load_calendar_state_eligibility(
+            eligibility,
+            boundary=boundary,
+            expected_causal_receipt=causal,
+            expected_coverage_receipt=coverage,
+        )
     if (
         manifest.metadata["causal_release_id"] != causal.release_id
         or manifest.source_release_ids
@@ -1902,10 +2304,19 @@ def load_foundation_set(
     receipt: VerifiedReleaseReceipt, *, boundary: RepoBoundary
 ) -> dict[str, object]:
     manifest = receipt.verify(boundary)
+    if manifest.schema_version == FOUNDATION_OBSERVABILITY_SCHEMA_VERSION:
+        return load_foundation_observability_successor(
+            receipt,
+            boundary=boundary,
+        )
     supported_schema_versions = {
         FOUNDATION_SET_SCHEMA_VERSION,
         FOUNDATION_SUCCESSOR_SCHEMA_VERSION,
+        FOUNDATION_CALENDAR_SCHEMA_VERSION,
     }
+    calendar_bound = manifest.schema_version == FOUNDATION_CALENDAR_SCHEMA_VERSION
+    observability_bound = False
+    successor_like = manifest.schema_version == FOUNDATION_SUCCESSOR_SCHEMA_VERSION
     expected_metadata = {
         "feature_spec_hash",
         "coverage_matrix_id",
@@ -1915,8 +2326,16 @@ def load_foundation_set(
         "run_id",
         "source_dbn_release_id",
     }
-    if manifest.schema_version == FOUNDATION_SUCCESSOR_SCHEMA_VERSION:
+    if successor_like:
         expected_metadata.add("successor_provenance_id")
+    if observability_bound:
+        expected_metadata.update(
+            {
+                "historical_observability_coverage_id",
+                "historical_observability_policy_sha256",
+                "predecessor_foundation_release_id",
+            }
+        )
     if (
         manifest.release_kind != FOUNDATION_SET_RELEASE_KIND
         or manifest.schema_version not in supported_schema_versions
@@ -1960,8 +2379,18 @@ def load_foundation_set(
         "source_dbn_release_id",
         "wfa_execution_count",
     }
-    if manifest.schema_version == FOUNDATION_SUCCESSOR_SCHEMA_VERSION:
+    if successor_like:
         expected_payload_keys.add("successor_provenance")
+    if calendar_bound:
+        expected_payload_keys.add("calendar_coverage_receipt")
+    if observability_bound:
+        expected_payload_keys.update(
+            {
+                "historical_observability_coverage",
+                "historical_observability_policy_sha256",
+                "predecessor_foundation_release_id",
+            }
+        )
     if set(payload) != expected_payload_keys:
         raise IntegrityError("foundation-set payload schema is invalid")
     foundation_set_id = payload.pop("foundation_set_id", None)
@@ -2024,7 +2453,7 @@ def load_foundation_set(
         )
         is None
         or (
-            manifest.schema_version == FOUNDATION_SUCCESSOR_SCHEMA_VERSION
+            successor_like
             and (
                 not isinstance(payload.get("successor_provenance"), dict)
                 or payload["successor_provenance"].get("successor_provenance_id")
@@ -2070,6 +2499,18 @@ def load_foundation_set(
         if dependency.release_kind != expected_kind:
             raise IntegrityError("foundation-set top-level dependency kind is invalid")
         dependency_ids.add(dependency.release_id)
+    calendar_coverage_receipt: VerifiedReleaseReceipt | None = None
+    if calendar_bound:
+        calendar_coverage_receipt = _receipt(
+            payload.get("calendar_coverage_receipt"),
+            name="calendar_coverage",
+        )
+        calendar_coverage_receipt.verify(boundary)
+        if calendar_coverage_receipt.release_kind != CALENDAR_COVERAGE_RELEASE_KIND:
+            raise IntegrityError(
+                "foundation-set calendar coverage dependency kind is invalid"
+            )
+        dependency_ids.add(calendar_coverage_receipt.release_id)
     selection_manifest = top_receipts[0].verify(boundary)
     market_state_manifest = top_receipts[3].verify(boundary)
     market_state_contract = top_receipts[3].embedded_document(
@@ -2102,10 +2543,16 @@ def load_foundation_set(
     }
     if len(interval_markets_by_key) != len(raw_intervals):
         raise IntegrityError("foundation-set interval identity collection is invalid")
+    if calendar_coverage_receipt is not None:
+        load_foundation_calendar_coverage(
+            calendar_coverage_receipt,
+            boundary=boundary,
+            expected_intervals=raw_intervals,
+        )
     interval_policy_pairs: dict[
         str, tuple[VerifiedReleaseReceipt, VerifiedReleaseReceipt]
     ] = {}
-    if manifest.schema_version == FOUNDATION_SUCCESSOR_SCHEMA_VERSION:
+    if successor_like:
         from .successor_contract import (
             REBUILT_MARKETS,
             verify_foundation_successor_provenance,
@@ -2134,11 +2581,61 @@ def load_foundation_set(
         for policy_receipt, session_receipt in unique_component_pairs.values():
             dependency_ids.add(policy_receipt.release_id)
             dependency_ids.add(session_receipt.release_id)
+    if observability_bound:
+        observability_policy_path = (
+            boundary.active_root
+            / "configs"
+            / "historical_observability_policy.json"
+        )
+        observability_policy = load_historical_observability_policy(
+            observability_policy_path
+        )
+        policy_sha256 = sha256_file(observability_policy_path)
+        predecessor_release_id = payload.get("predecessor_foundation_release_id")
+        if (
+            payload.get("historical_observability_policy_sha256")
+            != policy_sha256
+            or manifest.metadata.get("historical_observability_policy_sha256")
+            != policy_sha256
+            or predecessor_release_id
+            != observability_policy["predecessor_foundation_release_id"]
+            or manifest.metadata.get("predecessor_foundation_release_id")
+            != predecessor_release_id
+        ):
+            raise IntegrityError(
+                "foundation historical-observability policy binding is invalid"
+            )
+        expected_observability_coverage = build_historical_observability_coverage(
+            {
+                "intervals": raw_intervals,
+                "schema_version": FOUNDATION_SUCCESSOR_SCHEMA_VERSION,
+                "source_dbn_release_id": payload.get("source_dbn_release_id"),
+            },
+            predecessor_release_id=str(predecessor_release_id),
+            policy=observability_policy,
+        )
+        if (
+            payload.get("historical_observability_coverage")
+            != expected_observability_coverage
+            or manifest.metadata.get("historical_observability_coverage_id")
+            != expected_observability_coverage[
+                "historical_observability_coverage_id"
+            ]
+        ):
+            raise IntegrityError(
+                "foundation historical-observability coverage is invalid"
+            )
+        dependency_ids.add(str(predecessor_release_id))
     interval_keys: list[str] = []
     receipt_fields = (
         "raw_release_receipt",
         "definition_release_receipt",
         "causal_release_receipt",
+        *(
+            ("calendar_eligibility_release_receipt",)
+            if calendar_bound
+            else ()
+        ),
         "status_eligibility_release_receipt",
         "economics_release_receipt",
         "feature_input_release_receipt",
@@ -2148,6 +2645,15 @@ def load_foundation_set(
         "raw_release_receipt": RAW_RELEASE_KIND,
         "definition_release_receipt": DEFINITION_RELEASE_KIND,
         "causal_release_receipt": CAUSAL_RELEASE_KIND,
+        **(
+            {
+                "calendar_eligibility_release_receipt": (
+                    CALENDAR_ELIGIBILITY_RELEASE_KIND
+                )
+            }
+            if calendar_bound
+            else {}
+        ),
         "status_eligibility_release_receipt": STATUS_ELIGIBILITY_RELEASE_KIND,
         "economics_release_receipt": ECONOMICS_RELEASE_KIND,
         "feature_input_release_receipt": FEATURE_SOURCE_INPUT_RELEASE_KIND,
@@ -2177,7 +2683,7 @@ def load_foundation_set(
     if len(run_interval_by_key) != len(run_contract_intervals):
         raise IntegrityError("foundation-set run query intervals are not unique")
     for raw_interval in raw_intervals:
-        if not isinstance(raw_interval, dict) or set(raw_interval) != {
+        expected_interval_keys = {
             "bar_source_path",
             "bar_source_sha256",
             "bar_query_contract_id",
@@ -2205,7 +2711,13 @@ def load_foundation_set(
             "status_unresolved_rows",
             "start",
             "year",
-        }:
+        }
+        if calendar_bound:
+            expected_interval_keys.add("calendar_eligibility_release_receipt")
+        if (
+            not isinstance(raw_interval, dict)
+            or set(raw_interval) != expected_interval_keys
+        ):
             raise IntegrityError("foundation-set interval schema is invalid")
         key = raw_interval.get("interval_key")
         market = raw_interval.get("market")
@@ -2345,6 +2857,18 @@ def load_foundation_set(
             "foundation_policy_receipt": interval_policy_receipt.as_dict(),
             "session_policy_receipt": interval_session_receipt.as_dict(),
         }
+        if calendar_bound:
+            assert calendar_coverage_receipt is not None
+            expected_outcome_dependencies.update(
+                {
+                    "calendar_coverage_receipt": (
+                        calendar_coverage_receipt.as_dict()
+                    ),
+                    "calendar_state_eligibility_receipt": parsed_receipts[
+                        "calendar_eligibility_release_receipt"
+                    ].as_dict(),
+                }
+            )
         if any(
             outcome_payload[name] != expected
             for name, expected in expected_outcome_dependencies.items()
@@ -2369,6 +2893,18 @@ def load_foundation_set(
             "foundation_policy_receipt": interval_policy_receipt.as_dict(),
             "session_policy_receipt": interval_session_receipt.as_dict(),
         }
+        if calendar_bound:
+            assert calendar_coverage_receipt is not None
+            expected_feature_dependencies.update(
+                {
+                    "calendar_coverage_receipt": (
+                        calendar_coverage_receipt.as_dict()
+                    ),
+                    "calendar_state_eligibility_receipt": parsed_receipts[
+                        "calendar_eligibility_release_receipt"
+                    ].as_dict(),
+                }
+            )
         if (
             any(
                 feature_payload[name] != expected
@@ -2378,6 +2914,20 @@ def load_foundation_set(
             != payload["feature_spec_hash"]
         ):
             raise IntegrityError("foundation-set feature-source binding is invalid")
+        if calendar_bound:
+            assert calendar_coverage_receipt is not None
+            eligibility_payload = load_calendar_state_eligibility(
+                parsed_receipts["calendar_eligibility_release_receipt"],
+                boundary=boundary,
+                expected_causal_receipt=parsed_receipts[
+                    "causal_release_receipt"
+                ],
+                expected_coverage_receipt=calendar_coverage_receipt,
+            )
+            if eligibility_payload["disposition"] != "ELIGIBLE":
+                raise IntegrityError(
+                    "foundation-set includes schedule-ineligible bars"
+                )
         status_contract = load_status_eligibility(
             parsed_receipts["status_eligibility_release_receipt"],
             causal_receipt=parsed_receipts["causal_release_receipt"],
@@ -2576,6 +3126,13 @@ def load_foundation_set(
         "status_source_market_year_fraction",
         "status_unresolved_rows",
     }
+    if calendar_bound:
+        coverage_gate_keys.update(
+            {
+                "calendar_contract_status",
+                "calendar_coverage_receipt_id",
+            }
+        )
     if (
         set(coverage_gate) != coverage_gate_keys
         or coverage_gate.get("archive_census") != expected_archive_census
@@ -2646,6 +3203,16 @@ def load_foundation_set(
             coverage_gate,
             coverage_policy=coverage_policy,
         )
+        or (
+            calendar_bound
+            and (
+                calendar_coverage_receipt is None
+                or coverage_gate.get("calendar_contract_status")
+                != "BOUND_AND_ALL_ROWS_OPEN"
+                or coverage_gate.get("calendar_coverage_receipt_id")
+                != calendar_coverage_receipt.receipt_id
+            )
+        )
     ):
         raise IntegrityError("foundation-set aggregate coverage census is invalid")
     if tuple(sorted(dependency_ids)) != manifest.source_release_ids:
@@ -2688,6 +3255,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--source-contract", type=Path, required=True)
     parser.add_argument("--source-dbn-manifest", type=Path, required=True)
     parser.add_argument("--source-selection-manifest", type=Path, required=True)
+    parser.add_argument("--calendar-index-manifest", type=Path, required=True)
     parser.add_argument("--feature-spec", type=Path, required=True)
     parser.add_argument("--batch-rows", type=int, default=100_000)
     parser.add_argument("--execute", action="store_true")
@@ -2733,12 +3301,21 @@ def main(argv: list[str] | None = None) -> int:
         raise IntegrityError(
             "selection release is not bound to the requested DBN release"
         )
+    calendar_index_receipt = VerifiedReleaseReceipt.from_manifest(
+        args.calendar_index_manifest, boundary
+    )
+    calendar_index_manifest = calendar_index_receipt.verify(boundary)
+    if calendar_index_manifest.release_kind != CALENDAR_INDEX_RELEASE_KIND:
+        raise IntegrityError(
+            "requested calendar index is not a verified exchange-calendar index"
+        )
     operation = OperationReceipt.issue_local(
         boundary,
         operation="PUBLISH_RELEASE",
         classification=OperationClassification.CONTROLLED_REBUILD_NON_ALPHA,
         scope={
             "feature_spec_hash": feature_spec.spec_hash,
+            "calendar_index_release_id": calendar_index_receipt.release_id,
             "selection_manifest_id": selection_manifest_id,
             "source_dbn_release_id": source_dbn_release_id,
         },
@@ -2751,6 +3328,7 @@ def main(argv: list[str] | None = None) -> int:
         source_dbn_manifest=args.source_dbn_manifest,
         source_selection_receipt=selection_receipt,
         feature_spec=feature_spec,
+        calendar_index_receipt=calendar_index_receipt,
     )
     print(canonical_bytes(result.as_dict()).decode("utf-8"))
     return 0

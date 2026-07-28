@@ -173,9 +173,11 @@ def _copy_configs(boundary) -> None:
     for name in (
         "contract_economics_rules.json",
         "environment.lock.json",
+        "exchange_calendar_policy.json",
         "foundation_policy.json",
         "foundation_coverage_policy.json",
         "foundation_resource_policy.json",
+        "historical_observability_policy.json",
         "known_anomalies.json",
         "mechanical_feature_spec.json",
         "provider_data_epochs.json",
@@ -369,6 +371,7 @@ def _orchestrator(boundary, operation_factory) -> FoundationOrchestrator:
         boundary=boundary,
         operation_receipt=operation_factory("PUBLISH_RELEASE"),
         batch_rows=1,
+        allow_legacy_calendar_unbound=True,
     )
 
 
@@ -433,6 +436,7 @@ def test_new_run_resolves_selection_once_and_capacity_failure_writes_no_checkpoi
         boundary=boundary,
         operation_receipt=operation_factory("PUBLISH_RELEASE"),
         batch_rows=2,
+        allow_legacy_calendar_unbound=True,
     )
     monkeypatch.setattr(
         resource_module.shutil,
@@ -1184,10 +1188,12 @@ def test_orchestrator_has_no_research_model_outcome_or_provider_execution_import
         elif isinstance(node, ast.ImportFrom):
             modules.add(node.module or "")
             imported_names.update(alias.name for alias in node.names)
+    historical_modules = {module for module in modules if "historical_" in module}
+    assert historical_modules <= {"historical_observability"}
     assert not any(
         token in module
         for module in modules
-        for token in ("historical_", ".research", ".inference", "requests", "urllib")
+        for token in (".research", ".inference", "requests", "urllib")
     )
     assert {
         "generate_causal_outcomes",

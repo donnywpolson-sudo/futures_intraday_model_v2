@@ -133,6 +133,7 @@ class FoundationSuccessorFinalizer:
             boundary=boundary,
             operation_receipt=operation_receipt,
             batch_rows=batch_rows,
+            allow_legacy_calendar_unbound=True,
         )
         self.publisher = self.base.publisher
         self.batch_rows = batch_rows

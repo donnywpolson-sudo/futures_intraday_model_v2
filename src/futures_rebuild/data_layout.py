@@ -28,7 +28,7 @@ from .locking import FileLease
 
 LAYOUT_VERSION = "2.0.0"
 MANIFEST_VERSION = "2.0.0"
-PHYSICAL_LAYOUT_REVISION = "2.2.0"
+PHYSICAL_LAYOUT_REVISION = "2.3.0"
 MANIFEST_ROOT = Path("manifests/data_releases")
 STAGING_ROOT = Path("state/data_publication_staging")
 PUBLICATION_INTENT_FILENAME = "_publication_intent.json"
@@ -36,6 +36,7 @@ PUBLICATION_INTENT_VERSION = "1.0.0"
 DATA_ROOTS = frozenset(
     {
         "causally_gated_normalized",
+        "calendar_eligibility",
         "dbn",
         "evaluations",
         "features",
@@ -59,6 +60,7 @@ _MARKET = r"[0-9A-Z]{1,16}"
 _YEAR = r"\d{4}"
 _LOGICAL_TEMPLATES = {
     "causally_gated_normalized": "data/causally_gated_normalized/{market}/{year}/{interval}/{filename}",
+    "calendar_eligibility": "data/calendar_eligibility/{market}/{year}/{interval}/{filename}",
     "dbn": "data/dbn/{family}/{market}/{year}/{filename}",
     "evaluations": "data/evaluations/{classification}/{trial-id}/{fold-id}/{filename}",
     "features": "data/features/{feature-spec-id}/{market}/{year}/{interval}/{filename}",
@@ -67,7 +69,7 @@ _LOGICAL_TEMPLATES = {
     "outcomes": "data/outcomes/{label-method-id}/{market}/{year}/{interval}/{filename}",
     "predictions": "data/predictions/{bundle-id}/{market}/{year}/{session-date}/{filename}",
     "raw": "data/raw/{market}/{year}/{interval}/{filename}",
-    "reference": "data/reference/{definitions|economics}/{filename}",
+    "reference": "data/reference/{definitions|economics|exchange_calendars}/{filename}",
     "status_eligibility": "data/status_eligibility/{market}/{year}/{interval}/{filename}",
 }
 _RELEASE_ID_PHYSICAL_TEMPLATES = {
@@ -96,7 +98,12 @@ _LOGICAL_PATTERNS = {
     "causally_gated_normalized": re.compile(
         rf"^data/causally_gated_normalized/{_MARKET}/{_YEAR}/{_SEGMENT}/{_SEGMENT}$"
     ),
-    "reference": re.compile(rf"^data/reference/(definitions|economics)/{_SEGMENT}$"),
+    "calendar_eligibility": re.compile(
+        rf"^data/calendar_eligibility/{_MARKET}/{_YEAR}/{_SEGMENT}/{_SEGMENT}$"
+    ),
+    "reference": re.compile(
+        rf"^data/reference/(definitions|economics|exchange_calendars)/{_SEGMENT}$"
+    ),
     "market_state": re.compile(
         rf"^data/market_state/(status|statistics)/{_MARKET}/{_YEAR}/{_SEGMENT}/{_SEGMENT}$"
     ),
