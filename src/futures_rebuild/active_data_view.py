@@ -30,6 +30,7 @@ from .canonical import (
 )
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
 from .locking import FileLease
+from .runtime_environment import require_locked_repository_environment
 
 
 CONTRACT_PATH = Path("configs/active_data_view_contract.json")
@@ -1740,6 +1741,7 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     root = args.repository_root.resolve(strict=True)
+    require_locked_repository_environment(root)
     verify_contract(root)
     if args.command == "policy-plan":
         from .active_data_plan import (

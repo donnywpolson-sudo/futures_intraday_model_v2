@@ -45,6 +45,7 @@ from .data_layout import (
     verify_data_release_manifest,
 )
 from .errors import IntegrityError
+from .runtime_environment import require_locked_repository_environment
 
 
 PILOT_EVIDENCE_SCHEMA = "causal_active_pilot_evidence/1.0.0"
@@ -697,6 +698,7 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     root = args.repository_root.resolve(strict=True)
+    require_locked_repository_environment(root)
     resolve = lambda path: path if path.is_absolute() else root / path
     pilot_evidence, pilot_records = build_pilot_evidence(
         repository_root=root,

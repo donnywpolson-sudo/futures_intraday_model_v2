@@ -41,16 +41,17 @@ state.
 
 ## Setup
 
-Use 64-bit Python 3.11.9 from the repository root.
+Use 64-bit Python 3.11.9 from the repository root. The Windows launcher is used
+only to create `.venv`; after that, commands use explicit local executable paths
+and do not depend on activation or `PATH`.
 
 ```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --require-hashes -r requirements.sha256.lock
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --require-hashes -r requirements.sha256.lock
 $env:SETUPTOOLS_USE_DISTUTILS = 'stdlib'
-python -m pip install --no-deps --no-build-isolation -e .
+.\.venv\Scripts\python.exe -m pip install --no-deps --no-build-isolation -e .
 Remove-Item Env:SETUPTOOLS_USE_DISTUTILS
-python -m pytest -q
+.\.venv\Scripts\python.exe -m pytest -q
 ```
 
 `requirements.sha256.lock` is the complete exact runtime, test, provider,
@@ -83,9 +84,9 @@ The validated profile view is `configs/alpha_tiered.yaml`; the canonical
 admission authority is `configs/research_universe_contract.json`.
 
 ```powershell
-futures-pipeline list
-futures-pipeline validate-profiles
-futures-pipeline smoke
+.\.venv\Scripts\futures-pipeline.exe list
+.\.venv\Scripts\futures-pipeline.exe validate-profiles
+.\.venv\Scripts\futures-pipeline.exe smoke
 ```
 
 The default Phase 1A-11 interface is synthetic mechanics only and has no
@@ -95,18 +96,17 @@ condition.
 
 ## Daily use
 
-Activate the pinned environment and inspect current state before work:
+Use the pinned executables and inspect current state before work:
 
 ```powershell
-.\.venv\Scripts\Activate.ps1
 git status --short --untracked-files=all
-futures-pipeline validate-profiles
+.\.venv\Scripts\futures-pipeline.exe validate-profiles
 ```
 
 Before reviewing a proposed commit, run the affected targeted tests, then:
 
 ```powershell
-python -m pytest
+.\.venv\Scripts\python.exe -m pytest
 git diff --check
 ```
 
@@ -133,10 +133,10 @@ Root `MASTER_AUDIT.md` is the canonical non-authorizing state audit. Run it with
 a frozen invocation:
 
 ```powershell
-futures-master-audit --invocation configs/master_audit_v3/invocation.example.json
+.\.venv\Scripts\futures-master-audit.exe --invocation configs/master_audit_v3/invocation.example.json
 .\.venv\Scripts\python.exe -m pytest -q --junitxml=.pytest_tmp/full-suite.xml
-futures-meta-audit --junitxml .pytest_tmp/full-suite.xml --suite-evidence-output .pytest_tmp/full-suite-evidence.json
-futures-retirement-audit
+.\.venv\Scripts\futures-meta-audit.exe --junitxml .pytest_tmp/full-suite.xml --suite-evidence-output .pytest_tmp/full-suite-evidence.json
+.\.venv\Scripts\futures-retirement-audit.exe
 ```
 
 The example intentionally fails closed because it omits the exact universe
@@ -150,9 +150,9 @@ repository.
 ## Futures Live Cockpit
 
 ```powershell
-futures-live-cockpit --self-check
-futures-live-cockpit --demo
-futures-live-cockpit --live-smoke --approval <approved-receipt.json> --result-output reports/live_cockpit/bounded_live_smoke_result_attempt_2.json
+.\.venv\Scripts\futures-live-cockpit.exe --self-check
+.\.venv\Scripts\futures-live-cockpit.exe --demo
+.\.venv\Scripts\futures-live-cockpit.exe --live-smoke --approval <approved-receipt.json> --result-output reports/live_cockpit/bounded_live_smoke_result_attempt_2.json
 powershell -NoProfile -File scripts/build_live_cockpit.ps1
 powershell -NoProfile -File scripts/install_live_cockpit.ps1 -Upgrade -WhatIf
 powershell -NoProfile -File scripts/activate_live_cockpit.ps1 -PreparedInstallPath <prepared-version> -LiveSmokeResult reports/live_cockpit/bounded_live_smoke_result_attempt_2.json -WhatIf

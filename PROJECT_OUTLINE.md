@@ -173,30 +173,31 @@ an authoritative artifact.
 
 ## Runnable commands
 
-From the repository root in the pinned Python 3.11.9 environment:
+From the repository root, use explicit executables from the pinned Python
+3.11.9 environment without depending on activation or `PATH`:
 
 ```powershell
-futures-pipeline list
-futures-pipeline validate-profiles
-futures-pipeline --output reports/pipeline_audit/synthetic-phase1a-11.json smoke
-futures-pipeline phase1a
-futures-pipeline phase1b
-futures-pipeline phase2
-futures-pipeline phase3
-futures-pipeline phase4
-futures-pipeline phase5
-futures-pipeline phase6
-futures-pipeline phase7
-futures-pipeline phase8
-futures-pipeline phase9
-futures-pipeline phase10
-futures-pipeline phase11
+.\.venv\Scripts\futures-pipeline.exe list
+.\.venv\Scripts\futures-pipeline.exe validate-profiles
+.\.venv\Scripts\futures-pipeline.exe --output reports/pipeline_audit/synthetic-phase1a-11.json smoke
+.\.venv\Scripts\futures-pipeline.exe phase1a
+.\.venv\Scripts\futures-pipeline.exe phase1b
+.\.venv\Scripts\futures-pipeline.exe phase2
+.\.venv\Scripts\futures-pipeline.exe phase3
+.\.venv\Scripts\futures-pipeline.exe phase4
+.\.venv\Scripts\futures-pipeline.exe phase5
+.\.venv\Scripts\futures-pipeline.exe phase6
+.\.venv\Scripts\futures-pipeline.exe phase7
+.\.venv\Scripts\futures-pipeline.exe phase8
+.\.venv\Scripts\futures-pipeline.exe phase9
+.\.venv\Scripts\futures-pipeline.exe phase10
+.\.venv\Scripts\futures-pipeline.exe phase11
 ```
 
 The global options precede the subcommand when using the module directly:
 
 ```powershell
-python -m futures_rebuild.pipeline --output reports/pipeline_audit/smoke.json smoke
+.\.venv\Scripts\python.exe -m futures_rebuild.pipeline --output reports/pipeline_audit/smoke.json smoke
 ```
 
 Outputs are create-only. Choose a new path for each run.
@@ -204,10 +205,10 @@ Outputs are create-only. Choose a new path for each run.
 ## Audit commands
 
 ```powershell
-futures-master-audit --invocation <frozen-invocation.json>
+.\.venv\Scripts\futures-master-audit.exe --invocation <frozen-invocation.json>
 .\.venv\Scripts\python.exe -m pytest -q --junitxml=.pytest_tmp/full-suite.xml
-futures-meta-audit --junitxml .pytest_tmp/full-suite.xml --suite-evidence-output .pytest_tmp/full-suite-evidence.json
-futures-retirement-audit
+.\.venv\Scripts\futures-meta-audit.exe --junitxml .pytest_tmp/full-suite.xml --suite-evidence-output .pytest_tmp/full-suite-evidence.json
+.\.venv\Scripts\futures-retirement-audit.exe
 ```
 
 The Master Audit classifies one exact target without granting authority. The
@@ -219,9 +220,9 @@ repository.
 ## Cockpit workflow
 
 ```powershell
-futures-live-cockpit --self-check
-futures-live-cockpit --demo
-futures-live-cockpit --live-smoke --approval <approved-receipt.json> --result-output reports/live_cockpit/bounded_live_smoke_result_attempt_2.json
+.\.venv\Scripts\futures-live-cockpit.exe --self-check
+.\.venv\Scripts\futures-live-cockpit.exe --demo
+.\.venv\Scripts\futures-live-cockpit.exe --live-smoke --approval <approved-receipt.json> --result-output reports/live_cockpit/bounded_live_smoke_result_attempt_2.json
 powershell -NoProfile -File scripts/build_live_cockpit.ps1
 powershell -NoProfile -File scripts/install_live_cockpit.ps1 -Upgrade -WhatIf
 powershell -NoProfile -File scripts/activate_live_cockpit.ps1 -PreparedInstallPath <prepared-version> -LiveSmokeResult reports/live_cockpit/bounded_live_smoke_result_attempt_2.json -WhatIf

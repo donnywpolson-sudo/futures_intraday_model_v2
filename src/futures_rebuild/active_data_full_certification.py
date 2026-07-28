@@ -28,6 +28,7 @@ from .canonical import (
     sha256_json,
 )
 from .errors import IntegrityError, UnauthorizedOperation
+from .runtime_environment import require_locked_repository_environment
 
 
 FULL_REPORT_SCHEMA = "causal_active_full_certification_report/1.0.0"
@@ -312,6 +313,7 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     root = args.repository_root.resolve(strict=True)
+    require_locked_repository_environment(root)
     plan_path = args.plan if args.plan.is_absolute() else root / args.plan
     approval_path = (
         args.approval if args.approval.is_absolute() else root / args.approval

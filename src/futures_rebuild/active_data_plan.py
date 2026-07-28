@@ -70,6 +70,7 @@ IMPLEMENTATION_PATHS = (
     "src/futures_rebuild/foundation/snapshot.py",
     "src/futures_rebuild/foundation/support.py",
     "src/futures_rebuild/locking.py",
+    "src/futures_rebuild/runtime_environment.py",
 )
 ENVIRONMENT_PATHS = (
     "configs/dependency_lock_receipt.json",
