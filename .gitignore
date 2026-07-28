@@ -12,6 +12,7 @@ venv/
 .hypothesis/
 .mypy_cache/
 .ruff_cache/
+reports/audits/final/
 htmlcov/
 .codex/
 
