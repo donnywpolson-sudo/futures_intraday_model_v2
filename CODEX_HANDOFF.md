@@ -4,119 +4,127 @@
 
 - Repository: `C:\Users\donny\Desktop\futures_intraday_model_v2`
 - Branch: `codex/standalone-v2-completion`
-- Current pre-closure HEAD:
-  `63a326dc07639e95dc8e2991eece1bef4e91b6b7`.
-- The approved 41-market DBN successor is
-  `086282eaef7b36a61626f88d93d06c93b87c1cb3407c936d065d0d1b9d98599e`:
-  4,491 DBNs plus 4,491 sidecars across 41 markets.
-- The complete schema-v5 foundation release is
+- Pre-closure HEAD: `3b8fee583c80e37aeae521c1e1cf042ac407e30d`
+- Session 1 milestone commits:
+  - cockpit activation: `2ea5964741b6567877fc824fdbb0a955a1a0ac06`;
+  - calendar and empirical foundation:
+    `d2ef4e1a385ae459041aa321b23bccc9d8982e87`;
+  - non-authorizing causal predecessor:
+    `42dac0a5b874b190aece0523e4da36b15871d084`;
+  - steady-state audit and operating documents:
+    `e0cee4129e5072afb0df0c6f2b5afcdf5d9097c7`.
+- Accepted 41-market DBN release:
+  `086282eaef7b36a61626f88d93d06c93b87c1cb3407c936d065d0d1b9d98599e`
+  (4,491 DBNs plus 4,491 sidecars).
+- Accepted schema-5 foundation predecessor:
   `78806ef01714c72f6da537c1b6e6f8b2e903b14728822b0daa31b4c6c75a8909`;
-  manifest SHA-256 is
-  `bfa86450b77ab4b19c6e17e641aab6684895d721188497a664eb4b37ab4c8ce9`.
-  Its bounded successor run rebuilt 118 eight-market intervals, reused 565
-  contract-compatible intervals, assembled all 683 intervals, and made zero
-  provider calls.
-- Economics-policy successor:
-  `747bb91353c7ef7271e3760aed6ecdfd177a4e333a557f42bd4ffd15d69e5556`.
-  Session-policy successor:
-  `0986b5220fc84397763c0195e3ca86acfa7f5004b6e9ab414ec7bc2f2a7a6632`.
-- The research-scope gate is 82/82 for 2025 onward. The archive-wide status
-  census remains explicit and no longer incorrectly blocks that scoped gate.
-- Local `api.env` is ignored, v2-local, and has a nonempty
-  `DATABENTO_API_KEY`. Never print, stage, commit, package, archive, install, or
-  report the key.
+  manifest SHA-256:
+  `bfa86450b77ab4b19c6e17e641aab6684895d721188497a664eb4b37ab4c8ce9`;
+  683 immutable intervals.
+- Active official current/forward CME calendar index:
+  `2b1ec84769b655dd0e73789522126aa1650ae2209210dd5c4c49d0ae67bc423c`;
+  pointer:
+  `ca0044c4a6bf197a62a9d5b01896226d2b4c4295aa0f6873d3b6908844b45dcc`.
+- The observation-only cockpit smoke and separately approved activation passed;
+  prior installation and rollback metadata remain preserved.
 
-## Cockpit evidence and active gate
+## Empirical historical-observability successor
 
-- Approved smoke attempt 1 is immutable failed evidence under
-  `manifests/live_cockpit_smoke_attempts/65a2e0b45a68f595d49609822fe27ad054cfebe156a7eb7da32c84e2b9e624ac/`.
-  Result ID:
-  `e3647f34a14da41df8f9a3434d54fd1ff39581709604b450a6c6451cd4fdf74f`;
-  result SHA-256:
-  `1dc195a4b6aba23d879eaa0d139018efe7bbf3d6a2687cafdc7d0795394a3752`.
-  It failed because source Python, not the approved package, executed. It made
-  exactly two bounded live sessions, made no history/cache request, shut both
-  sessions down, and did not authorize or perform cutover.
-- Package identity is now checked before provider construction. Pending
-  approval, source runtime, wrong executable hash, result-path drift, and
-  create-only collisions all fail before Databento starts.
-- The offline self-check state probe now returns a bounded fail-closed result
-  when its state directory is unwritable; it no longer spins in Windows
-  temporary-file creation.
-- Corrected prepared installation:
-  `C:\Users\donny\AppData\Local\Programs\FuturesLiveCockpit\20260726-022002-ab15788e`.
-- Corrected executable SHA-256:
-  `f028897a7807ae75bcec986e203b37ffc18c697248309e6da542b530c160e9f2`.
-- Active successor plan ID:
-  `967ab4ed95ab198adbdad8657e36c164620a690a90edd40c6aa72de83d0ff8ff`;
-  plan-file SHA-256:
-  `ab15788ee839298c32e6561bc5eb993a9902a3ba539899d8fdc0d6b8c704407e`.
-- The user supplied the exact successor approval token on 2026-07-25. Its plan
-  ID, plan-file SHA-256, and executable SHA-256 match the active successor
-  artifacts. Preserve the token unbound and unconsumed until the Sunday Globex
-  reopen so the required ES-focus leg can produce meaningful live evidence.
-  This session exposes no Codex scheduling/automation tool, so a later task
-  wake or user resume is required; do not substitute a raw Windows scheduled
-  task for the gated interactive verification.
-  Exact-token UTF-8 SHA-256 / future `user_authorization_id`:
-  `fd3a6b3cd3c61c08c49fd001b665a232e25065a3e9c6f6b5c7025cb1e8e43542`.
-  `configs/live_cockpit_smoke_approval.json` remains pending meanwhile. The
-  installed package contains the exact active plan, contains no credential,
-  points its locator to the ignored v2-local `api.env`, and passes offline
-  self-check.
-- Both Desktop and Start Menu shortcuts still target preserved version
-  `20260714-115629`; no auto-start shortcut exists.
-- Cockpit tests: 88 passed and 1 skipped only because Node is unavailable.
-  Targeted self-check/approval/cutover tests and operational-document tests
-  pass. `git diff --check` passes.
-- A pre-closure full suite completed in 459.6 seconds with 470 passed,
-  1 Node-only skip, 0 failed, and 0 errors. The Master Audit receipt verifier
-  was then corrected to accept the project’s actual self-hashed approval
-  receipt while independently verifying the receipt file hash; 14 targeted
-  Master/Meta tests pass after that change. Therefore the full suite must be
-  rerun once more after live closure before final Meta Audit publication.
-- The completed offline implementation was committed locally, without a push,
-  as milestone `544ebbb6eff8fd37e3f13c220b27d9225ebbb596`
-  (`Complete 41-market foundation and prepare cockpit cutover`). Immediately
-  before that commit, the exact staged content passed the fresh full suite:
-  471 passed, 1 Node-only skip, 0 failed, and 0 errors in 395.9 seconds.
-  Runtime foundation checkpoints, batch stdout logs, installed/package output,
-  DBNs, and the ignored credential were excluded. A final suite is still
-  required after the approved smoke/cutover state is recorded.
-- Synthetic Phase 1A-11 evidence is complete at
-  `reports/pipeline/synthetic_phase1a_11.json`, run ID
-  `c1f4680580e74d16fe5e99a99debe2193fb3d8679dfed64338e272c9dc4d0c62`;
-  it grants no provider or real-history authority.
-- Dependency locking passes. The ignored local key is absent from Git,
-  repository/package text, and the prepared installation. Operational v2 trees
-  contain zero reparse points. The retirement inventory now records all 4,491
-  DBNs and 4,491 sidecars as migrated immutable v2 evidence.
+- The user selected immutable Databento DBN observability instead of continuing
+  the incomplete public historical CME archive search.
+- Approved semantic plan:
+  `reports/foundation/dbn_empirical_historical_observability_successor_plan.json`
+  - plan ID:
+    `e990d135fce49cd809c4b122c72f3077ef49216eb9d691bf677e87582a4493c2`
+  - plan SHA-256:
+    `73f9f3c83366913b2873667ae4545079d13b3546923f19a75019779819ccf0dd`
+  - approval receipt ID:
+    `43dc2fd562ef2ae513534bb7c2b2768251c678ed0d69627e4f82e5a38044cebc`
+- The policy is offline and non-authorizing:
+  - actual decoded DBN rows only;
+  - no fill, interpolation, synthetic open/close, or closed-state inference;
+  - unobserved time is missing, not closed;
+  - session rollover groups trade dates but is not trading-hours authority;
+  - no official historical CME open/close/halt/holiday claim;
+  - the activated official CME calendar remains current/forward cockpit
+    scheduling authority only.
+- Derived predecessor census:
+  - 683 physical intervals across 41 markets;
+  - 650 available market-years;
+  - 644 research-admissible market-years;
+  - 568 pre-status intervals;
+  - 115 status-scope physical intervals representing 82 market-years
+    (41 markets for 2025 and 2026; 2026 has immutable source splits);
+  - 562 research-admissible pre-status candidate market-years;
+  - 198 research-admissible discovery market-years;
+  - 41 locked holdout and 41 forward-only market-years;
+  - six quarantined market-years remain observable but not
+    research-admissible.
+- Accepted schema-7 empirical-observability foundation:
+  `637f16b3c23c9f2215858f49754965738fe9c00095661d7a29d6877d566ae5e3`;
+  manifest SHA-256:
+  `969079b6576417658ede21e63b00b9d2211856157d01ef10c3ebb0d77cca2ad9`.
+  Its publication approval receipt is
+  `f995fc23e007dbb4b153b043767c4327f2ed42cd75c36906f1e6d9992f5ca002`.
+  Existing schema-4/5/6 foundations remain reproducible but fail readiness
+  with `HISTORICAL_OBSERVABILITY_CONTRACT_NOT_BOUND`.
+- This semantic operation authorizes no network/provider request, historical
+  payload read, foundation publication, readiness publication, outcomes,
+  models, predictions, holdout access, staging, commit, or push.
 
-## Continue in this order
+## Contracts and closure evidence
 
-1. The exact user approval has been received:
-   `APPROVE BOUNDED OBSERVATION-ONLY DATABENTO SMOKE SUCCESSOR 967ab4ed95ab198adbdad8657e36c164620a690a90edd40c6aa72de83d0ff8ff SHA256 ab15788ee839298c32e6561bc5eb993a9902a3ba539899d8fdc0d6b8c704407e EXECUTABLE f028897a7807ae75bcec986e203b37ffc18c697248309e6da542b530c160e9f2`
-2. After the Sunday Globex reopen, first reverify the active plan and
-   executable hashes, absence of the attempt-2 result, old shortcut targets,
-   zero cockpit processes, and ES market availability. Then bind that exact
-   token into the active approval receipt and run only the installed 41-market
-   overview / ES-focus smoke, for at most 120 seconds and two sessions,
-   publishing create-only result
-   `reports/live_cockpit/bounded_live_smoke_result_attempt_2.json`.
-3. Only a package-bound `PASS` may activate the prepared installation. Verify
-   both shortcuts, observation-only behavior, clean shutdown, and rollback.
-   Otherwise preserve the current shortcuts and installations.
-4. Run the full pinned suite, dependency/secret/external-path scans,
-   `git diff --check`, all active Master Audits, Meta Audit, and retirement
-   audit. Remediate all Critical/High or P0/P1 gaps.
-5. Stage only reviewed explicit paths, create the authorized local closure
-   commit and clean-HEAD receipts, and do not push.
+- Use the pinned environment: `.\.venv\Scripts\python.exe` (Databento 0.78.0).
+  System Python currently resolves Databento 0.79.0 and is not authoritative.
+- Universe/cohort contract SHA-256:
+  `86e38f8732bd05b10d0faa2eec93e0bd0db6aeac3e56a13fbaed8e69555035d4`.
+- Operational profile SHA-256:
+  `df406dcd31826bfdb83d1237ecee1c41db668bf27bfd0d04127df893a9c64954`.
+- Active current/forward calendar:
+  - index release:
+    `2b1ec84769b655dd0e73789522126aa1650ae2209210dd5c4c49d0ae67bc423c`;
+  - index manifest SHA-256:
+    `51ad8a036eadcb9f11831ede6dcb65575c2e796deb4bc03ad27f87c3fb7d25a7`;
+  - policy SHA-256:
+    `4c3420d301390d7cb6f7602f61a00abe9d6b09ae2defb2b19e916ca948aee6d5`.
+- Data-inventory baseline is DBN release
+  `086282eaef7b36a61626f88d93d06c93b87c1cb3407c936d065d0d1b9d98599e`,
+  manifest SHA-256
+  `c2584d5e1a65103f8651a871de6f704ac31ec2c2f7ec5c2e1a941aae6a4dc8fd`,
+  with 4,491 DBNs, 4,491 sidecars, 8,982 files, and 25,592,717,852 bytes.
+- The pinned full suite passed before final receipt generation: 600 passed,
+  one existing Node-only skip, zero failed, and zero errors.
+- Final closure requires create-only reports at:
+  - `reports/audits/final/foundation_ready.json`;
+  - `reports/audits/final/historical_research_ready.json`;
+  - `reports/audits/final/observation_cockpit_ready.json`;
+  - `reports/audits/final/meta_master_audit.json`;
+  - `reports/audits/final/retirement_readiness.json`.
+  The first three and Meta Audit must be `SUPPORTABLE`; retirement must be
+  `LEGACY_RETIREMENT_READY`. Treat any absent or different result as a blocker.
+- `data/active` is absent. No current writer, provider operation, publication,
+  recovery process, or active lock exists. Historical staging and recovery
+  artifacts are retained as inert evidence.
+- Preserve every prior calendar/archive attempt and failure artifact as inert
+  evidence. Do not resume the CME/Internet Archive historical search.
+- `configs/causal_market_year_materialization_approval.json` remains
+  `PENDING_EXACT_HASH_BOUND_APPROVAL`; it is predecessor evidence only and
+  authorizes no materialization, cutover, or publication.
+- No remote push and no legacy deletion.
 
-## Stop lines
+## Session 2
 
-- No further provider call without the exact successor approval above.
-- No real-history alpha/WFA/OOS, prediction materialization, candidate sealing,
-  holdout/forward access, trading, or orders.
-- No shortcut cutover before the successor smoke passes.
-- No credential exposure, legacy write/delete, remote push, immutable release
-  overwrite, link-based migration, or destructive cleanup.
+After all final reports above pass and `git status --short` is empty, continue
+in the session named `Review data path format`:
+
+1. Read `AGENTS.md`, `PROJECT_OUTLINE.md`, this handoff, and live repository
+   evidence.
+2. Bind Session 2 to schema-7 foundation release
+   `637f16b3c23c9f2215858f49754965738fe9c00095661d7a29d6877d566ae5e3`.
+3. Reconcile the actual 650/562/6/41/41/198 counts; do not force a planning
+   snapshot.
+4. Treat the pending causal-materialization plan as non-authorizing predecessor
+   evidence and stop at its next exact approval boundary.
+5. Do not mutate `data/active`, read outcomes, fit models, access holdout or
+   forward rows, call a provider, push, trade, or delete the legacy repository
+   without separate exact authority.
