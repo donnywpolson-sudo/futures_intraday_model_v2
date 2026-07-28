@@ -34,6 +34,7 @@ futures-pipeline = "futures_rebuild.pipeline:main"
 futures-live-cockpit = "futures_rebuild.live_cockpit.app:main"
 futures-retirement-audit = "futures_rebuild.retirement:main"
 futures-meta-audit = "futures_rebuild.meta_audit:main"
+futures-active-view = "futures_rebuild.active_data_view:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

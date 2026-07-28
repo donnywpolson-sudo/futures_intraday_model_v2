@@ -114,17 +114,31 @@
 
 ## Session 2
 
-After all final reports above pass and `git status --short` is empty, continue
-in the session named `Review data path format`:
+The active-view preparation and bounded pilot are complete:
 
-1. Read `AGENTS.md`, `PROJECT_OUTLINE.md`, this handoff, and live repository
-   evidence.
-2. Bind Session 2 to schema-7 foundation release
-   `637f16b3c23c9f2215858f49754965738fe9c00095661d7a29d6877d566ae5e3`.
-3. Reconcile the actual 650/562/6/41/41/198 counts; do not force a planning
-   snapshot.
-4. Treat the pending causal-materialization plan as non-authorizing predecessor
-   evidence and stop at its next exact approval boundary.
-5. Do not mutate `data/active`, read outcomes, fit models, access holdout or
-   forward rows, call a provider, push, trade, or delete the legacy repository
-   without separate exact authority.
+- Accepted price-only policy release:
+  `cb3e9ad469301debdb1550efdce3df06b0b1abb61906ead2d949d04ac53a77a2`.
+- Passing pilot plan:
+  `87b6335dea77d6acb6715be8c858617a227016757532549c436e7a9bc0d382a3`;
+  scope:
+  `32dcf8b9336c545c0a8bbe4f6b35e5dcfd1470a28ba98b002c7d6d2278e5eab1`.
+- `6A/2010` and `ES/2022` passed twice. Correctness projections, regenerated
+  Parquet hashes, and content-validation receipts were identical; only measured
+  runtime/memory fields and IDs derived from those measurements differed.
+- Pending measured full-certification plan:
+  `55670c1c5e9f36b3447639bea284ecc214cfdf80a11435c6563fdb80e0e6a915`.
+  It reconciles 650 total entries, 562 candidates, six quarantines, 41 holdout,
+  41 forward-only, and 198 selection-eligible entries. Its single-worker ETA is
+  46,800 seconds and its approval duration ceiling is 72,000 seconds.
+- Full pinned suite: 636 passed and two environment-only skips. Fresh
+  Foundation, Historical Research, and Observation Cockpit Master Audits are
+  `SUPPORTABLE`; Meta Audit is `SUPPORTABLE` with zero Critical/High or P0/P1
+  gaps.
+- `data/active` remains absent. Pilot state is preserved locally under the
+  ignored certification-state root. No provider call, protected payload read,
+  outcome access, model fit, publication, archive, deletion, trading action, or
+  push occurred.
+
+Next boundary: obtain exact approval for the pending full-certification plan.
+That approval authorizes Stage 6 certification only. It does not authorize
+materialization or publication.

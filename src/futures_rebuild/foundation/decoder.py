@@ -226,6 +226,8 @@ def _chunks(
     chunks = (decoded,) if isinstance(decoded, np.ndarray) else decoded
     expected_dtypes = {
         "definition": {DEFINITION_DTYPE_V1, DEFINITION_DTYPE_V3},
+        "ohlcv-1d": {OHLCV_DTYPE},
+        "ohlcv-1h": {OHLCV_DTYPE},
         "ohlcv-1m": {OHLCV_DTYPE},
         "status": {STATUS_DTYPE},
         "statistics": {STATISTICS_DTYPE},

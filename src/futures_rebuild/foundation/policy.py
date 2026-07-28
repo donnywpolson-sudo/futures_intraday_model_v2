@@ -110,7 +110,12 @@ _LIFECYCLE_QUARANTINE_START_NS = _utc_date_ns("2015-11-22")
 _LIFECYCLE_QUARANTINE_END_NS = _MDP3_START_NS
 
 
-def _validate_provider_data_epochs(path: Path, expected_sha256: str) -> None:
+def _validate_provider_data_epochs_payload(payload: object) -> None:
+    if payload != PROVIDER_DATA_EPOCH_CONTRACT:
+        raise IntegrityError("provider data-epoch contract is not exact")
+
+
+def _validate_provider_data_epochs(path: Path, expected_sha256: str) -> object:
     if re.fullmatch(r"[0-9a-f]{64}", expected_sha256) is None:
         raise IntegrityError("provider data-epoch hash is invalid")
     if sha256_file(path) != expected_sha256:
@@ -119,8 +124,8 @@ def _validate_provider_data_epochs(path: Path, expected_sha256: str) -> None:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise IntegrityError("provider data-epoch JSON is invalid") from exc
-    if payload != PROVIDER_DATA_EPOCH_CONTRACT:
-        raise IntegrityError("provider data-epoch contract is not exact")
+    _validate_provider_data_epochs_payload(payload)
+    return payload
 
 
 @dataclass(frozen=True)
@@ -156,6 +161,27 @@ class FoundationPolicy:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             raise IntegrityError("foundation policy JSON is invalid") from exc
+        epoch_hash = (
+            payload.get("provider_data_epochs_sha256", "")
+            if isinstance(payload, dict)
+            else ""
+        )
+        epoch_payload = _validate_provider_data_epochs(
+            path.parent / "provider_data_epochs.json",
+            str(epoch_hash),
+        )
+        return cls.from_payload(
+            payload,
+            provider_data_epochs=epoch_payload,
+        )
+
+    @classmethod
+    def from_payload(
+        cls,
+        payload: object,
+        *,
+        provider_data_epochs: object,
+    ) -> "FoundationPolicy":
         expected = {
             "canonical_research_schemas",
             "continuous_contract",
@@ -216,7 +242,7 @@ class FoundationPolicy:
             or re.fullmatch(r"[0-9a-f]{64}", epoch_hash) is None
         ):
             raise IntegrityError("known-anomaly policy hash is invalid")
-        _validate_provider_data_epochs(path.parent / "provider_data_epochs.json", epoch_hash)
+        _validate_provider_data_epochs_payload(provider_data_epochs)
         return cls(
             dataset="GLBX.MDP3",
             interval=timedelta(microseconds=interval_ns // 1000),
@@ -293,6 +319,14 @@ class KnownAnomalyPolicy:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             raise IntegrityError("known-anomaly policy JSON is invalid") from exc
+        return cls.from_payload(payload, policy_hash=observed_hash)
+
+    @classmethod
+    def from_payload(
+        cls, payload: object, *, policy_hash: str
+    ) -> "KnownAnomalyPolicy":
+        if re.fullmatch(r"[0-9a-f]{64}", policy_hash) is None:
+            raise IntegrityError("known-anomaly policy hash is invalid")
         expected = {
             "contract_version",
             "default_disposition",
@@ -331,7 +365,7 @@ class KnownAnomalyPolicy:
             normalized.append({"market": market, "year": year})
         if normalized != sorted(normalized, key=lambda item: (str(item["market"]), int(item["year"]))):
             raise IntegrityError("known-anomaly families are not canonical")
-        return cls(frozenset(families), observed_hash)
+        return cls(frozenset(families), policy_hash)
 
     def is_quarantined(self, market: str, year: int) -> bool:
         return (market, year) in self.families

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from datetime import date, datetime, time, timedelta
 from pathlib import Path
@@ -11,7 +12,13 @@ from typing import Mapping
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from ..boundary import RepoBoundary
-from ..canonical import sha256_file, sha256_json
+from ..canonical import (
+    assert_no_linklike_ancestors,
+    canonical_bytes,
+    fsync_directory,
+    sha256_file,
+    sha256_json,
+)
 from ..errors import ContractError, IntegrityError
 from ..data_layout import (
     DataReleaseManifest as ReleaseManifest,
@@ -32,6 +39,75 @@ POLICY_FILENAMES = {
     "provider_data_epochs.json",
     "session_policy.json",
 }
+
+
+def _verified_policy_release(
+    receipt: VerifiedReleaseReceipt, *, boundary: RepoBoundary
+) -> tuple[ReleaseManifest, str]:
+    manifest = receipt.verify(boundary)
+    if (
+        manifest.release_kind != POLICY_RELEASE_KIND
+        or manifest.schema_version != POLICY_SCHEMA_VERSION
+        or manifest.files
+        or set(manifest.embedded_documents) != POLICY_FILENAMES
+        or set(manifest.metadata) != {
+            "policy_payload_release_id",
+            "policy_set_id",
+        }
+    ):
+        raise IntegrityError("foundation policy release file/kind contract is invalid")
+    payload_release_id = manifest.metadata["policy_payload_release_id"]
+    policy_set_id = manifest.metadata["policy_set_id"]
+    if (
+        not isinstance(payload_release_id, str)
+        or re.fullmatch(r"[0-9a-f]{64}", payload_release_id) is None
+        or not isinstance(policy_set_id, str)
+        or re.fullmatch(r"[0-9a-f]{64}", policy_set_id) is None
+    ):
+        raise IntegrityError("foundation policy release identity is invalid")
+    return manifest, payload_release_id
+
+
+def _materialize_embedded_policy_documents(
+    *,
+    boundary: RepoBoundary,
+    workspace: Path,
+    documents: Mapping[str, object],
+) -> Path:
+    policy_root = boundary.assert_active_path(
+        workspace,
+        purpose="embedded certification policy workspace",
+        subtree="state",
+    )
+    assert_no_linklike_ancestors(policy_root)
+    try:
+        policy_root.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as exc:
+        raise IntegrityError(
+            "embedded certification policy workspace already exists"
+        ) from exc
+    for name in sorted(POLICY_FILENAMES):
+        encoded = canonical_bytes(documents[name]) + b"\n"
+        path = policy_root / name
+        descriptor = os.open(
+            path,
+            os.O_CREAT
+            | os.O_EXCL
+            | os.O_WRONLY
+            | getattr(os, "O_BINARY", 0),
+        )
+        try:
+            remaining = memoryview(encoded)
+            while remaining:
+                written = os.write(descriptor, remaining)
+                if written <= 0:
+                    raise OSError("embedded policy write made no progress")
+                remaining = remaining[written:]
+            os.fsync(descriptor)
+        finally:
+            os.close(descriptor)
+    fsync_directory(policy_root)
+    return policy_root
 
 
 class VerifiedFoundationPolicies:
@@ -58,24 +134,9 @@ class VerifiedFoundationPolicies:
     def from_release(
         cls, receipt: VerifiedReleaseReceipt, *, boundary: RepoBoundary
     ) -> "VerifiedFoundationPolicies":
-        manifest = receipt.verify(boundary)
-        if (
-            manifest.release_kind != POLICY_RELEASE_KIND
-            or manifest.schema_version != POLICY_SCHEMA_VERSION
-            or manifest.files
-            or set(manifest.embedded_documents) != POLICY_FILENAMES
-            or set(manifest.metadata) != {
-                "policy_payload_release_id",
-                "policy_set_id",
-            }
-        ):
-            raise IntegrityError("foundation policy release file/kind contract is invalid")
-        payload_release_id = manifest.metadata["policy_payload_release_id"]
-        if (
-            not isinstance(payload_release_id, str)
-            or re.fullmatch(r"[0-9a-f]{64}", payload_release_id) is None
-        ):
-            raise IntegrityError("foundation policy payload release ID is invalid")
+        manifest, payload_release_id = _verified_policy_release(
+            receipt, boundary=boundary
+        )
         config_root = boundary.active_root / "configs"
         active_documents: dict[str, object] = {}
         for name in POLICY_FILENAMES:
@@ -87,15 +148,61 @@ class VerifiedFoundationPolicies:
                 raise IntegrityError("active foundation policy JSON is invalid") from exc
         if dict(manifest.embedded_documents) != active_documents:
             raise IntegrityError("active foundation policies differ from their release")
-        foundation = FoundationPolicy.from_file(config_root / "foundation_policy.json")
+        return cls._from_policy_root(
+            receipt=receipt,
+            boundary=boundary,
+            manifest=manifest,
+            payload_release_id=payload_release_id,
+            policy_root=config_root,
+        )
+
+    @classmethod
+    def from_embedded_release(
+        cls,
+        receipt: VerifiedReleaseReceipt,
+        *,
+        boundary: RepoBoundary,
+        workspace: Path,
+        required_market: str,
+    ) -> "VerifiedFoundationPolicies":
+        manifest, payload_release_id = _verified_policy_release(
+            receipt, boundary=boundary
+        )
+        policy_root = _materialize_embedded_policy_documents(
+            boundary=boundary,
+            workspace=workspace,
+            documents=manifest.embedded_documents,
+        )
+        return cls._from_embedded_documents(
+            receipt=receipt,
+            boundary=boundary,
+            manifest=manifest,
+            documents=manifest.embedded_documents,
+            policy_root=policy_root,
+            required_market=required_market,
+        )
+
+    @classmethod
+    def _from_policy_root(
+        cls,
+        *,
+        receipt: VerifiedReleaseReceipt,
+        boundary: RepoBoundary,
+        manifest: ReleaseManifest,
+        payload_release_id: str,
+        policy_root: Path,
+    ) -> "VerifiedFoundationPolicies":
+        foundation = FoundationPolicy.from_file(
+            policy_root / "foundation_policy.json"
+        )
         anomalies = KnownAnomalyPolicy.from_file(
-            config_root / "known_anomalies.json",
+            policy_root / "known_anomalies.json",
             expected_sha256=foundation.known_anomalies_sha256,
         )
         economics = EconomicsRuleBook.from_file(
-            config_root / "contract_economics_rules.json"
+            policy_root / "contract_economics_rules.json"
         )
-        rules = _load_session_rules(config_root / "session_policy.json")
+        rules = _load_session_rules(policy_root / "session_policy.json")
         core = {
             "anomalies_sha256": anomalies.policy_hash,
             "economics_rulebook_hash": economics.rulebook_hash,
@@ -103,7 +210,7 @@ class VerifiedFoundationPolicies:
             "provider_data_epochs_sha256": foundation.provider_data_epochs_sha256,
             "release_id": payload_release_id,
             "session_policy_sha256": sha256_file(
-                config_root / "session_policy.json"
+                policy_root / "session_policy.json"
             ),
         }
         policy_set_id = sha256_json(core)
@@ -117,6 +224,46 @@ class VerifiedFoundationPolicies:
             economics=economics,
             session_rules=rules,
             policy_set_id=policy_set_id,
+        )
+
+    @classmethod
+    def _from_embedded_documents(
+        cls,
+        *,
+        receipt: VerifiedReleaseReceipt,
+        boundary: RepoBoundary,
+        manifest: ReleaseManifest,
+        documents: Mapping[str, object],
+        policy_root: Path,
+        required_market: str,
+    ) -> "VerifiedFoundationPolicies":
+        foundation = FoundationPolicy.from_payload(
+            documents["foundation_policy.json"],
+            provider_data_epochs=documents["provider_data_epochs.json"],
+        )
+        anomalies = KnownAnomalyPolicy.from_payload(
+            documents["known_anomalies.json"],
+            policy_hash=foundation.known_anomalies_sha256,
+        )
+        economics = EconomicsRuleBook.from_embedded_payload(
+            documents["contract_economics_rules.json"],
+            required_market=required_market,
+        )
+        rules = _load_session_rules_payload(documents["session_policy.json"])
+        for name in sorted(POLICY_FILENAMES):
+            path = policy_root / name
+            if path.read_bytes() != canonical_bytes(documents[name]) + b"\n":
+                raise IntegrityError(
+                    "materialized embedded policy differs from its release"
+                )
+        return cls(
+            receipt=receipt,
+            boundary=boundary,
+            foundation=foundation,
+            anomalies=anomalies,
+            economics=economics,
+            session_rules=rules,
+            policy_set_id=str(manifest.metadata["policy_set_id"]),
         )
 
     def verify(self) -> None:
@@ -142,6 +289,12 @@ def _load_session_rules(path: Path) -> Mapping[str, tuple[str, time, int]]:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
         raise IntegrityError("foundation session policy JSON is invalid") from exc
+    return _load_session_rules_payload(payload)
+
+
+def _load_session_rules_payload(
+    payload: object,
+) -> Mapping[str, tuple[str, time, int]]:
     if (
         not isinstance(payload, dict)
         or set(payload) != {"policy_version", "rules"}

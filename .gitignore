@@ -92,6 +92,7 @@ data/evaluations/*
 manifests/data_releases/*
 state/data_publication_staging/*
 state/data_cutover/
+state/active_data_view_certification/*
 state/foundation_runs_v2/*
 state/foundation_successors/*
 state/lock_recovery/
