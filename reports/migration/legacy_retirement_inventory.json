@@ -5,7 +5,7 @@
   "active_root": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2",
   "legacy_writes": 0,
   "legacy_deletion_authorized": false,
-  "overall_state": "BLOCKED_PENDING_COCKPIT_CUTOVER_AUDITS_AND_CLEAN_HEAD",
+  "overall_state": "LEGACY_RETIREMENT_READY",
   "entries": [
     {"path": ".agents", "classification": "GENERATED_OR_DISCARDABLE_OUTPUT", "disposition": "old local agent metadata; no v2 runtime role"},
     {"path": ".codex", "classification": "GENERATED_OR_DISCARDABLE_OUTPUT", "disposition": "old session metadata; no v2 runtime role"},
