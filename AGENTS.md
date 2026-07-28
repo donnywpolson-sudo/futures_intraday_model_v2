@@ -3,7 +3,12 @@
 ## Working defaults
 
 - Keep work focused on the latest request. Search before opening broad file
-  sets and prefer small, safe, reviewable changes.
+  sets, read only the smallest relevant ranges, summarize rather than repeat
+  large outputs, and stop gathering context once sufficient evidence resolves
+  the task. Prefer small, safe, reviewable changes.
+- Reuse existing code, contracts, and configuration paths before adding helpers,
+  abstractions, dependencies, or configuration layers. Add new structure for a
+  demonstrated current requirement, not speculative reuse.
 - Inspect the repository root and `git status --short` before edits. Preserve
   unrelated user changes, accepted releases, credentials, lockfiles, runtime
   state, and generated evidence.
@@ -59,6 +64,13 @@
 - Do not move, rename, delete, or replace an active contract or interface while
   a hash-bound run depends on it. A successor requires an explicit migration
   boundary, compatibility plan where needed, and fresh validation.
+- Treat labels and targets, feature computation, session and roll normalization,
+  causal gates, split/purge/embargo logic, trading-cost math, position policy,
+  timestamp alignment, missing-value handling, and evaluation semantics as
+  protected research logic. Do not change them through incidental cleanup or
+  refactoring. An intentional semantic change requires an explicit scoped task,
+  a successor boundary for affected hash-bound evidence, targeted contract
+  tests, and refreshed downstream hashes and audits.
 
 ## Safety and authorization
 
@@ -94,10 +106,21 @@ If the required scope or approval is absent, stale, mismatched, or already
 consumed, stop before the boundary. Approval for one authority class never
 authorizes another.
 
+After any command that can mutate data, reports, models, predictions, configs,
+manifests, runtime state, packages, or installations, reconcile Git status and
+every declared output location. Stop before staging or publication if any change
+is unexplained or exposes a credential, runtime artifact, or undeclared output.
+
 ## Research integrity
 
 - Existing historical data and observed results are discovery evidence.
   Synthetic tests prove mechanics only and never alpha.
+- Historical research uses immutable Databento DBN observability, not an
+  official historical CME session calendar. Admit only actual decoded source
+  rows; never fill missing time, synthesize opens/closes, or infer that an
+  unobserved period was closed. Session rollover groups trade dates but is not
+  trading-hours authority. The activated CME calendar remains authoritative
+  only for current/forward cockpit scheduling.
 - A real-data attempt is any evaluation or model operation using non-synthetic
   historical, live, provider, or imported data. Before it begins,
   `state/trial_registry` must contain a durable declaration binding its
@@ -113,7 +136,11 @@ authorizes another.
   results to rescue traditional-universe failure.
 - Model-trust evidence requires complete trial genealogy, simple baselines,
   negative controls, multiplicity handling, net costs, dependence-aware
-  uncertainty, portfolio/risk review, and finite stop rules.
+  uncertainty, portfolio/risk review, and finite stop rules. Added model,
+  feature, or pipeline complexity must demonstrate material out-of-sample
+  benefit net of costs versus the simplest valid baseline. When results are
+  materially equivalent, prefer fewer assumptions, parameters, data
+  dependencies, interfaces, and failure modes.
 - Missing, stale, mismatched, incomplete, ambiguous, or future-known inputs fail
   closed before evaluation or publication. Observation/inference may instead
   return an explicit reasoned abstention without a score or trade.
@@ -133,12 +160,23 @@ authorizes another.
 
 - Prefer primary evidence: exact files, schemas, manifests, hashes, command
   output, and independently reproduced calculations.
+- Agreement among AI reviewers is not independent evidence. Cross-model review
+  is an adversarial challenge only; audit conclusions must trace to exact
+  repository evidence or independently reproducible checks.
 - Distinguish `Verified`, `Inferred`, `Assumed`, and `Not established`. Do not
   present inference, absence, warnings, synthetic mechanics, gross-only results,
   or producer assertions as readiness or model-trust evidence.
+- Before broad architecture, data-source, modeling, refactor, or trust-changing
+  work, evaluate the actual problem, hidden assumptions, failure modes,
+  complexity and maintenance cost, expected value, and the smallest lower-risk
+  alternative. Push back on low-value or architecture-conflicting work; keep
+  narrow mechanical tasks direct.
 - Preserve contradictions, negative results, stopped branches, exclusions,
   limitations, and failed attempts. A renamed model, new directory, or expanded
   universe does not reset trial history.
+- If the same diagnostic approach fails twice, change strategy. Distinguish
+  shell, sandbox, permission, launcher, and tooling failures that occur before
+  the target program starts from project validation failures.
 - Report the exact rejected item and the smallest missing approval, input, or
   evidence when a gate fails.
 

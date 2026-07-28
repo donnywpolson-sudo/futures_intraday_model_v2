@@ -1,6 +1,6 @@
 {
   "schema_version": "systematic_futures_audit/3.0.0",
-  "registry_id": "V2-MASTER-AUDIT-STAGE-MATRIX-3.1.0",
+  "registry_id": "V2-MASTER-AUDIT-STAGE-MATRIX-3.2.0",
   "target_states": {
     "FOUNDATION_READY": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3", "G3.S1", "G3.S2", "G3.S3", "G8.S1", "G8.S2", "G8.S4"],
     "HISTORICAL_RESEARCH_READY": ["G1.S1", "G1.S2", "G1.S3", "G2.S1", "G2.S2", "G2.S3", "G3.S1", "G3.S2", "G3.S3", "G4.S1", "G4.S2", "G4.S3", "G4.S4"],
@@ -21,7 +21,7 @@
     {"gate_id": "G2", "title": "POINT_IN_TIME_CAUSALITY_AND_FUTURES_IDENTITY", "subchecks": [
       {"subcheck_id": "G2.S1", "title": "BITEMPORAL_VINTAGE_CONTROL"},
       {"subcheck_id": "G2.S2", "title": "DATA_POPULATION_UNIVERSE_AND_TARGET_INTEGRITY"},
-      {"subcheck_id": "G2.S3", "title": "FUTURES_SESSION_CONTRACT_AND_ROLL_CONTROL"}
+      {"subcheck_id": "G2.S3", "title": "FUTURES_EMPIRICAL_HISTORICAL_OBSERVABILITY_AND_CURRENT_FORWARD_CALENDAR_CONTROL"}
     ]},
     {"gate_id": "G3", "title": "SPLIT_FEATURE_LABEL_AND_PIPELINE_ISOLATION", "subchecks": [
       {"subcheck_id": "G3.S1", "title": "FEATURE_TRANSFORM_AND_SERVING_POPULATION_INTEGRITY"},
@@ -56,9 +56,9 @@
     ]},
     {"gate_id": "G8", "title": "TARGET_STATE_READINESS_GOVERNANCE_AND_RECOVERY", "subchecks": [
       {"subcheck_id": "G8.S1", "title": "STAGE_CAPABILITY_AND_SERVING_PARITY"},
-      {"subcheck_id": "G8.S2", "title": "MONITORING_AND_CHANGE_DETECTION"},
+      {"subcheck_id": "G8.S2", "title": "OBSERVABILITY_BINDING_MONITORING_AND_CURRENT_FORWARD_CALENDAR_FRESHNESS"},
       {"subcheck_id": "G8.S3", "title": "ORDER_STATE_INVARIANTS_AND_OPERATIONAL_RECOVERY"},
-      {"subcheck_id": "G8.S4", "title": "CHANGE_CONTROL_INDEPENDENT_VALIDATION_AND_AUDIT_TRAIL"},
+      {"subcheck_id": "G8.S4", "title": "SUCCESSOR_CHANGE_CONTROL_INDEPENDENT_VALIDATION_AND_AUDIT_TRAIL"},
       {"subcheck_id": "G8.S5", "title": "COCKPIT_DEPENDENCY_AND_ASSET_INTEGRITY"},
       {"subcheck_id": "G8.S6", "title": "COCKPIT_APPROVED_41_MARKET_CONFIGURATION"},
       {"subcheck_id": "G8.S7", "title": "COCKPIT_SECRET_ISOLATION_AND_CREDENTIAL_LOCATION"},

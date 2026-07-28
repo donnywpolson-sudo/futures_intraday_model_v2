@@ -113,6 +113,20 @@ git diff --check
 Do not stage `api.env`, immutable data payloads, runtime checkpoints, build
 output, or installed cockpit files.
 
+## Historical observability and current calendar
+
+Historical research is based on rows actually decoded from the accepted,
+immutable Databento DBN release. Missing time stays missing; the pipeline does
+not fill gaps, synthesize opens or closes, or interpret no rows as a closed
+exchange. Pre-2025 intervals are classified
+`CAUSAL_PRICE_ONLY_EMPIRICAL_OBSERVABILITY`; status-era intervals may be
+`CAUSAL_PRICE_PLUS_STATUS_GATED_EMPIRICAL_OBSERVABILITY`.
+
+This is deliberately not an official historical CME session calendar. The
+activated CME calendar remains authoritative for current/forward cockpit
+scheduling. Publishing the schema-7 historical-observability foundation still
+requires its own exact hash-bound approval.
+
 ## Master audits
 
 Root `MASTER_AUDIT.md` is the canonical non-authorizing state audit. Run it with
@@ -143,6 +157,14 @@ powershell -NoProfile -File scripts/build_live_cockpit.ps1
 powershell -NoProfile -File scripts/install_live_cockpit.ps1 -Upgrade -WhatIf
 powershell -NoProfile -File scripts/activate_live_cockpit.ps1 -PreparedInstallPath <prepared-version> -LiveSmokeResult reports/live_cockpit/bounded_live_smoke_result_attempt_2.json -WhatIf
 ```
+
+The packaged application is published directly to `FuturesLiveCockpit/`. Its
+only top-level items are `FuturesLiveCockpit.exe` and `_internal/`.
+This directory is installation input, not the authenticated launch target, and
+intentionally contains no credential locator. After an approved preparation
+and activation, start normal authenticated use through the Desktop or Start
+Menu shortcut; the installed version contains only a non-secret locator back
+to the ignored v2-local `api.env`.
 
 The cockpit provides search/grouping, live charts, history controls, bounded
 cache, persisted preferences, explicit provider errors, prediction abstention,

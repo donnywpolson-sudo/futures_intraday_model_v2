@@ -40,12 +40,16 @@
       "control_id": "META.C03",
       "severity": "Critical",
       "priority": "P0",
-      "threat": "Future-known identity, session, roll, definition, or universe information leaks into earlier decisions.",
-      "master_terms": ["market-year admission as of the decision", "continuous symbols", "future-known definitions"],
+      "threat": "Future-known, stale, incomplete, or product-wrong exchange-calendar, identity, roll, definition, or universe information leaks into decisions.",
+      "master_terms": ["market-year admission as of the decision", "continuous symbols", "empirical-observability policy"],
       "matrix_subchecks": ["G2.S1", "G2.S2", "G2.S3"],
       "tests": [
         "tests/test_time_and_identity.py::test_future_mapping_and_definition_cannot_change_earlier_identity",
-        "tests/test_time_and_identity.py::test_utc_midnight_mapping_change_is_a_hard_contract_segment_boundary"
+        "tests/test_time_and_identity.py::test_utc_midnight_mapping_change_is_a_hard_contract_segment_boundary",
+        "tests/test_exchange_calendar.py::test_calendar_regular_early_close_pause_and_full_closure",
+        "tests/test_exchange_calendar.py::test_unknown_state_and_ambiguous_mapping_fail_closed",
+        "tests/test_exchange_calendar.py::test_verified_calendar_covers_exact_41_market_universe",
+        "tests/test_foundation_historical_observability.py::test_coverage_uses_manifest_observability_without_calendar_claims"
       ]
     },
     {
@@ -112,12 +116,16 @@
       "control_id": "META.C09",
       "severity": "High",
       "priority": "P1",
-      "threat": "Serving drift, stale state, monitoring precedence, or failed recovery silently changes behavior.",
-      "master_terms": ["serving parity", "change detection", "recovery"],
+      "threat": "Serving drift, stale current/forward CME source state, missing empirical-observability binding, monitoring precedence, or failed recovery silently changes behavior.",
+      "master_terms": ["serving parity", "schema-7 foundation", "current/forward calendar evidence", "recovery"],
       "matrix_subchecks": ["G8.S1", "G8.S2", "G8.S3", "G8.S4"],
       "tests": [
         "tests/test_research_robustness_monitoring.py::test_monitoring_precedence_and_threshold_boundaries",
-        "tests/test_release_locking.py::test_second_writer_fails_and_only_proven_dead_stale_lock_is_quarantined"
+        "tests/test_release_locking.py::test_second_writer_fails_and_only_proven_dead_stale_lock_is_quarantined",
+        "tests/test_exchange_calendar.py::test_calendar_correction_invalidates_only_intersecting_foundation_dates",
+        "tests/test_exchange_calendar.py::test_freshness_requires_72_hour_holiday_revalidation_and_far_notice_coverage",
+        "tests/test_readiness.py::test_legacy_foundation_is_classified_historical_observability_contract_not_bound",
+        "tests/test_foundation_historical_observability.py::test_policy_and_coverage_tampering_fail_closed"
       ]
     },
     {

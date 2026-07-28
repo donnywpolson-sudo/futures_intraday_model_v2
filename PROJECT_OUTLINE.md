@@ -54,6 +54,11 @@ authority.
 - `configs/alpha_tiered.yaml` is a validated profile view of that universe.
 - Foundation coverage, status-scope, session, identity, and economics contracts
   define acceptance for the causal foundation.
+- `configs/historical_observability_policy.json` classifies historical
+  foundation rows as immutable DBN observability. It does not establish
+  official historical CME open, close, halt, pause, or holiday states.
+- `configs/exchange_calendar_policy.json` reserves the activated official CME
+  calendar for current/forward cockpit scheduling.
 - `manifests/data_releases/**` contains content-addressed release descriptors;
   accepted payloads live in v2-owned immutable release roots.
 - `state/trial_registry/**` declares every real-data attempt before outcomes are
@@ -111,7 +116,7 @@ or selection eligibility, or unlock holdout/forward data.
 | --- | --- | --- | --- |
 | 1A | Preflight exact provider requests; ingest and verify immutable DBN/sidecar pairs | `futures-pipeline phase1a` | DBN release manifests and acquisition evidence |
 | 1B | Convert accepted DBNs and independently reconcile rows, schemas, definitions, hashes, and sidecars | `futures-pipeline phase1b` | immutable raw releases and ingest reports |
-| 2 | Build point-in-time causal, session-normalized, actual-contract data | `futures-pipeline phase2` | causal foundation releases |
+| 2 | Build point-in-time causal, trade-date-grouped, actual-contract data from observed DBN rows | `futures-pipeline phase2` | empirical-observability causal foundation releases |
 | 3 | Build outcomes with explicit entry lag, horizon, maturity, and unresolved states | `futures-pipeline phase3` | separate labeled/outcome-source releases |
 | 4 | Build leakage-audited causal feature matrices without outcome access | `futures-pipeline phase4` | immutable feature releases |
 | 5 | Freeze nested chronological split plans with purge and embargo | `futures-pipeline phase5` | split-plan manifests |
@@ -140,6 +145,12 @@ an authoritative artifact.
 - Phase 1B preserves source event semantics. Phase 2 is the first phase allowed
   to apply causal session normalization, explicit missing/degraded states, and
   trainability gates.
+- Historical Phase 2 admits actual decoded DBN rows only. It performs no gap
+  filling, interpolation, synthetic open/close generation, or inference that
+  unobserved time was closed. Its trade-date rollover is grouping logic, not
+  official historical exchange-hours authority.
+- The activated official CME calendar governs current/forward cockpit
+  scheduling only and is not retrofitted onto historical research releases.
 - Missing, sparse, degraded, unresolved, and partially decoded states remain in
   coverage denominators. They cannot become trainable through a global waiver.
 - Feature builders may not discover or read outcome, label, prediction, or
@@ -215,6 +226,9 @@ powershell -NoProfile -File scripts/build_live_cockpit.ps1
 powershell -NoProfile -File scripts/install_live_cockpit.ps1 -Upgrade -WhatIf
 powershell -NoProfile -File scripts/activate_live_cockpit.ps1 -PreparedInstallPath <prepared-version> -LiveSmokeResult reports/live_cockpit/bounded_live_smoke_result_attempt_2.json -WhatIf
 ```
+
+Packaging publishes `FuturesLiveCockpit/` with exactly
+`FuturesLiveCockpit.exe` and `_internal/` at its top level.
 
 The normal UI is observation-only and may read live GLBX.MDP3 data through the
 v2-local credential locator. A provider-backed smoke requires its exact durable

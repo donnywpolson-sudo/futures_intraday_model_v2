@@ -1,6 +1,6 @@
 # Meta Audit of the Systematic Futures Master Audit
 
-Version: 1.1.0
+Version: 1.2.0
 Mode: independent, evidence-only prompt-quality review
 
 ## Mission
@@ -51,8 +51,10 @@ The blind standard must cover:
 
 - exact evidence provenance, immutable releases, canonical schemas, hashes,
   reproducibility, dependency locking, and clean committed state;
-- point-in-time universe admission, market/contract identity, sessions, rolls,
-  source availability, missingness, and causal timing;
+- point-in-time universe admission, market/contract identity, immutable
+  historical DBN observability, missing-is-not-closed handling, no synthetic
+  open/close rows, current/forward CME captures, exact product mappings,
+  activated calendar segments, rolls, source freshness, and causal timing;
 - feature/outcome/prediction isolation, chronological nested splits,
   purge/embargo, train-only fitting, and serving parity;
 - complete trial genealogy, researcher degrees of freedom, multiplicity,
@@ -80,6 +82,11 @@ At minimum, attempt mutations that:
   success flag for independent evidence;
 - inject future-known identity/session/roll state, feature access to outcomes,
   an unregistered real-data trial, a hidden holdout query, or satellite rescue;
+- substitute a historical observability contract that fills time, calls
+  unobserved periods closed, claims official CME authority, drops quarantines,
+  or binds a wrong predecessor; or substitute a stale/incomplete
+  current/forward CME capture, ambiguous product mapping, unknown schedule
+  state, or no-op successor;
 - expose a credential through Git, logs, reports, cache, package, install, or
   shortcut metadata;
 - add an order/broker dependency, unbounded reconnect, cache mutation, corrupt
