@@ -8,7 +8,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 if (-not $BuildRoot) {
-    $BuildRoot = Join-Path $repoRoot 'dist\FuturesLiveCockpit'
+    $BuildRoot = Join-Path $repoRoot 'FuturesLiveCockpit'
 }
 if (-not $CredentialFile) {
     $CredentialFile = Join-Path $repoRoot 'api.env'

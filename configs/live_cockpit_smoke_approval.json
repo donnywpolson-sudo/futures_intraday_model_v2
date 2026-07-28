@@ -1,10 +1,10 @@
 {
   "schema_version": "futures_live_cockpit_smoke_approval/1.1.0",
-  "status": "PENDING_APPROVAL",
+  "status": "APPROVED",
   "operation": "RUN_BOUNDED_OBSERVATION_ONLY_DATABENTO_SMOKE_SUCCESSOR",
   "plan_id": "967ab4ed95ab198adbdad8657e36c164620a690a90edd40c6aa72de83d0ff8ff",
   "plan_sha256": "ab15788ee839298c32e6561bc5eb993a9902a3ba539899d8fdc0d6b8c704407e",
-  "approved_at": null,
-  "user_authorization_id": null,
-  "approval_receipt_id": null
+  "approved_at": "2026-07-26T04:43:07Z",
+  "user_authorization_id": "fd3a6b3cd3c61c08c49fd001b665a232e25065a3e9c6f6b5c7025cb1e8e43542",
+  "approval_receipt_id": "09a76af6b628e013ad3edebbbbd557d37bd101f724a2c9709587b341223ea4c9"
 }

@@ -2093,6 +2093,8 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "v5.1.0" in vendor
     assert ".market-grouping" in stylesheet
     assert ".market-group-drag" in stylesheet
-    spec = Path("FuturesLiveCockpit.spec").read_text(encoding="utf-8")
-    assert "configs/alpha_tiered.yaml" in spec
+    spec = Path(
+        "FuturesLiveCockpit/_internal/FuturesLiveCockpit.spec"
+    ).read_text(encoding="utf-8")
+    assert "'configs' / 'alpha_tiered.yaml'" in spec
     assert MAX_RENDER_HZ == 15.0

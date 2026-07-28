@@ -1,14 +1,28 @@
 # -*- mode: python ; coding: utf-8 -*-
 
+from pathlib import Path
+
+
+repo_root = Path(SPECPATH).parents[1]
+support_root = repo_root / 'FuturesLiveCockpit' / '_internal'
+
 a = Analysis(
-    ['futures_live_cockpit.py'],
-    pathex=['src'],
+    [str(support_root / 'futures_live_cockpit.py')],
+    pathex=[str(repo_root / 'src')],
     binaries=[],
     datas=[
-        ('configs/alpha_tiered.yaml', 'configs'),
-        ('configs/live_cockpit_smoke_plan.json', 'configs'),
-        ('src/futures_rebuild/live_cockpit/assets', 'futures_rebuild/live_cockpit/assets'),
-        ('THIRD_PARTY_NOTICES.md', '.'),
+        (str(repo_root / 'configs' / 'alpha_tiered.yaml'), 'configs'),
+        (
+            str(repo_root / 'configs' / 'live_cockpit_smoke_plan.json'),
+            'configs',
+        ),
+        (
+            str(repo_root / 'src' / 'futures_rebuild' / 'live_cockpit' / 'assets'),
+            'futures_rebuild/live_cockpit/assets',
+        ),
+        (str(repo_root / 'THIRD_PARTY_NOTICES.md'), '.'),
+        (str(support_root / 'FuturesLiveCockpit.spec'), '.'),
+        (str(support_root / 'futures_live_cockpit.py'), '.'),
     ],
     hiddenimports=[
         'databento',

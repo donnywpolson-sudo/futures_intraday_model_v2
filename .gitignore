@@ -41,6 +41,12 @@ secrets/
 # Build and packaging output
 build/
 dist/
+tmp/
+FuturesLiveCockpit/*
+!FuturesLiveCockpit/_internal/
+FuturesLiveCockpit/_internal/*
+!FuturesLiveCockpit/_internal/FuturesLiveCockpit.spec
+!FuturesLiveCockpit/_internal/futures_live_cockpit.py
 *.log
 *.pkg
 *.pyz

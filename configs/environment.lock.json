@@ -12,12 +12,13 @@
     "pywebview==6.2.1"
   ],
   "packaging_dependencies": ["PyInstaller==6.21.0"],
+  "calendar_document_dependencies": ["pypdf==6.14.2"],
   "build_dependencies": ["setuptools==82.0.1"],
   "test_dependencies": ["pytest==9.0.3"],
   "complete_binary_closure": {
-    "package_count": 45,
+    "package_count": 46,
     "requirements_path": "requirements.sha256.lock",
-    "requirements_sha256": "681440477df36c528a01e6aca94a92b0555d7cf5aada94dcb61b7f9288cb6d04",
+    "requirements_sha256": "6878b63fdb37635daad82c404821ab773e65c425f38dcf270a815b40305da4a7",
     "install_policy": "--require-hashes"
   },
   "timezone_policy": "UTC_only",
