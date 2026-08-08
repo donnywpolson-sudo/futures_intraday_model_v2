@@ -1,0 +1,54 @@
+{
+  "schema_version": "tier1_authoritative_stable_synthetic_verification/1.0.0",
+  "verification_id": "22ac30fb3f47a32b91595f7ebfce3f4b19d39ef237b7e6646362d7077c4d0197",
+  "state": "PREPARED_NOT_PUBLISHED",
+  "scope": "COMPLETE_APPLICABLE_TIER1_TREE_WITH_ONLY_TRANSITION_STABLE_AUTHORITATIVE_TESTS_SELECTED",
+  "test_file_count": 51,
+  "test_tree_id": "e6a3acfca20080adfb3a03f4526a8d10c5c4f99d605b532854cf4748cbefa092",
+  "conftest_sha256": "ac9ecd1f29441d7ab712adee752aca3fd9d7040a603e02add7e1cbecd2e55cf3",
+  "runner_sha256": "eb4b899dc382b6ec9a3b1865e2e93ea7a4440d875b469ebe9ee3848b36b72fdf",
+  "selection": {
+    "marker": "high_risk",
+    "file_prefixes": [
+      "test_tier1_bracket",
+      "test_tier1_frozen",
+      "test_tier1_preexecution",
+      "test_tier1_standard",
+      "test_tier1_final",
+      "test_tier1_authoritative"
+    ],
+    "ignored_invalid_test_file": "tests/test_tier1_authoritative_lifecycle.py",
+    "deselected_historical_assertions": [
+      "tests/test_tier1_bracket_v10_registration.py::test_v9_retirement_and_v10_registration_are_prepared_create_only",
+      "tests/test_tier1_final_decision_validity.py::test_final_lifecycle_is_prepared_without_publication_or_pointer_mutation"
+    ],
+    "expected_xfail": "tests/test_tier1_bracket_v6.py::test_v5_is_preserved_and_v6_prepares_without_publication"
+  },
+  "applicable_results": {
+    "passed": 283,
+    "failed": 0,
+    "deselected": 1004,
+    "expected_xfailed": 1
+  },
+  "all_v4_through_v12_controls_included": true,
+  "complete_synthetic_source_to_terminal_pipeline_tested": true,
+  "scenario_specific_risk_abstention_tested": true,
+  "conclusive_rejection_lattice_tested": true,
+  "independent_baseline_paths_tested": true,
+  "invalid_preparation_preserved_tested": true,
+  "every_selected_lifecycle_test_transition_stable": true,
+  "prepublication_context_tested": true,
+  "postpublication_context_tested": true,
+  "failed_activation_rollback_tested": true,
+  "durable_unpublished_bundle_tested": true,
+  "single_use_authorization_tested": true,
+  "historical_rows_opened": false,
+  "provider_or_network_access": false,
+  "credential_access": false,
+  "holdout_2025_access": false,
+  "real_model_fit": false,
+  "historical_evaluation": false,
+  "trial_registration": false,
+  "publication": false,
+  "trading": false
+}

@@ -1,0 +1,45 @@
+{
+  "schema_version": "tier1_bracket_successor_v11_historical_execution_plan/1.0.0",
+  "plan_id": "ba5bd18e75d1ea2fe788d0fc50257c69242d46b0c73e8657d4d7e054049de194",
+  "operation": "EXECUTE_TIER1_BRACKET_SUCCESSOR_V11_HISTORICAL_SCREEN",
+  "trial_id": "4583409eb5443c89306f118b912bea1fabd6f20f437e30294395ac7786c3719b",
+  "trial_registry_sha256": "2f2e4f65b7b8b6c7a9002c63715c0d35a36cf99d227dab6bc650e81491846287",
+  "source_binding_id": "2ccd285d00170b31e1ad650122c466a52e0691bb27815851a93bccffe9c20a22",
+  "calendar_release_id": "038940d82031f31e2c66ed37186e98a6ee6cff3e7248f634f2c7a8e94ea6ecf3",
+  "dependency_lock_receipt_id": "854480e6fcdcc32093012b42408cb04e75628c2578959b21764a9dcc86a0dd79",
+  "runner_sha256": "7c8655d2c25b29b8422a75ec908c69a24895747feea044e107041a406596696e",
+  "source_scope": {
+    "markets": ["6E", "CL", "ES", "ZN"],
+    "years": [2018, 2019, 2020, 2021, 2022],
+    "registered_source_count": 20
+  },
+  "registered_execution_bindings": {
+    "src/futures_rebuild/tier1_bracket_v10.py": "b1e5279d46c4eb7bf6cb5b4c51def995131cbd17472a75cf82443ca1d80a63f8",
+    "src/futures_rebuild/tier1_bracket_v10_decision_validity.py": "2677adacda4e608fa911366a60c33ea35a441940b39605e087f8ca86d2c7dfbb",
+    "src/futures_rebuild/tier1_bracket_v11.py": "11907da29f76a9a6ee40dcce1c368070e85d376e162ee9215a6c202b396d7827",
+    "src/futures_rebuild/tier1_bracket_v11_pipeline.py": "d4aef5bbdb9faae29545fef27c0bf401307f942c650e7ba6749cda1a46ae88d8",
+    "src/futures_rebuild/tier1_bracket_v11_execution.py": "8e57afbf5dc8c2752bf03eadadf24ac316b45d4ed789a6e1cb5259b7749c042c"
+  },
+  "execution_mode": "IN_MEMORY_UNPUBLISHED_RESULT",
+  "maximum_host_runtime_seconds": 900,
+  "estimated_external_cost_usd": "0",
+  "authorized_actions": {
+    "source_row_read": true,
+    "model_fit": true,
+    "prediction_generation": true,
+    "historical_evaluation": true
+  },
+  "forbidden_actions": {
+    "holdout_or_forward_access": true,
+    "provider_or_network_access": true,
+    "evidence_publication": true,
+    "active_data_mutation": true,
+    "staging": true,
+    "commit": true,
+    "push": true,
+    "trading_or_orders": true
+  },
+  "output_root": "state/tier1_bracket_successor_v11_unpublished",
+  "receipt_policy": "NEW_EXACT_SINGLE_USE_CREATE_ONLY_CLAIM_BOUND_TO_THIS_PLAN_BEFORE_SOURCE_OPEN",
+  "preservation_boundary": "V10 retirement, V11 registration, registered source bytes, prior evidence, unrelated work, and 2025 remain unchanged. Results remain in memory until a separate publication approval."
+}

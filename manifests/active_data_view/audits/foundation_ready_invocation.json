@@ -1,0 +1,272 @@
+{
+    "schema_version":  "systematic_futures_audit/3.0.0",
+    "classification":  "NON_AUTHORIZING_EVIDENCE_CLASSIFICATION",
+    "mode":  "EVIDENCE_ONLY",
+    "audit_id":  "ACTIVE-VIEW-PREPARATION-FOUNDATION_READY-20260728",
+    "target_state":  "FOUNDATION_READY",
+    "allowed_paths":  [
+                          "MASTER_AUDIT.md",
+                          "configs",
+                          "reports",
+                          "manifests"
+                      ],
+    "specification":  {
+                          "path":  "MASTER_AUDIT.md",
+                          "sha256":  "70913d266e7fa819e56b70d012a897d8ffe8957235ea3f31c8b1e295de5aeaec"
+                      },
+    "stage_matrix":  {
+                         "path":  "configs/master_audit_v3/stage_requirement_matrix.json",
+                         "sha256":  "6a0ec9f32010f2362a92f0d428e19774fd7a83125e4565dc0f7bf1c02692b449"
+                     },
+    "universe_contract":  {
+                              "path":  "configs/research_universe_contract.json",
+                              "sha256":  "86e38f8732bd05b10d0faa2eec93e0bd0db6aeac3e56a13fbaed8e69555035d4"
+                          },
+    "evidence":  [
+                     {
+                         "evidence_id":  "8ce1194f41cde2739696937515cec8d6ec96865e6ddb426b6ba1570a4a295a11",
+                         "path":  "configs/eight_market_successor_migration_approval.json",
+                         "sha256":  "f726c17bc0192cb1e3edc65b02aa57b79c93a441b4fb0c3a2b219b4d377e9987",
+                         "bytes":  539,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-FOUNDATION-SCHEMA7",
+                         "path":  "manifests/data_releases/foundation/637f16b3c23c9f2215858f49754965738fe9c00095661d7a29d6877d566ae5e3.json",
+                         "sha256":  "969079b6576417658ede21e63b00b9d2211856157d01ef10c3ebb0d77cca2ad9",
+                         "bytes":  16006927,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-HISTORICAL-OBSERVABILITY-POLICY",
+                         "path":  "configs/historical_observability_policy.json",
+                         "sha256":  "1b1c3b2e681cad9476d09e48610c8cea82d8da3c11da409fbebe1cf74ce389c8",
+                         "bytes":  1693,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-CURRENT-FORWARD-CALENDAR",
+                         "path":  "configs/active_exchange_calendar.json",
+                         "sha256":  "a6fc445a116023820ab009d0a87f85682cbf35873230ce8bf75ecdf764b5b9ca",
+                         "bytes":  860,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-SUITE-CLEAN-HEAD",
+                         "path":  "reports/audits/active_view_preparation/full_suite_evidence.json",
+                         "sha256":  "47d6a5fddccad53780d0b4d8e153ce0044c7b51b2ae90a563a21398983727c6b",
+                         "bytes":  2785,
+                         "safe_to_read":  true,
+                         "limitations":  [
+                                             "NON_AUTHORIZING_EVIDENCE_ONLY"
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-META-AUDIT",
+                         "path":  "reports/audits/active_view_preparation/meta_master_audit.json",
+                         "sha256":  "cd9a60641921bf185420ab7a6eabd211b3cef8a73efb27b6c7d4da0124c1b843",
+                         "bytes":  2878,
+                         "safe_to_read":  true,
+                         "limitations":  [
+                                             "NON_AUTHORIZING_EVIDENCE_ONLY"
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-ACTIVE-VIEW-PILOT",
+                         "path":  "reports/active_data_view/pilot/32dcf8b9336c545c0a8bbe4f6b35e5dcfd1470a28ba98b002c7d6d2278e5eab1/run-2/pilot_evidence.json",
+                         "sha256":  "b1786d919ae401056dc427082a589a01a58a592892c4ef1bc4b326f245b4f36e",
+                         "bytes":  5521,
+                         "safe_to_read":  true,
+                         "limitations":  [
+                                             "NON_AUTHORIZING_EVIDENCE_ONLY"
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-ACTIVE-VIEW-FULL-PENDING-PLAN",
+                         "path":  "manifests/active_data_view/plans/causal_active_full_certification_plan_v3.json",
+                         "sha256":  "5bc13e80a5d9355fb4f06ca8ed7d90ad8e7038b5e3a74f90d737a7c0ec467be7",
+                         "bytes":  5946675,
+                         "safe_to_read":  true,
+                         "limitations":  [
+                                             "NON_AUTHORIZING_EVIDENCE_ONLY"
+                                         ]
+                     }
+                 ],
+    "check_results":  [
+                          {
+                              "subcheck_id":  "G1.S1",
+                              "status":  "PASS",
+                              "reason":  "CLEAN_HEAD_SUITE_AND_SCHEMA7_READBACK_REPRODUCE_FOUNDATION_MECHANICS",
+                              "evidence_refs":  [
+                                                    "E-SUITE-CLEAN-HEAD",
+                                                    "E-FOUNDATION-SCHEMA7"
+                                                ],
+                              "limitations":  [
+                                                  "NO_ALPHA_CLAIM"
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G1.S2",
+                              "status":  "PASS",
+                              "reason":  "APPROVED_41_MARKET_UNIVERSE_AND_IMMUTABLE_FOUNDATION_EVIDENCE_CLOSE_THE_CLAIM_SCOPE",
+                              "evidence_refs":  [
+                                                    "8ce1194f41cde2739696937515cec8d6ec96865e6ddb426b6ba1570a4a295a11",
+                                                    "E-FOUNDATION-SCHEMA7"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G1.S3",
+                              "status":  "PASS",
+                              "reason":  "META_AUDIT_AND_SUITE_VERIFY_REGISTRY_APPLICABILITY_AND_FAIL_CLOSED_THRESHOLDS",
+                              "evidence_refs":  [
+                                                    "E-META-AUDIT",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G2.S1",
+                              "status":  "PASS",
+                              "reason":  "SCHEMA7_LINEAGE_BINDS_POINT_IN_TIME_PREDECESSOR_SOURCE_AND_OBSERVED_ROWS",
+                              "evidence_refs":  [
+                                                    "E-FOUNDATION-SCHEMA7",
+                                                    "E-HISTORICAL-OBSERVABILITY-POLICY"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G2.S2",
+                              "status":  "PASS",
+                              "reason":  "FOUNDATION_COVERS_THE_APPROVED_41_MARKET_UNIVERSE_WITH_EXPLICIT_QUARANTINE",
+                              "evidence_refs":  [
+                                                    "8ce1194f41cde2739696937515cec8d6ec96865e6ddb426b6ba1570a4a295a11",
+                                                    "E-FOUNDATION-SCHEMA7"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G2.S3",
+                              "status":  "PASS",
+                              "reason":  "EMPIRICAL_HISTORY_AND_CURRENT_FORWARD_CALENDAR_AUTHORITIES_ARE_SEPARATE_AND_EXPLICIT",
+                              "evidence_refs":  [
+                                                    "E-FOUNDATION-SCHEMA7",
+                                                    "E-HISTORICAL-OBSERVABILITY-POLICY",
+                                                    "E-CURRENT-FORWARD-CALENDAR"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G3.S1",
+                              "status":  "PASS",
+                              "reason":  "FOUNDATION_FEATURE_AND_OUTCOME_INPUT_ROLES_REMAIN_SEPARATE_AND_SUITE_VERIFIED",
+                              "evidence_refs":  [
+                                                    "E-FOUNDATION-SCHEMA7",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+                                                  "NO_OUTCOME_EXECUTION"
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G3.S2",
+                              "status":  "NOT_APPLICABLE",
+                              "reason":  "NO_LABEL_OR_OUTCOME_EXECUTION_EXISTS_IN_FOUNDATION_READY_STATE",
+                              "evidence_refs":  [
+
+                                                ],
+                              "limitations":  [
+                                                  "LABEL_EVALUATION_REQUIRES_SEPARATE_AUTHORITY"
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G3.S3",
+                              "status":  "NOT_APPLICABLE",
+                              "reason":  "NO_MODEL_SELECTION_TRAINING_OR_WFA_EXECUTION_EXISTS_IN_FOUNDATION_READY_STATE",
+                              "evidence_refs":  [
+
+                                                ],
+                              "limitations":  [
+                                                  "REAL_HISTORY_RESEARCH_REQUIRES_SEPARATE_AUTHORITY"
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G8.S1",
+                              "status":  "PASS",
+                              "reason":  "STEADY_STATE_FOUNDATION_INTERFACES_AND_SCHEMA7_READINESS_MECHANICS_PASS",
+                              "evidence_refs":  [
+                                                    "E-SUITE-CLEAN-HEAD",
+                                                    "E-FOUNDATION-SCHEMA7"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G8.S2",
+                              "status":  "PASS",
+                              "reason":  "HISTORICAL_OBSERVABILITY_BINDING_AND_CURRENT_FORWARD_CALENDAR_ARE_EXACTLY_BOUND",
+                              "evidence_refs":  [
+                                                    "E-FOUNDATION-SCHEMA7",
+                                                    "E-HISTORICAL-OBSERVABILITY-POLICY",
+                                                    "E-CURRENT-FORWARD-CALENDAR"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G8.S4",
+                              "status":  "PASS",
+                              "reason":  "HASH_BOUND_SUCCESSOR_APPROVAL_LINEAGE_AND_ADVERSARIAL_TESTS_PASS",
+                              "evidence_refs":  [
+                                                    "E-FOUNDATION-SCHEMA7",
+                                                    "E-SUITE-CLEAN-HEAD",
+                                                    "E-META-AUDIT"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          }
+                      ],
+    "runtime":  {
+                    "max_files":  100,
+                    "max_bytes_read":  100000000,
+                    "allowed_command_classes":  [
+                                                    "static-read",
+                                                    "hash-read"
+                                                ],
+                    "forbidden_actions":  [
+                                              "network",
+                                              "provider-call",
+                                              "project-code-execution",
+                                              "holdout-row-access",
+                                              "readiness-publication",
+                                              "candidate-sealing",
+                                              "order-placement",
+                                              "legacy-write"
+                                          ]
+                }
+}

@@ -1,0 +1,38 @@
+{
+  "schema_version": "tier1_bracket_v12_local_source_alternative_census_plan/1.0.0",
+  "plan_id": "203dc5c3b50e23522c5fe877a867389f6c67b6bd2485125caeb2efcc6f4f1213",
+  "operation": "AUDIT_V12_LOCAL_CAUSAL_RELEASE_ALTERNATIVES_READ_ONLY",
+  "candidate_manifest_catalog_id": "08d1833bb8a7fee7a2783479e26089a4001fb8819f945d42b0e705a876ee8f34",
+  "candidate_release_count": 61,
+  "market_year_pair_count": 20,
+  "calendar_release_id": "038940d82031f31e2c66ed37186e98a6ee6cff3e7248f634f2c7a8e94ea6ecf3",
+  "v12_contract_sha256": "17a9da4b3f24d90cc2281a7a6adbca0a228eaf987c57b8bfe9d5a84eb96c9e4a",
+  "dependency_census_code_sha256": "b1e5279d46c4eb7bf6cb5b4c51def995131cbd17472a75cf82443ca1d80a63f8",
+  "runner_sha256": "bfc6150ad54a74ee33419797c9e5465cc1d242ba177f3a997357c099a57af736",
+  "source_scope": {
+    "markets": ["6E", "CL", "ES", "ZN"],
+    "years": [2018, 2019, 2020, 2021, 2022]
+  },
+  "selection_rule": "MAXIMIZE_COMPLETE_BOTH_WINDOWS_THEN_COMPLETE_EXECUTION_WINDOWS_THEN_COMPLETE_FEATURE_WINDOWS_THEN_MINIMIZE_MISSING_SESSIONS_THEN_AMBIGUOUS_SESSIONS_THEN_LEXICOGRAPHIC_RELEASE_ID",
+  "execution_mode": "IN_MEMORY_UNPUBLISHED_COVERAGE_COUNTS_ONLY",
+  "maximum_host_runtime_seconds": 900,
+  "estimated_external_cost_usd": "0",
+  "authorized_actions": {
+    "local_registered_historical_row_read": true,
+    "dependency_window_coverage_census": true
+  },
+  "forbidden_actions": {
+    "model_fit": true,
+    "prediction_generation": true,
+    "historical_performance_evaluation": true,
+    "holdout_or_forward_access": true,
+    "provider_or_network_access": true,
+    "publication": true,
+    "active_data_mutation": true,
+    "staging": true,
+    "commit": true,
+    "push": true,
+    "trading_or_orders": true
+  },
+  "preservation_boundary": "All immutable releases, trial records, authorization claims, prior evidence, unrelated work, and 2025 remain unchanged. Counts and selections remain in memory until separately authorized."
+}

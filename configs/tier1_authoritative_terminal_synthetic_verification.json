@@ -1,0 +1,105 @@
+{
+  "schema_version": "tier1_authoritative_terminal_synthetic_verification/1.0.0",
+  "state": "PREPARED_NOT_PUBLISHED",
+  "scope": "POINTER_NEUTRAL_COMPLETE_TIER1_SUITE_WITH_SYNTHETIC_ACTIVE_DOCUMENTS",
+  "test_file_count": 53,
+  "test_tree_id": "c1aabe2bcac13e0e7df38cba3a2d4ec2e0dd05946dcbad10ba116c26e7abea68",
+  "conftest_sha256": "ac9ecd1f29441d7ab712adee752aca3fd9d7040a603e02add7e1cbecd2e55cf3",
+  "runner_sha256": "eb4b899dc382b6ec9a3b1865e2e93ea7a4440d875b469ebe9ee3848b36b72fdf",
+  "selection": {
+    "marker": "high_risk",
+    "file_prefixes": [
+      "test_tier1_bracket",
+      "test_tier1_frozen",
+      "test_tier1_preexecution",
+      "test_tier1_standard",
+      "test_tier1_final",
+      "test_tier1_authoritative"
+    ],
+    "ignored_invalid_test_files": [
+      "tests/test_tier1_authoritative_lifecycle.py",
+      "tests/test_tier1_authoritative_stable_lifecycle.py",
+      "tests/test_tier1_authoritative_certified_lifecycle.py"
+    ],
+    "deselected_historical_assertions": [
+      "tests/test_tier1_bracket_v10_registration.py::test_v9_retirement_and_v10_registration_are_prepared_create_only",
+      "tests/test_tier1_final_decision_validity.py::test_final_lifecycle_is_prepared_without_publication_or_pointer_mutation",
+      "tests/test_tier1_final_decision_validity.py::test_final_protocol_preserves_parameters_and_closes_predecessor_only",
+      "tests/test_tier1_final_decision_validity.py::test_final_execution_plan_requires_registration_and_durable_staging"
+    ],
+    "same_arguments_required_pre_and_post_activation": true,
+    "selected_tests_may_call_prepublication_builder": false,
+    "expected_xfail": "tests/test_tier1_bracket_v6.py::test_v5_is_preserved_and_v6_prepares_without_publication"
+  },
+  "replacement_control_map": {
+    "tests/test_tier1_authoritative_lifecycle.py": [
+      "test_140f_is_preserved_and_invalid_without_research_change",
+      "test_terminal_protocol_keeps_parameters_and_pointer_out_of_bindings",
+      "test_terminal_plan_remains_separately_authorized_and_sealed",
+      "test_terminal_suite_selection_is_exact_and_state_neutral",
+      "test_synthetic_active_documents_validate_without_pointer_dependency",
+      "test_live_transition_documents_validate_before_or_after_activation",
+      "test_terminal_validator_rejects_pointer_retirement_and_gate_drift",
+      "test_failed_terminal_activation_restores_exact_pointer_bytes",
+      "test_terminal_execution_claim_is_exact_and_single_use",
+      "test_terminal_selected_tests_cannot_call_prepublication_builder",
+      "test_terminal_entrypoints_import_no_provider_holdout_or_trading_modules",
+      "test_terminal_trial_binds_140f_and_omits_mutable_pointer_in_all_states"
+    ],
+    "tests/test_tier1_authoritative_stable_lifecycle.py": [
+      "test_140f_is_preserved_and_invalid_without_research_change",
+      "test_terminal_protocol_keeps_parameters_and_pointer_out_of_bindings",
+      "test_terminal_plan_remains_separately_authorized_and_sealed",
+      "test_terminal_suite_selection_is_exact_and_state_neutral",
+      "test_synthetic_active_documents_validate_without_pointer_dependency",
+      "test_live_transition_documents_validate_before_or_after_activation",
+      "test_terminal_validator_rejects_pointer_retirement_and_gate_drift",
+      "test_failed_terminal_activation_restores_exact_pointer_bytes",
+      "test_terminal_execution_claim_is_exact_and_single_use",
+      "test_terminal_selected_tests_cannot_call_prepublication_builder",
+      "test_terminal_entrypoints_import_no_provider_holdout_or_trading_modules",
+      "test_terminal_trial_binds_140f_and_omits_mutable_pointer_in_all_states"
+    ],
+    "tests/test_tier1_authoritative_certified_lifecycle.py": [
+      "test_140f_is_preserved_and_invalid_without_research_change",
+      "test_terminal_protocol_keeps_parameters_and_pointer_out_of_bindings",
+      "test_terminal_plan_remains_separately_authorized_and_sealed",
+      "test_terminal_suite_selection_is_exact_and_state_neutral",
+      "test_synthetic_active_documents_validate_without_pointer_dependency",
+      "test_live_transition_documents_validate_before_or_after_activation",
+      "test_terminal_validator_rejects_pointer_retirement_and_gate_drift",
+      "test_failed_terminal_activation_restores_exact_pointer_bytes",
+      "test_terminal_execution_claim_is_exact_and_single_use",
+      "test_terminal_selected_tests_cannot_call_prepublication_builder",
+      "test_terminal_entrypoints_import_no_provider_holdout_or_trading_modules",
+      "test_terminal_trial_binds_140f_and_omits_mutable_pointer_in_all_states"
+    ]
+  },
+  "applicable_results": {
+    "passed": 285,
+    "failed": 0,
+    "deselected": 26,
+    "expected_xfailed": 1
+  },
+  "all_v4_through_v12_controls_included": true,
+  "complete_synthetic_source_to_terminal_pipeline_tested": true,
+  "scenario_specific_risk_abstention_tested": true,
+  "conclusive_rejection_lattice_tested": true,
+  "independent_baseline_paths_tested": true,
+  "synthetic_active_documents_tested": true,
+  "live_pointer_selected_context_tested": true,
+  "prepublication_builder_call_forbidden_in_selected_tests": true,
+  "failed_activation_rollback_tested": true,
+  "durable_unpublished_bundle_tested": true,
+  "single_use_authorization_tested": true,
+  "historical_rows_opened": false,
+  "provider_or_network_access": false,
+  "credential_access": false,
+  "holdout_2025_access": false,
+  "real_model_fit": false,
+  "historical_evaluation": false,
+  "trial_registration": false,
+  "publication": false,
+  "trading": false,
+  "verification_id": "da8b0628be9683002d593798090f694915b2c781387082c9cfaa3bfcb8567ba5"
+}

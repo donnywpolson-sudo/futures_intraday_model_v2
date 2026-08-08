@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "futures_live_cockpit_workflow/1.0.0",
+  "type": "object",
+  "required": ["schema_version", "goal", "basis", "stages", "interaction_budget", "paused_installation", "outcome_id"],
+  "properties": {
+    "schema_version": {"const": "futures_live_cockpit_workflow/1.0.0"},
+    "goal": {"type": "string", "minLength": 1},
+    "basis": {"type": "object"},
+    "stages": {"type": "array", "minItems": 1},
+    "interaction_budget": {"type": "object"},
+    "paused_installation": {"type": "object"},
+    "outcome_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "additionalProperties": false
+}

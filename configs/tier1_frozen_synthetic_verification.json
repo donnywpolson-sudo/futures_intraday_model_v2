@@ -1,0 +1,51 @@
+{
+  "schema_version": "tier1_frozen_synthetic_verification/1.0.0",
+  "state": "PREPARED_NOT_PUBLISHED",
+  "scope": "V4_THROUGH_V12_DEFECT_CONTROLS_PLUS_UNVERSIONED_FROZEN_PROTOCOL",
+  "test_file_count": 45,
+  "test_tree_id": "49c1478c940ef60de4983672919d7a6e200d2e70a1adc240cde42c985712562f",
+  "applicable_results": {
+    "passed": 262,
+    "failed": 0,
+    "expected_xfailed": 1,
+    "historical_prepublication_assertions_deselected": 1,
+    "legacy_v2_tests_deselected": 9
+  },
+  "runs": [
+    {
+      "scope": "EXACT_HIGH_RISK_FROZEN_TIER1_TREE_EXCLUDING_ONE_HISTORICAL_ASSERTION_AND_SELF_BINDING_TEST",
+      "passed": 248,
+      "failed": 0,
+      "expected_xfailed": 1,
+      "interpretation": "All applicable high-risk tests passed under the automatic short Windows host temporary root."
+    },
+    {
+      "scope": "CURRENT_LANE_TIER1_V4_SYNTHETIC_TESTS",
+      "passed": 13,
+      "failed": 0
+    },
+    {
+      "scope": "FOCUSED_QUOTE_COST_STAGING_AND_CAUSAL_ADEQUACY_BOUNDARY",
+      "passed": 25,
+      "failed": 0
+    },
+    {
+      "scope": "SYNTHETIC_VERIFICATION_TREE_BINDING_TEST_AFTER_REFRESH",
+      "passed": 1,
+      "failed": 0
+    }
+  ],
+  "expected_xfail_reason": "V6 prepublication-only assertion is historical after its create-only publication.",
+  "historical_assertion_deselection_reason": "The V10 registration now exists, so its earlier assertion that the prepared registration path must be absent is preserved as historical evidence rather than treated as a current invariant.",
+  "complete_synthetic_source_to_crossfit_pipeline": true,
+  "independent_baseline_universes_and_account_paths": true,
+  "future_outcome_mutation_leaves_prediction_eligibility_unchanged": true,
+  "flat_no_trade_is_true_zero": true,
+  "historical_source_rows_opened": false,
+  "provider_or_network_access": false,
+  "holdout_or_forward_access": false,
+  "model_fit_on_real_data": false,
+  "historical_performance_evaluation": false,
+  "trading": false,
+  "verification_id": "4a0df7fc180487e13a146d8d328fe89fd5d4ec929e74d447553615f618fadb63"
+}

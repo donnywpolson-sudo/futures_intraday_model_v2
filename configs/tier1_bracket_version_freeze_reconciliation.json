@@ -1,0 +1,123 @@
+{
+  "schema_version": "tier1_bracket_version_freeze_reconciliation/1.0.0",
+  "state": "PREPARED_GOVERNANCE_ONLY_NOT_PUBLISHED",
+  "version_creation_frozen": true,
+  "reconciled_repository": "C:/Users/donny/Desktop/futures_intraday_model_v2",
+  "reconciled_branch": "codex/tier1-phase8-economics",
+  "reconciled_head": "fceff51754cc706c60123c17a4036a65c9f61f9b",
+  "search_scope": [
+    "current_worktree",
+    "all_local_and_remote_tracking_refs_without_network_access",
+    "local_tags",
+    "local_git_history"
+  ],
+  "authoritative_current_trial": null,
+  "current_state": "NO_EXECUTION_READY_TIER1_TRIAL",
+  "certification_target": "UNVERSIONED_FROZEN_SUCCESSOR_SNAPSHOT",
+  "versions": [
+    {
+      "version": "V2",
+      "trial_id": "aab8134537f5f6efa9d9ced5603adb89212d43e67282ab5a2ab7e3adb3fd011c",
+      "disposition": "INVALID_VOID_CAUSAL_TIMING_FILL_AND_COVERAGE_DEFECTS",
+      "lifecycle": "HISTORICAL_EVALUATION_OCCURRED_INVALID_CLOSURE_PREPARED",
+      "evidence": "configs/tier1_bracket_invalid_trial_closure_preparation_v2.json"
+    },
+    {
+      "version": "V3",
+      "trial_id": "1763e644f5b3ebcd95a744971145f9a552c19d2db6b95226b540dcecef247f33",
+      "disposition": "INCOMPLETE_PRE_DATA_IMPLEMENTATION_BINDING",
+      "lifecycle": "RETIRED_WITHOUT_DATA_ACCESS",
+      "evidence": "state/trial_registry/tier1_bracket_v3_retirement/579505dcd7cb9c93109d1610a6693baeb6a36461ac13006dfe18bf42d3c4c0c8.json"
+    },
+    {
+      "version": "V4",
+      "trial_id": "427237dc760699831f0998421e6718b3166c5a03dfc1e336bdd3bf7b901c2349",
+      "disposition": "INCOMPLETE_PRE_DATA_IMPLEMENTATION_DEFECTS",
+      "lifecycle": "RETIRED_WITHOUT_DATA_ACCESS",
+      "evidence": "state/trial_registry/tier1_bracket_v4_retirement/22b2ee6a3c499888e0b16d745eb90313919f0ff5c9f35e3037f5ebf09763e654.json"
+    },
+    {
+      "version": "V5",
+      "trial_id": "8f6fed0171979ffe76256117c29937bc1f469f674d722525414b16ca5bfd4e03",
+      "disposition": "INVALID_PRE_MODEL_FIT_SOURCE_CENSUS_IDENTITY_DEFECT",
+      "lifecycle": "RETIRED_INVALID_BEFORE_MODEL_FIT",
+      "evidence": "state/trial_registry/tier1_bracket_v5_retirement/c812fb61a4868986e8d0e202582ca383a054f9cf0a112d930c91d05da0820cc4.json"
+    },
+    {
+      "version": "V6",
+      "trial_id": "c92c5a6ecfd96a00d0cf89aa02319878b479dad6c6e21b703e54bd55943a8608",
+      "disposition": "INVALID_PRE_DATA_TEST_LIFECYCLE_AND_RUNNER_BINDING_DEFECT",
+      "lifecycle": "RETIRED_INVALID_BEFORE_SOURCE_ACCESS",
+      "evidence": "state/trial_registry/tier1_bracket_v6_retirement/d925f3dfcb2047ebbca4788398f823b1f45dc0c6f89049446bde21094dcecde8.json"
+    },
+    {
+      "version": "V7",
+      "trial_id": "b2b1b19967418ad9d3a66f70e4fa15732f8065d9abf9f32489b2e2d44072a64e",
+      "disposition": "INVALID_PARTIAL_MODEL_FIT_REQUIRED_BASELINE_COVERAGE_EXCEPTION",
+      "lifecycle": "RETIRED_INVALID_AFTER_SOURCE_ACCESS_BEFORE_PREDICTIONS",
+      "evidence": "state/trial_registry/tier1_bracket_v7_retirement/3fa10b4e50c6c89c2ca6298380df6c04fba012e24e3fd587ca821c297dcb2718.json"
+    },
+    {
+      "version": "V8",
+      "trial_id": "136f1d9c7779f48565e7100bb890c148f6aed751faaa84670795b45348cf6233",
+      "disposition": "INVALID_PARTIAL_MODEL_FIT_MARKET_FOLD_COVERAGE_EXCEPTION",
+      "lifecycle": "RETIRED_INVALID_AFTER_SOURCE_ACCESS_BEFORE_PREDICTIONS",
+      "evidence": "state/trial_registry/tier1_bracket_v8_retirement/65895b22c1d9278dff331733244d0f23a9fd33115a75dee11ba4edfd2f2273df.json"
+    },
+    {
+      "version": "V9",
+      "trial_id": "fed4cc30c3f01e4f5b15eacfecdc50fe3a45bf671c0306d568f013f02c91dcd8",
+      "disposition": "INVALID_SOURCE_SCOPE_AND_FUTURE_OUTCOME_CONDITIONED_DECISION_PIPELINE",
+      "lifecycle": "RETIRED_INVALID_AFTER_UNPUBLISHED_HISTORICAL_EXECUTION",
+      "evidence": "state/trial_registry/tier1_bracket_v9_retirement/c0e126f3ca8c50b53a94de8e025292dabe4206605f2dbfd6571b21ebb6d2afef.json"
+    },
+    {
+      "version": "V10",
+      "trial_id": "53c9aa144b38187ea93acbfbe2ea10f6c76fcb382edef01a5254b3ecda38ddc3",
+      "disposition": "INVALID_PRE_DATA_SHARED_CANDIDATE_BASELINE_OPPORTUNITY_UNIVERSE",
+      "lifecycle": "RETIRED_INVALID_BEFORE_SOURCE_ACCESS",
+      "evidence": "state/trial_registry/tier1_bracket_v10_retirement/377eb1bae1c07dd2c71f872c0cc3b3cf1d3561ec5a0c385ef07fab162bcd43da.json"
+    },
+    {
+      "version": "V11",
+      "trial_id": "4583409eb5443c89306f118b912bea1fabd6f20f437e30294395ac7786c3719b",
+      "disposition": "INVALID_POST_EXECUTION_FLAT_BASELINE_FEATURE_COVERAGE_DEPENDENCY",
+      "lifecycle": "INVALID_RETIREMENT_PREPARED_NOT_PUBLISHED",
+      "evidence": "configs/tier1_bracket_v11_retirement_preparation.json"
+    },
+    {
+      "version": "V12",
+      "trial_id": null,
+      "disposition": "PREPARED_NOT_REGISTERED_SOURCE_SUFFICIENCY_NOT_DURABLY_PROVEN",
+      "lifecycle": "CONTRACT_ONLY_NO_HISTORICAL_EXECUTION",
+      "evidence": "configs/tier1_bracket_successor_v12.json"
+    },
+    {
+      "version": "V13",
+      "trial_id": null,
+      "disposition": "CLAIMED_VERSION_NOT_FOUND_IN_LOCAL_REPOSITORY_OR_REFS",
+      "lifecycle": "NOT_A_RECONCILABLE_TRIAL",
+      "evidence": null
+    },
+    {
+      "version": "V14",
+      "trial_id": null,
+      "disposition": "CLAIMED_VERSION_NOT_FOUND_IN_LOCAL_REPOSITORY_OR_REFS",
+      "lifecycle": "NOT_A_RECONCILABLE_TRIAL",
+      "evidence": null
+    }
+  ],
+  "execution_freeze": {
+    "register_new_trial": false,
+    "read_historical_rows": false,
+    "fit_models": false,
+    "generate_predictions": false,
+    "evaluate_performance": false,
+    "publish_research_evidence": false,
+    "access_2025": false,
+    "provider_or_network_access": false,
+    "stage_commit_push": false,
+    "trading": false
+  },
+  "unfreeze_condition": "ONE_PREEXECUTION_VALIDITY_CERTIFICATE_PASSES_ALL_MECHANICS_GOVERNANCE_AND_SOURCE_SUFFICIENCY_GATES"
+}

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "local_commit_plan/1.0.0",
+  "type": "object",
+  "required": ["schema_version", "authority_class", "basis", "paths", "working_tree_scope_sha256", "expected_staged_scope_sha256", "message", "push_authorized", "plan_id"],
+  "properties": {
+    "schema_version": {"const": "local_commit_plan/1.0.0"},
+    "authority_class": {"const": "ATOMIC_LOCAL_STAGE_AND_COMMIT"},
+    "basis": {"type": "object"},
+    "paths": {"type": "array", "minItems": 1},
+    "working_tree_scope_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "expected_staged_scope_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "message": {"type": "string", "minLength": 1},
+    "push_authorized": {"const": false},
+    "plan_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "additionalProperties": false
+}

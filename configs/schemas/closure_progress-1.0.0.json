@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "closure_progress/1.0.0",
+  "type": "object",
+  "required": ["schema_version", "plan_id", "state", "status", "approval_consumed", "target_started", "completed_actions"],
+  "properties": {
+    "schema_version": {"const": "closure_progress/1.0.0"},
+    "plan_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "state": {"enum": ["AUTHENTICATED", "PREFLIGHT_PASSED", "PREFLIGHT_FAILED_RESUMABLE", "STARTED", "TERMINAL"]},
+    "status": {"enum": ["RUNNING", "FAILED", "PASS"]},
+    "approval_consumed": {"type": "boolean"},
+    "target_started": {"type": "boolean"},
+    "completed_actions": {"type": "array", "items": {"type": "string"}}
+  },
+  "additionalProperties": true
+}

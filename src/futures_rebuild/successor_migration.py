@@ -444,7 +444,7 @@ def execute(
     approval_path: Path,
 ) -> dict[str, Any]:
     root = repository_root.resolve(strict=True)
-    legacy = Path(r"C:\Users\example\Desktop\futures_intraday_model")
+    legacy = Path(r"C:\Users\donny\Desktop\futures_intraday_model")
     boundary = RepoBoundary(active_root=root, legacy_roots=(legacy,))
     plan_path = plan_path.resolve(strict=True)
     approval_path = approval_path.resolve(strict=True)

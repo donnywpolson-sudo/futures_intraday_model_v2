@@ -1,0 +1,29 @@
+{
+  "schema_version": "tier1_bracket_v4_retirement_preparation/1.0.0",
+  "state": "PREPARED_REQUIRES_PUBLICATION_APPROVAL",
+  "trial_id": "427237dc760699831f0998421e6718b3166c5a03dfc1e336bdd3bf7b901c2349",
+  "disposition": "INCOMPLETE_PRE_DATA_IMPLEMENTATION_DEFECTS",
+  "research_evidence_contaminated": false,
+  "historical_source_rows_opened": false,
+  "model_fit_performed": false,
+  "predictions_generated": false,
+  "historical_evaluation_performed": false,
+  "holdout_or_forward_accessed": false,
+  "preservation": "REGISTERED_V4_DECLARATION_EVENT_CONFIG_IMPLEMENTATION_AND_TEST_BYTES_UNCHANGED",
+  "basis": [
+    "SOURCE_DISPOSITION_NOT_ENFORCED",
+    "OBSERVED_ROW_DERIVED_SESSION_CENSUS",
+    "NON_CONTINUOUS_MARK_TO_MARKET_DRAWDOWN",
+    "REGISTERED_INFERENCE_IMPLEMENTATION_MISMATCH",
+    "POWER_AND_EFFECT_CLASSIFICATION_CONFLATED",
+    "NO_MINIMUM_COVERAGE_PROMOTION_GATE",
+    "ORIGINAL_1500_USD_DRAWDOWN_MANDATE_DRIFT",
+    "INCOMPLETE_IMMUTABLE_EVIDENCE_CHAIN",
+    "AMBIGUOUS_EQUAL_TIMESTAMP_OVERLAP",
+    "MISLABELED_DSR_PROXY",
+    "UNPROVEN_RISK_MATCHED_BASELINE",
+    "UNBOUNDED_PARQUET_MATERIALIZATION",
+    "CALLER_CONSTRUCTED_BOOLEAN_AUTHORIZATION"
+  ],
+  "publication_authorized": false
+}

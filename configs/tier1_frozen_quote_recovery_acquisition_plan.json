@@ -1,0 +1,52 @@
+{
+  "cost_record_id": "6226b40be917d4d407b40c78569c1250394326ad0294aca285812772c1e3dc07",
+  "cost_record_sha256": "b4b01b70003a48c8c32b401b8286177ab93f1e9d340753df9bafe5b1792c2534",
+  "credential_source": "file api.env",
+  "dataset": "GLBX.MDP3",
+  "estimated_external_cost_usd": "1.252167820932",
+  "fresh_metadata_cost_calls_before_download": 30,
+  "fresh_quote_must_not_exceed_maximum_before_any_download": true,
+  "forbidden_actions": {
+    "access_2025_or_forward_data": true,
+    "activate_or_mutate_active_research_data": true,
+    "alter_protocol": true,
+    "commit": true,
+    "decode_or_evaluate_performance": true,
+    "fit_models": true,
+    "generate_predictions": true,
+    "log_or_publish_credentials": true,
+    "overwrite_existing_files": true,
+    "push": true,
+    "register_or_retire_trial": true,
+    "stage_git_index": true,
+    "trade_or_access_order_path": true
+  },
+  "implementation_sha256": "f24a2f402021fd7d1fe0d04d6990342a301c8855515337b3e46edad39a45c75b",
+  "maximum_external_cost_usd": "1.30",
+  "maximum_host_runtime_seconds": 600,
+  "operation": "ACQUIRE_FROZEN_TIER1_BBO_1S_RECOVERY_STAGING_AND_PUBLISH",
+  "plan_id": "ebfb3338ef1fb5fdc71ec074ee682d2767675c630c8ae1cb6e434d19cacc8c82",
+  "protocol_id": "d647438200d54b60f9c7ddb69117adcd0abc23050b971dae542cda3fbdc21867",
+  "protocol_sha256": "7b6dcc144f52ef9feac7298dc87bbfbb6cb51f9f4628bfaaad773923d70a9662",
+  "provider": "Databento",
+  "publication": {
+    "event_root": "state/provider_acquisition_events/tier1_frozen_bbo_recovery",
+    "mode": "CREATE_ONLY",
+    "record_root": "state/provider_acquisitions/tier1_frozen_bbo_recovery"
+  },
+  "purpose": "Acquire only the frozen one-second top-of-book recovery windows into quarantine so source sufficiency can later be assessed without changing the trial protocol.",
+  "query_count": 30,
+  "query_set_id": "6d8cf355e15d7aec4c73e1abc3062de6814be8997ccb35ef235ade30ef03800c",
+  "raw_market_rows_downloaded": true,
+  "schema": "bbo-1s",
+  "schema_version": "tier1_frozen_quote_recovery_acquisition_plan/1.0.0",
+  "staging": {
+    "immutable_raw_dbn_and_manifest_per_query": true,
+    "root": "state/provider_acquisition_staging/tier1_frozen_bbo_recovery",
+    "source_activation": false
+  },
+  "state": "PREPARED_REQUIRES_SEPARATE_PAID_ACQUISITION_APPROVAL",
+  "stype_in": "continuous",
+  "stype_out": "instrument_id",
+  "unresolved_target_count": 33
+}

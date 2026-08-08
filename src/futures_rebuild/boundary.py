@@ -11,7 +11,6 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from pathlib import Path
-from types import MappingProxyType
 from typing import Mapping
 
 from .canonical import (
@@ -22,6 +21,7 @@ from .canonical import (
     sha256_json,
 )
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
+from .research_gateway_policy import require_current_real_history_operation
 
 
 class OperationClassification(str, Enum):
@@ -31,81 +31,42 @@ class OperationClassification(str, Enum):
     EXTERNAL_REAL_HISTORY_AUTHORIZATION = "EXTERNAL_REAL_HISTORY_AUTHORIZATION"
 
 
-EXTERNAL_SIGNATURE_ALGORITHM = "RSASSA-PKCS1-v1_5-SHA256"
-_SHA256_DIGEST_INFO_PREFIX = bytes.fromhex("3031300d060960864801650304020105000420")
-
-
-@dataclass(frozen=True)
-class AuthorityKeyRecord:
-    key_id: str
-    modulus: int
-    exponent: int
-    valid_from: datetime
-    valid_until: datetime
-    revoked: bool
-    allowed_classifications: tuple[OperationClassification, ...]
-
-    def as_dict(self) -> dict[str, object]:
-        return {
-            "allowed_classifications": [item.value for item in self.allowed_classifications],
-            "exponent": self.exponent,
-            "key_id": self.key_id,
-            "modulus_hex": format(self.modulus, "x"),
-            "revoked": self.revoked,
-            "valid_from": self.valid_from.isoformat(),
-            "valid_until": self.valid_until.isoformat(),
-        }
-
-
-EXTERNAL_AUTHORITY_KEYS: Mapping[str, AuthorityKeyRecord] = MappingProxyType({
-    # Only the public key is in-repository. The corresponding private key is not
-    # present in code, configs, tests, or the worktree, so repository code cannot
-    # mint a candidate/real-history authorization by recomputing a content hash.
-    "USER_GATED_REBUILD_AUTHORITY_V1": AuthorityKeyRecord(
-        "USER_GATED_REBUILD_AUTHORITY_V1",
-        int(
-            "b03d865e53238ff71a2a782f76b5d50191296325f8e0e01e7c6c05036a909369"
-            "6e6e8e411969f45df47db7c879f7a28c3ef884d58844db53b16e4cd3644797df"
-            "615a5459a20f45f2507588f5d219e7b7aeba02491528ae824ca28068a6e5a1e0"
-            "4c33db6b932c61d5df1d69527eae86a0ca18c5ebe39ce74c69f95c48af298084"
-            "ab53f8d93e317c68e41be12688996f70a6e11009be394cdb73344cd562753b0dd"
-            "0d8799a3dd29ab5541d1287b77dd7b612412081d70cde79bc07a1eb79b85b659"
-            "7558350054d281f5330c9f8e87aa77dfeabfd48da5de4e5b2fb92d97fa13efbd"
-            "4de09a10fbd7ea26521419b0146f23787c96c25b10b0da1c4ff17a423d51761",
-            16,
-        ),
-        65537,
-        datetime(2026, 1, 1, tzinfo=timezone.utc),
-        datetime(2035, 1, 1, tzinfo=timezone.utc),
-        False,
-        (
-            OperationClassification.EXTERNAL_CANDIDATE_AUTHORIZATION,
-            OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
-        ),
-    )
-})
-EXTERNAL_AUTHORITY_REGISTRY_HASH = sha256_json(
-    [EXTERNAL_AUTHORITY_KEYS[key].as_dict() for key in sorted(EXTERNAL_AUTHORITY_KEYS)]
+PERSONAL_APPROVAL_AUTHORITY_ID = "PERSONAL_PROJECT_EXACT_APPROVAL_V1"
+PERSONAL_APPROVAL_ALGORITHM = "SHA256-EXACT-USER-APPROVAL"
+_PERSONAL_APPROVAL_SCOPE_KEYS = frozenset(
+    {"approval_command", "approval_plan_id", "approval_plan_sha256"}
+)
+# Preserve the existing receipt-schema identity so already accepted local
+# rebuild receipts remain verifiable. No external signing-key registry remains.
+EXTERNAL_AUTHORITY_REGISTRY_HASH = (
+    "de8316ad204bce1db6dde48de3c288afa75d19251587638abecb300a6ea36d33"
 )
 
 
-def _verify_external_signature(
-    *, key: AuthorityKeyRecord, signature_hex: str, message: bytes
+def _personal_approval_line(command: str, plan_id: str, plan_sha256: str) -> str:
+    if (
+        re.fullmatch(r"[A-Z][A-Z0-9_]*", command) is None
+        or re.fullmatch(r"[0-9a-f]{64}", plan_id) is None
+        or re.fullmatch(r"[0-9a-f]{64}", plan_sha256) is None
+    ):
+        raise ContractError("personal approval binding is invalid")
+    return f"APPROVE {command} PLAN {plan_id} SHA256 {plan_sha256}"
+
+
+def _verify_personal_approval_digest(
+    *, scope: tuple[tuple[str, str], ...], approval_digest: str
 ) -> bool:
-    modulus, exponent = key.modulus, key.exponent
-    width = (modulus.bit_length() + 7) // 8
-    if re.fullmatch(rf"[0-9a-f]{{{width * 2}}}", signature_hex) is None:
+    values = dict(scope)
+    try:
+        expected = _personal_approval_line(
+            values["approval_command"],
+            values["approval_plan_id"],
+            values["approval_plan_sha256"],
+        )
+    except (KeyError, ContractError):
         return False
-    signature = int(signature_hex, 16)
-    if signature >= modulus:
-        return False
-    digest_info = _SHA256_DIGEST_INFO_PREFIX + hashlib.sha256(message).digest()
-    padding_length = width - len(digest_info) - 3
-    if padding_length < 8:
-        return False
-    expected = b"\x00\x01" + b"\xff" * padding_length + b"\x00" + digest_info
-    observed = pow(signature, exponent, modulus).to_bytes(width, "big")
-    return hmac.compare_digest(observed, expected)
+    observed = hashlib.sha256(expected.encode("utf-8")).hexdigest()
+    return hmac.compare_digest(observed, approval_digest)
 
 
 def _normalized(path: Path) -> str:
@@ -246,7 +207,7 @@ class RepoBoundary:
 
 @dataclass(frozen=True)
 class OperationReceipt:
-    """Hash-bound operation scope. External candidate/history receipts are load-only."""
+    """Hash-bound operation scope with single-use user approval for gated work."""
 
     operation: str
     repository_id: str
@@ -351,6 +312,92 @@ class OperationReceipt:
             nonce,
             EXTERNAL_AUTHORITY_REGISTRY_HASH,
             False,
+            sha256_json(core),
+        )
+
+    @classmethod
+    def issue_user_approved(
+        cls,
+        boundary: RepoBoundary,
+        *,
+        operation: str,
+        classification: OperationClassification,
+        scope: Mapping[str, str],
+        approval_command: str,
+        approval_plan_id: str,
+        approval_plan_sha256: str,
+        approval_line: str,
+    ) -> "OperationReceipt":
+        """Issue a bounded personal-project receipt from one exact user approval.
+
+        This protects the official workflow from accidental or out-of-scope runs.
+        It is intentionally not a defense against malicious code running as the
+        repository owner.
+        """
+
+        if classification not in {
+            OperationClassification.EXTERNAL_CANDIDATE_AUTHORIZATION,
+            OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
+        }:
+            raise UnauthorizedOperation(
+                "personal approval is only valid for candidate or real-history work"
+            )
+        if type(operation) is not str or not operation:
+            raise ContractError("operation must be an exact nonempty string")
+        if not isinstance(scope, Mapping) or any(
+            key in scope for key in _PERSONAL_APPROVAL_SCOPE_KEYS
+        ):
+            raise ContractError("operation scope uses a reserved approval binding")
+        expected = _personal_approval_line(
+            approval_command, approval_plan_id, approval_plan_sha256
+        )
+        if type(approval_line) is not str or not hmac.compare_digest(
+            approval_line, expected
+        ):
+            raise UnauthorizedOperation("exact personal-project approval is required")
+        bound_scope = dict(scope)
+        bound_scope.update(
+            {
+                "approval_command": approval_command,
+                "approval_plan_id": approval_plan_id,
+                "approval_plan_sha256": approval_plan_sha256,
+            }
+        )
+        normalized_scope = _scope_tuple(bound_scope)
+        issued_at = datetime.now(timezone.utc)
+        not_before = issued_at
+        expires_at = issued_at + timedelta(days=1)
+        nonce = os.urandom(32).hex()
+        core = cls._core(
+            operation,
+            boundary.repository_id,
+            classification,
+            normalized_scope,
+            True,
+            PERSONAL_APPROVAL_AUTHORITY_ID,
+            PERSONAL_APPROVAL_ALGORITHM,
+            issued_at,
+            not_before,
+            expires_at,
+            nonce,
+            EXTERNAL_AUTHORITY_REGISTRY_HASH,
+            True,
+        )
+        return cls(
+            operation,
+            boundary.repository_id,
+            classification,
+            normalized_scope,
+            True,
+            PERSONAL_APPROVAL_AUTHORITY_ID,
+            PERSONAL_APPROVAL_ALGORITHM,
+            hashlib.sha256(approval_line.encode("utf-8")).hexdigest(),
+            issued_at,
+            not_before,
+            expires_at,
+            nonce,
+            EXTERNAL_AUTHORITY_REGISTRY_HASH,
+            True,
             sha256_json(core),
         )
 
@@ -533,26 +580,19 @@ class OperationReceipt:
             OperationClassification.EXTERNAL_CANDIDATE_AUTHORIZATION,
             OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
         }:
-            key = EXTERNAL_AUTHORITY_KEYS.get(self.authority_key_id or "")
             if (
                 self.externally_authorized is not True
                 or self.single_use is not True
-                or not self.authority_key_id
-                or self.signature_algorithm != EXTERNAL_SIGNATURE_ALGORITHM
+                or self.authority_key_id != PERSONAL_APPROVAL_AUTHORITY_ID
+                or self.signature_algorithm != PERSONAL_APPROVAL_ALGORITHM
                 or not self.signature_hex
-                or key is None
-                or key.revoked
-                or now < key.valid_from
-                or now >= key.valid_until
-                or self.classification not in key.allowed_classifications
-                or not _verify_external_signature(
-                    key=key,
-                    signature_hex=self.signature_hex,
-                    message=canonical_bytes(core),
+                or not _verify_personal_approval_digest(
+                    scope=self.scope,
+                    approval_digest=self.signature_hex,
                 )
             ):
                 raise UnauthorizedOperation(
-                    "external gated receipt lacks a valid pinned-authority signature"
+                    "gated receipt lacks a valid exact user approval"
                 )
         elif (
             self.classification
@@ -573,6 +613,11 @@ class OperationReceipt:
             raise UnauthorizedOperation("operation receipt classification is not permitted")
         if required_scope is not None and self.scope != _scope_tuple(required_scope):
             raise UnauthorizedOperation("operation receipt scope is not the exact required scope")
+        if self.classification is OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION:
+            require_current_real_history_operation(
+                self.operation,
+                dict(self.scope) if required_scope is None else required_scope,
+            )
 
     def consume(
         self,
@@ -597,7 +642,13 @@ class OperationReceipt:
         path = root / f"{self.receipt_id}.json"
         payload = self._authorization_use_payload()
         try:
-            descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            descriptor = os.open(
+                path,
+                os.O_CREAT
+                | os.O_EXCL
+                | os.O_WRONLY
+                | getattr(os, "O_BINARY", 0),
+            )
         except FileExistsError as exc:
             raise UnauthorizedOperation("external authorization receipt was already used") from exc
         try:

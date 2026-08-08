@@ -1,0 +1,43 @@
+{
+  "schema_version": "prop_firm_risk_profile/1.0.0",
+  "purpose": "The active profile is the risk envelope for Phase 8 research. It is not broker connectivity, order authority, or a claim that an Apex account is live.",
+  "active_profile_id": "apex_eod_performance_50k",
+  "switching_instructions": "To change firms or account types, add a complete sourced profile below, then change only active_profile_id before a new evaluation declaration is prepared.",
+  "profiles": {
+    "apex_eod_performance_50k": {
+      "firm": "Apex Trader Funding",
+      "program": "EOD Performance Account",
+      "account_size_usd": 50000,
+      "reviewed_on": "2026-08-02",
+      "official_sources": [
+        "https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-performance-accounts-pa/",
+        "https://apextraderfunding.com/help-center/additional-helpful-items/daily-loss-limit-explained/",
+        "https://apextraderfunding.com/help-center/additional-helpful-items/scaling-levels-pa-explained/"
+      ],
+      "firm_limits": {
+        "drawdown": {"kind": "end_of_day_drawdown_enforced_intraday", "maximum_usd": 2000, "breach_behavior": "account_failure_and_liquidation"},
+        "starting_tier": {"profit_range_usd": [0, 1499], "maximum_standard_contract_equivalents": 2, "daily_loss_limit_usd": 1000},
+        "scaling_tiers": [
+          {"minimum_profit_usd": 0, "maximum_standard_contract_equivalents": 2, "daily_loss_limit_usd": 1000},
+          {"minimum_profit_usd": 1500, "maximum_standard_contract_equivalents": 3, "daily_loss_limit_usd": 1000},
+          {"minimum_profit_usd": 3000, "maximum_standard_contract_equivalents": 4, "daily_loss_limit_usd": 2000},
+          {"minimum_profit_usd": 6000, "maximum_standard_contract_equivalents": 4, "daily_loss_limit_usd": 3000}
+        ],
+        "micro_contracts_per_standard_contract": 10,
+        "daily_loss_reset": "18:00 America/New_York"
+      },
+      "project_limits": {
+        "maximum_standard_contract_equivalents": 1,
+        "daily_stop_loss_usd": 500,
+        "maximum_initial_risk_usd": 250,
+        "maximum_total_drawdown_usd": 1500,
+        "external_drawdown_reserve_usd": 500,
+        "maximum_entries_per_session": 3,
+        "maximum_single_market_risk_fraction": 0.25,
+        "maximum_sector_risk_fraction": 0.50,
+        "reason": "Deliberately stricter than Apex's initial tier to reserve room for slippage, liquidation uncertainty, and model error. The $2,000 firm drawdown is an emergency boundary, not usable strategy risk."
+      },
+      "review_required_before_real_evaluation": true
+    }
+  }
+}

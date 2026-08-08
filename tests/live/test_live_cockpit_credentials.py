@@ -12,6 +12,7 @@ from futures_rebuild.live_cockpit.credentials import (
     CREDENTIAL_LOCATOR_SCHEMA,
     CredentialLocatorError,
     credential_status,
+    default_repository_package_api_env_path,
     resolve_cockpit_api_key_source,
 )
 
@@ -127,6 +128,18 @@ def test_absent_locator_preserves_existing_source_resolution(
     assert resolved is not None
     assert resolved.key == STALE_ENV_KEY
     assert calls == [{"DATABENTO_API_KEY": STALE_ENV_KEY}]
+
+
+def test_repository_package_path_is_available_for_existence_only_self_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(credentials, "REPOSITORY_ROOT", tmp_path)
+    monkeypatch.setattr(credentials.sys, "frozen", False, raising=False)
+
+    assert default_repository_package_api_env_path() == tmp_path / "api.env"
+
+    monkeypatch.setattr(credentials.sys, "frozen", True, raising=False)
+    assert default_repository_package_api_env_path() is None
 
 
 def test_frozen_default_locator_and_status_use_existing_file(

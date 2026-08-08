@@ -5,7 +5,6 @@ import os
 import shutil
 import stat
 import subprocess
-import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -76,11 +75,10 @@ def _remove_readonly(function, path: str, _error) -> None:
 
 
 @pytest.fixture
-def boundary() -> RepoBoundary:
+def boundary(short_test_root_factory) -> RepoBoundary:
     # The production-derived census snapshot has deep prescribed paths. Keep
     # the synthetic repository below legacy Windows MAX_PATH.
-    root = Path(Path.cwd().anchor) / f"rdy-{uuid.uuid4().hex[:8]}"
-    root.mkdir()
+    root = short_test_root_factory("rdy-")
     active = root / "a"
     legacy = root / "l"
     stock = root / "s"
@@ -230,12 +228,18 @@ def _prerequisites(boundary, operation_factory, monkeypatch):
         calendar_release_id=calendar_receipt.release_id,
         predecessor_index_release_id=None,
         diff_report_id=str(calendar_diff["diff_report_id"]),
+        approved_at_utc=(
+            (now + timedelta(minutes=1))
+            .isoformat()
+            .replace("+00:00", "Z")
+        ),
     )
     calendar_index_receipt = publish_calendar_index(
         candidate_calendar_receipt=calendar_receipt,
         activation_approval=activation,
         publisher=_publisher(boundary, operation_factory, "calendar-index"),
         expected_markets=("ES",),
+        freshness_at=now,
     )
     active_pointer = active_pointer_payload(
         calendar_index_receipt,
@@ -268,6 +272,14 @@ def _prerequisites(boundary, operation_factory, monkeypatch):
     synthetic = prerequisites.synthetic_test_evidence_receipt
     engine = prerequisites.engine_registration_receipt
     isolation = prerequisites.isolation_evidence_receipt
+    # These tests exercise the general readiness publication contract with a
+    # compact synthetic schema-v6 fixture.  Schema-v7 empirical-observability
+    # binding is covered separately by the fail-closed legacy-schema test.
+    monkeypatch.setattr(
+        readiness_module,
+        "_calendar_readiness_codes",
+        lambda _foundation, *, boundary: (),
+    )
     return foundation, synthetic, engine, isolation, census, publisher
 
 
@@ -480,7 +492,7 @@ def test_all_absent_inputs_return_blockers_without_writes(
     ).exists()
 
 
-def test_legacy_foundation_is_classified_calendar_contract_not_bound(
+def test_legacy_foundation_is_classified_historical_observability_contract_not_bound(
     boundary, monkeypatch
 ) -> None:
     monkeypatch.setattr(
@@ -521,8 +533,14 @@ def test_legacy_foundation_is_classified_calendar_contract_not_bound(
         (blocker.state, blocker.code) for blocker in assessment.blockers
     }.issuperset(
         {
-            ("REBUILD_COMPLETE", "CALENDAR_CONTRACT_NOT_BOUND"),
-            ("HISTORICAL_RESEARCH_READY", "CALENDAR_CONTRACT_NOT_BOUND"),
+            (
+                "REBUILD_COMPLETE",
+                "HISTORICAL_OBSERVABILITY_CONTRACT_NOT_BOUND",
+            ),
+            (
+                "HISTORICAL_RESEARCH_READY",
+                "HISTORICAL_OBSERVABILITY_CONTRACT_NOT_BOUND",
+            ),
         }
     )
 

@@ -1,0 +1,61 @@
+{
+  "schema_version": "cash_open_impulse_dependency_forensics_plan/1.0.0",
+  "state": "PREPARED_SINGLE_USE_READ_ONLY",
+  "operation": "AUDIT_CASH_OPEN_EXACT_LOCAL_DEPENDENCIES_ONCE",
+  "purpose": "Distinguish exact active-source dependency failures and compare only those checkpoints against every bound local immutable causal alternative without price-valued output or economic evaluation.",
+  "protocol_id": "3b8e09d65015afd33fc033aa72c8bb0be22425cafac8b8b145eeccb639258067",
+  "calendar_release_id": "038940d82031f31e2c66ed37186e98a6ee6cff3e7248f634f2c7a8e94ea6ecf3",
+  "source_scope": {
+    "markets": ["ES", "CL", "ZN", "6E"],
+    "years": [2018, 2019, 2020, 2021, 2022],
+    "active_pair_count": 20,
+    "local_immutable_release_count": 61,
+    "holdout_2025_excluded": true
+  },
+  "forensic_taxonomy": [
+    "MISSING_SOURCE_SESSION",
+    "MISSING_MINUTE",
+    "NON_EXECUTABLE_DISPOSITION",
+    "DUPLICATE_EXECUTABLE_MINUTE",
+    "LATE_AVAILABILITY",
+    "MISSING_IDENTITY",
+    "IDENTITY_CHANGE",
+    "ROLL_OR_IDENTITY_CHANGE_BETWEEN_FEATURE_AND_EXECUTION",
+    "MISSING_MARKET_SPEC",
+    "MARKET_SPEC_CHANGE",
+    "ENTRY_NOT_AFTER_DECISION",
+    "CALENDAR_INELIGIBLE"
+  ],
+  "output_root": "state/unpublished_evidence/cash_open_impulse_dependency_forensics",
+  "output_policy": "CREATE_ONLY_UNPUBLISHED_PRICE_FREE_EXACT_DEPENDENCY_EVIDENCE",
+  "maximum_runtime_seconds": 900,
+  "worker_timeout_seconds": 780,
+  "maximum_workers": 4,
+  "maximum_attempts": 1,
+  "maximum_retries": 0,
+  "external_cost_usd": "0",
+  "bindings": {
+    "configs/active_data_view_contract.json": "73d89cea2487dcfa40b28a9a998909036a48ef512f9d5b53d97d58a4deadfa41",
+    "configs/cash_open_impulse_pre_registration_protocol.json": "8d9dbb4bc4355dc9fd753ebde8cce11086b6c7027677c168cd1c000eebeb8c30",
+    "configs/tier1_historical_checkpoint_calendar_v5.json": "a328798dca5175456f824e6c0df74398d604f9d57ee43969bdfe82ff12c2fdd8",
+    "data/active/catalog.json": "da8f5b9afa8584db94dfaac1415d10da7945adac413a8a767526b8fc7e0894da",
+    "manifests/split_plans/tier1_core/1ef3d7de365833cb46e1a239759b018b1f85b5bfc7d342b291064f1efe66399b.json": "540a245be6efda355e23af28f8532c8d422f2957416e97daed9256cbe52718e7",
+    "scripts/run_cash_open_impulse_dependency_forensics.py": "55a9c200cf6b1a4097ba3fc2c13a15272ac0dda1830cf12408c38822a916587a",
+    "src/futures_rebuild/cash_open_impulse_dependency_forensics.py": "8352054b01b6840f371b5e7a46214405059b0561277c1ae312c700574c0ace27",
+    "src/futures_rebuild/research_gateway_policy.py": "8d036488116ceb86b38b4d6d67c03f249d89e3ebd4a95cc4f47310e1f06b32d5"
+  },
+  "forbidden_actions": {
+    "price_values_in_output": true,
+    "returns_or_performance": true,
+    "model_fit": true,
+    "prediction_generation": true,
+    "trial_registration_or_publication": true,
+    "active_data_mutation": true,
+    "holdout_2025": true,
+    "provider_network_credentials": true,
+    "stage_commit_push": true,
+    "trading": true
+  },
+  "preservation_boundary": "Preserve active data, all immutable releases, prior plans, authorization uses, census evidence, and unrelated work; create only one authorization-use record and one unpublished forensic report.",
+  "plan_id": "786bdf31a81ff1356d91d293c97b66e93252c943854bd0f7561de5f446bef0ad"
+}

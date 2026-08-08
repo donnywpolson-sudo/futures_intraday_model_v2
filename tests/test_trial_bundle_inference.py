@@ -7,7 +7,6 @@ from pathlib import Path
 
 import pytest
 
-import futures_rebuild.boundary as boundary_module
 from futures_rebuild.boundary import (
     OperationClassification,
     OperationReceipt,
@@ -53,9 +52,6 @@ from tests.test_legacy_trial_census import (
     _publisher as _legacy_publisher,
     _snapshot as _legacy_census_snapshot,
 )
-
-
-TEST_AUTHORITY_KEY_ID = "SYNTHETIC_TEST_AUTHORITY"
 
 
 def inference_policy():
@@ -644,8 +640,6 @@ def test_unresolved_census_blocks_before_external_authority_can_be_considered(
     registry.register(real)
     with pytest.raises(UnauthorizedOperation, match="INVALID_TRIAL_CENSUS_UNRESOLVED"):
         registry.permit(real.charter_id)
-    with pytest.raises(TypeError):
-        boundary_module.EXTERNAL_AUTHORITY_KEYS[TEST_AUTHORITY_KEY_ID] = (1, 3)
     assert all(event["event_type"] != "PRE_OUTCOME_ANCHORED" for event in events.events())
 
 

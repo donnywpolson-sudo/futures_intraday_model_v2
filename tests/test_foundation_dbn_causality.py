@@ -14,7 +14,7 @@ import futures_rebuild.foundation.parquet as parquet_module
 import futures_rebuild.producer_bridge as producer_bridge_module
 from futures_rebuild.boundary import RepoBoundary
 from futures_rebuild.boundary import OperationClassification, OperationReceipt
-from futures_rebuild.canonical import sha256_file
+from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
 from futures_rebuild.data_layout import (
     DataReleaseManifest,
     PhasePublisher as AtomicPublisher,
@@ -423,6 +423,7 @@ def test_economics_rulebook_treats_mutable_urls_as_non_authoritative_and_fails_o
     assert payload["authority_policy"] == {
         "eligible_contract_requires_provider_unit_qty_match": True,
         "mutable_public_urls_authorize_economics": False,
+        "non_multiplier_provider_unit_markets": ["ZQ"],
         "provider_sentinel_allowed": False,
         "rulebook_hash_bound_into_every_economics_record": True,
     }
@@ -458,10 +459,10 @@ def test_economics_rulebook_treats_mutable_urls_as_non_authoritative_and_fails_o
         row_ordinal=0,
         row_sha256="d" * 64,
     )
-    with pytest.raises(ContractError, match="economics fail closed"):
-        EconomicsRuleBook.from_file(
-            REPO / "configs" / "contract_economics_rules.json"
-        ).resolve("ES", definition)
+    resolved = EconomicsRuleBook.from_file(
+        REPO / "configs" / "contract_economics_rules.json"
+    ).resolve("ES", definition)
+    assert resolved.provider_unit_qty_state == "RULEBOOK_VALUE_PROVIDER_UNIT_QTY_UNAVAILABLE"
 
 
 @pytest.mark.parametrize(
@@ -545,15 +546,18 @@ def test_eight_market_successor_economics_are_provider_quantity_bound(
     assert resolved.tick_value == Decimal(tick_value)
     assert resolved.quote_convention == quote_convention
 
-    with pytest.raises(ContractError, match="contradicts the pinned market rule"):
-        rulebook.resolve(
-            market,
-            replace(
-                definition,
-                unit_of_measure_qty_nano=(unit_qty + 1) * 1_000_000_000,
-                row_sha256="e" * 64,
-            ),
+    changed_unit = replace(
+        definition,
+        unit_of_measure_qty_nano=(unit_qty + 1) * 1_000_000_000,
+        row_sha256="e" * 64,
+    )
+    if market == "ZQ":
+        assert rulebook.resolve(market, changed_unit).provider_unit_qty_state == (
+            "RULEBOOK_VALUE_PROVIDER_UNIT_QTY_UNAVAILABLE"
         )
+    else:
+        with pytest.raises(ContractError, match="contradicts the pinned market rule"):
+            rulebook.resolve(market, changed_unit)
 
 
 def test_economics_asset_classes_cover_the_exact_41_market_universe() -> None:
@@ -714,3 +718,112 @@ def test_phase2_causal_release_consumes_only_verified_raw_and_policy_releases(
     )
     assert reference_census == (1, {"ELIGIBLE": 1}, {"GLBX_MDP3_CAPTURE_TIME": 1})
     assert reference_path.read_bytes() == bars_path.read_bytes()
+
+
+def test_certification_rehydrates_embedded_predecessor_policy_release(
+    tmp_path: Path,
+) -> None:
+    boundary = RepoBoundary(active_root=tmp_path)
+    config_root = boundary.active_root / "configs"
+    config_root.mkdir(parents=True)
+    for name in (
+        "contract_economics_rules.json",
+        "foundation_policy.json",
+        "known_anomalies.json",
+        "provider_data_epochs.json",
+        "session_policy.json",
+    ):
+        (config_root / name).write_bytes((REPO / "configs" / name).read_bytes())
+    operation = OperationReceipt.issue_local(
+        boundary,
+        operation="PUBLISH_RELEASE",
+        classification=OperationClassification.SYNTHETIC_MECHANICS_ONLY,
+    )
+    publisher = AtomicPublisher(
+        boundary=boundary,
+        operation_receipt=operation,
+        lock_path=boundary.active_root / "state" / "locks" / "policy.lock",
+    )
+    receipt = publish_foundation_policies(
+        boundary=boundary,
+        publisher=publisher,
+        config_root=config_root,
+    )
+    manifest = receipt.verify(boundary)
+    embedded_economics = manifest.embedded_documents[
+        "contract_economics_rules.json"
+    ]
+    active_economics = json.loads(
+        (config_root / "contract_economics_rules.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    active_economics["valid_from"] = "2099-01-01"
+    (config_root / "contract_economics_rules.json").write_bytes(
+        canonical_bytes(active_economics) + b"\n"
+    )
+
+    with pytest.raises(
+        IntegrityError, match="active foundation policies differ"
+    ):
+        VerifiedFoundationPolicies.from_release(receipt, boundary=boundary)
+
+    policy_workspace = (
+        boundary.active_root
+        / "state"
+        / "predecessor-policy"
+    )
+    policies = VerifiedFoundationPolicies.from_embedded_release(
+        receipt,
+        boundary=boundary,
+        workspace=policy_workspace,
+        required_market="ES",
+    )
+
+    assert policies.policy_set_id == manifest.metadata["policy_set_id"]
+    assert policies.economics.rulebook_hash == sha256_json(embedded_economics)
+    assert policies.economics.rulebook_hash != sha256_json(active_economics)
+    assert (
+        policy_workspace / "contract_economics_rules.json"
+    ).read_bytes() == canonical_bytes(embedded_economics) + b"\n"
+    policies.verify()
+    with pytest.raises(IntegrityError, match="workspace already exists"):
+        VerifiedFoundationPolicies.from_embedded_release(
+            receipt,
+            boundary=boundary,
+            workspace=policy_workspace,
+            required_market="ES",
+        )
+
+
+def test_embedded_predecessor_economics_requires_candidate_market() -> None:
+    payload = json.loads(
+        (REPO / "configs" / "contract_economics_rules.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    payload["rules_version"] = "1.2.0"
+    payload["rules"] = payload["rules"][:33]
+    payload["verification_sources"]["DATABENTO_DEFINITION_GLBX_MDP3"][
+        "locator"
+    ] = (
+        f"manifests/data_releases/dbn/{'b' * 64}.json"
+        "#data/dbn/definition/{market}/{year}/{filename}"
+    )
+
+    rulebook = EconomicsRuleBook.from_embedded_payload(
+        payload,
+        required_market="ES",
+    )
+
+    assert len(rulebook.rules) == 33
+    assert rulebook.rulebook_hash == sha256_json(payload)
+    with pytest.raises(IntegrityError, match="schema/policy is invalid"):
+        EconomicsRuleBook.from_payload(payload)
+    with pytest.raises(
+        IntegrityError, match="does not cover the required market"
+    ):
+        EconomicsRuleBook.from_embedded_payload(
+            payload,
+            required_market="ZW",
+        )

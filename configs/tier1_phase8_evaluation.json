@@ -1,0 +1,75 @@
+{
+  "schema_version": "tier1_phase8_evaluation/1.0.0",
+  "purpose": "Locked local configuration for the first net-economics evaluation. It is not an evaluation result, order authority, or permission to read market rows.",
+  "tier": "tier_1_research",
+  "markets": ["ES", "CL", "ZN", "6E"],
+  "period": "2018-2022",
+  "risk_profile_id": "apex_eod_performance_50k",
+  "costs": {
+    "assumption_status": "PROVISIONAL_APEX_TRADOVATE_ZN_FEE",
+    "evaluation_result_label": "PROVISIONAL_EXECUTION_COSTS",
+    "exact_apex_live_costs_verified": false,
+    "execution_connection": "Tradovate",
+    "reviewed_on": "2026-08-02",
+    "official_source": "https://apextraderfunding.com/help-center/tradovate/tradovate-commission-instruments/",
+    "unit": "Apex published all-in USD per standard contract per side; slippage is total round-trip ticks",
+    "base": {
+      "ES": {"fee_status": "EXACT_APEX_TRADOVATE_PUBLISHED", "all_in_fee_per_side_usd": "1.55", "round_trip_fee_usd": "3.10", "round_trip_slippage_ticks_per_contract": 2},
+      "CL": {"fee_status": "EXACT_APEX_TRADOVATE_PUBLISHED", "all_in_fee_per_side_usd": "1.67", "round_trip_fee_usd": "3.34", "round_trip_slippage_ticks_per_contract": 4},
+      "ZN": {"fee_status": "PROVISIONAL_CONSERVATIVE_PRE_ACCOUNT_ASSUMPTION", "all_in_fee_per_side_usd": "2.50", "round_trip_fee_usd": "5.00", "round_trip_slippage_ticks_per_contract": 2, "reason": "Apex's current public Tradovate schedule does not publish ZN. This deliberately conservative placeholder permits research only and must be replaced by the account-specific rate before any exact-cost or deployment claim."},
+      "6E": {"fee_status": "EXACT_APEX_TRADOVATE_PUBLISHED", "all_in_fee_per_side_usd": "1.77", "round_trip_fee_usd": "3.54", "round_trip_slippage_ticks_per_contract": 2}
+    },
+    "stress": {"fee_multiplier": "1.00", "slippage_multiplier": 2, "minimum_round_trip_slippage_ticks": 2},
+    "extreme": {"fee_multiplier": "1.00", "slippage_multiplier": 4, "minimum_round_trip_slippage_ticks": 4},
+    "replacement_rule": "Use the current Apex Tradovate all-in published fee unchanged for ES, CL, and 6E. ZN is a deliberately conservative pre-account placeholder: all results must be labeled PROVISIONAL_EXECUTION_COSTS and cannot claim exact Apex live costs or deployment readiness. Do not lower slippage after seeing results."
+  },
+  "delay": {"decision_to_order_bars": 1, "fill_assumption": "next_eligible_bar", "roll_handling": "contract_boundary_not_return"},
+  "position_sizing": {
+    "method": "atr_bracket_fixed_one_contract",
+    "risk_per_new_position_usd": 250,
+    "maximum_open_risk_usd": 250,
+    "maximum_standard_contract_equivalents": 1,
+    "allow_pyramiding": false,
+    "sizing_uses_training_only_volatility": true,
+    "maximum_entries_per_session": 3,
+    "admission_cost_scenario": "stress"
+  },
+  "bracket_exit_policy": {
+    "atr_method": "wilder",
+    "atr_lookback_completed_bars": 20,
+    "atr_multiple": "1.5",
+    "profit_target_net_r_multiple": "2",
+    "maximum_hold_minutes": 60,
+    "session_roll": "17:00 America/Chicago",
+    "session_end_fill": "last_verified_eligible_bar_before_roll",
+    "intrabar_stop_target_collision": "stop_first",
+    "entry_blackout_minutes_before_session_roll": 60,
+    "missing_or_roll_behavior": "abstain_or_flatten_never_invent_price"
+  },
+  "margin": {"treatment": "NOT_USED_FOR_FIXED_RISK_RESEARCH_EVALUATION", "live_buying_power_validation": false, "source": "outside_this_historical_research_lane"},
+  "concentration_limits": {
+    "maximum_single_market_risk_fraction": "0.25",
+    "maximum_sector_risk_fraction": "0.50",
+    "daily_stop_loss_usd": 500,
+    "maximum_total_drawdown_usd": 1500,
+    "external_firm_drawdown_usd": 2000,
+    "external_drawdown_reserve_usd": 500,
+    "breach_behavior": "flatten_and_stop_for_session"
+  },
+  "baselines": [
+    "flat_no_trade",
+    "fold_local_unconditional_return_by_market_session",
+    "previous_bar_sign_momentum",
+    "previous_bar_sign_reversal",
+    "risk_matched_always_long_intraday",
+    "equal_risk_version_of_candidate_signal"
+  ],
+  "pass_fail_metrics": {
+    "required": ["net_pnl_usd", "sharpe", "sortino", "maximum_drawdown_usd", "turnover", "hit_rate", "gross_exposure", "net_exposure", "market_year_results"],
+    "report_by": ["market", "market_year", "portfolio", "cost_scenario"],
+    "required_cost_scenario_for_promotion": "stress",
+    "must_beat_after_costs": ["flat_no_trade", "fold_local_unconditional_return_by_market_session", "previous_bar_sign_momentum", "previous_bar_sign_reversal", "risk_matched_always_long_intraday"],
+    "equivalence_checks": ["equal_risk_version_of_candidate_signal"],
+    "fail_closed_on_missing_metric_or_coverage": true
+  }
+}

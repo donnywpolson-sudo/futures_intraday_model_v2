@@ -1,0 +1,43 @@
+{
+  "schema_version": "eight_market_successor_candidate/1.0.0",
+  "classification": "NON_AUTHORIZING_READ_ONLY_SOURCE_INVENTORY",
+  "source_root": "C:\\Users\\donny\\Desktop\\futures_intraday_model",
+  "parent_release": {
+    "release_id": "9e5a9f2a405e50b0cda6702b67506b0951b057500781d37c45171da3967e9b51",
+    "dbn_files": 4020,
+    "sidecar_files": 4020,
+    "combined_files": 8040,
+    "combined_bytes": 25007876004
+  },
+  "markets": ["6N", "6S", "BTC", "ETH", "GF", "PA", "PL", "ZQ"],
+  "families": {
+    "definition": "definition",
+    "ohlcv_1m": "ohlcv-1m",
+    "statistics": "statistics",
+    "status": "status"
+  },
+  "expected_candidate": {
+    "dbn_files": 471,
+    "sidecar_files": 471,
+    "combined_files": 942,
+    "combined_bytes": 584841848
+  },
+  "expected_union": {
+    "dbn_files": 4491,
+    "sidecar_files": 4491,
+    "combined_files": 8982,
+    "combined_bytes": 25592717852,
+    "market_count": 41
+  },
+  "excluded_relative_paths": [
+    "data/dbn/statistics/6N/2010/.2010-06-06_2011-01-01.dbn.zst.phase1a-ca3b7f3071493696c1549d75-5843244d.tmp/GLBX-20260720-X85N4QHYYA/condition.json",
+    "data/dbn/statistics/6N/2010/.2010-06-06_2011-01-01.dbn.zst.phase1a-ca3b7f3071493696c1549d75-5843244d.tmp/GLBX-20260720-X85N4QHYYA/GLBX-20260720-X85N4QHYYA.zip",
+    "data/dbn/statistics/6N/2010/.2010-06-06_2011-01-01.dbn.zst.phase1a-ca3b7f3071493696c1549d75-5843244d.tmp/GLBX-20260720-X85N4QHYYA/metadata.json"
+  ],
+  "authority": {
+    "provider_calls_authorized": false,
+    "copy_authorized": false,
+    "destination_mutation_authorized": false,
+    "legacy_mutation_authorized": false
+  }
+}

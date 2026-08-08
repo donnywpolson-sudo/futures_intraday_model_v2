@@ -2,8 +2,8 @@
 
 The module proves that the exact foundation and statistical machinery are
 present and can derive gates from row-level returns.  It deliberately does not
-open real history: that boundary requires a separately signed, single-use
-``EXTERNAL_REAL_HISTORY_AUTHORIZATION`` receipt.
+open real history: that boundary requires a separate exact, plan-hash-bound,
+single-use ``EXTERNAL_REAL_HISTORY_AUTHORIZATION`` user-approval receipt.
 """
 
 from __future__ import annotations
@@ -60,6 +60,12 @@ REQUIRED_COMPONENTS = {
     ],
     "futures_rebuild.historical_builder": ["build_synthetic_research_run"],
     "futures_rebuild.historical_evaluator": ["evaluate_frozen_research_run"],
+    "futures_rebuild.historical_phase3": [
+        "Phase3SampleContract",
+        "build_phase3_outcomes",
+        "load_phase3_outcome_release",
+        "publish_phase3_outcome_release",
+    ],
     "futures_rebuild.historical_splitter": ["split_synthetic_research_run"],
     "futures_rebuild.producer_bridge": [
         "generate_causal_outcomes",

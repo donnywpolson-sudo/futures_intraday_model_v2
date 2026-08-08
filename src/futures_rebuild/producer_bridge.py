@@ -22,6 +22,7 @@ import pyarrow.parquet as pq
 
 from .boundary import RepoBoundary
 from .canonical import canonical_bytes, sha256_file, sha256_json
+from .contract_economics_audit import require_phase8_passing_contract_economics_audit
 from .economics import VerifiedEconomicsRegistry
 from .errors import ContractError, IntegrityError
 from .foundation.economics import ResolvedEconomics
@@ -1287,6 +1288,26 @@ def publish_actual_contract_economics(
     return receipt
 
 
+def derive_actual_contract_economics_records(
+    *,
+    causal_receipt: VerifiedReleaseReceipt,
+    definitions: LoadedActualContractDefinitions,
+    policies: VerifiedFoundationPolicies,
+    session_policy: VerifiedSessionPolicy,
+    boundary: RepoBoundary,
+) -> tuple[dict[str, object], ...]:
+    """Derive the canonical numeric registry for one causal interval without writing.
+
+    Phase 8 reconciliation uses this small public read-only surface to decide
+    whether a historic registry remains numerically compatible with the current
+    rulebook.  It is intentionally not an authorization to publish a release.
+    """
+
+    return _economics_records(
+        causal_receipt, definitions, policies, session_policy, boundary
+    )
+
+
 def load_actual_contract_economics(
     receipt: VerifiedReleaseReceipt,
     *,
@@ -1329,6 +1350,31 @@ def verify_actual_contract_economics_context(
         session_policy=session_policy,
         boundary=boundary,
         expected_records=None,
+    )
+
+
+def verify_phase8_actual_contract_economics_context(
+    receipt: VerifiedReleaseReceipt,
+    *,
+    audit_receipt: VerifiedReleaseReceipt,
+    causal_receipt: VerifiedReleaseReceipt,
+    definitions: LoadedActualContractDefinitions,
+    policies: VerifiedFoundationPolicies,
+    session_policy: VerifiedSessionPolicy,
+    boundary: RepoBoundary,
+) -> VerifiedEconomicsRegistry:
+    """Current Phase 8 gate: passing all-market DBN audit plus rulebook."""
+
+    require_phase8_passing_contract_economics_audit(
+        audit_receipt, boundary=boundary, rulebook=policies.economics
+    )
+    return verify_actual_contract_economics_context(
+        receipt,
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
     )
 
 

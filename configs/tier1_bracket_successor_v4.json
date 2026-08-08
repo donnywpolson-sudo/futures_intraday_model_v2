@@ -1,0 +1,98 @@
+{
+  "schema_version": "tier1_bracket_successor_v4_contract/1.0.0",
+  "state": "PREPARED_NOT_REGISTERED",
+  "classification": "POST_AUDIT_NON_PRISTINE_HISTORICAL_SCREEN_ONLY",
+  "supersedes_incomplete_v3_trial_id": "1763e644f5b3ebcd95a744971145f9a552c19d2db6b95226b540dcecef247f33",
+  "inherits_policy_path": "configs/tier1_bracket_post_audit_successor_v3.json",
+  "inherits_policy_sha256": "eda2d3a251e98edc705f109923dfcf6a138a951737e92fb9e5686d8458ca02bf",
+  "required_bound_execution_stages": [
+    "EXPECTED_OPPORTUNITY_CENSUS",
+    "AVAILABLE_AT_CAUSAL_FEATURE_MATERIALIZATION",
+    "FUTURE_INDEPENDENT_OUTCOME_MATURATION",
+    "EIGHT_FOLD_MARKET_SPECIFIC_TRAINING_ONLY_RIDGE",
+    "FROZEN_PREDICTION_AND_EXPLICIT_ABSTENTION_LEDGER",
+    "INDEPENDENT_BASELINE_SIGNAL_SCHEDULE_COST_RISK_PATHS",
+    "CONTINUOUS_AND_SEGMENTED_ACCOUNT_VIEWS",
+    "SESSION_LEVEL_HAC_BOOTSTRAP_POWER_DSR_ROMANO_WOLF",
+    "TWENTY_FOUR_SLEEVE_GATES_AND_NEGATIVE_CONTROLS",
+    "ORDERED_SINGLE_TERMINAL_DECISION"
+  ],
+  "execution_input": {
+    "source": "TWENTY_HASH_BOUND_CAUSAL_MARKET_YEAR_RELEASES",
+    "session_schedule": "HASH_BOUND_POINT_IN_TIME_EXPECTED_SESSION_CENSUS",
+    "required_source_columns": [
+      "market",
+      "exchange_session_date",
+      "event_at_ns",
+      "open_nano",
+      "high_nano",
+      "low_nano",
+      "close_nano",
+      "volume",
+      "tick_size",
+      "tick_value",
+      "point_value",
+      "actual_identity_hash",
+      "source_row_sha256"
+    ],
+    "bar_end_derivation": "event_at_ns + 60000000000",
+    "available_at_derivation": "bar_end_at_ns + 5000000000",
+    "availability_rule_is_registered_before_row_access": true,
+    "2025_path_rejected_before_open": true
+  },
+  "prediction_coverage": {
+    "features_do_not_require_future_outcome": true,
+    "prediction_rows_survive_missing_future_outcome": true,
+    "training_rows_require_mature_outcome_and_record_exclusion": true,
+    "all_expected_checkpoints_end_in_prediction_or_explicit_abstention": true
+  },
+  "split_plan": {
+    "session_universe": "SORTED_UNION_OF_SESSION_LABELS_FROM_ALL_TWENTY_HASH_BOUND_SOURCES_BEFORE_FEATURE_OR_OUTCOME_CONSTRUCTION",
+    "training_period": "ALL_AVAILABLE_2018_2019_SESSIONS_BEFORE_EACH_TEST_FOLD",
+    "evaluation_period": "ALL_2020_2022_SESSIONS_DIVIDED_INTO_EIGHT_CONTIGUOUS_NEAR_EQUAL_FOLDS",
+    "division_rule": "EARLIEST_FOLDS_RECEIVE_ONE_EXTRA_SESSION_WHEN_NOT_EVENLY_DIVISIBLE",
+    "purge_minutes": 60,
+    "embargo_sessions": 1,
+    "unused_sessions": "NONE_EXCEPT_THE_ONE_SESSION_EMBARGO_BEFORE_EACH_TEST_FOLD"
+  },
+  "baselines": [
+    "flat_no_trade",
+    "fold_local_unconditional_return_by_market_session",
+    "previous_bar_sign_momentum",
+    "previous_bar_sign_reversal",
+    "risk_matched_always_long_intraday",
+    "candidate_signal_market_order_ranking_ablation"
+  ],
+  "multiplicity": {
+    "legacy_trial_penalty_count": 105,
+    "dsr_reference": "105_DETERMINISTIC_STANDARD_NORMAL_NULL_QUANTILES_AT_SESSION_STANDARD_ERROR_PLUS_CURRENT_CANDIDATE",
+    "candidate_not_unique_maximum_behavior": "DSR_PROBABILITY_ZERO_FAIL_CLOSED",
+    "legacy_penalty_manifest": "manifests/data_releases/evidence/a3a24c59e592baa38444fbf7380ab41df666898a638eb4454683fbc4f393e359.json"
+  },
+  "inference_input_construction": {
+    "training_power_variance_proxy": "SESSION_SUM_OF_MEAN_LONG_SHORT_STRESS_NET_COUNTERFACTUALS_ON_TRAINING_ONLY_ROWS",
+    "evaluation_sleeves": "CANDIDATE_REALIZED_STRESS_NET_CONTRIBUTION_PER_COMPLETE_SESSION_ZERO_WHEN_NO_TRADE",
+    "training_sleeves": "DIRECTIONAL_STRESS_NET_COUNTERFACTUAL_PER_COMPLETE_TRAINING_SESSION",
+    "random_seed": "FIRST_64_BITS_OF_REGISTERED_TRIAL_ID",
+    "negative_controls": "EXECUTED_BY_ENGINE_NOT_CALLER_ASSERTED"
+  },
+  "evaluation": {
+    "production_bootstrap_resamples": 10000,
+    "production_power_resamples": 5000,
+    "deterministic_seed_from_trial_id": true,
+    "minimum_complete_clusters": 30,
+    "pbo_not_applicable_for_single_configuration": true,
+    "runtime_metadata_separate_from_canonical_payload": true
+  },
+  "authority": {
+    "registration_publication_authorized": false,
+    "historical_source_row_access_authorized": false,
+    "model_fit_authorized": false,
+    "prediction_generation_authorized": false,
+    "historical_evaluation_authorized": false,
+    "holdout_or_forward_access_authorized": false,
+    "provider_access_authorized": false,
+    "trading_authorized": false,
+    "git_actions_authorized": false
+  }
+}

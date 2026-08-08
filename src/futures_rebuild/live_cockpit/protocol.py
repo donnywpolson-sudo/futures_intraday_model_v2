@@ -80,6 +80,7 @@ HISTORY_CACHE_FAILURE_CATEGORIES = frozenset(
     {
         "ESTIMATE_UNAVAILABLE",
         "SYMBOL_RESOLUTION",
+        "AUTHORIZATION",
         "TIMEOUT",
         "CONNECTION",
         "DATA_AVAILABILITY",
@@ -318,6 +319,31 @@ def validate_history_cache_payload(payload: Mapping[str, Any]) -> None:
             raise ValueError("unsupported history-cache failure category")
     elif failure_category is not None:
         raise ValueError("non-error history-cache status cannot carry a failure category")
+    diagnostic = payload.get("diagnostic")
+    if diagnostic is not None:
+        fields = {
+            "phase",
+            "chunk_number",
+            "requested_start",
+            "requested_end",
+            "download_began",
+        }
+        if not isinstance(diagnostic, Mapping) or set(diagnostic) != fields:
+            raise ValueError("history-cache diagnostic fields are not exact")
+        phase = diagnostic.get("phase")
+        if not isinstance(phase, str) or not phase or len(phase) > 32:
+            raise ValueError("invalid history-cache diagnostic phase")
+        chunk_number = diagnostic.get("chunk_number")
+        if chunk_number is not None and _nonnegative_int(
+            chunk_number, name="diagnostic.chunk_number"
+        ) < 1:
+            raise ValueError("history-cache diagnostic chunk number must be one-based")
+        for field in ("requested_start", "requested_end"):
+            value = diagnostic.get(field)
+            if value is not None:
+                _nonnegative_int(value, name=f"diagnostic.{field}")
+        if not isinstance(diagnostic.get("download_began"), bool):
+            raise ValueError("history-cache diagnostic download_began must be a boolean")
 
 
 def event(event_type: str, payload: Mapping[str, Any]) -> dict[str, Any]:

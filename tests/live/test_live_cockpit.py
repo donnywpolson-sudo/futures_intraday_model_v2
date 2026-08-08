@@ -4,6 +4,7 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime, timedelta, timezone
@@ -24,7 +25,6 @@ from futures_rebuild.live_cockpit.app import (
     self_check,
 )
 from futures_rebuild.live_cockpit.cache import BarCache
-from futures_rebuild.live_cockpit.credentials import CredentialStatus
 from futures_rebuild.live_cockpit.engine import (
     DEFAULT_VISUAL_UPDATE_MODE,
     HISTORY_REQUEST_TIMEOUT_SECONDS,
@@ -152,16 +152,49 @@ def test_history_cache_contract_is_bounded_and_rejects_secrets() -> None:
     }
     validate_history_cache_payload(payload)
     validate_event(event("history_cache_status", payload))
-    unsafe = {
+    error_payload = {
         **payload,
         "state": "ERROR",
         "plan_id": None,
         "estimated_cost_usd": None,
         "estimate_expires_at": None,
+        "failure_category": "UNAVAILABLE",
+        "diagnostic": {
+            "phase": "COST_ESTIMATE",
+            "chunk_number": None,
+            "requested_start": 1_000,
+            "requested_end": 2_000,
+            "download_began": False,
+        },
+    }
+    validate_history_cache_payload(error_payload)
+    validate_event(event("history_cache_status", error_payload))
+    unsafe = {
+        **error_payload,
         "failure_category": "https://provider.invalid/?key=SECRET",
     }
     with pytest.raises(ValueError, match="unsupported history-cache failure"):
         validate_history_cache_payload(unsafe)
+    with pytest.raises(ValueError, match="fields are not exact"):
+        validate_history_cache_payload(
+            {
+                **error_payload,
+                "diagnostic": {
+                    **error_payload["diagnostic"],
+                    "provider_text": "SECRET",
+                },
+            }
+        )
+    with pytest.raises(ValueError, match="one-based"):
+        validate_history_cache_payload(
+            {
+                **error_payload,
+                "diagnostic": {
+                    **error_payload["diagnostic"],
+                    "chunk_number": 0,
+                },
+            }
+        )
 
 
 def _ready_prediction_payload() -> dict[str, object]:
@@ -473,6 +506,15 @@ def test_demo_engine_exposes_41_markets_states_and_cached_timeframes() -> None:
         bootstrap = engine.bootstrap_event()
         payload = bootstrap["payload"]
         assert len(payload["markets"]) == 41
+        market_names = {
+            market["symbol"]: market["name"] for market in payload["markets"]
+        }
+        assert market_names["ES"] == "E-mini S&P 500"
+        assert market_names["NG"] == "Henry Hub Natural Gas"
+        assert market_names["ZN"] == "10-Year U.S. Treasury Note"
+        assert market_names["ZC"] == "Corn"
+        assert market_names["BTC"] == "Bitcoin"
+        assert all(market_names.values())
         assert payload["market_grouping_capability"] == {
             "alpha_tiers_available": True,
             "alpha_tier_groups": [
@@ -828,6 +870,28 @@ class _FakeMetadata:
     TIMEOUT = 999
     outcomes: list[object] = []
     calls: list[dict[str, object]] = []
+    range_outcomes: list[object] = []
+    range_calls: list[dict[str, object]] = []
+
+    def get_dataset_range(self, **kwargs):
+        self.__class__.range_calls.append(dict(kwargs))
+        if not self.__class__.range_outcomes:
+            return {
+                "start": "2010-01-01T00:00:00Z",
+                "end": "2099-01-01T00:00:00Z",
+                "schema": {
+                    "ohlcv-1m": {
+                        "start": "2010-01-01T00:00:00Z",
+                        "end": "2099-01-01T00:00:00Z",
+                    }
+                },
+            }
+        outcome = self.__class__.range_outcomes.pop(0)
+        if callable(outcome):
+            outcome = outcome(kwargs)
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
 
     def get_cost(self, **kwargs):
         self.__class__.calls.append(dict(kwargs))
@@ -900,9 +964,12 @@ def _reset_fake_live() -> None:
     _FakeTimeseries.calls = []
     _FakeMetadata.outcomes = []
     _FakeMetadata.calls = []
+    _FakeMetadata.range_outcomes = []
+    _FakeMetadata.range_calls = []
 
 
 def _patch_live_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(cockpit_engine, "FOCUS_MAPPING_WAIT_SECONDS", 0.0)
     monkeypatch.setattr(
         cockpit_engine,
         "resolve_cockpit_api_key_source",
@@ -918,6 +985,29 @@ def _patch_live_dependencies(monkeypatch: pytest.MonkeyPatch) -> None:
         ),
     )
     monkeypatch.setattr(cockpit_engine, "historical_store_to_candles", lambda _store: [])
+
+
+def _bind_all_history_markets(engine: LiveCockpitEngine) -> list[HistoryBinding]:
+    bindings = [
+        HistoryBinding(info.symbol, f"{info.symbol}U6", 1_000 + index)
+        for index, info in enumerate(engine.markets)
+    ]
+    for binding in bindings:
+        engine._remember_binding(binding)
+    return bindings
+
+
+def _dataset_range(*, schema_end: object) -> dict[str, object]:
+    return {
+        "start": "2010-01-01T00:00:00Z",
+        "end": "2099-01-01T00:00:00Z",
+        "schema": {
+            "ohlcv-1m": {
+                "start": "2010-01-01T00:00:00Z",
+                "end": schema_end,
+            }
+        },
+    }
 
 
 def test_market_switch_publishes_persisted_cache_before_focus_swap(
@@ -1132,6 +1222,7 @@ def test_history_backfill_does_not_block_focus_start_or_next_switch(
             )
         )
         assert _FakeTimeseries.calls == []
+        assert _FakeMetadata.range_calls == [{"dataset": "GLBX.MDP3"}]
         assert len(_FakeMetadata.calls) == 7
         assert all(len(call["symbols"]) == 41 for call in _FakeMetadata.calls)
         _wait_until(
@@ -1338,7 +1429,153 @@ def test_history_failure_keeps_live_connected_and_manual_retry_merges_completed_
         engine.stop()
 
 
-def test_history_availability_boundary_is_clamped_and_retried(
+@pytest.mark.parametrize(
+    ("range_value", "expected_category"),
+    [
+        ({}, "DATA_AVAILABILITY"),
+        ({"schema": {}}, "DATA_AVAILABILITY"),
+        (
+            {"schema": {"ohlcv-1m": {"end": "not-a-timestamp"}}},
+            "DATA_AVAILABILITY",
+        ),
+        (
+            {"schema": {"ohlcv-1m": {"end": "2026-07-14T05:24:00"}}},
+            "DATA_AVAILABILITY",
+        ),
+        (
+            {"schema": {"ohlcv-1m": {"end": "2026-07-07T05:24:00Z"}}},
+            "DATA_AVAILABILITY",
+        ),
+    ],
+)
+def test_history_availability_invalid_boundaries_fail_before_cost_or_download(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    range_value: object,
+    expected_category: str,
+) -> None:
+    fixed_now = datetime(2026, 7, 14, 5, 24, 30, tzinfo=timezone.utc)
+
+    class _FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now if tz is not None else fixed_now.replace(tzinfo=None)
+
+    monkeypatch.setattr(cockpit_engine, "datetime", _FixedDateTime)
+    _FakeMetadata.range_outcomes = [range_value]
+    messages: list[dict[str, object]] = []
+    engine = LiveCockpitEngine(
+        cache_path=tmp_path / "bars.sqlite3",
+        env={"DATABENTO_API_KEY": "db-test"},
+        db_module=_FakeDb,
+    )
+    try:
+        engine._historical = _FakeHistorical()
+        engine._publish = messages.append
+        _bind_all_history_markets(engine)
+        engine._prepare_history_plan()
+        error_payload = next(
+            message["payload"]
+            for message in messages
+            if message["type"] == "history_cache_status"
+            and message["payload"].get("state") == "ERROR"
+        )
+        assert error_payload["failure_category"] == expected_category
+        assert error_payload["diagnostic"]["phase"] == "DATASET_RANGE"
+        assert error_payload["diagnostic"]["download_began"] is False
+        assert _FakeMetadata.range_calls == [{"dataset": "GLBX.MDP3"}]
+        assert _FakeMetadata.calls == []
+        assert _FakeTimeseries.calls == []
+    finally:
+        engine.stop()
+
+
+@pytest.mark.parametrize(
+    ("failure", "expected_category"),
+    [
+        (TimeoutError("range timeout db-range-secret"), "TIMEOUT"),
+        (ConnectionError("connection db-range-secret"), "CONNECTION"),
+        (RuntimeError("authentication failed db-range-secret"), "AUTHORIZATION"),
+        (RuntimeError("provider body db-range-secret"), "UNAVAILABLE"),
+    ],
+)
+def test_history_availability_provider_failures_are_bounded_and_sanitized(
+    tmp_path: Path,
+    failure: Exception,
+    expected_category: str,
+) -> None:
+    _FakeMetadata.range_outcomes = [failure]
+    messages: list[dict[str, object]] = []
+    engine = LiveCockpitEngine(
+        cache_path=tmp_path / "bars.sqlite3",
+        env={"DATABENTO_API_KEY": "db-test"},
+        db_module=_FakeDb,
+    )
+    try:
+        engine._historical = _FakeHistorical()
+        engine._publish = messages.append
+        _bind_all_history_markets(engine)
+        engine._prepare_history_plan()
+        error_payload = next(
+            message["payload"]
+            for message in messages
+            if message["type"] == "history_cache_status"
+            and message["payload"].get("state") == "ERROR"
+        )
+        assert error_payload["failure_category"] == expected_category
+        assert error_payload["diagnostic"]["phase"] == "DATASET_RANGE"
+        serialized = json.dumps(
+            {
+                "events": messages,
+                "metrics": engine.runtime_metrics(),
+            }
+        )
+        assert "db-range-secret" not in serialized
+        assert "provider body" not in serialized
+        assert _FakeMetadata.calls == []
+        assert _FakeTimeseries.calls == []
+    finally:
+        engine.stop()
+
+
+def test_history_availability_end_equal_to_completed_minute(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    fixed_now = datetime(2026, 7, 14, 5, 24, 30, tzinfo=timezone.utc)
+    completed_minute = fixed_now.replace(second=0, microsecond=0)
+
+    class _FixedDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return fixed_now if tz is not None else fixed_now.replace(tzinfo=None)
+
+    monkeypatch.setattr(cockpit_engine, "datetime", _FixedDateTime)
+    _FakeMetadata.range_outcomes = [
+        _dataset_range(schema_end=completed_minute.isoformat())
+    ]
+    engine = LiveCockpitEngine(
+        cache_path=tmp_path / "bars.sqlite3",
+        env={"DATABENTO_API_KEY": "db-test"},
+        db_module=_FakeDb,
+    )
+    try:
+        engine._historical = _FakeHistorical()
+        engine._publish = lambda _message: None
+        _bind_all_history_markets(engine)
+        engine._prepare_history_plan()
+        with engine._history_lock:
+            assert engine._history_plan is not None
+            assert engine._history_plan.target_end == completed_minute
+            assert all(
+                chunk.end <= completed_minute for chunk in engine._history_plan.chunks
+            )
+        assert len(_FakeMetadata.calls) == 7
+        assert _FakeTimeseries.calls == []
+    finally:
+        engine.stop()
+
+
+def test_history_availability_boundary_clamps_cost_and_download_without_retry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     _patch_live_dependencies(monkeypatch)
@@ -1351,11 +1588,19 @@ def test_history_availability_boundary_is_clamped_and_retried(
         def now(cls, tz=None):
             return fixed_now if tz is not None else fixed_now.replace(tzinfo=None)
 
-    _FakeTimeseries.outcomes = [
-        RuntimeError("data available up to, but not including '2026-07-14'"),
-        [],
-        *([[]] * 10),
+    _FakeMetadata.range_outcomes = [
+        {
+            "start": "2010-01-01T00:00:00Z",
+            "end": "2026-07-14T05:24:00Z",
+            "schema": {
+                "ohlcv-1m": {
+                    "start": "2010-01-01T00:00:00Z",
+                    "end": available_end.isoformat(),
+                }
+            },
+        }
     ]
+    _FakeTimeseries.outcomes = [*([[]] * 10)]
     monkeypatch.setattr(cockpit_engine, "datetime", _FixedDateTime)
 
     messages: list[dict[str, object]] = []
@@ -1388,6 +1633,16 @@ def test_history_availability_boundary_is_clamped_and_retried(
             if message["type"] == "history_cache_status"
             and message["payload"].get("state") == "CONFIRMATION_REQUIRED"
         )
+        with engine._history_lock:
+            assert engine._history_plan is not None
+            assert engine._history_plan.target_end == available_end
+            assert all(
+                chunk.end <= available_end for chunk in engine._history_plan.chunks
+            )
+        assert len(_FakeMetadata.range_calls) == 1
+        assert len(_FakeMetadata.calls) == 7
+        assert all(call["end"] <= available_end for call in _FakeMetadata.calls)
+        assert _FakeTimeseries.calls == []
         assert engine.confirm_history_cache(plan_id) is True
         _wait_until(
             lambda: any(
@@ -1396,18 +1651,15 @@ def test_history_availability_boundary_is_clamped_and_retried(
                 for message in messages
             )
         )
-        assert len(_FakeTimeseries.calls) == 8
-        assert _FakeTimeseries.calls[0]["end"] == fixed_now.replace(second=0, microsecond=0)
-        assert _FakeTimeseries.calls[1]["end"] == available_end
-        assert _FakeTimeseries.calls[1]["start"] == (
-            fixed_now.replace(second=0, microsecond=0) - timedelta(hours=24)
-        )
+        assert len(_FakeTimeseries.calls) == 7
+        assert all(call["end"] <= available_end for call in _FakeTimeseries.calls)
         assert not any(
             message["type"] == "history_cache_status"
             and message["payload"].get("state") == "ERROR"
             for message in messages
         )
         assert engine.runtime_metrics()["history_requests"] == 7
+        assert engine.runtime_metrics()["history_dataset_range_requests"] == 1
         assert engine.runtime_metrics()["history_failure"] is None
     finally:
         engine.stop()
@@ -1509,12 +1761,27 @@ def test_stale_history_plan_is_rejected_and_switch_discards_old_focus_identity(
         engine.stop()
 
 
+@pytest.mark.parametrize(
+    ("failure", "expected_category"),
+    [
+        (TimeoutError("estimate timed out db-estimate-secret"), "TIMEOUT"),
+        (ConnectionError("connection db-estimate-secret"), "CONNECTION"),
+        (
+            RuntimeError("authentication failed db-estimate-secret"),
+            "AUTHORIZATION",
+        ),
+        (RuntimeError("provider body db-estimate-secret"), "UNAVAILABLE"),
+    ],
+)
 def test_history_cost_estimate_failure_is_redacted_and_fails_closed(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    failure: Exception,
+    expected_category: str,
 ) -> None:
     monkeypatch.setattr(cockpit_engine, "HISTORY_MAPPING_WAIT_SECONDS", 0.0)
     secret = "db-estimate-secret"
-    _FakeMetadata.outcomes = [TimeoutError(f"estimate timed out {secret}")]
+    _FakeMetadata.outcomes = [failure]
     messages: list[dict[str, object]] = []
     engine = LiveCockpitEngine(
         cache_path=tmp_path / "bars.sqlite3",
@@ -1542,10 +1809,176 @@ def test_history_cost_estimate_failure_is_redacted_and_fails_closed(
             if message["type"] == "history_cache_status"
             and message["payload"].get("state") == "ERROR"
         )
-        assert error_payload["failure_category"] == "ESTIMATE_UNAVAILABLE"
+        assert error_payload["failure_category"] == expected_category
+        assert error_payload["diagnostic"] == {
+            "phase": "COST_ESTIMATE",
+            "chunk_number": None,
+            "requested_start": error_payload["diagnostic"]["requested_start"],
+            "requested_end": error_payload["diagnostic"]["requested_end"],
+            "download_began": False,
+        }
         assert secret not in json.dumps(error_payload)
+        assert "provider body" not in json.dumps(
+            {"events": messages, "metrics": engine.runtime_metrics()}
+        )
         assert _FakeTimeseries.calls == []
         assert engine.runtime_metrics()["live_sessions_started"] == 0
+    finally:
+        engine.stop()
+
+
+@pytest.mark.parametrize(
+    ("live_event", "expected_state"),
+    [
+        (None, "DEGRADED"),
+        ((3, "ESU6", timedelta(seconds=30)), "CURRENT"),
+        ((3, "ESU6", timedelta(seconds=151)), "DEGRADED"),
+        ((3, "ESU6", timedelta(seconds=-1)), "DEGRADED"),
+        ((3, "NQU6", timedelta(seconds=30)), "DEGRADED"),
+        ((2, "ESU6", timedelta(seconds=30)), "DEGRADED"),
+    ],
+)
+def test_history_cache_complete_requires_fresh_matching_live_tail(
+    tmp_path: Path,
+    live_event: tuple[int, str, timedelta] | None,
+    expected_state: str,
+) -> None:
+    evaluated_at = datetime(2026, 7, 14, 5, 24, 30, tzinfo=timezone.utc)
+    engine = LiveCockpitEngine(
+        cache_path=tmp_path / "bars.sqlite3",
+        env={"DATABENTO_API_KEY": "db-test"},
+        db_module=_FakeDb,
+    )
+    try:
+        engine.generation = 3
+        engine._history_complete_generation = 3
+        if live_event is not None:
+            generation, contract, age = live_event
+            engine._focus_last_live_event = (
+                generation,
+                contract,
+                evaluated_at - age,
+            )
+        payload = engine._focus_health_payload(
+            market="ES",
+            contract="ESU6",
+            instrument_id=1_000,
+            timeframe="1m",
+            bars=[_bar(evaluated_at - timedelta(minutes=1))],
+            generation=3,
+            evaluated_at=evaluated_at,
+        )
+        assert payload["state"] == expected_state
+        if expected_state == "CURRENT":
+            assert "DATA_STALE" not in payload["reason_codes"]
+        else:
+            assert "DATA_STALE" in payload["reason_codes"]
+    finally:
+        engine.stop()
+
+
+def test_history_cache_incomplete_never_becomes_current_from_fresh_live_tail(
+    tmp_path: Path,
+) -> None:
+    evaluated_at = datetime(2026, 7, 14, 5, 24, 30, tzinfo=timezone.utc)
+    engine = LiveCockpitEngine(
+        cache_path=tmp_path / "bars.sqlite3",
+        env={"DATABENTO_API_KEY": "db-test"},
+        db_module=_FakeDb,
+    )
+    try:
+        engine.generation = 3
+        engine._focus_last_live_event = (
+            3,
+            "ESU6",
+            evaluated_at - timedelta(seconds=30),
+        )
+        payload = engine._focus_health_payload(
+            market="ES",
+            contract="ESU6",
+            instrument_id=1_000,
+            timeframe="1m",
+            bars=[_bar(evaluated_at - timedelta(minutes=1))],
+            generation=3,
+            history_state="PARTIAL",
+            evaluated_at=evaluated_at,
+        )
+        assert payload["state"] == "DEGRADED"
+        assert "HISTORY_PARTIAL" in payload["reason_codes"]
+        empty_payload = engine._focus_health_payload(
+            market="ES",
+            contract="ESU6",
+            instrument_id=1_000,
+            timeframe="1m",
+            bars=[],
+            generation=3,
+            history_state="LOADING",
+            evaluated_at=evaluated_at,
+        )
+        assert empty_payload["state"] == "DEGRADED"
+        assert "HISTORY_LOADING" in empty_payload["reason_codes"]
+    finally:
+        engine.stop()
+
+
+def test_history_cache_daily_advancement_estimates_only_new_delta(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = [datetime(2026, 7, 14, 5, 24, 30, tzinfo=timezone.utc)]
+
+    class _AdvancingDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            value = current[0]
+            return value if tz is not None else value.replace(tzinfo=None)
+
+    monkeypatch.setattr(cockpit_engine, "datetime", _AdvancingDateTime)
+    first_end = current[0].replace(second=0, microsecond=0)
+    second_end = first_end + timedelta(days=1)
+    _FakeMetadata.range_outcomes = [
+        _dataset_range(schema_end=first_end.isoformat()),
+        _dataset_range(schema_end=second_end.isoformat()),
+    ]
+    engine = LiveCockpitEngine(
+        cache_path=tmp_path / "bars.sqlite3",
+        env={"DATABENTO_API_KEY": "db-test"},
+        db_module=_FakeDb,
+    )
+    try:
+        engine._historical = _FakeHistorical()
+        engine._publish = lambda _message: None
+        bindings = _bind_all_history_markets(engine)
+        engine._prepare_history_plan()
+        with engine._history_lock:
+            assert engine._history_plan is not None
+            first_plan_id = engine._history_plan.plan_id
+            first_start = engine._history_plan.target_start
+            assert engine._history_plan.target_end == first_end
+        assert engine.cache is not None
+        for binding in bindings:
+            engine.cache.record_coverage(
+                dataset="GLBX.MDP3",
+                instrument_id=binding.instrument_id,
+                raw_symbol=binding.contract,
+                start=first_start,
+                end=first_end,
+                now=first_end,
+            )
+        current[0] = current[0] + timedelta(days=1)
+        engine._prepare_history_plan()
+        with engine._history_lock:
+            assert engine._history_plan is not None
+            second_plan = engine._history_plan
+            assert second_plan.plan_id != first_plan_id
+            assert second_plan.confirmed is False
+            assert second_plan.target_end == second_end
+            assert len(second_plan.chunks) == 1
+            assert second_plan.chunks[0].start == first_end
+            assert second_plan.chunks[0].end == second_end
+            assert len(second_plan.chunks[0].bindings) == 41
+        assert len(_FakeMetadata.range_calls) == 2
+        assert len(_FakeMetadata.calls) == 8
+        assert _FakeTimeseries.calls == []
     finally:
         engine.stop()
 
@@ -1589,6 +2022,31 @@ def test_focus_resolution_timeout_retries_once_then_connects(
         )
         assert _FakeLive.max_active == 2
     finally:
+        engine.stop()
+
+
+def test_focus_prefers_bounded_live_mapping_before_historical_resolution(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _patch_live_dependencies(monkeypatch)
+    monkeypatch.setattr(cockpit_engine, "FOCUS_MAPPING_WAIT_SECONDS", 0.25)
+    monkeypatch.setattr(
+        cockpit_engine,
+        "resolve_single_instrument",
+        lambda *_args, **_kwargs: pytest.fail("historical resolution was called"),
+    )
+    engine = LiveCockpitEngine(
+        cache_path=tmp_path / "bars.sqlite3",
+        env={"DATABENTO_API_KEY": "db-test"},
+        db_module=_FakeDb,
+    )
+    binding = HistoryBinding("ES", "ESU6", 101)
+    timer = threading.Timer(0.01, engine._remember_binding, args=(binding,))
+    timer.start()
+    try:
+        assert engine._wait_for_live_binding("ES", engine.generation) == binding
+    finally:
+        timer.join()
         engine.stop()
 
 
@@ -1714,6 +2172,62 @@ def test_late_focus_generation_is_ignored(tmp_path: Path) -> None:
         engine.stop()
 
 
+@pytest.mark.parametrize("record_kind", ["trade", "ohlcv"])
+def test_focus_health_uses_observed_event_time_when_provider_clock_leads(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    record_kind: str,
+) -> None:
+    event_time = datetime(2026, 7, 30, 18, 3, tzinfo=timezone.utc)
+    monkeypatch.setattr(
+        cockpit_engine,
+        "now_utc",
+        lambda: event_time - timedelta(milliseconds=100),
+    )
+    engine = LiveCockpitEngine(
+        cache_path=tmp_path / "bars.sqlite3",
+        db_module=_FakeDb,
+    )
+    messages: list[dict[str, object]] = []
+    try:
+        engine._publish = messages.append
+        engine.generation = 1
+        engine._contract = "ESU6"
+        engine._resolved_instrument_id = 101
+        if record_kind == "trade":
+            record = SimpleNamespace(
+                ts_event=event_time,
+                price=100_000_000_000,
+                size=1,
+            )
+        else:
+            record = SimpleNamespace(
+                ts_event=event_time,
+                open=100_000_000_000,
+                high=101_000_000_000,
+                low=99_000_000_000,
+                close=100_500_000_000,
+                volume=6,
+            )
+        engine._on_focus_record(
+            record,
+            generation=1,
+            aggregator=TradeCandleAggregator(
+                timeframe_seconds=60,
+                timeframe="1m",
+            ),
+        )
+        health = [
+            message["payload"]
+            for message in messages
+            if message["type"] == "data_health"
+        ][-1]
+        assert health["evaluated_at"] == int(event_time.timestamp())
+        assert health["last_bar_time"] == int(event_time.timestamp())
+    finally:
+        engine.stop()
+
+
 def test_focus_trades_are_coalesced_to_one_pending_visual_update(tmp_path: Path) -> None:
     engine = LiveCockpitEngine(cache_path=tmp_path / "bars.sqlite3", db_module=_FakeDb)
     messages: list[dict[str, object]] = []
@@ -1821,6 +2335,26 @@ def test_self_check_is_offline_and_verifies_assets_and_webview(tmp_path: Path) -
     assert result["asset_launch_target_local"] is True
 
 
+def test_cli_self_check_is_provider_free_and_passes(tmp_path: Path) -> None:
+    executable = Path(sys.executable).with_name("futures-live-cockpit.exe")
+    env = dict(os.environ)
+    env["LOCALAPPDATA"] = str(tmp_path / "localappdata")
+    result = subprocess.run(
+        [str(executable), "--self-check"],
+        cwd=Path.cwd(),
+        env=env,
+        check=False,
+        capture_output=True,
+        text=True,
+        shell=False,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    payload = json.loads(result.stdout)
+    assert payload["status"] == "PASS"
+    assert payload["provider_connection_opened"] is False
+
+
 def test_desktop_uses_local_server_instead_of_file_uri(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -1872,24 +2406,33 @@ def test_desktop_uses_local_server_instead_of_file_uri(
     assert engine.stopped is True
 
 
-def test_self_check_fails_closed_for_invalid_installed_credential_locator(
+def test_self_check_inspects_installed_credentials_by_existence_only(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     program_files = tmp_path / "program-files"
     (program_files / "Microsoft" / "EdgeWebView" / "Application" / "123.0").mkdir(
         parents=True
     )
+    locator_path = tmp_path / "credential-source.json"
+    locator_path.write_bytes(b"intentionally invalid and unreadable as JSON")
+    original_read_text = Path.read_text
+
+    def reject_locator_content_read(path: Path, *args, **kwargs):
+        if path == locator_path:
+            raise AssertionError("self-check must not read credential locator contents")
+        return original_read_text(path, *args, **kwargs)
+
     monkeypatch.setattr(
         cockpit_app,
-        "credential_status",
-        lambda _env: CredentialStatus(
-            configured=False,
-            source=None,
-            locator_present=True,
-            locator_valid=False,
-            error="credential locator target is unavailable",
-        ),
+        "default_credential_locator_path",
+        lambda: locator_path,
     )
+    monkeypatch.setattr(
+        cockpit_app,
+        "default_repository_package_api_env_path",
+        lambda: None,
+    )
+    monkeypatch.setattr(Path, "read_text", reject_locator_content_read)
 
     result = self_check(
         env={
@@ -1899,10 +2442,13 @@ def test_self_check_fails_closed_for_invalid_installed_credential_locator(
         }
     )
 
-    assert result["status"] == "FAIL"
+    assert result["status"] == "PASS"
+    assert result["credential_check_mode"] == "existence_only"
+    assert result["credential_source_present"] is True
+    assert result["api_key_configured"] is None
     assert result["credential_locator_present"] is True
-    assert result["credential_locator_valid"] is False
-    assert result["credential_error"] == "credential locator target is unavailable"
+    assert result["credential_locator_valid"] is None
+    assert result["credential_error"] is None
     assert result["provider_connection_opened"] is False
 
 
@@ -2009,6 +2555,16 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert 'id="session-boundaries"' in html
     assert 'id="prediction-rail"' in html
     assert 'id="data-health-pill"' in html
+    assert 'id="quote-open"' not in html
+    assert 'id="quote-high"' not in html
+    assert 'id="quote-low"' not in html
+    assert 'id="quote-close"' not in html
+    assert 'id="quote-volume"' not in html
+    assert "updateQuote" not in javascript
+    assert ".quote-strip" not in stylesheet
+    assert "renderInstrumentMeta" in javascript
+    assert "market?.name || state.selectedMarket" in javascript
+    assert 'String(market.name || "").toLowerCase().includes(query)' in javascript
     assert 'id="layers-menu"' in html
     assert 'id="group-by-sector"' in html
     assert 'id="group-by-alpha"' in html

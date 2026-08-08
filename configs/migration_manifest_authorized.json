@@ -1,0 +1,479 @@
+{
+  "manifest_version": "1.0.0",
+  "migration_id": "futures_v2_m1_controlled_source_copy",
+  "source_root": "C:\\Users\\donny\\Desktop\\futures_intraday_model",
+  "destination_root": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2\\data\\vault\\.staging\\controlled_import",
+  "publication_root": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2\\data\\vault\\source_snapshots",
+  "state_root": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2\\state\\migrations",
+  "lock_path": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2\\state\\locks\\migration.lock",
+  "copy_authorized": true,
+  "authoritative_group": {
+    "families": [
+      "dbn_definition",
+      "dbn_ohlcv_1d",
+      "dbn_ohlcv_1h",
+      "dbn_ohlcv_1m",
+      "dbn_ohlcv_1s",
+      "dbn_statistics",
+      "dbn_status",
+      "dbn_trades"
+    ],
+    "expected_files": 8040,
+    "expected_bytes": 25007876004
+  },
+  "policy": {
+    "operation": "copy_only",
+    "overwrite": false,
+    "follow_links": false,
+    "require_source_stable_during_copy": true,
+    "verify_destination_sha256": true
+  },
+  "entries": [
+    {
+      "family": "dbn_definition",
+      "source": "data/dbn/definition",
+      "destination": "dbn/definition",
+      "disposition": "validate_then_promote",
+      "include_regex": "^.+\\.dbn\\.zst(?:\\.manifest\\.json)?$",
+      "exclude_regexes": [],
+      "expected_files": 1132,
+      "expected_excluded_files": 0
+    },
+    {
+      "family": "dbn_ohlcv_1d",
+      "source": "data/dbn/ohlcv_1d",
+      "destination": "dbn/ohlcv_1d",
+      "disposition": "validate_then_promote",
+      "include_regex": "^.+\\.dbn\\.zst(?:\\.manifest\\.json)?$",
+      "exclude_regexes": [],
+      "expected_files": 1122,
+      "expected_excluded_files": 0
+    },
+    {
+      "family": "dbn_ohlcv_1h",
+      "source": "data/dbn/ohlcv_1h",
+      "destination": "dbn/ohlcv_1h",
+      "disposition": "validate_then_promote",
+      "include_regex": "^.+\\.dbn\\.zst(?:\\.manifest\\.json)?$",
+      "exclude_regexes": [],
+      "expected_files": 1122,
+      "expected_excluded_files": 0
+    },
+    {
+      "family": "dbn_ohlcv_1m",
+      "source": "data/dbn/ohlcv_1m",
+      "destination": "dbn/ohlcv_1m",
+      "disposition": "validate_then_promote",
+      "include_regex": "^.+\\.dbn\\.zst(?:\\.manifest\\.json)?$",
+      "exclude_regexes": [],
+      "expected_files": 1132,
+      "expected_excluded_files": 0
+    },
+    {
+      "family": "dbn_ohlcv_1s",
+      "source": "data/dbn/ohlcv_1s",
+      "destination": "dbn/ohlcv_1s",
+      "disposition": "validate_then_promote",
+      "include_regex": "^.+\\.dbn\\.zst(?:\\.manifest\\.json)?$",
+      "exclude_regexes": [],
+      "expected_files": 1132,
+      "expected_excluded_files": 0
+    },
+    {
+      "family": "dbn_statistics",
+      "source": "data/dbn/statistics",
+      "destination": "dbn/statistics",
+      "disposition": "validate_then_promote",
+      "include_regex": "^.+\\.dbn\\.zst(?:\\.manifest\\.json)?$",
+      "exclude_regexes": [],
+      "expected_files": 1136,
+      "expected_excluded_files": 0
+    },
+    {
+      "family": "dbn_status",
+      "source": "data/dbn/status",
+      "destination": "dbn/status",
+      "disposition": "validate_then_promote",
+      "include_regex": "^.+\\.dbn\\.zst(?:\\.manifest\\.json)?$",
+      "exclude_regexes": [],
+      "expected_files": 1130,
+      "expected_excluded_files": 0
+    },
+    {
+      "family": "dbn_trades",
+      "source": "data/dbn/trades",
+      "destination": "dbn/trades",
+      "disposition": "validate_then_promote",
+      "include_regex": "^.+\\.dbn\\.zst(?:\\.manifest\\.json)?$",
+      "exclude_regexes": [],
+      "expected_files": 134,
+      "expected_excluded_files": 0
+    },
+    {
+      "family": "phase1b_raw",
+      "source": "data/raw",
+      "destination": "comparison_only/raw",
+      "disposition": "comparison_only_never_authoritative_regenerate",
+      "include_regex": "^[^_/][^/]*/\\d{4}\\.parquet$",
+      "exclude_regexes": [
+        "(^|/)_refresh_"
+      ],
+      "expected_files": 530,
+      "expected_bytes": 3161272269,
+      "expected_excluded_files": 132
+    },
+    {
+      "family": "phase2_causal",
+      "source": "data/causally_gated_normalized",
+      "destination": "comparison_only/causally_gated_normalized",
+      "disposition": "comparison_only_never_authoritative_regenerate",
+      "include_regex": "^[^_/][^/]*/\\d{4}\\.parquet$",
+      "exclude_regexes": [
+        "(^|/)_refresh_"
+      ],
+      "expected_files": 518,
+      "expected_bytes": 5116452241,
+      "expected_excluded_files": 0
+    },
+    {
+      "family": "legacy_data_manifest",
+      "kind": "file",
+      "source": "configs/data_manifest.yaml",
+      "destination": "evidence/configs/data_manifest.yaml",
+      "disposition": "coordination_evidence_not_authority",
+      "expected_files": 1,
+      "expected_bytes": 5322,
+      "expected_sha256": "228b93d6d6e10e2197c1e7f5472257b663200c5b23446011db0f41d655a9d769"
+    },
+    {
+      "family": "legacy_phase1a_policy",
+      "kind": "file",
+      "source": "configs/phase1a_policy.yaml",
+      "destination": "evidence/configs/phase1a_policy.yaml",
+      "disposition": "policy_evidence_requires_reconciliation",
+      "expected_files": 1,
+      "expected_bytes": 1492,
+      "expected_sha256": "73f533bbbc4307df82948bb76250ba32f8c3c64cc06c149ae56ceab5b6a82998"
+    },
+    {
+      "family": "legacy_acquisition_registry",
+      "kind": "file",
+      "source": "manifests/phase1a_acquisition_registry.jsonl",
+      "destination": "evidence/manifests/phase1a_acquisition_registry.jsonl",
+      "disposition": "provider_lineage_evidence",
+      "expected_files": 1,
+      "expected_bytes": 12373662,
+      "expected_sha256": "06fbd8701f9923bec8951739fa5a91f0b933205bdf223e8c5c654541a0927771"
+    },
+    {
+      "family": "legacy_conversion_receipts",
+      "kind": "file",
+      "source": "manifests/phase1b_conversion_receipts.jsonl",
+      "destination": "evidence/manifests/phase1b_conversion_receipts.jsonl",
+      "disposition": "conversion_lineage_evidence_requires_handoff_reconciliation",
+      "expected_files": 1,
+      "expected_bytes": 128528,
+      "expected_sha256": "6dac6edd713b22811b07796751a2901575a22ed4c735d8d5067334106b9b20d4"
+    },
+    {
+      "family": "legacy_phase1a_approval",
+      "kind": "file",
+      "source": "manifests/phase1a_approval_APPROVE_PHASE1A_REFRESH_20260613_20260714_ZERO_COST_231_TASKS.json",
+      "destination": "evidence/manifests/phase1a_approval.json",
+      "disposition": "historical_approval_evidence_not_v2_authorization",
+      "expected_files": 1,
+      "expected_bytes": 2498,
+      "expected_sha256": "adcbcd595feeed6b02fcc05ed55fab9b2ab3687f4a2a92eac6ad1c912aa37b93"
+    },
+    {
+      "family": "legacy_phase1b_approval",
+      "kind": "file",
+      "source": "manifests/phase1b_approval_APPROVE_PHASE1B_2026_RAW_REFRESH_PROMOTION_20260714.json",
+      "destination": "evidence/manifests/phase1b_approval.json",
+      "disposition": "historical_approval_evidence_not_v2_authorization",
+      "expected_files": 1,
+      "expected_bytes": 1302,
+      "expected_sha256": "8fc83c94025c0a25d7c4f967904130358c4207397f695e5c45bf131429ee2c3a"
+    },
+    {
+      "family": "legacy_phase1a_schema_exceptions",
+      "kind": "file",
+      "source": "configs/phase1a_required_schema_exceptions.yaml",
+      "destination": "evidence/configs/phase1a_required_schema_exceptions.yaml",
+      "disposition": "schema_exception_evidence_requires_v2_revalidation",
+      "expected_files": 1,
+      "expected_bytes": 584,
+      "expected_sha256": "abe91850f5feb5f4d7a337968701da967a4097e002465f18e934340f2061eb40"
+    },
+    {
+      "family": "legacy_market_sessions",
+      "kind": "file",
+      "source": "configs/market_sessions.yaml",
+      "destination": "evidence/configs/market_sessions.yaml",
+      "disposition": "session_evidence_requires_v2_causal_revalidation",
+      "expected_files": 1,
+      "expected_bytes": 6603,
+      "expected_sha256": "a29bda140f01ab2609ddbfee73eb630c70db5e1bbf5437e26703929cd825da17"
+    },
+    {
+      "family": "legacy_costs_policy",
+      "kind": "file",
+      "source": "configs/costs.yaml",
+      "destination": "evidence/configs/costs.yaml",
+      "disposition": "economics_reconciliation_evidence_never_authoritative",
+      "expected_files": 1,
+      "expected_bytes": 18393,
+      "expected_sha256": "e20fdb449f6dbdcd43184771eff439494207eb2b85f01172bd02434f0f4667d9"
+    },
+    {
+      "family": "legacy_futures_live_cockpit_exe",
+      "kind": "file",
+      "source": "dist/FuturesLiveCockpit/FuturesLiveCockpit.exe",
+      "destination": "evidence/generated_charting_artifact/FuturesLiveCockpit.exe",
+      "disposition": "generated_charting_artifact_non_active_not_trusted_not_executable",
+      "expected_files": 1,
+      "expected_bytes": 13636273,
+      "expected_sha256": "1cdc1210f884a157f93d8b2741ae36846bbbb6ac2cf4f45dbf36f647de6bbdf3"
+    },
+    {
+      "family": "legacy_research_orac_failure_analysis",
+      "kind": "file",
+      "source": "docs/opening_range_acceptance_continuation_30m_v1_failure_analysis.md",
+      "destination": "evidence/legacy_research/by_family/legacy_research_orac_failure_analysis.md",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 9078,
+      "expected_sha256": "fb15c0af9ceead5557733bf16841c905660c16861294b1476e47b01ccb3e1ac7"
+    },
+    {
+      "family": "legacy_research_orac_failure_autopsy",
+      "kind": "file",
+      "source": "docs/opening_range_acceptance_continuation_30m_v1_failure_autopsy.md",
+      "destination": "evidence/legacy_research/by_family/legacy_research_orac_failure_autopsy.md",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 5321,
+      "expected_sha256": "17585a4c15cdd5ae37d95e0cfbfb9ffbdbc20bd323ec999fedf27583e44ec0a1"
+    },
+    {
+      "family": "legacy_research_feature_registry",
+      "kind": "file",
+      "source": "manifests/feature_hypotheses/registry.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_feature_registry.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 2556,
+      "expected_sha256": "5ed606ad31ca24925412750203edbefa9eba6466c5974257e12b7f3ed838641a"
+    },
+    {
+      "family": "legacy_research_feature_trial_statuses",
+      "kind": "file",
+      "source": "manifests/feature_hypotheses/trial_statuses.jsonl",
+      "destination": "evidence/legacy_research/by_family/legacy_research_feature_trial_statuses.jsonl",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 1135,
+      "expected_sha256": "c4aa4029d66e14c7c3c74c41d11cf38d793a93438ef651615445057905b26185"
+    },
+    {
+      "family": "legacy_research_target_registry",
+      "kind": "file",
+      "source": "manifests/target_hypotheses/registry.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_target_registry.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 76639,
+      "expected_sha256": "8c3d9dc06fdef2d6d79c02257bb01b23e9d79e29d56a2c19a64962152af2a00f"
+    },
+    {
+      "family": "legacy_research_target_trial_statuses",
+      "kind": "file",
+      "source": "manifests/target_hypotheses/trial_statuses.jsonl",
+      "destination": "evidence/legacy_research/by_family/legacy_research_target_trial_statuses.jsonl",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 49243,
+      "expected_sha256": "f9bd185af341c1a7e742bde9d630b9964279c034a1d11854f957446f50d3326f"
+    },
+    {
+      "family": "legacy_research_experiment_ledger",
+      "kind": "file",
+      "source": "reports/experiments/ledger.jsonl",
+      "destination": "evidence/legacy_research/by_family/legacy_research_experiment_ledger.jsonl",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 12218,
+      "expected_sha256": "103574b9e8dcb65d19b6f6764fb013c2a371f747bb88203ff3b51a3d2d05aec2"
+    },
+    {
+      "family": "legacy_research_trial_search_mutation_execution",
+      "kind": "file",
+      "source": "reports/master_audit/master_audit_canonical_trial_search_append_only_mutation_execution_20260710/master_audit_canonical_trial_search_append_only_mutation_execution.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_trial_search_mutation_execution.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 9736,
+      "expected_sha256": "e278f4c52d4bca01e43deb9f44db8162e0fae2b32f7045da13ed14941739b3c7"
+    },
+    {
+      "family": "legacy_research_trial_search_mutation_package",
+      "kind": "file",
+      "source": "reports/master_audit/master_audit_canonical_trial_search_append_only_mutation_package_20260710/master_audit_canonical_trial_search_append_only_mutation_package.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_trial_search_mutation_package.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 68202,
+      "expected_sha256": "7e2ebf45cf58d349e9404b9a8cb111f59a64c0b361a2fed4fdd71c7a6ea8fbb2"
+    },
+    {
+      "family": "legacy_research_trial_search_completeness",
+      "kind": "file",
+      "source": "reports/master_audit/master_audit_post_mutation_trial_search_completeness_reconciliation_20260710/master_audit_post_mutation_trial_search_completeness_reconciliation.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_trial_search_completeness.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 19498,
+      "expected_sha256": "51ebcae61f62da245f9516b4462647abf977e6157b9e47cefb60b4033e0cf4c4"
+    },
+    {
+      "family": "legacy_research_post_recompute_validity",
+      "kind": "file",
+      "source": "reports/master_audit/master_audit_post_recompute_statistical_validity_reconciliation_20260710/master_audit_post_recompute_statistical_validity_reconciliation.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_post_recompute_validity.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 32531,
+      "expected_sha256": "1547ef3f20d24e6a0a745148af8890de6e4d8383c056135d0a29818cef5eb6cb"
+    },
+    {
+      "family": "legacy_research_validity_closeout",
+      "kind": "file",
+      "source": "reports/master_audit/master_audit_statistical_validity_closeout_boundary_decision_20260710/master_audit_statistical_validity_closeout_boundary_decision.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_validity_closeout.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 23629,
+      "expected_sha256": "fbd1a204320258825ca5f8bd2aa5e839d562f4e2ba90756b0c08b297fbceb7bc"
+    },
+    {
+      "family": "legacy_research_overfit_accounting_intake",
+      "kind": "file",
+      "source": "reports/master_audit/master_audit_trial_ledger_overfit_accounting_intake_20260710/master_audit_trial_ledger_overfit_accounting_intake.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_overfit_accounting_intake.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 33986,
+      "expected_sha256": "0d0408f5d99319cced0666f14fef56b58ed371142c5cd1338fc1cdc75fa6b704"
+    },
+    {
+      "family": "legacy_research_ledger_search_path",
+      "kind": "file",
+      "source": "reports/master_audit/master_audit_trial_ledger_search_path_reconciliation_20260710/master_audit_trial_ledger_search_path_reconciliation.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_ledger_search_path.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 33655,
+      "expected_sha256": "e7fd8db91ade5745e687833525099c9fa310615e1f2a8a4457e69a9e8e4f10c5"
+    },
+    {
+      "family": "legacy_research_ledger_backfill",
+      "kind": "file",
+      "source": "reports/master_audit/master_audit_trial_search_ledger_backfill_decision_20260710/master_audit_trial_search_ledger_backfill_decision.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_ledger_backfill.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 55017,
+      "expected_sha256": "4c77c1cc02e964f9a091da47b067d1cab360c335bc7d9982206bef508e69893e"
+    },
+    {
+      "family": "legacy_research_ledger_schema",
+      "kind": "file",
+      "source": "reports/master_audit/master_audit_trial_search_ledger_schema_remediation_plan_20260710/master_audit_trial_search_ledger_schema_remediation_plan.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_ledger_schema.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 250305,
+      "expected_sha256": "34936b0a6a521c7805fa7ce73a115e858397650f932bcf8ff69d1d92076e157d"
+    },
+    {
+      "family": "legacy_research_unrecovered_family_metadata",
+      "kind": "file",
+      "source": "reports/master_audit/master_audit_unrecovered_source_family_metadata_remediation_20260710/master_audit_unrecovered_source_family_metadata_remediation.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_unrecovered_family_metadata.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 88443,
+      "expected_sha256": "63f5345de5248078bf9eb6543399c7a6dffa2c1f0da6ffd121a96d7763c220d5"
+    },
+    {
+      "family": "legacy_research_alpha_completion_closeout",
+      "kind": "file",
+      "source": "reports/model_trust_audit/alpha_evidence_completion_closeout_20260709T035929Z/alpha_evidence_completion_closeout.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_alpha_completion_closeout.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 13034,
+      "expected_sha256": "6d5a7de00ecf06dedc79ce64f65046e60b4b3853eecd1906c361d6aef6c46371"
+    },
+    {
+      "family": "legacy_research_alpha_gap_matrix_034109",
+      "kind": "file",
+      "source": "reports/model_trust_audit/alpha_evidence_gap_matrix_20260709T034109Z/alpha_evidence_gap_matrix.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_alpha_gap_matrix_034109.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 24247,
+      "expected_sha256": "9885f6a809d7a55a99c7f2bdaaa0a92e26ddf7a59eed2f3dc0ae1043bd6727ff"
+    },
+    {
+      "family": "legacy_research_alpha_gap_matrix_034313",
+      "kind": "file",
+      "source": "reports/model_trust_audit/alpha_evidence_gap_matrix_20260709T034313Z/alpha_evidence_gap_matrix.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_alpha_gap_matrix_034313.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 23307,
+      "expected_sha256": "74b1e200c1092fd58b9d15bb268c3c0f4e4dcb9ff8ea69cdf81239412001cf37"
+    },
+    {
+      "family": "legacy_research_statistical_validity_summary",
+      "kind": "file",
+      "source": "reports/statistical_validity/tier1_core_phase6_full_predictions_20260706/statistical_validity_summary.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_statistical_validity_summary.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 3886,
+      "expected_sha256": "f9ae8fcc0fb34e7666e407ffdff138406837979e7e1a9ff81ddf436ce5c43fcf"
+    },
+    {
+      "family": "legacy_research_distributional_wfa_manifest",
+      "kind": "file",
+      "source": "reports/wfa_distributional/distributional_30m_probability_magnitude_v1_5929e9e/predictions_manifest.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_distributional_wfa_manifest.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 28868,
+      "expected_sha256": "0479ed2016f6ab8a5a972300cc58bc8aa753ce5c58ff79d841a561381f475db4"
+    },
+    {
+      "family": "legacy_research_distributional_prediction_audit",
+      "kind": "file",
+      "source": "reports/prediction_audit/distributional_30m_probability_magnitude_v1_5929e9e/distributional_prediction_audit.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_distributional_prediction_audit.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 556906,
+      "expected_sha256": "4b18f33ac771b75c00a965f204496f73e0d5f1778cacbb08ffa15919cb40dfe2"
+    },
+    {
+      "family": "legacy_research_distributional_alpha_evaluation",
+      "kind": "file",
+      "source": "reports/model_selection/distributional_30m_probability_magnitude_v1_5929e9e/distributional_alpha_evaluation.json",
+      "destination": "evidence/legacy_research/by_family/legacy_research_distributional_alpha_evaluation.json",
+      "disposition": "legacy_trial_census_evidence_only",
+      "expected_files": 1,
+      "expected_bytes": 94468,
+      "expected_sha256": "bac8c7c58f4838d3d5592dbfcdb9e9afadafd5fc45afe8e7000548f9a9f1fb30"
+    }
+  ]
+}

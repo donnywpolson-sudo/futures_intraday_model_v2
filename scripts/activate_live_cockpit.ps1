@@ -1,7 +1,8 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
     [Parameter(Mandatory = $true)][string]$PreparedInstallPath,
-    [Parameter(Mandatory = $true)][string]$LiveSmokeResult
+    [Parameter(Mandatory = $true)][string]$LiveSmokeResult,
+    [Parameter(Mandatory = $true)][string]$LiveSmokePlan
 )
 
 $ErrorActionPreference = 'Stop'
@@ -9,9 +10,7 @@ $repoRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
 $pythonPath = (Resolve-Path -LiteralPath (
     Join-Path $repoRoot '.venv\Scripts\python.exe'
 )).Path
-$planPath = (Resolve-Path -LiteralPath (
-    Join-Path $repoRoot 'configs\live_cockpit_smoke_plan.json'
-)).Path
+$planPath = (Resolve-Path -LiteralPath $LiveSmokePlan).Path
 $installRoot = [IO.Path]::GetFullPath(
     (Join-Path $env:LOCALAPPDATA 'Programs\FuturesLiveCockpit')
 )
@@ -90,7 +89,7 @@ $rollback = Get-Content -LiteralPath $rollbackPath -Raw | ConvertFrom-Json
 if (
     $rollback.schema -ne 'futures_live_cockpit_shortcut_rollback/1.0.0' -or
     $rollback.startup_shortcut_absent -ne $true -or
-    @($rollback.shortcuts).Count -ne 2
+    @($rollback.shortcuts).Count -eq 0
 ) {
     throw 'Prepared shortcut rollback metadata is invalid.'
 }
@@ -125,7 +124,7 @@ foreach ($record in @($rollback.shortcuts)) {
 
 if (-not $PSCmdlet.ShouldProcess(
     $preparedPath,
-    'Activate verified cockpit and replace both preserved shortcuts'
+    'Activate verified cockpit and replace preserved shortcuts'
 )) {
     return [pscustomobject]@{
         Action = 'WouldActivate'

@@ -1,0 +1,64 @@
+{
+  "absent_file_cell_count": 14,
+  "bound_immutable_file_count": 14,
+  "calendar_release_id": "038940d82031f31e2c66ed37186e98a6ee6cff3e7248f634f2c7a8e94ea6ecf3",
+  "dbn_manifest_sha256": "c2584d5e1a65103f8651a871de6f704ac31ec2c2f7ec5c2e1a941aae6a4dc8fd",
+  "dbn_release_id": "086282eaef7b36a61626f88d93d06c93b87c1cb3407c936d065d0d1b9d98599e",
+  "diagnostic_catalog_entry_count": 28,
+  "diagnostic_catalog_id": "db60c5943cd791690975fe57e41943cd95de170eddcb637db2cf2ebf2b529eda",
+  "diagnostic_decoder_sha256": "d0ccc30bdb90c9d1e1ad973b0385dd0dfc79cd25b711ef8eb50477ec9c3564a6",
+  "diagnostic_schemas": [
+    "ohlcv-1s",
+    "trades"
+  ],
+  "diagnostic_semantics": {
+    "diagnostic_presence_is_research_authority": false,
+    "entry_window": "[decision+1m, decision+2m)",
+    "identity_ambiguity": "FAIL_CLOSED",
+    "identity_window": "[decision+1m, entry+66m)",
+    "liquidation_window": "[entry+60m, entry+66m)",
+    "prices_or_sizes_serialized": false,
+    "successor_source_creation_authorized": false
+  },
+  "estimated_external_cost_usd": "0",
+  "forbidden_actions": {
+    "access_2025_or_forward_data": true,
+    "access_provider_or_network": true,
+    "change_protocol": true,
+    "commit": true,
+    "create_successor_data": true,
+    "evaluate_performance": true,
+    "fit_models": true,
+    "generate_predictions": true,
+    "mutate_active_data": true,
+    "push": true,
+    "register_or_retire_trial": true,
+    "report_prices": true,
+    "stage": true,
+    "trade_or_access_order_path": true
+  },
+  "implementation_sha256": "eaf74018c22de0b20cc3c8f78a0670df7e07edc41bbeb2708dc2b0678a73039c",
+  "maximum_host_runtime_seconds": 900,
+  "operation": "CENSUS_FROZEN_TIER1_DIAGNOSTIC_EXECUTION_RECOVERY_AND_PUBLISH",
+  "plan_id": "31dc42fa4e757183568d873e9678d0f7692cf3e6efa633170f1ca1095b4281a1",
+  "protocol_id": "d647438200d54b60f9c7ddb69117adcd0abc23050b971dae542cda3fbdc21867",
+  "protocol_sha256": "7b6dcc144f52ef9feac7298dc87bbfbb6cb51f9f4628bfaaad773923d70a9662",
+  "publication": {
+    "event_root": "state/source_quality_events/tier1_frozen_diagnostic_recovery",
+    "mode": "CREATE_ONLY",
+    "record_root": "state/source_quality/tier1_frozen_diagnostic_recovery"
+  },
+  "purpose": "Classify whether the 34 frozen feature-complete execution gaps have price-free timing and identity evidence in already-accepted diagnostic sources.",
+  "schema_version": "tier1_frozen_diagnostic_recovery_plan/1.0.0",
+  "source_adequacy_record_id": "b3d8efbb010631922a944f13aff2de77e20d6775a2d98e5333994eca33cb5fbf",
+  "source_adequacy_record_sha256": "81057522b9038f3580f32ce51807b07435ebdd80f390ca812fad2c0cce010c9f",
+  "source_contract_sha256": "7dbfe0bb29e598345a3be0f8e9b1d3520d3199579635e6612b0e493d26a47b67",
+  "state": "PREPARED_REQUIRES_SEPARATE_APPROVAL",
+  "target_category_counts": {
+    "ENTRY": 27,
+    "IDENTITY": 1,
+    "LIQUIDATION": 6
+  },
+  "target_count": 34,
+  "target_set_id": "5ebab82c72598e7d64c4908ad8a15349e7610ddaede3d8721f53f7ede42f2ef4"
+}

@@ -1,0 +1,49 @@
+{
+  "schema_version": "tier1_standard_only_synthetic_verification/1.0.0",
+  "state": "PREPARED_NOT_PUBLISHED",
+  "scope": "COMPLETE_APPLICABLE_TIER1_BRACKET_FROZEN_PREEXECUTION_AND_STANDARD_ONLY_HIGH_RISK_TREE",
+  "inherited_verification_id": "4a0df7fc180487e13a146d8d328fe89fd5d4ec929e74d447553615f618fadb63",
+  "inherited_verification_sha256": "96bf695175c193c998c35be510bb596a8e1330efa8948aae01c6e1ec024d3e96",
+  "test_file_count": 48,
+  "test_tree_id": "5d05627cf5e8f0595c50784b2b5566871669d18f035008b26a48f95b99f1b14c",
+  "conftest_sha256": "ac9ecd1f29441d7ab712adee752aca3fd9d7040a603e02add7e1cbecd2e55cf3",
+  "windows_host_root_runner_sha256": "eb4b899dc382b6ec9a3b1865e2e93ea7a4440d875b469ebe9ee3848b36b72fdf",
+  "selection": {
+    "marker": "high_risk",
+    "file_prefixes": [
+      "test_tier1_bracket",
+      "test_tier1_frozen",
+      "test_tier1_preexecution",
+      "test_tier1_standard"
+    ],
+    "deselected_historical_assertion": "tests/test_tier1_bracket_v10_registration.py::test_v9_retirement_and_v10_registration_are_prepared_create_only",
+    "deselection_reason": "V10_IS_ALREADY_REGISTERED_SO_THE_PREPUBLICATION_ABSENCE_ASSERTION_IS_HISTORICAL",
+    "expected_xfail": "tests/test_tier1_bracket_v6.py::test_v5_is_preserved_and_v6_prepares_without_publication",
+    "expected_xfail_reason": "V6_IS_ALREADY_REGISTERED_SO_THE_PREPUBLICATION_ABSENCE_ASSERTION_IS_HISTORICAL"
+  },
+  "applicable_results": {
+    "passed": 266,
+    "failed": 0,
+    "deselected": 23,
+    "expected_xfailed": 1
+  },
+  "all_v4_through_v12_defect_controls_included": true,
+  "complete_synthetic_source_to_terminal_pipeline": true,
+  "independent_baseline_universes_and_account_paths": true,
+  "prediction_eligibility_outcome_independent": true,
+  "selected_missing_path_forces_inconclusive": true,
+  "missing_path_zero_return_imputation_forbidden": true,
+  "runner_up_substitution_forbidden": true,
+  "same_rule_for_candidate_and_active_baselines": true,
+  "cost_risk_statistics_evidence_runtime_and_authorization_aligned": true,
+  "holdout_2025_fails_closed_before_open": true,
+  "historical_source_rows_opened": false,
+  "provider_or_network_access": false,
+  "credential_access": false,
+  "holdout_or_forward_access": false,
+  "model_fit_on_real_data": false,
+  "historical_performance_evaluation": false,
+  "trial_registration": false,
+  "trading": false,
+  "verification_id": "bce11bb85b4a765150d176de4ee6cce29fe531cf03cf50ad617b034b1a256f63"
+}

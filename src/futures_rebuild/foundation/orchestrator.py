@@ -84,6 +84,12 @@ from .market_state import (
     publish_market_state_foundation,
     publish_status_eligibility,
 )
+from .historical_observability import (
+    FOUNDATION_OBSERVABILITY_SCHEMA_VERSION,
+    build_historical_observability_coverage,
+    load_foundation_observability_successor,
+    load_historical_observability_policy,
+)
 from .resources import (
     FoundationResourcePolicy,
     assert_capacity_admission,
@@ -138,8 +144,10 @@ _CLOSURE_MODULES = (
     "foundation/coverage.py",
     "foundation/economics.py",
     "foundation/identity.py",
+    "foundation/historical_observability.py",
     "foundation/materialize.py",
     "foundation/market_state.py",
+    "foundation/calendar_successor.py",
     "foundation/orchestrator.py",
     "foundation/parquet.py",
     "foundation/pipeline.py",
@@ -163,6 +171,7 @@ _CONFIG_FILES = (
     "contract_economics_rules.json",
     "environment.lock.json",
     "exchange_calendar_policy.json",
+    "historical_observability_policy.json",
     "foundation_policy.json",
     "foundation_coverage_policy.json",
     "foundation_resource_policy.json",
@@ -588,7 +597,9 @@ class FoundationOrchestrator:
             calendar_index_receipt is None
             and not self.allow_legacy_calendar_unbound
         ):
-            raise IntegrityError("HISTORICAL_CALENDAR_SOURCE_NOT_ESTABLISHED")
+            raise IntegrityError(
+                "HISTORICAL_OBSERVABILITY_CONTRACT_NOT_BOUND"
+            )
         if calendar_index_receipt is not None:
             load_exchange_calendar_policy(
                 self.boundary.active_root
@@ -2293,12 +2304,19 @@ def load_foundation_set(
     receipt: VerifiedReleaseReceipt, *, boundary: RepoBoundary
 ) -> dict[str, object]:
     manifest = receipt.verify(boundary)
+    if manifest.schema_version == FOUNDATION_OBSERVABILITY_SCHEMA_VERSION:
+        return load_foundation_observability_successor(
+            receipt,
+            boundary=boundary,
+        )
     supported_schema_versions = {
         FOUNDATION_SET_SCHEMA_VERSION,
         FOUNDATION_SUCCESSOR_SCHEMA_VERSION,
         FOUNDATION_CALENDAR_SCHEMA_VERSION,
     }
     calendar_bound = manifest.schema_version == FOUNDATION_CALENDAR_SCHEMA_VERSION
+    observability_bound = False
+    successor_like = manifest.schema_version == FOUNDATION_SUCCESSOR_SCHEMA_VERSION
     expected_metadata = {
         "feature_spec_hash",
         "coverage_matrix_id",
@@ -2308,8 +2326,16 @@ def load_foundation_set(
         "run_id",
         "source_dbn_release_id",
     }
-    if manifest.schema_version == FOUNDATION_SUCCESSOR_SCHEMA_VERSION:
+    if successor_like:
         expected_metadata.add("successor_provenance_id")
+    if observability_bound:
+        expected_metadata.update(
+            {
+                "historical_observability_coverage_id",
+                "historical_observability_policy_sha256",
+                "predecessor_foundation_release_id",
+            }
+        )
     if (
         manifest.release_kind != FOUNDATION_SET_RELEASE_KIND
         or manifest.schema_version not in supported_schema_versions
@@ -2353,10 +2379,18 @@ def load_foundation_set(
         "source_dbn_release_id",
         "wfa_execution_count",
     }
-    if manifest.schema_version == FOUNDATION_SUCCESSOR_SCHEMA_VERSION:
+    if successor_like:
         expected_payload_keys.add("successor_provenance")
     if calendar_bound:
         expected_payload_keys.add("calendar_coverage_receipt")
+    if observability_bound:
+        expected_payload_keys.update(
+            {
+                "historical_observability_coverage",
+                "historical_observability_policy_sha256",
+                "predecessor_foundation_release_id",
+            }
+        )
     if set(payload) != expected_payload_keys:
         raise IntegrityError("foundation-set payload schema is invalid")
     foundation_set_id = payload.pop("foundation_set_id", None)
@@ -2419,7 +2453,7 @@ def load_foundation_set(
         )
         is None
         or (
-            manifest.schema_version == FOUNDATION_SUCCESSOR_SCHEMA_VERSION
+            successor_like
             and (
                 not isinstance(payload.get("successor_provenance"), dict)
                 or payload["successor_provenance"].get("successor_provenance_id")
@@ -2518,7 +2552,7 @@ def load_foundation_set(
     interval_policy_pairs: dict[
         str, tuple[VerifiedReleaseReceipt, VerifiedReleaseReceipt]
     ] = {}
-    if manifest.schema_version == FOUNDATION_SUCCESSOR_SCHEMA_VERSION:
+    if successor_like:
         from .successor_contract import (
             REBUILT_MARKETS,
             verify_foundation_successor_provenance,
@@ -2547,6 +2581,51 @@ def load_foundation_set(
         for policy_receipt, session_receipt in unique_component_pairs.values():
             dependency_ids.add(policy_receipt.release_id)
             dependency_ids.add(session_receipt.release_id)
+    if observability_bound:
+        observability_policy_path = (
+            boundary.active_root
+            / "configs"
+            / "historical_observability_policy.json"
+        )
+        observability_policy = load_historical_observability_policy(
+            observability_policy_path
+        )
+        policy_sha256 = sha256_file(observability_policy_path)
+        predecessor_release_id = payload.get("predecessor_foundation_release_id")
+        if (
+            payload.get("historical_observability_policy_sha256")
+            != policy_sha256
+            or manifest.metadata.get("historical_observability_policy_sha256")
+            != policy_sha256
+            or predecessor_release_id
+            != observability_policy["predecessor_foundation_release_id"]
+            or manifest.metadata.get("predecessor_foundation_release_id")
+            != predecessor_release_id
+        ):
+            raise IntegrityError(
+                "foundation historical-observability policy binding is invalid"
+            )
+        expected_observability_coverage = build_historical_observability_coverage(
+            {
+                "intervals": raw_intervals,
+                "schema_version": FOUNDATION_SUCCESSOR_SCHEMA_VERSION,
+                "source_dbn_release_id": payload.get("source_dbn_release_id"),
+            },
+            predecessor_release_id=str(predecessor_release_id),
+            policy=observability_policy,
+        )
+        if (
+            payload.get("historical_observability_coverage")
+            != expected_observability_coverage
+            or manifest.metadata.get("historical_observability_coverage_id")
+            != expected_observability_coverage[
+                "historical_observability_coverage_id"
+            ]
+        ):
+            raise IntegrityError(
+                "foundation historical-observability coverage is invalid"
+            )
+        dependency_ids.add(str(predecessor_release_id))
     interval_keys: list[str] = []
     receipt_fields = (
         "raw_release_receipt",

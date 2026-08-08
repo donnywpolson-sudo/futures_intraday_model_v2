@@ -1,0 +1,133 @@
+{
+  "schema_version": "tier1_bracket_preexecution_validity_certificate/1.0.0",
+  "state": "PREPARED_NOT_READY_NOT_PUBLISHED",
+  "overall_decision": "NOT_READY",
+  "certification_target": "UNVERSIONED_FROZEN_SUCCESSOR_SNAPSHOT",
+  "version_freeze_reconciliation_path": "configs/tier1_bracket_version_freeze_reconciliation.json",
+  "version_freeze_reconciliation_sha256": "24c04106af7dd8dbdaeff79bcd9319dbc2ee4e2d6a57794f823c0fca915edfc7",
+  "locked_runtime": {
+    "interpreter": "C:/Users/donny/Desktop/futures_intraday_model_v2/.venv/Scripts/python.exe",
+    "python_version": "3.11.9",
+    "dependency_lock_path": "configs/dependency_lock_receipt.json",
+    "dependency_lock_sha256": "e6302e16d30d114b0c3140f2b075fd6850558ce4ea245475d2687b8531db1726"
+  },
+  "synthetic_verification": {
+    "passed": 136,
+    "deselected": 13,
+    "expected_xfailed": 1,
+    "failed": 0,
+    "expected_xfail_reason": "V6 prepublication-only assertion is historical after create-only publication",
+    "historical_price_rows_opened": false,
+    "provider_access": false,
+    "holdout_or_forward_access": false
+  },
+  "gates": [
+    {
+      "gate": "VERSION_LINEAGE_AND_FREEZE",
+      "status": "PASS",
+      "evidence": [
+        "configs/tier1_bracket_version_freeze_reconciliation.json",
+        "tests/test_tier1_bracket_version_freeze.py"
+      ]
+    },
+    {
+      "gate": "ALL_V4_THROUGH_V12_DEFECTS_HAVE_ADVERSARIAL_TESTS",
+      "status": "PASS",
+      "evidence": [
+        "tests/test_tier1_bracket_v5.py",
+        "tests/test_tier1_bracket_v8.py",
+        "tests/test_tier1_bracket_v9.py",
+        "tests/test_tier1_bracket_v10.py",
+        "tests/test_tier1_bracket_v10_decision_validity.py",
+        "tests/test_tier1_bracket_v11.py",
+        "tests/test_tier1_bracket_v12.py"
+      ]
+    },
+    {
+      "gate": "COMPLETE_SYNTHETIC_SOURCE_TO_TERMINAL_PIPELINE",
+      "status": "PASS",
+      "evidence": [
+        "tests/test_tier1_bracket_v4.py::test_synthetic_source_to_terminal_decision_is_deterministic",
+        "tests/test_tier1_bracket_v5.py::test_market_specific_model_and_all_strategy_evaluators_integrate_synthetically",
+        "tests/test_tier1_bracket_v10_pipeline.py",
+        "tests/test_tier1_bracket_v11.py::test_v11_nested_crossfit_uses_independent_complete_baseline_universes",
+        "tests/test_tier1_bracket_v12.py::test_v12_nested_crossfit_flat_coverage_is_exact"
+      ]
+    },
+    {
+      "gate": "INDEPENDENT_BASELINE_UNIVERSES_SCHEDULES_COSTS_AND_ACCOUNT_PATHS",
+      "status": "PASS",
+      "evidence": [
+        "tests/test_tier1_bracket_evaluation.py",
+        "tests/test_tier1_bracket_v5.py::test_candidate_and_baseline_have_independent_risk_paths_and_segments",
+        "tests/test_tier1_bracket_v11.py"
+      ]
+    },
+    {
+      "gate": "PREDICTION_ELIGIBILITY_IS_OUTCOME_INDEPENDENT",
+      "status": "PASS",
+      "evidence": [
+        "tests/test_tier1_bracket_v10_decision_validity.py::test_crossfit_prediction_eligibility_ignores_future_outcomes_and_risk_abstention",
+        "tests/test_tier1_bracket_v10_decision_validity.py::test_ranking_occurs_before_outcome_lookup_and_never_substitutes_runner_up"
+      ]
+    },
+    {
+      "gate": "COST_RISK_STATISTICS_AND_PROTOCOL_ALIGNMENT",
+      "status": "PASS",
+      "evidence": [
+        "tests/test_tier1_bracket_v5.py::test_v5_contract_restores_mandate_and_preparations_preserve_v4",
+        "tests/test_tier1_bracket_v5.py::test_continuous_risk_uses_favorable_peak_and_exit_bar_adverse_mark",
+        "tests/test_tier1_bracket_v5.py::test_registered_power_resamples_and_effect_classification_are_separate",
+        "tests/test_tier1_bracket_v5.py::test_crossfit_power_uses_registered_30_dollar_alternative",
+        "tests/test_tier1_bracket_v5.py::test_bootstrap_runs_all_registered_block_sensitivities"
+      ]
+    },
+    {
+      "gate": "EVIDENCE_RUNTIME_AND_SINGLE_USE_AUTHORIZATION",
+      "status": "PASS",
+      "evidence": [
+        "tests/test_tier1_bracket_v5.py::test_evidence_manifest_binds_predictions_fills_marks_and_runtime",
+        "tests/test_tier1_bracket_v12_execution.py"
+      ]
+    },
+    {
+      "gate": "HOLDOUT_2025_FAILS_CLOSED_BEFORE_OPEN",
+      "status": "PASS",
+      "evidence": [
+        "tests/test_tier1_bracket_v12_execution.py::test_v12_rejects_2025_before_registry_or_file_open",
+        "tests/test_tier1_bracket_v9.py::test_v9_rejects_2025_before_registry_or_file_open"
+      ]
+    },
+    {
+      "gate": "ONE_IMMUTABLE_SOURCE_SET_BOUND",
+      "status": "FAIL",
+      "reason": "No certified successor source-set record is published or bound to an unversioned candidate snapshot.",
+      "evidence": []
+    },
+    {
+      "gate": "SOURCE_COVERAGE_SUFFICIENT_FOR_EVERY_REQUIRED_DEPENDENCY",
+      "status": "FAIL",
+      "reason": "Feature, fold, market-year, and selected execution-path sufficiency are not durably proven for one immutable source set.",
+      "evidence": []
+    },
+    {
+      "gate": "ONE_AUTHORITATIVE_EXECUTION_READY_TRIAL_POINTER",
+      "status": "FAIL",
+      "reason": "The freeze correctly points to no current trial until source and snapshot certification pass.",
+      "evidence": [
+        "configs/tier1_bracket_version_freeze_reconciliation.json"
+      ]
+    }
+  ],
+  "prohibited_until_all_gates_pass": [
+    "successor_version_creation",
+    "trial_registration",
+    "historical_model_fit",
+    "prediction_generation",
+    "performance_evaluation",
+    "promotion_or_rejection_claim"
+  ],
+  "holdout_2025_touched": false,
+  "provider_access": false,
+  "trading": false
+}

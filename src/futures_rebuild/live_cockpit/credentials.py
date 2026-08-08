@@ -11,6 +11,7 @@ from typing import Mapping
 from .feed import (
     API_KEY_ENV,
     ApiKeyResolution,
+    ROOT as REPOSITORY_ROOT,
     load_databento_api_key_from_file,
     resolve_api_key_source,
 )
@@ -39,6 +40,14 @@ def default_credential_locator_path() -> Path | None:
     if not getattr(sys, "frozen", False):
         return None
     return Path(sys.executable).resolve().parent / CREDENTIAL_LOCATOR_FILENAME
+
+
+def default_repository_package_api_env_path() -> Path | None:
+    """Return the source-package credential path for existence-only self-checks."""
+
+    if getattr(sys, "frozen", False):
+        return None
+    return REPOSITORY_ROOT / "api.env"
 
 
 def _credential_path_from_locator(locator_path: Path) -> Path:

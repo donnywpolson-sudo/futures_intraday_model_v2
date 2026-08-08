@@ -1,0 +1,63 @@
+{
+  "schema_version": "tier1_frozen_source_adequacy_census_plan/1.0.0",
+  "state": "PREPARED_REQUIRES_SEPARATE_APPROVAL",
+  "operation": "CENSUS_FROZEN_TIER1_REPORTED_BAR_SOURCE_ADEQUACY_AND_PUBLISH",
+  "purpose": "Apply frozen causal reported-trade-bar semantics to every 2018-2022 calendar-open checkpoint in the 20 already-selected immutable causal releases, without fitting or evaluating a model.",
+  "source_record_path": "state/source_quality/tier1_preexecution_source_certification/7a7db45fb4e1a2e3825969e99781fd6f0d02b4dad7a7376b3f0163a0bb41cda5.json",
+  "source_record_id": "7a7db45fb4e1a2e3825969e99781fd6f0d02b4dad7a7376b3f0163a0bb41cda5",
+  "source_record_sha256": "6707a0be36384ea992bb8c83a0abb3fcb5cea41ae7299d7781f4b6c7ef41b531",
+  "selected_sources_id": "f61f34df0b9d8cf7b344016ce3df8bb76abeb890558740460f60d51e5ca37bde",
+  "selected_release_count": 20,
+  "recovery_record_path": "state/source_quality/tier1_preexecution_recovery_feasibility/c343a1ad972f51c9af774b9c7ffb163a3337b9cbf24c0cddeb0d17ca4a35c4eb.json",
+  "recovery_record_id": "c343a1ad972f51c9af774b9c7ffb163a3337b9cbf24c0cddeb0d17ca4a35c4eb",
+  "recovery_record_sha256": "801aa65057651b0021441b0f552b4694894f45a18594921fc90299a0fd50a92a",
+  "dbn_release_id": "086282eaef7b36a61626f88d93d06c93b87c1cb3407c936d065d0d1b9d98599e",
+  "calendar_release_id": "038940d82031f31e2c66ed37186e98a6ee6cff3e7248f634f2c7a8e94ea6ecf3",
+  "historical_scope": {
+    "markets": ["6E", "CL", "ES", "ZN"],
+    "years": [2018, 2019, 2020, 2021, 2022]
+  },
+  "reported_bar_semantics": {
+    "feature_history": "61 causal executable reported bars from the same session and identity; never forward-fill or synthesize a bar",
+    "feature_lags_and_atr": "computed by reported-bar ordinal over the selected 61 real bars, not by silently substituting clock-minute bars",
+    "maximum_feature_span_minutes": 75,
+    "maximum_latest_bar_staleness_minutes": 5,
+    "entry": "one exact observed executable bar at decision plus one minute",
+    "maximum_hold_minutes": 60,
+    "maximum_liquidation_delay_minutes": 5,
+    "missing_feature_disposition": "CAUSAL_ABSTENTION",
+    "missing_execution_disposition": "EXPLICIT_UNAVAILABLE",
+    "prediction_eligibility_independent_of_future_execution_availability": true,
+    "every_feature_complete_checkpoint_requires_complete_execution_path_before_registration": true,
+    "incomplete_selected_execution_forces_trial_rejection": true
+  },
+  "overall_feature_rate_percent": 95,
+  "market_year_feature_rate_percent": 90,
+  "market_fold_feature_rate_percent": 90,
+  "minimum_market_fold_feature_sessions": 30,
+  "publication": {
+    "mode": "CREATE_ONLY_ONE_HASH_BOUND_SOURCE_ADEQUACY_RECORD",
+    "record_root": "state/source_quality/tier1_frozen_source_adequacy",
+    "event_root": "state/source_quality_events/tier1_frozen_source_adequacy"
+  },
+  "maximum_host_runtime_seconds": 900,
+  "estimated_external_cost_usd": "0",
+  "source_semantics_sha256": "be042e6ae8a8a83bc5a719b005f39932eb9241ce0d05cf556b187376aad7d77f",
+  "implementation_sha256": "e95a72f1074edb4766cd549452c9a44b29b046af6d0fc4466bab61e16ddd0a28",
+  "forbidden_actions": {
+    "access_2025": true,
+    "active_data_mutation": true,
+    "commit": true,
+    "create_successor_data": true,
+    "diagnostic_source_family_read": true,
+    "evaluate_performance": true,
+    "fit_models": true,
+    "generate_predictions": true,
+    "provider_or_network_access": true,
+    "push": true,
+    "register_or_retire_trial": true,
+    "stage": true,
+    "trade": true
+  },
+  "plan_id": "4564533b69c4414503be80c6781f3c7dfd898b19f523a20467e0ac2695853516"
+}

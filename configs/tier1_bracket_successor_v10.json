@@ -1,0 +1,58 @@
+{
+  "schema_version": "tier1_bracket_successor_v10_contract/1.0.0",
+  "state": "PREPARED_NOT_REGISTERED",
+  "classification": "POST_V9_CHECKPOINT_SCOPED_SOURCE_CONTINUITY_PREREGISTERED_HISTORICAL_SCREEN",
+  "research_only": true,
+  "live_readiness": false,
+  "supersedes_v9_trial_id": "fed4cc30c3f01e4f5b15eacfecdc50fe3a45bf671c0306d568f013f02c91dcd8",
+  "inherited_v9_contract_path": "configs/tier1_bracket_successor_v9.json",
+  "inherited_v9_contract_sha256": "37c378d7a1bd24864c6c17356d2ddae98a345c6e1de91871819bd4b8a63dda81",
+  "frozen_without_change": [
+    "calendar_markets_period_and_2025_holdout",
+    "features_candidate_model_family_hyperparameters_and_available_cell_math",
+    "splits_purge_embargo_entry_hurdle_ranking_and_tie_breaking",
+    "costs_position_limits_daily_loss_and_1500_usd_drawdown",
+    "independent_baseline_scheduling_and_required_baseline_coverage_gate",
+    "candidate_and_nested_crossfit_coverage_thresholds",
+    "inference_and_promotion_gate"
+  ],
+  "source_continuity_successor": {
+    "whole_session_expected_minute_grid": "NOT_DECLARED_BY_REGISTERED_CHECKPOINT_CALENDAR",
+    "adjacent_timestamp_discontinuity": "DIAGNOSTIC_ONLY_NOT_PROOF_OF_A_MISSING_REQUIRED_BAR",
+    "nontradable_source_row": "RETAIN_ONCE_AS_NONEXECUTABLE_NEVER_CONVERT_TO_TRADABLE",
+    "tradable_row_without_session": "INVALID_FAIL_CLOSED",
+    "sessionless_nontradable_row": "REQUIRE_COVERAGE_MEMBERSHIP_FAILURE_PROVENANCE_AND_EXACT_MINUTE_ADJACENT_SAME_SESSION_NEIGHBORS",
+    "missing_complete_market_session": "THREE_EXPLICIT_CHECKPOINT_ABSTENTIONS_FROM_INDEPENDENT_CALENDAR_CENSUS",
+    "feature_completeness": "EXACT_61_BAR_CAUSAL_MINUTE_CONTIGUOUS_CHECKPOINT_WINDOW",
+    "entry_and_outcome_completeness": "ENTRY_AT_DECISION_PLUS_ONE_MINUTE_AND_EXACT_MINUTE_CONTIGUOUS_CAUSAL_PREFIX_THROUGH_DIRECTION_AND_SCENARIO_SPECIFIC_EXIT",
+    "gap_before_causal_exit": "SELECTED_OUTCOME_UNRESOLVED_FAIL_CLOSED",
+    "gap_after_causal_exit": "IRRELEVANT_TO_THE_ALREADY_PROVEN_FILL",
+    "missing_required_dependency": "CHECKPOINT_SPECIFIC_ABSTENTION_NO_IMPUTATION_OR_SHORTENING",
+    "duplicate_event_identity": "ONLY_CHECKPOINTS_WHOSE_EXACT_FEATURE_OR_ENTRY_OUTCOME_DEPENDENCIES_CONTAIN_THE_DUPLICATE_ARE_AMBIGUOUS_FAIL_CLOSED"
+  },
+  "decision_validity_successor": {
+    "prediction_eligibility": "CALENDAR_OPEN_OWNED_FOLD_WITH_CAUSAL_FEATURES_INDEPENDENT_OF_FUTURE_OUTCOME_AVAILABILITY",
+    "risk_cap_rejection": "DECISION_TIME_POLICY_ABSTENTION_INCLUDED_AS_ZERO_POLICY_RETURN_NOT_MISSING_STATISTICAL_DATA",
+    "missing_features": "TRUE_DECISION_DATA_INELIGIBILITY_INCLUDED_IN_COVERAGE_DENOMINATOR",
+    "model_unavailable": "EXPLICIT_PRE_PREDICTION_ABSTENTION_INCLUDED_IN_MODEL_AVAILABILITY_GATE",
+    "signal_risk_and_cross_market_ranking": "FROZEN_BEFORE_ANY_OUTCOME_LOOKUP",
+    "missing_selected_outcome": "NO_RUNNER_UP_SUBSTITUTION_AND_INCONCLUSIVE_DATA_OR_COVERAGE",
+    "policy_statistic": "EVERY_DECLARED_EVALUATION_SESSION_INCLUDED_WITH_ZERO_RETURN_FOR_INTENTIONAL_NO_TRADE",
+    "gate_order": "DATA_AND_POLICY_COMPLETENESS_BEFORE_ANY_PERFORMANCE_INFERENCE",
+    "required_active_baselines": "EACH_USES_ITS_OWN_CAUSAL_SIGNAL_RANKING_SELECTED_PATH_COVERAGE_SCHEDULE_COSTS_AND_RISK_STATE"
+  },
+  "anti_tuning": {
+    "strategy_or_model_parameter_change": false,
+    "cost_or_risk_change": false,
+    "promotion_standard_change": false,
+    "v9_observed_returns_used_for_selection": false
+  },
+  "authority": {
+    "historical_execution_requires": "NEW_VERIFIED_SINGLE_USE_OPERATION_RECEIPT_BOUND_TO_V10_TRIAL_SOURCE_HASHES_OUTPUT_ROOT_AND_2025_FALSE",
+    "publication_requires_separate_approval": true,
+    "holdout_or_forward_access": false,
+    "provider_access": false,
+    "trading": false,
+    "git_actions": false
+  }
+}

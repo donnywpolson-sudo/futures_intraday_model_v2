@@ -36,10 +36,10 @@ from .feed import (
     floor_timeframe,
     historical_store_to_candles,
     import_databento,
+    is_databento_auth_error,
     normalize_timeframe,
     normalize_ts_event,
     ohlcv_record_to_candle,
-    parse_available_end_from_text,
     record_error_text,
     resolve_single_instrument,
     timeframe_seconds,
@@ -78,12 +78,15 @@ MIN_RENDER_HZ = VISUAL_UPDATE_HZ["efficient"]
 MAX_RENDER_HZ = VISUAL_UPDATE_HZ["high"]
 RENDER_INTERVAL_SECONDS_OVERRIDE: float | None = None
 FOCUS_SWITCH_DEBOUNCE_SECONDS = 0.15
+FOCUS_MAPPING_WAIT_SECONDS = 3.0
 DEFAULT_HISTORY_HOURS = 168
 OVERVIEW_STALE_SECONDS = 150.0
-SYMBOL_REQUEST_TIMEOUT_SECONDS = 10
+FOCUS_LIVE_TAIL_MAX_AGE_SECONDS = 150.0
+SYMBOL_REQUEST_TIMEOUT_SECONDS = 30
 SYMBOL_RESOLUTION_ATTEMPTS = 2
 SYMBOL_RESOLUTION_RETRY_DELAY_SECONDS = 1.0
 HISTORY_REQUEST_TIMEOUT_SECONDS = 30
+MAX_HISTORY_COST_ESTIMATE_REQUESTS = 8
 LIVE_REPLAY_MAX_HOURS = 24
 LIVE_REPLAY_SAFETY_MINUTES = 2
 HISTORY_MAPPING_WAIT_SECONDS = 5.0
@@ -104,6 +107,10 @@ SYSTEM_CODE_NAMES = {
     3: "REPLAY_COMPLETED",
     4: "END_OF_INTERVAL",
 }
+
+
+class _HistoryAvailabilityBoundaryError(ValueError):
+    """A dataset-range response cannot authorize a historical request window."""
 
 
 class CockpitEngine(Protocol):
@@ -209,32 +216,49 @@ def _resolution_timed_out(exc: Exception) -> bool:
     return False
 
 
+def _connection_failed(exc: Exception) -> bool:
+    current: BaseException | None = exc
+    seen: set[int] = set()
+    while current is not None and id(current) not in seen:
+        seen.add(id(current))
+        if isinstance(current, ConnectionError) or "connection" in type(current).__name__.lower():
+            return True
+        current = current.__cause__ or current.__context__
+    return False
+
+
 def _history_failure_details(exc: Exception) -> dict[str, bool | str]:
     timed_out = _resolution_timed_out(exc)
     if timed_out:
         category = "TIMEOUT"
-    elif _history_available_end(exc) is not None:
-        category = "DATA_AVAILABILITY"
-    elif isinstance(exc, ConnectionError):
+    elif is_databento_auth_error(exc):
+        category = "AUTHORIZATION"
+    elif _connection_failed(exc):
         category = "CONNECTION"
     else:
         category = "UNAVAILABLE"
     return {"failure_category": category, "timed_out": timed_out}
 
 
-def _history_available_end(exc: Exception) -> datetime | None:
-    candidates = (
-        str(exc),
-        getattr(exc, "http_body", None),
-        getattr(exc, "json_body", None),
-    )
-    for candidate in candidates:
-        if candidate is None:
-            continue
-        available_end = parse_available_end_from_text(str(candidate))
-        if available_end is not None:
-            return floor_timeframe(available_end, 60)
-    return None
+def _history_diagnostic(
+    *,
+    phase: str,
+    chunk_number: int | None = None,
+    requested_start: datetime | None = None,
+    requested_end: datetime | None = None,
+    download_began: bool = False,
+) -> dict[str, Any]:
+    return {
+        "phase": phase,
+        "chunk_number": chunk_number,
+        "requested_start": (
+            timestamp_seconds(requested_start) if requested_start is not None else None
+        ),
+        "requested_end": (
+            timestamp_seconds(requested_end) if requested_end is not None else None
+        ),
+        "download_began": download_began,
+    }
 
 
 def _merge_completed_history(
@@ -343,6 +367,9 @@ def provider_control_message(record: object) -> dict[str, Any] | None:
 def _market_payload(info: object, *, alpha_tier_group: str | None = None) -> dict[str, Any]:
     return {
         "symbol": str(getattr(info, "symbol")),
+        "name": str(
+            getattr(info, "display_name", None) or getattr(info, "symbol")
+        ),
         "family": str(getattr(info, "family", None) or "Other"),
         "description": str(getattr(info, "description", None) or ""),
         "alpha_tier_group": alpha_tier_group,
@@ -889,9 +916,13 @@ class LiveCockpitEngine:
         self._history_plan: HistoryPlan | None = None
         self._history_reestimate_requested = False
         self._history_active_chunk: HistoryChunk | None = None
+        self._history_active_chunk_number: int | None = None
+        self._history_plan_chunk_number = 0
         self._history_ready_markets = 0
+        self._history_dataset_range_requests = 0
         self._history_cost_estimate_requests = 0
         self._history_plan_confirmations = 0
+        self._history_available_end: datetime | None = None
         self._pending_update: tuple[int, dict[str, Any]] | None = None
         self._pending_snapshot_generation: int | None = None
         self._pending_cache: list[dict[str, Any]] = []
@@ -930,6 +961,7 @@ class LiveCockpitEngine:
         self._history_retry_active = False
         self._history_failure: dict[str, Any] | None = None
         self._history_complete_generation: int | None = None
+        self._focus_last_live_event: tuple[int, str, datetime] | None = None
         self._shutdown_errors: list[str] = []
         self._metrics_lock = threading.RLock()
         self._prediction_source = NullPredictionSource()
@@ -965,6 +997,105 @@ class LiveCockpitEngine:
             return "UNAVAILABLE"
         return "PARTIAL" if has_bars else "LOADING"
 
+    def _live_tail_is_fresh(
+        self,
+        *,
+        generation: int,
+        contract: str,
+        evaluated_at: datetime,
+    ) -> bool:
+        with self._lock:
+            live_event = self._focus_last_live_event
+        if live_event is None:
+            return False
+        live_generation, live_contract, live_time = live_event
+        age_seconds = (evaluated_at - live_time).total_seconds()
+        return (
+            live_generation == generation
+            and live_contract == contract
+            and 0.0 <= age_seconds <= FOCUS_LIVE_TAIL_MAX_AGE_SECONDS
+        )
+
+    def _focus_health_payload(
+        self,
+        *,
+        market: str,
+        contract: str,
+        instrument_id: int | None,
+        timeframe: str,
+        bars: Sequence[Mapping[str, Any]],
+        generation: int,
+        history_state: str | None = None,
+        evaluated_at: datetime | None = None,
+    ) -> dict[str, Any]:
+        aggregated = _aggregate(bars, timeframe)
+        resolved_history_state = history_state or self._history_health_state(
+            generation=generation, has_bars=bool(aggregated)
+        )
+        evaluated = evaluated_at or now_utc()
+        if resolved_history_state != "COMPLETE":
+            health_state = "DEGRADED"
+            health_reasons = [
+                {
+                    "LOADING": "HISTORY_LOADING",
+                    "PARTIAL": "HISTORY_PARTIAL",
+                    "UNAVAILABLE": "HISTORY_UNAVAILABLE",
+                }.get(resolved_history_state, "HISTORY_UNAVAILABLE")
+            ]
+        elif not aggregated:
+            health_state = "UNKNOWN"
+            health_reasons = ["NO_BAR_DATA"]
+        elif not self._live_tail_is_fresh(
+            generation=generation,
+            contract=contract,
+            evaluated_at=evaluated,
+        ):
+            health_state = "DEGRADED"
+            health_reasons = ["DATA_STALE"]
+        else:
+            health_state = "CURRENT"
+            health_reasons = []
+        health_reasons.append("CONTINUITY_NOT_EVALUATED")
+        return _data_health_payload(
+            market=market,
+            contract=contract,
+            instrument_id=instrument_id,
+            timeframe=timeframe,
+            generation=generation,
+            bars=aggregated,
+            state=health_state,
+            history_state=resolved_history_state,
+            requested_hours=float(self.history_hours),
+            continuity_state="NOT_EVALUATED",
+            unexpected_gap_count=None,
+            largest_gap_seconds=None,
+            reason_codes=health_reasons,
+            evaluated_at=evaluated,
+        )
+
+    def _publish_current_focus_health(self, *, evaluated_at: datetime | None = None) -> None:
+        with self._lock:
+            market = self.market
+            contract = self._contract
+            instrument_id = self._resolved_instrument_id
+            timeframe = self.timeframe
+            generation = self.generation
+            bars = list(self._raw_bars)
+        if self._publish is None:
+            return
+        self._emit(
+            "data_health",
+            self._focus_health_payload(
+                market=market,
+                contract=contract,
+                instrument_id=instrument_id,
+                timeframe=timeframe,
+                bars=bars,
+                generation=generation,
+                evaluated_at=evaluated_at,
+            ),
+        )
+
     def _publish_focus_bundle(
         self,
         *,
@@ -980,23 +1111,6 @@ class LiveCockpitEngine:
         if self._publish is None:
             return
         aggregated = _aggregate(bars, timeframe)
-        resolved_history_state = history_state or self._history_health_state(
-            generation=generation, has_bars=bool(aggregated)
-        )
-        if not aggregated:
-            health_state = "UNKNOWN"
-            health_reasons = ["NO_BAR_DATA"]
-        elif resolved_history_state in {"PARTIAL", "UNAVAILABLE"}:
-            health_state = "DEGRADED"
-            health_reasons = [
-                "HISTORY_UNAVAILABLE"
-                if resolved_history_state == "UNAVAILABLE"
-                else "HISTORY_PARTIAL"
-            ]
-        else:
-            health_state = "CURRENT"
-            health_reasons = []
-        health_reasons.append("CONTINUITY_NOT_EVALUATED")
         evaluated_at = now_utc()
         self._publish(
             _snapshot_event(
@@ -1011,20 +1125,14 @@ class LiveCockpitEngine:
         self._publish(
             event(
                 "data_health",
-                _data_health_payload(
+                self._focus_health_payload(
                     market=market,
                     contract=contract,
                     instrument_id=instrument_id,
                     timeframe=timeframe,
+                    bars=bars,
                     generation=generation,
-                    bars=aggregated,
-                    state=health_state,
-                    history_state=resolved_history_state,
-                    requested_hours=float(self.history_hours),
-                    continuity_state="NOT_EVALUATED",
-                    unexpected_gap_count=None,
-                    largest_gap_seconds=None,
-                    reason_codes=health_reasons,
+                    history_state=history_state,
                     evaluated_at=evaluated_at,
                 ),
             )
@@ -1208,6 +1316,7 @@ class LiveCockpitEngine:
                 "active_live_sessions": len(self._active_live_clients),
                 "max_live_sessions": self._max_live_sessions,
                 "history_requests": self._history_requests,
+                "history_dataset_range_requests": self._history_dataset_range_requests,
                 "history_cost_estimate_requests": self._history_cost_estimate_requests,
                 "history_plan_confirmations": self._history_plan_confirmations,
                 "history_ready_markets": self._history_ready_markets,
@@ -1236,13 +1345,76 @@ class LiveCockpitEngine:
                 "history_enabled": self.history_enabled,
                 "cache_enabled": self.cache_enabled,
                 "reconnect_enabled": self.reconnect_enabled,
+                "history_available_end_utc": (
+                    self._history_available_end.isoformat()
+                    if self._history_available_end is not None
+                    else None
+                ),
             }
 
     def _history_target(
-        self, *, now: datetime | None = None
+        self,
+        *,
+        now: datetime | None = None,
+        available_end: datetime | None = None,
     ) -> tuple[datetime, datetime]:
-        end = floor_timeframe(now or datetime.now(timezone.utc), 60)
-        return end - timedelta(hours=self.history_hours), end
+        completed_minute = floor_timeframe(now or datetime.now(timezone.utc), 60)
+        requested_start = completed_minute - timedelta(hours=self.history_hours)
+        resolved_available_end = (
+            available_end
+            if available_end is not None
+            else self._history_available_end
+        )
+        historical_end = (
+            min(completed_minute, resolved_available_end)
+            if resolved_available_end is not None
+            else completed_minute
+        )
+        return requested_start, historical_end
+
+    def _lookup_history_available_end(
+        self,
+        *,
+        completed_minute: datetime,
+        requested_start: datetime,
+    ) -> datetime:
+        if self._historical is None:
+            raise RuntimeError("historical client is unavailable")
+        metadata = getattr(self._historical, "metadata", None)
+        get_dataset_range = getattr(metadata, "get_dataset_range", None)
+        if not callable(get_dataset_range):
+            raise _HistoryAvailabilityBoundaryError("dataset range is unavailable")
+        with self._metrics_lock:
+            self._history_dataset_range_requests += 1
+        value = get_dataset_range(dataset=DEFAULT_DATASET)
+        if not isinstance(value, Mapping):
+            raise _HistoryAvailabilityBoundaryError("dataset range is malformed")
+        schema_ranges = value.get("schema")
+        if not isinstance(schema_ranges, Mapping):
+            raise _HistoryAvailabilityBoundaryError("dataset schema range is absent")
+        schema_range = schema_ranges.get(DEFAULT_HISTORICAL_SCHEMA)
+        if not isinstance(schema_range, Mapping):
+            raise _HistoryAvailabilityBoundaryError("historical schema range is absent")
+        raw_end = schema_range.get("end")
+        if not isinstance(raw_end, str) or not raw_end.strip():
+            raise _HistoryAvailabilityBoundaryError("historical schema end is absent")
+        try:
+            parsed_end = datetime.fromisoformat(raw_end.strip().replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise _HistoryAvailabilityBoundaryError(
+                "historical schema end is malformed"
+            ) from exc
+        if parsed_end.tzinfo is None or parsed_end.utcoffset() is None:
+            raise _HistoryAvailabilityBoundaryError(
+                "historical schema end is timezone-less"
+            )
+        available_end = floor_timeframe(parsed_end.astimezone(timezone.utc), 60)
+        historical_end = min(completed_minute, available_end)
+        if historical_end <= requested_start:
+            raise _HistoryAvailabilityBoundaryError(
+                "historical schema end is outside the requested window"
+            )
+        return available_end
 
     def _missing_history(
         self,
@@ -1280,6 +1452,7 @@ class LiveCockpitEngine:
         *,
         plan: HistoryPlan | None = None,
         failure_category: str | None = None,
+        diagnostic: Mapping[str, Any] | None = None,
         active_market: str | None = None,
     ) -> None:
         with self._history_lock:
@@ -1317,6 +1490,8 @@ class LiveCockpitEngine:
         }
         if failure_category is not None:
             payload["failure_category"] = failure_category
+        if diagnostic is not None:
+            payload["diagnostic"] = dict(diagnostic)
         self._emit("history_cache_status", payload)
 
     def _remember_binding(self, binding: HistoryBinding) -> None:
@@ -1349,6 +1524,39 @@ class LiveCockpitEngine:
             except Exception:
                 pass
 
+    def _record_history_failure(
+        self,
+        *,
+        failure_category: str,
+        diagnostic: Mapping[str, Any],
+    ) -> None:
+        with self._lock:
+            generation = self.generation
+            self._history_complete_generation = None
+        with self._metrics_lock:
+            self._history_failure = {
+                "failure_category": failure_category,
+                "generation": generation,
+                "diagnostic": dict(diagnostic),
+            }
+
+    def _set_selected_history_coverage(
+        self,
+        *,
+        missing_by_instrument: Mapping[int, Sequence[tuple[datetime, datetime]]],
+    ) -> None:
+        with self._lock:
+            instrument_id = self._resolved_instrument_id
+            generation = self.generation
+            if (
+                instrument_id is not None
+                and instrument_id in missing_by_instrument
+                and not missing_by_instrument[instrument_id]
+            ):
+                self._history_complete_generation = generation
+            else:
+                self._history_complete_generation = None
+
     @staticmethod
     def _symbology_result(value: object) -> Mapping[str, Any]:
         if not isinstance(value, Mapping):
@@ -1378,7 +1586,12 @@ class LiveCockpitEngine:
         candidates = tuple(dict.fromkeys(active or fallback))
         return candidates[0] if len(candidates) == 1 else None
 
-    def _resolve_history_bindings(self) -> list[HistoryBinding]:
+    def _resolve_history_bindings(
+        self,
+        *,
+        target_start: datetime,
+        target_end: datetime,
+    ) -> list[HistoryBinding]:
         with self._history_lock:
             known = dict(self._market_bindings)
         missing = sorted(self._symbols - set(known))
@@ -1388,7 +1601,6 @@ class LiveCockpitEngine:
         resolve = getattr(symbology, "resolve", None)
         if not callable(resolve):
             return sorted(known.values(), key=lambda item: item.market)
-        target_start, target_end = self._history_target()
         start_date = target_start.date().isoformat()
         end_date = (target_end.date() + timedelta(days=1)).isoformat()
         queries = [f"{market}{DEFAULT_CONTINUOUS_SUFFIX}" for market in missing]
@@ -1473,19 +1685,81 @@ class LiveCockpitEngine:
         ):
             return
         self._emit_history_cache_status("CHECKING", "Checking one-week cache coverage")
+        with self._lock:
+            self._history_complete_generation = None
+        completed_minute = floor_timeframe(datetime.now(timezone.utc), 60)
+        requested_start = completed_minute - timedelta(hours=self.history_hours)
+        range_diagnostic = _history_diagnostic(
+            phase="DATASET_RANGE",
+            requested_start=requested_start,
+            requested_end=completed_minute,
+        )
         try:
-            bindings = self._resolve_history_bindings()
-        except Exception:
+            available_end = self._lookup_history_available_end(
+                completed_minute=completed_minute,
+                requested_start=requested_start,
+            )
+        except Exception as exc:
+            failure_category = (
+                "DATA_AVAILABILITY"
+                if isinstance(exc, _HistoryAvailabilityBoundaryError)
+                else str(_history_failure_details(exc)["failure_category"])
+            )
             with self._history_lock:
                 self._history_plan = None
                 self._history_retry_active = False
+                self._history_available_end = None
+            self._record_history_failure(
+                failure_category=failure_category,
+                diagnostic=range_diagnostic,
+            )
+            self._emit_history_cache_status(
+                "ERROR",
+                "Historical availability could not be verified; no history was downloaded.",
+                failure_category=failure_category,
+                diagnostic=range_diagnostic,
+            )
+            self._publish_current_focus_health(evaluated_at=completed_minute)
+            return
+        with self._history_lock:
+            self._history_available_end = available_end
+        self._publish_current_focus_health(evaluated_at=completed_minute)
+        target_start, target_end = self._history_target(
+            now=completed_minute,
+            available_end=available_end,
+        )
+        binding_diagnostic = _history_diagnostic(
+            phase="BINDING_RESOLUTION",
+            requested_start=target_start,
+            requested_end=target_end,
+        )
+        try:
+            bindings = self._resolve_history_bindings(
+                target_start=target_start,
+                target_end=target_end,
+            )
+        except Exception as exc:
+            failure_category = str(_history_failure_details(exc)["failure_category"])
+            with self._history_lock:
+                self._history_plan = None
+                self._history_retry_active = False
+            self._record_history_failure(
+                failure_category=failure_category,
+                diagnostic=binding_diagnostic,
+            )
             self._emit_history_cache_status(
                 "ERROR",
                 "Some market contracts could not be resolved; live data remains available.",
-                failure_category="SYMBOL_RESOLUTION",
+                failure_category=failure_category,
+                diagnostic=binding_diagnostic,
             )
+            self._publish_current_focus_health(evaluated_at=completed_minute)
             return
-        target_start, target_end = self._history_target()
+        cache_diagnostic = _history_diagnostic(
+            phase="CACHE_COVERAGE",
+            requested_start=target_start,
+            requested_end=target_end,
+        )
         try:
             missing_by_instrument = {
                 binding.instrument_id: self._missing_history(
@@ -1497,15 +1771,27 @@ class LiveCockpitEngine:
             with self._history_lock:
                 self._history_plan = None
                 self._history_retry_active = False
+            self._record_history_failure(
+                failure_category="UNAVAILABLE",
+                diagnostic=cache_diagnostic,
+            )
             self._emit_history_cache_status(
                 "ERROR",
                 "The local history cache is unavailable; live data remains available.",
-                failure_category="CACHE_UNAVAILABLE",
+                failure_category="UNAVAILABLE",
+                diagnostic=cache_diagnostic,
             )
+            self._publish_current_focus_health(evaluated_at=completed_minute)
             return
         ready = sum(not intervals for intervals in missing_by_instrument.values())
         with self._history_lock:
             self._history_ready_markets = ready
+        self._set_selected_history_coverage(
+            missing_by_instrument=missing_by_instrument,
+        )
+        with self._metrics_lock:
+            self._history_failure = None
+        self._publish_current_focus_health(evaluated_at=completed_minute)
         chunks = group_history_chunks(bindings, missing_by_instrument)
         if not chunks:
             with self._history_lock:
@@ -1516,22 +1802,53 @@ class LiveCockpitEngine:
                     "COMPLETE", "One-week history is cached for all markets"
                 )
             else:
+                self._record_history_failure(
+                    failure_category="UNAVAILABLE",
+                    diagnostic=binding_diagnostic,
+                )
                 self._emit_history_cache_status(
                     "ERROR",
                     "Some market contracts could not be resolved; live data remains available.",
-                    failure_category="SYMBOL_RESOLUTION",
+                    failure_category="UNAVAILABLE",
+                    diagnostic=binding_diagnostic,
                 )
             return
-        try:
-            estimated_cost = self._estimate_history_cost(chunks)
-        except Exception:
+        cost_diagnostic = _history_diagnostic(
+            phase="COST_ESTIMATE",
+            requested_start=target_start,
+            requested_end=target_end,
+        )
+        if len(chunks) > MAX_HISTORY_COST_ESTIMATE_REQUESTS:
             with self._history_lock:
                 self._history_plan = None
                 self._history_retry_active = False
+            self._record_history_failure(
+                failure_category="UNAVAILABLE",
+                diagnostic=cost_diagnostic,
+            )
             self._emit_history_cache_status(
                 "ERROR",
                 "History cost could not be estimated; no history was downloaded.",
-                failure_category="ESTIMATE_UNAVAILABLE",
+                failure_category="UNAVAILABLE",
+                diagnostic=cost_diagnostic,
+            )
+            return
+        try:
+            estimated_cost = self._estimate_history_cost(chunks)
+        except Exception as exc:
+            failure_category = str(_history_failure_details(exc)["failure_category"])
+            with self._history_lock:
+                self._history_plan = None
+                self._history_retry_active = False
+            self._record_history_failure(
+                failure_category=failure_category,
+                diagnostic=cost_diagnostic,
+            )
+            self._emit_history_cache_status(
+                "ERROR",
+                "History cost could not be estimated; no history was downloaded.",
+                failure_category=failure_category,
+                diagnostic=cost_diagnostic,
             )
             return
         created_at = datetime.now(timezone.utc)
@@ -1548,6 +1865,7 @@ class LiveCockpitEngine:
             if self._stop_event.is_set():
                 return
             self._history_plan = plan
+            self._history_plan_chunk_number = 0
             self._history_retry_active = False
         self._emit_history_cache_status(
             "CONFIRMATION_REQUIRED",
@@ -1600,21 +1918,10 @@ class LiveCockpitEngine:
         }
         with self._metrics_lock:
             self._history_requests += 1
-        covered_end = chunk.end
-        try:
-            store = self._historical.timeseries.get_range(**request)
-        except Exception as exc:
-            available_end = _history_available_end(exc)
-            if available_end is None:
-                raise
-            covered_end = min(chunk.end, available_end)
-            if covered_end <= chunk.start:
-                raise
-            request["end"] = covered_end
-            store = self._historical.timeseries.get_range(**request)
+        store = self._historical.timeseries.get_range(**request)
         return (
             self._group_history_store(store, instrument_ids=instrument_ids),
-            covered_end,
+            chunk.end,
         )
 
     @staticmethod
@@ -1817,12 +2124,23 @@ class LiveCockpitEngine:
             return False
         visible_bars = [bars_by_time[key] for key in sorted(bars_by_time)]
         target_start, target_end = self._history_target(now=now)
-        history_missing = self._missing_history(
-            binding=binding,
-            start=target_start,
-            end=target_end,
+        availability_known = self._history_available_end is not None
+        history_missing = (
+            self._missing_history(
+                binding=binding,
+                start=target_start,
+                end=target_end,
+            )
+            if availability_known
+            else [(target_start, target_end)]
         )
-        history_state = "COMPLETE" if not history_missing else "PARTIAL"
+        history_state = (
+            "COMPLETE"
+            if availability_known and not history_missing
+            else "PARTIAL"
+            if availability_known
+            else "LOADING"
+        )
         with self._lock:
             if generation != self.generation or self._stop_event.is_set():
                 return False
@@ -1858,6 +2176,7 @@ class LiveCockpitEngine:
             self._contract = normalized
             self._resolved_instrument_id = None
             self._history_complete_generation = None
+            self._focus_last_live_event = None
         with self._metrics_lock:
             self._history_failure = None
         self._emit(
@@ -1952,7 +2271,9 @@ class LiveCockpitEngine:
                     and plan.chunks
                 ):
                     chunk = plan.chunks.pop(0)
+                    self._history_plan_chunk_number += 1
                     self._history_active_chunk = chunk
+                    self._history_active_chunk_number = self._history_plan_chunk_number
             if reestimate:
                 self._prepare_history_plan()
                 continue
@@ -1961,6 +2282,7 @@ class LiveCockpitEngine:
                 self._history_wakeup.clear()
                 continue
             active_market = chunk.bindings[0].market if len(chunk.bindings) == 1 else None
+            chunk_number = self._history_active_chunk_number
             self._emit_history_cache_status(
                 "WARMING",
                 "Updating missing one-week history in the background",
@@ -2004,32 +2326,51 @@ class LiveCockpitEngine:
             except Exception as exc:
                 details = _history_failure_details(exc)
                 failure_category = str(details["failure_category"])
+                diagnostic = _history_diagnostic(
+                    phase="DOWNLOAD",
+                    chunk_number=chunk_number,
+                    requested_start=chunk.start,
+                    requested_end=chunk.end,
+                    download_began=True,
+                )
                 with self._history_lock:
                     self._history_active_chunk = None
+                    self._history_active_chunk_number = None
                     if self._history_plan is plan:
                         self._history_plan = None
                     self._history_retry_active = False
-                with self._metrics_lock:
-                    self._history_failure = {
-                        "failure_category": failure_category,
-                        "timed_out": bool(details["timed_out"]),
-                    }
+                self._record_history_failure(
+                    failure_category=failure_category,
+                    diagnostic=diagnostic,
+                )
                 message = (
                     "History update timed out; cached and live data remain available."
                     if details["timed_out"]
                     else "History update failed; cached and live data remain available."
                 )
                 self._emit_history_cache_status(
-                    "ERROR", message, failure_category=failure_category
+                    "ERROR",
+                    message,
+                    failure_category=failure_category,
+                    diagnostic=diagnostic,
                 )
+                self._publish_current_focus_health()
                 continue
             with self._history_lock:
                 self._history_active_chunk = None
+                self._history_active_chunk_number = None
                 bindings = list(self._market_bindings.values())
-            ready = self._ready_market_count(
-                bindings=bindings,
-                start=plan.target_start,
-                end=plan.target_end,
+            missing_by_instrument = {
+                binding.instrument_id: self._missing_history(
+                    binding=binding,
+                    start=plan.target_start,
+                    end=plan.target_end,
+                )
+                for binding in bindings
+            }
+            ready = sum(not intervals for intervals in missing_by_instrument.values())
+            self._set_selected_history_coverage(
+                missing_by_instrument=missing_by_instrument,
             )
             with self._history_lock:
                 self._history_ready_markets = ready
@@ -2054,6 +2395,7 @@ class LiveCockpitEngine:
                     "PARTIAL",
                     "Some market history remains incomplete; refresh the estimate to retry.",
                 )
+            self._publish_current_focus_health()
 
     def retry_history(self) -> bool:
         return self.retry_history_cache_estimate()
@@ -2093,10 +2435,20 @@ class LiveCockpitEngine:
                 plan.paused = False
                 self._history_plan_confirmations += 1
         if expired:
+            diagnostic = _history_diagnostic(
+                phase="COST_ESTIMATE",
+                requested_start=plan.target_start if plan is not None else None,
+                requested_end=plan.target_end if plan is not None else None,
+            )
+            self._record_history_failure(
+                failure_category="UNAVAILABLE",
+                diagnostic=diagnostic,
+            )
             self._emit_history_cache_status(
                 "ERROR",
                 "The history estimate expired; refresh it before downloading.",
-                failure_category="ESTIMATE_UNAVAILABLE",
+                failure_category="UNAVAILABLE",
+                diagnostic=diagnostic,
             )
             return False
         self._emit_history_cache_status(
@@ -2200,14 +2552,29 @@ class LiveCockpitEngine:
             market, generation = selected
             self._activate_focus(market, generation)
 
+    def _wait_for_live_binding(
+        self, market: str, generation: int
+    ) -> HistoryBinding | None:
+        deadline = time.monotonic() + FOCUS_MAPPING_WAIT_SECONDS
+        while not self._stop_event.is_set() and generation == self.generation:
+            with self._history_lock:
+                binding = self._market_bindings.get(market)
+            if binding is not None:
+                return binding
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return None
+            if self._stop_event.wait(min(0.05, remaining)):
+                return None
+        return None
+
     def _activate_focus(self, market: str, generation: int) -> None:
         if self._historical is None or self.db_module is None or self._api_key is None:
             return
         now = datetime.now(timezone.utc)
         lookback_start = now - timedelta(hours=self.history_hours)
         end = floor_timeframe(now, 60)
-        with self._history_lock:
-            known_binding = self._market_bindings.get(market)
+        known_binding = self._wait_for_live_binding(market, generation)
         resolved = (
             SimpleNamespace(
                 market=known_binding.market,
@@ -2311,12 +2678,23 @@ class LiveCockpitEngine:
             self._resolved_instrument_id = resolved.instrument_id
             timeframe = self.timeframe
         target_start, target_end = self._history_target(now=now)
-        history_missing = self._missing_history(
-            binding=binding,
-            start=target_start,
-            end=target_end,
+        availability_known = self._history_available_end is not None
+        history_missing = (
+            self._missing_history(
+                binding=binding,
+                start=target_start,
+                end=target_end,
+            )
+            if availability_known
+            else [(target_start, target_end)]
         )
-        history_state = "COMPLETE" if not history_missing else "PARTIAL" if cached else "LOADING"
+        history_state = (
+            "COMPLETE"
+            if availability_known and not history_missing
+            else "PARTIAL"
+            if availability_known and cached
+            else "LOADING"
+        )
         if history_state == "COMPLETE":
             with self._lock:
                 self._history_complete_generation = generation
@@ -2429,21 +2807,29 @@ class LiveCockpitEngine:
         ):
             try:
                 candle = ohlcv_record_to_candle(record)
+                event_time = normalize_ts_event(_record_field(record, "ts_event"))
             except Exception:
                 return
             with self._lock:
                 if generation != self.generation or self._stop_event.is_set():
                     return
                 _upsert_sorted_bar(self._raw_bars, candle)
+                self._focus_last_live_event = (
+                    generation,
+                    self._contract,
+                    event_time,
+                )
                 if self._pending_cache_generation != generation:
                     self._pending_cache = []
                     self._pending_cache_generation = generation
                 self._pending_cache.append(dict(candle))
                 self._pending_snapshot_generation = generation
+            self._publish_current_focus_health(evaluated_at=event_time)
             return
         if hasattr(record, "price") and hasattr(record, "size"):
             try:
                 candle = aggregator.apply_trade(record)
+                event_time = normalize_ts_event(_record_field(record, "ts_event"))
             except Exception:
                 return
             if candle is None:
@@ -2465,6 +2851,12 @@ class LiveCockpitEngine:
                 else:
                     self._raw_bars.append(dict(candle))
                 self._pending_update = (generation, dict(candle))
+                self._focus_last_live_event = (
+                    generation,
+                    self._contract,
+                    event_time,
+                )
+            self._publish_current_focus_health(evaluated_at=event_time)
             if self._focus_live_announced_generation != generation:
                 self._focus_live_announced_generation = generation
                 self._emit(
@@ -2561,12 +2953,21 @@ class LiveCockpitEngine:
     def _maintenance_worker(self) -> None:
         while not self._stop_event.wait(30.0):
             self._refresh_overview_staleness()
+            self._publish_current_focus_health()
             current_day = trading_day_start(datetime.now(timezone.utc))
             if current_day == self._trading_day:
                 continue
             self._trading_day = current_day
             with self._history_lock:
                 self._market_bindings.clear()
+                self._history_available_end = None
+                if self._history_plan is not None:
+                    self._history_plan.chunks.clear()
+                self._history_plan = None
+                self._history_reestimate_requested = True
+                self._history_retry_active = True
+            with self._lock:
+                self._history_complete_generation = None
             self._emit(
                 "feed_status",
                 {
@@ -2578,6 +2979,7 @@ class LiveCockpitEngine:
             self._stop_overview()
             self._start_overview()
             self.select_market(self.market, force=True)
+            self._history_wakeup.set()
 
     def stop(self) -> None:
         self._stop_event.set()

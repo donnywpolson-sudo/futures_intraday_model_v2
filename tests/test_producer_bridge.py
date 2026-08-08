@@ -17,7 +17,7 @@ from futures_rebuild.data_layout import (
     PhasePublisher as AtomicPublisher,
     PhasePublisher,
 )
-from futures_rebuild.errors import ContractError, IntegrityError
+from futures_rebuild.errors import ContractError, IntegrityError, UnauthorizedOperation
 from futures_rebuild.foundation.materialize import (
     FOUNDATION_TRANSFORMS,
     RAW_RELEASE_KIND,
@@ -36,6 +36,15 @@ from futures_rebuild.foundation.support import (
     publish_foundation_policies,
 )
 from futures_rebuild.ledger import LedgerHeadContract, PredictionLedger
+from futures_rebuild.historical_phase3 import (
+    Phase3Sample,
+    Phase3SampleContract,
+    REAL_SOURCE_KIND,
+    SYNTHETIC_SOURCE_KIND,
+    build_phase3_outcomes,
+    load_phase3_outcome_release,
+    publish_phase3_outcome_release,
+)
 from futures_rebuild.producer_bridge import (
     CAUSAL_OUTCOME_LABEL_METHOD_ID,
     CausalOutcomeContext,
@@ -574,16 +583,11 @@ def test_definition_bridge_hash_binds_provider_unit_qty_abstentions(
 
     assert manifest.schema_version == "2.1.0"
     assert manifest.metadata["source_definition_row_count"] == 2
-    assert manifest.metadata["eligible_definition_row_count"] == 1
-    assert manifest.metadata["ineligible_definition_row_count"] == 1
-    assert set(definitions.by_provider_row) == {"8" * 64}
-    assert set(definitions.ineligible_by_provider_row) == {DEFINITION_ROW_SHA256}
-    excluded = definitions.ineligible_by_provider_row[DEFINITION_ROW_SHA256]
-    assert excluded["disposition"] == "ABSTAIN_ECONOMICS_UNRESOLVED"
-    assert excluded["reason_code"] == "PROVIDER_UNIT_QTY_UNAVAILABLE"
-    assert excluded["prediction_in_coverage_denominator"] is True
-    assert excluded["research_eligible"] is False
-    assert audit["records"] == [dict(excluded)]
+    assert manifest.metadata["eligible_definition_row_count"] == 2
+    assert manifest.metadata["ineligible_definition_row_count"] == 0
+    assert set(definitions.by_provider_row) == {"8" * 64, DEFINITION_ROW_SHA256}
+    assert not definitions.ineligible_by_provider_row
+    assert audit["records"] == []
     assert (
         audit["definition_ineligibility_ledger_id"]
         == manifest.metadata["ineligibility_ledger_id"]
@@ -611,10 +615,10 @@ def test_definition_bridge_hash_binds_provider_unit_qty_abstentions(
         session_policy=session_policy,
         boundary=boundary,
     )
-    assert len(economics.records) == 1
+    assert len(economics.records) == 2
 
 
-def test_all_economics_ineligible_interval_publishes_empty_fail_closed_registries(
+def test_missing_provider_unit_uses_rulebook_and_keeps_other_gaps_fail_closed(
     boundary, operation_factory
 ) -> None:
     publisher, policies, raw_receipt, causal_receipt = _foundation_chain(
@@ -634,8 +638,8 @@ def test_all_economics_ineligible_interval_publishes_empty_fail_closed_registrie
         policies=policies,
         boundary=boundary,
     )
-    assert not definitions.by_provider_row
-    assert set(definitions.ineligible_by_provider_row) == {DEFINITION_ROW_SHA256}
+    assert definitions.by_provider_row
+    assert not definitions.ineligible_by_provider_row
 
     session_receipt = publish_versioned_session_policy(
         policies=policies, boundary=boundary, publisher=publisher
@@ -660,7 +664,7 @@ def test_all_economics_ineligible_interval_publishes_empty_fail_closed_registrie
         boundary=boundary,
     )
     assert economics_receipt.schema_version == "1.1.0"
-    assert not economics.records
+    assert economics.records
 
     spec = CausalFeatureSpec(
         feature_names=("volume", "bar_return"),
@@ -687,8 +691,8 @@ def test_all_economics_ineligible_interval_publishes_empty_fail_closed_registrie
         boundary=boundary,
     )
     assert features.total_upstream_rows == 2
-    assert features.unresolved_upstream_rows == 2
-    assert not features.rows
+    assert features.unresolved_upstream_rows == 1
+    assert len(features.rows) == 1
 
 
 def test_outcome_release_requires_prediction_census_and_retains_unresolved(
@@ -937,4 +941,153 @@ def test_feature_bridge_rejects_noncausal_release_role(
             feature_spec=CausalFeatureSpec(("volume",), 60, 300),
             boundary=boundary,
             publisher=publisher,
+        )
+
+
+def test_phase3_sample_contract_labels_without_prediction_access(
+    boundary, operation_factory
+) -> None:
+    (
+        publisher,
+        policies,
+        _raw_receipt,
+        causal_receipt,
+        session_policy,
+        definitions,
+        economics,
+    ) = _bridge_chain(boundary, operation_factory, label_path=True)
+    feature_receipt = publish_causal_feature_release(
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        economics_registry=economics,
+        policies=policies,
+        session_policy=session_policy,
+        feature_spec=CausalFeatureSpec(("bar_return",), 55, 235),
+        boundary=boundary,
+        publisher=publisher,
+    )
+    feature = load_causal_feature_release(
+        feature_receipt,
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        economics_registry=economics,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
+    ).rows[0]
+    sample = Phase3Sample(
+        market="ES",
+        actual=feature.actual,
+        decision_at=feature.decision_at,
+        planned_entry_at=feature.planned_entry_at,
+        label_unlock_at=feature.label_unlock_at,
+        source_feature_input_release_id="f" * 64,
+    )
+    contract = Phase3SampleContract(
+        samples=(sample,),
+        causal_release_id=causal_receipt.release_id,
+        entry_delay_seconds=55,
+        label_horizon_seconds=235,
+    )
+    context = CausalOutcomeContext(
+        causal_receipt,
+        definitions,
+        economics,
+        policies,
+        session_policy,
+    )
+
+    first = build_phase3_outcomes(
+        contract=contract,
+        context=context,
+        boundary=boundary,
+        source_kind=SYNTHETIC_SOURCE_KIND,
+    )
+    second = build_phase3_outcomes(
+        contract=contract,
+        context=context,
+        boundary=boundary,
+        source_kind=SYNTHETIC_SOURCE_KIND,
+    )
+    assert first == second
+    assert first.resolved_count == 1
+    assert first.outcomes[0].status is OutcomeStatus.MATURED
+    assert first.outcomes[0].sample_id == sample.sample_id
+
+    receipt = publish_phase3_outcome_release(
+        batch=first,
+        contract=contract,
+        context=context,
+        boundary=boundary,
+        publisher=publisher,
+    )
+    loaded = load_phase3_outcome_release(
+        receipt,
+        expected_batch=first,
+        expected_contract=contract,
+        context=context,
+        boundary=boundary,
+    )
+    assert loaded["batch_id"] == first.batch_id
+
+
+def test_phase3_real_history_mode_fails_before_rows_without_exact_authority(
+    boundary, operation_factory
+) -> None:
+    (
+        publisher,
+        policies,
+        _raw_receipt,
+        causal_receipt,
+        session_policy,
+        definitions,
+        economics,
+    ) = _bridge_chain(boundary, operation_factory, label_path=True)
+    feature_receipt = publish_causal_feature_release(
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        economics_registry=economics,
+        policies=policies,
+        session_policy=session_policy,
+        feature_spec=CausalFeatureSpec(("bar_return",), 55, 235),
+        boundary=boundary,
+        publisher=publisher,
+    )
+    feature = load_causal_feature_release(
+        feature_receipt,
+        causal_receipt=causal_receipt,
+        definitions=definitions,
+        economics_registry=economics,
+        policies=policies,
+        session_policy=session_policy,
+        boundary=boundary,
+    ).rows[0]
+    contract = Phase3SampleContract(
+        samples=(
+            Phase3Sample(
+                market="ES",
+                actual=feature.actual,
+                decision_at=feature.decision_at,
+                planned_entry_at=feature.planned_entry_at,
+                label_unlock_at=feature.label_unlock_at,
+                source_feature_input_release_id="f" * 64,
+            ),
+        ),
+        causal_release_id=causal_receipt.release_id,
+        entry_delay_seconds=55,
+        label_horizon_seconds=235,
+    )
+    context = CausalOutcomeContext(
+        causal_receipt,
+        definitions,
+        economics,
+        policies,
+        session_policy,
+    )
+    with pytest.raises(UnauthorizedOperation, match="lack exact historical authority"):
+        build_phase3_outcomes(
+            contract=contract,
+            context=context,
+            boundary=boundary,
+            source_kind=REAL_SOURCE_KIND,
         )

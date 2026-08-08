@@ -1,0 +1,44 @@
+{
+  "schema_version": "tier1_bracket_invalid_trial_closure_preparation/2.0.0",
+  "state": "PREPARED_NOT_PUBLISHED_NOT_ACTIVE",
+  "disposition": "INVALID_VOID_CAUSAL_TIMING_FILL_AND_COVERAGE_DEFECTS",
+  "trial_id": "aab8134537f5f6efa9d9ced5603adb89212d43e67282ab5a2ab7e3adb3fd011c",
+  "preserved_bindings": {
+    "trial_registry_path": "state/trial_registry/tier1_bracket_successor_v2/aab8134537f5f6efa9d9ced5603adb89212d43e67282ab5a2ab7e3adb3fd011c.json",
+    "trial_registry_sha256": "13568d84c6b29f2f5f0812a12ac026c771365d3c8caebe46d8404c7590ecc964",
+    "evaluation_event_path": "state/trial_events/tier1_bracket_successor_v2_evaluation/65baef1fc6360a0f17ea67ac62ed343896301980320bbaa0ec70210cf92cd74b.json",
+    "evaluation_event_sha256": "4daae46c17ca9200b309166cabfa746b7a9b1a2967c2ed8ddb6d647123f63d9f",
+    "evaluation_release_id": "45054d8dce43317a746154fdb6d0a2346b4cc92a178d3824184a7d9b25e69038",
+    "evaluation_manifest_path": "manifests/data_releases/evaluations/45054d8dce43317a746154fdb6d0a2346b4cc92a178d3824184a7d9b25e69038.json",
+    "evaluation_manifest_sha256": "10ab754d054d67d50cd03b8645ed35b7a54564afe0b92aaa604b33bcdf98ae79"
+  },
+  "fatal_faults": [
+    "FEATURE_BAR_AVAILABLE_AFTER_DECISION",
+    "ENTRY_BEFORE_SIGNAL_AVAILABILITY",
+    "FUTURE_CONDITIONED_OPPORTUNITY_FILTERING",
+    "MISSING_AND_REJECTED_OPPORTUNITIES_REMOVED_FROM_COVERAGE",
+    "BASELINES_SHARED_DISTORTED_OPPORTUNITY_UNIVERSE",
+    "NONCONVENTIONAL_METRICS_MISLABELED"
+  ],
+  "affected_counts": {
+    "predictions_with_timing_fault": 4751,
+    "hurdle_passes_with_timing_fault": 12,
+    "admitted_trades_with_timing_fault": 10
+  },
+  "valid_mechanical_findings": [
+    "EIGHT_CHRONOLOGICAL_FOLDS",
+    "THIRTY_TWO_MARKET_SPECIFIC_MODELS",
+    "TRAINING_ONLY_STANDARDIZATION",
+    "FROZEN_PREDICTION_ARITHMETIC",
+    "STRESS_COST_AND_PNL_ARITHMETIC",
+    "CONTINUOUS_DRAWDOWN_ARITHMETIC",
+    "TRUE_ZERO_NO_TRADE_BASELINE",
+    "HOLDOUT_2025_UNTOUCHED"
+  ],
+  "strategy_conclusion": "INCONCLUSIVE_INVALID_TRIAL_NOT_EVIDENCE_OF_STRATEGY_FAILURE",
+  "successor_use": "DIAGNOSIS_AND_CONSERVATIVE_TRIAL_FAMILY_COUNT_ONLY",
+  "preserve_existing_artifacts_byte_for_byte": true,
+  "publication_authorized": false,
+  "activation_authorized": false,
+  "git_actions_authorized": false
+}

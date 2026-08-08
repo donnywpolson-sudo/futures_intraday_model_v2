@@ -1,0 +1,212 @@
+{
+  "authority_class": "PROVIDER_FREE_LOCAL_TRANSITION",
+  "basis": {
+    "repository": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2",
+    "branch": "codex/task-scheduler-registration-authority",
+    "head": "8dff39af7e9cf5704522988f92e141d46b9cfdca",
+    "installation_plan_id": "b83710bc49ee1f9adb929c664eb900d5e3a3c46f9e7416dfb88a5020cc8f84f5",
+    "installation_terminal_id": "1d3684dbd5cec31917020e96ebeb34f235813f93b659620ba84bfa8f4c9aeff7",
+    "prepared_install_path": "C:\\Users\\donny\\AppData\\Local\\Programs\\FuturesLiveCockpit\\20260730-063817-ab15788e",
+    "observed_existing_shortcut_count": 1,
+    "observed_desktop_shortcut_absent": true,
+    "observed_startup_shortcut_absent": true,
+    "existing_live_smoke_executable_sha256": "f028897a7807ae75bcec986e203b37ffc18c697248309e6da542b530c160e9f2",
+    "prepared_executable_sha256": "f6319039666596e0104bb5afab6530761374c3dae1384747691192bf2bc3d908"
+  },
+  "actions": [
+    {
+      "id": "reconcile_activation_partial_shortcut_preimage",
+      "type": "reconciliation",
+      "file_hashes": [
+        {
+          "path": "AGENTS.md",
+          "sha256": "31944556f8b4e25d9bb8047fada8e0ba15ffba29b5c5e5680f5ff49b8e1f03d7"
+        },
+        {
+          "path": "PROJECT_OUTLINE.md",
+          "sha256": "af142c90d994ffdeb82891e67b5b6d6d1c5a53b6bf34354bedef075120b233a9"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "4174c98b66996e0bec2906a44d1a3b3885290261274c1364baedd19919bfae1b"
+        },
+        {
+          "path": "configs/source_contract.json",
+          "sha256": "9d730e7500ca06cb0a45d13f4ef5c2a440c66bcee8489f5aac470edb7019490a"
+        },
+        {
+          "path": "configs/closure_workflow_policy.json",
+          "sha256": "d0ac4547d7829651fae04f624ec79f746a2d2cf5da4847786e1b4371ad98b862"
+        },
+        {
+          "path": "src/futures_rebuild/closure_workflow/engine.py",
+          "sha256": "db63b9fe376c70fb2421ee2dca2a5c798648d4262554392666dece63844cb25e"
+        },
+        {
+          "path": "src/futures_rebuild/closure_workflow/policy.py",
+          "sha256": "d7331318572518d7b52ab6c56c1967495da48f224756fa1fdbc770bc119b0c8b"
+        },
+        {
+          "path": "scripts/run_windows_host_root_pytest.ps1",
+          "sha256": "eb4b899dc382b6ec9a3b1865e2e93ea7a4440d875b469ebe9ee3848b36b72fdf"
+        },
+        {
+          "path": "scripts/activate_live_cockpit.ps1",
+          "sha256": "75875d6c1fc254ae59e0af9e3cc470e6fd4ccec66fd90712f40a711dd36661fc"
+        },
+        {
+          "path": "manifests/workflow/closure/deltas/live_cockpit_activation_partial_shortcuts.patch",
+          "sha256": "b3c03c56b5eb1cdf6784fc928210969d90fe4cdc7e3a6e8c03529746f05f7f04"
+        },
+        {
+          "path": "manifests/workflow/closure/deltas/live_cockpit_activation_partial_shortcuts_tests.patch",
+          "sha256": "6bf8336a7612e0892ab144d0b1c19b7733bb68c72f139fc440e8ec9bac1abec1"
+        },
+        {
+          "path": "manifests/live_cockpit/installation/plans/b83710bc49ee1f9adb929c664eb900d5e3a3c46f9e7416dfb88a5020cc8f84f5.json",
+          "sha256": "4bd078da72c739328fc237edc8f856a93eda60df4a6e64c7adcc90f452d981a0"
+        },
+        {
+          "path": "reports/live_cockpit/installation/b83710bc49ee1f9adb929c664eb900d5e3a3c46f9e7416dfb88a5020cc8f84f5/terminal.json",
+          "sha256": "3713a2a71c4e0c611a5d33b61fbe21d880cf849ead2f90d06e243baca037846f"
+        },
+        {
+          "path": "C:\\Users\\donny\\AppData\\Local\\Programs\\FuturesLiveCockpit\\20260730-063817-ab15788e\\FuturesLiveCockpit.exe",
+          "sha256": "f6319039666596e0104bb5afab6530761374c3dae1384747691192bf2bc3d908"
+        },
+        {
+          "path": "C:\\Users\\donny\\AppData\\Local\\Programs\\FuturesLiveCockpit\\20260730-063817-ab15788e\\rollback-shortcuts.json",
+          "sha256": "f51067c740f25884b097aa972373cf2915fbe0215d888026a2e84123bbc50fe6"
+        },
+        {
+          "path": "reports/live_cockpit/bounded_live_smoke_result_attempt_2.json",
+          "sha256": "5f6f88c95826c7898027a88562445c8101a880499997f9f32a3026ed1377717a"
+        }
+      ],
+      "required_absent": [
+        "tests/live/test_activate_live_cockpit.py"
+      ]
+    },
+    {
+      "id": "apply_activation_partial_shortcut_contract",
+      "type": "frozen_patch",
+      "target": "scripts/activate_live_cockpit.ps1",
+      "patch": "manifests/workflow/closure/deltas/live_cockpit_activation_partial_shortcuts.patch",
+      "patch_sha256": "b3c03c56b5eb1cdf6784fc928210969d90fe4cdc7e3a6e8c03529746f05f7f04",
+      "postimage_sha256": "727313685eb90e19e516d546067a433fd2ec779adbdb4bca166213f0b8c42670",
+      "depends_on": [
+        "reconcile_activation_partial_shortcut_preimage"
+      ]
+    },
+    {
+      "id": "apply_activation_partial_shortcut_tests",
+      "type": "frozen_patch",
+      "target": "tests/live/test_activate_live_cockpit.py",
+      "patch": "manifests/workflow/closure/deltas/live_cockpit_activation_partial_shortcuts_tests.patch",
+      "patch_sha256": "6bf8336a7612e0892ab144d0b1c19b7733bb68c72f139fc440e8ec9bac1abec1",
+      "postimage_sha256": "316ba884515f96a940f5cec0f4287e270f5e921e7bd5c15ddad42630938cefb4",
+      "depends_on": [
+        "apply_activation_partial_shortcut_contract"
+      ]
+    },
+    {
+      "id": "reconcile_activation_partial_shortcut_postimages",
+      "type": "reconciliation",
+      "file_hashes": [
+        {
+          "path": "scripts/activate_live_cockpit.ps1",
+          "sha256": "727313685eb90e19e516d546067a433fd2ec779adbdb4bca166213f0b8c42670"
+        },
+        {
+          "path": "tests/live/test_activate_live_cockpit.py",
+          "sha256": "316ba884515f96a940f5cec0f4287e270f5e921e7bd5c15ddad42630938cefb4"
+        },
+        {
+          "path": "C:\\Users\\donny\\AppData\\Local\\Programs\\FuturesLiveCockpit\\20260730-063817-ab15788e\\FuturesLiveCockpit.exe",
+          "sha256": "f6319039666596e0104bb5afab6530761374c3dae1384747691192bf2bc3d908"
+        },
+        {
+          "path": "C:\\Users\\donny\\AppData\\Local\\Programs\\FuturesLiveCockpit\\20260730-063817-ab15788e\\rollback-shortcuts.json",
+          "sha256": "f51067c740f25884b097aa972373cf2915fbe0215d888026a2e84123bbc50fe6"
+        }
+      ],
+      "depends_on": [
+        "apply_activation_partial_shortcut_tests"
+      ]
+    },
+    {
+      "id": "activation_partial_shortcut_contracts_host_root",
+      "type": "windows_host_root_suite",
+      "argv": [
+        "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "-NoProfile",
+        "-File",
+        "scripts\\run_windows_host_root_pytest.ps1",
+        "-q",
+        "tests\\live\\test_activate_live_cockpit.py"
+      ],
+      "depends_on": [
+        "reconcile_activation_partial_shortcut_postimages"
+      ]
+    },
+    {
+      "id": "record_terminal",
+      "type": "terminal_recording",
+      "depends_on": [
+        "activation_partial_shortcut_contracts_host_root"
+      ]
+    }
+  ],
+  "delta_bytes": 3129,
+  "delta_entry_count": 2,
+  "execution_environment": "EXPLICITLY_UNSANDBOXED_WINDOWS_HOST_ROOT",
+  "full_census_count": 0,
+  "implementation_paths": [
+    "scripts/activate_live_cockpit.ps1",
+    "tests/live/test_activate_live_cockpit.py"
+  ],
+  "limits": {
+    "maximum_duration_seconds": 120,
+    "maximum_activations": 0,
+    "maximum_installations": 0,
+    "maximum_shortcut_changes": 0,
+    "maximum_autostart_changes": 0,
+    "maximum_provider_requests": 0,
+    "maximum_network_requests": 0,
+    "maximum_production_cache_writes": 0,
+    "maximum_live_smoke_runs": 0,
+    "maximum_test_processes": 1,
+    "maximum_workers": 1,
+    "maximum_prestart_launcher_retries": 1,
+    "maximum_retries_after_start": 0
+  },
+  "preservation": {
+    "prepared_installation": "IMMUTABLE_VERIFIED_NO_MUTATION",
+    "previous_installation": "LAST_KNOWN_GOOD_NO_MUTATION",
+    "shortcut_state": "NO_ACCESS_NO_MUTATION",
+    "credential_source": "NO_ACCESS_NO_CONTENT_READ_NO_COPY",
+    "production_cache": "NO_ACCESS_NO_MUTATION",
+    "provider_and_network": "UNREACHABLE",
+    "existing_live_smoke_result": "IMMUTABLE_STALE_FOR_NEW_EXECUTABLE",
+    "activation": "FORBIDDEN",
+    "unrelated_worktree": "PRESERVE_NO_STAGE_NO_COMMIT",
+    "push": "FORBIDDEN"
+  },
+  "reused_evidence": [
+    "Passing installation terminal and exact prepared executable",
+    "Rollback metadata proving one preserved cockpit-owned shortcut",
+    "Existing live-smoke result proving executable mismatch and need for a fresh provider gate"
+  ],
+  "rollback": {
+    "failure_after_first_patch": "STOP_PRESERVE_PARTIAL_ZERO_RETRIES_REVERSE_ONLY_UNDER_FRESH_EXACT_AUTHORITY",
+    "prestart_failure": "ONE_RESUME_ONLY_IF_TARGET_NOT_STARTED_APPROVAL_UNCONSUMED_AND_HASHES_REMAIN_EXACT",
+    "reverse_order": [
+      "git apply --reverse --check -- manifests/workflow/closure/deltas/live_cockpit_activation_partial_shortcuts_tests.patch",
+      "git apply --reverse --check -- manifests/workflow/closure/deltas/live_cockpit_activation_partial_shortcuts.patch"
+    ],
+    "installation_state": "UNCHANGED",
+    "shortcut_state": "UNCHANGED"
+  },
+  "snapshot_reused": true,
+  "success_condition": "ACTIVATION_PARTIAL_SHORTCUT_POSTIMAGES_AND_SYNTHETIC_CONTRACTS_PASS"
+}

@@ -1,0 +1,14 @@
+{
+  "correction_id": "83fc2296d17c2c3eefba8575d26b9f1a3539eccae57b2adbbba16d1b38ff9408",
+  "evaluation": false,
+  "evaluation_authority": false,
+  "event_id": "a9612ad61c3b438ff9a1224e5c43fd3980e65aaa4e4789d444baebef9c4788e4",
+  "event_type": "PRE_OUTCOME_CORRECTED_DECLARATION",
+  "outcome_row_access": false,
+  "registered_at_utc": "2026-08-06T17:27:02.791224+00:00",
+  "schema_version": "overnight_inventory_reversal_trial_event/1.1.0",
+  "source_row_access": false,
+  "supersedes_unevaluated_local_trial_id": "620b6e4f3a4a7460b08e7b8dec834a7b1e5b5c5800dc0a68f3e4209b89709e28",
+  "trial_id": "24772e41730b16bfdf3187d0c9e79b2491e6118962cfdffbc16a86d4e241169c",
+  "trusted_external_pre_outcome_anchor": false
+}

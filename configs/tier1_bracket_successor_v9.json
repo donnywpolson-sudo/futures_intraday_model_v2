@@ -1,0 +1,41 @@
+{
+  "schema_version": "tier1_bracket_successor_v9_contract/1.0.0",
+  "state": "PREPARED_NOT_REGISTERED",
+  "classification": "POST_V8_MARKET_FOLD_COVERAGE_PREREGISTERED_HISTORICAL_SCREEN",
+  "research_only": true,
+  "live_readiness": false,
+  "supersedes_v8_trial_id": "136f1d9c7779f48565e7100bb890c148f6aed751faaa84670795b45348cf6233",
+  "inherited_v8_contract_path": "configs/tier1_bracket_successor_v8.json",
+  "inherited_v8_contract_sha256": "2d2e89e207a1404f1d40341fbe765f3ed7ed9f10a1fd243de4f6a4dae6242b23",
+  "frozen_without_change": [
+    "source_integrity_adapter_calendar_markets_period_and_2025_holdout",
+    "features_candidate_model_family_hyperparameters_and_available_cell_math",
+    "splits_purge_embargo_entry_hurdle_ranking_and_tie_breaking",
+    "costs_position_limits_daily_loss_and_1500_usd_drawdown",
+    "independent_baseline_scheduling_and_required_baseline_coverage_gate",
+    "candidate_coverage_thresholds_inference_thresholds_and_promotion_gate",
+    "evidence_artifact_set_and_test_runner_binding"
+  ],
+  "market_fold_coverage_successor": {
+    "empty_test_partition": "MODEL_CELL_RECORDED_NO_FIT_NO_PREDICTIONS_NO_EXCEPTION",
+    "empty_training_partition_with_eligible_test_rows": "EVERY_AFFECTED_OPPORTUNITY_EXPLICIT_PRE_PREDICTION_ABSTENTION",
+    "training_fallback_pooling_or_borrowing": "FORBIDDEN",
+    "candidate_prediction_rate_gate": "INHERITED_0.99_OF_CAUSAL_FEATURE_ELIGIBLE",
+    "candidate_market_year_feature_gate": "INHERITED_0.90",
+    "nested_crossfit_coverage_denominator": "EVERY_CALENDAR_OPEN_CHECKPOINT_IN_CROSSFIT_EVALUATION_SESSIONS",
+    "nested_crossfit_minimum_overall_statistic_eligibility": "0.95",
+    "nested_crossfit_minimum_each_market_statistic_eligibility": "0.90",
+    "nested_crossfit_minimum_overall_model_availability": "0.99",
+    "nested_crossfit_minimum_each_market_availability": "0.90",
+    "nested_crossfit_coverage_failure": "INCONCLUSIVE_DATA_OR_POWER",
+    "coverage_below_threshold_cannot_promote": true
+  },
+  "authority": {
+    "historical_execution_requires": "VERIFIED_SINGLE_USE_OPERATION_RECEIPT_BOUND_TO_V9_TRIAL_SOURCE_HASHES_OUTPUT_ROOT_AND_2025_FALSE",
+    "publication_requires_separate_approval": true,
+    "holdout_or_forward_access": false,
+    "provider_access": false,
+    "trading": false,
+    "git_actions": false
+  }
+}

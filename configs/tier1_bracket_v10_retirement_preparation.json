@@ -1,0 +1,21 @@
+{
+  "schema_version": "tier1_bracket_v10_retirement_preparation/1.0.0",
+  "state": "PREPARED_REQUIRES_PUBLICATION_APPROVAL",
+  "trial_id": "53c9aa144b38187ea93acbfbe2ea10f6c76fcb382edef01a5254b3ecda38ddc3",
+  "disposition": "INVALID_PRE_DATA_SHARED_CANDIDATE_BASELINE_OPPORTUNITY_UNIVERSE",
+  "historical_source_rows_opened": false,
+  "model_fit": false,
+  "predictions_generated": false,
+  "historical_evaluation_executed": false,
+  "historical_results_published": false,
+  "holdout_or_forward_access": false,
+  "provider_access": false,
+  "trading": false,
+  "fatal_finding": "ACTIVE_BASELINES_WERE_EVALUATED_ONLY_ON_CANDIDATE_MODEL_PREDICTION_IDENTITIES_SO_CANDIDATE_MODEL_UNAVAILABILITY_COULD_CENSOR_MODEL_INDEPENDENT_BASELINE_SIGNALS",
+  "interpretation": {
+    "strategy_performance_conclusion": "NONE_NO_SOURCE_ACCESS_OCCURRED",
+    "v10_use": "PRESERVED_CONTROL_AUDIT_EVIDENCE_ONLY",
+    "required_successor": "EACH_BASELINE_BUILDS_ITS_OWN_CAUSAL_OPPORTUNITY_UNIVERSE_BEFORE_SIGNAL_RANKING_AND_SCHEDULING"
+  },
+  "publication_requires_separate_approval": true
+}

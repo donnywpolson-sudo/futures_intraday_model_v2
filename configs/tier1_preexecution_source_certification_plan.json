@@ -1,0 +1,49 @@
+{
+  "schema_version": "tier1_preexecution_source_certification_plan/1.0.0",
+  "state": "PREPARED_REQUIRES_EXACT_APPROVAL",
+  "plan_id": "72e76adf377521649f25d3f550c1fe4226ff8aa73014058fd180bc19f945870a",
+  "operation": "CERTIFY_FROZEN_TIER1_SOURCE_SUFFICIENCY_AND_PUBLISH",
+  "certification_target": "UNVERSIONED_FROZEN_SUCCESSOR_SNAPSHOT",
+  "candidate_manifest_catalog_id": "08d1833bb8a7fee7a2783479e26089a4001fb8819f945d42b0e705a876ee8f34",
+  "candidate_release_count": 61,
+  "market_year_pair_count": 20,
+  "calendar_release_id": "038940d82031f31e2c66ed37186e98a6ee6cff3e7248f634f2c7a8e94ea6ecf3",
+  "implementation_sha256": "6100385ef1c9d5d845dd42d0e75533416a112e226bc1872c139b43c7e9acf5e5",
+  "census_dependency_sha256": "bfc6150ad54a74ee33419797c9e5465cc1d242ba177f3a997357c099a57af736",
+  "version_freeze_sha256": "24c04106af7dd8dbdaeff79bcd9319dbc2ee4e2d6a57794f823c0fca915edfc7",
+  "preexecution_certificate_sha256": "395125bf83155bbadf9329a342305f61c7a9467146590b3874b6be74c982f18b",
+  "source_scope": {
+    "markets": ["6E", "CL", "ES", "ZN"],
+    "years": [2018, 2019, 2020, 2021, 2022]
+  },
+  "selection_rule": "MAXIMIZE_COMPLETE_BOTH_WINDOWS_THEN_COMPLETE_EXECUTION_WINDOWS_THEN_COMPLETE_FEATURE_WINDOWS_THEN_MINIMIZE_MISSING_SESSIONS_THEN_AMBIGUOUS_SESSIONS_THEN_LEXICOGRAPHIC_RELEASE_ID",
+  "required_selected_source_gates": {
+    "missing_source_sessions": 0,
+    "ambiguous_source_sessions": 0,
+    "complete_feature_windows_equals_expected": true,
+    "complete_execution_windows_equals_expected": true,
+    "complete_both_windows_equals_expected": true,
+    "every_market_year_must_pass": true
+  },
+  "output": {
+    "record_root": "state/source_quality/tier1_preexecution_source_certification",
+    "event_root": "state/source_quality_events/tier1_preexecution_source_certification",
+    "mode": "ONE_CREATE_ONLY_HASH_BOUND_SOURCE_QUALITY_RECORD"
+  },
+  "maximum_host_runtime_seconds": 900,
+  "estimated_external_cost_usd": "0",
+  "forbidden_actions": {
+    "model_fit": true,
+    "prediction_generation": true,
+    "historical_performance_evaluation": true,
+    "trial_registration_or_retirement": true,
+    "holdout_or_forward_access": true,
+    "provider_or_network_access": true,
+    "active_data_mutation": true,
+    "staging": true,
+    "commit": true,
+    "push": true,
+    "trading_or_orders": true
+  },
+  "preservation_boundary": "All immutable releases, historical trial artifacts, unrelated work, active data, and 2025 remain unchanged. The only writes are one authorization-use claim, one source-quality record, and one source-quality event."
+}

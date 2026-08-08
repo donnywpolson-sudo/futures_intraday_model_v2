@@ -33,10 +33,13 @@ def test_controlled_rebuild_authority_and_repo_independence_are_explicit() -> No
         "legacy_repository_write",
     }
     assert authorization["legacy_repositories_read_only"] is True
-    security = authorization["external_authorization_security"]
-    assert security["private_key_present_in_repository"] is False
-    assert security["content_hash_without_valid_signature_authorizes"] is False
-    assert security["public_key_replacement_requires_code_and_commit_closure_change"]
+    assert authorization["user_approval_receipt_required"] is True
+    security = authorization["user_approval_security"]
+    assert security["windows_signing_key_required"] is False
+    assert security["cryptographic_signature_required"] is False
+    assert security["approval_line_stored"] is False
+    assert security["approval_line_sha256_stored"] is True
+    assert security["exact_plan_scope_and_single_use_required"] is True
     assert authorization["migration_approval_is_candidate_or_history_authorization"] is False
     independence = contract["independence"]
     assert independence["shared_mutable_data_paths"] is False

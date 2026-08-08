@@ -225,6 +225,7 @@ def load_source_selection_with_resolution(
     *,
     snapshot: PublishedSourceSnapshot,
     boundary: RepoBoundary,
+    verify_source_files: bool = True,
 ) -> tuple[dict[str, object], ResolvedFoundationSelection]:
     manifest = receipt.verify(boundary)
     if (
@@ -289,7 +290,11 @@ def load_source_selection_with_resolution(
         snapshot=snapshot,
         boundary=boundary,
     )
-    resolved = resolve_foundation_selection(selection, snapshot=snapshot)
+    resolved = resolve_foundation_selection(
+        selection,
+        snapshot=snapshot,
+        verify_source_files=verify_source_files,
+    )
     if resolved.query_manifest_id != manifest.metadata["query_manifest_id"]:
         raise IntegrityError("source selection query manifest identity is invalid")
     return selection, resolved
@@ -321,7 +326,10 @@ def _binding(snapshot: PublishedSourceSnapshot, declared_path: object) -> Snapsh
 
 
 def _verify_all_selected_bindings(
-    selection: Mapping[str, object], *, snapshot: PublishedSourceSnapshot
+    selection: Mapping[str, object],
+    *,
+    snapshot: PublishedSourceSnapshot,
+    verify_files: bool = True,
 ) -> None:
     raw_files = selection.get("files")
     if not isinstance(raw_files, list) or not raw_files:
@@ -339,7 +347,8 @@ def _verify_all_selected_bindings(
         seen.add(binding.relative_path)
         if raw.get("sha256") != binding.sha256 or raw.get("size") != binding.size:
             raise IntegrityError("source selection file differs from source snapshot")
-        binding.verify()
+        if verify_files:
+            binding.verify()
         sidecar_path = raw.get("sidecar_path")
         if type(sidecar_path) is not str:
             raise IntegrityError("source selection lacks an exact DBN sidecar binding")
@@ -350,7 +359,8 @@ def _verify_all_selected_bindings(
             or raw.get("sidecar_size") != sidecar.size
         ):
             raise IntegrityError("source selection sidecar differs from source snapshot")
-        sidecar.verify()
+        if verify_files:
+            sidecar.verify()
 
 
 def _selected_family_file(
@@ -415,11 +425,18 @@ def _selected_family_file(
 
 
 def resolve_foundation_selection(
-    selection: dict[str, object], *, snapshot: PublishedSourceSnapshot
+    selection: dict[str, object],
+    *,
+    snapshot: PublishedSourceSnapshot,
+    verify_source_files: bool = True,
 ) -> ResolvedFoundationSelection:
     """Resolve all four canonical families and make every gap/extra explicit."""
 
-    _verify_all_selected_bindings(selection, snapshot=snapshot)
+    _verify_all_selected_bindings(
+        selection,
+        snapshot=snapshot,
+        verify_files=verify_source_files,
+    )
     raw_files = selection.get("files")
     assert isinstance(raw_files, list)
     all_selected: list[SelectedFamilyFile] = []

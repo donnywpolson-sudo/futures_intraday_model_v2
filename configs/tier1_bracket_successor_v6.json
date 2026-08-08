@@ -1,0 +1,44 @@
+{
+  "schema_version": "tier1_bracket_successor_v6_contract/1.0.0",
+  "state": "PREPARED_NOT_REGISTERED",
+  "classification": "POST_V5_SOURCE_INTEGRITY_PREREGISTERED_HISTORICAL_SCREEN_ONLY",
+  "research_only": true,
+  "live_readiness": false,
+  "supersedes_v5_trial_id": "8f6fed0171979ffe76256117c29937bc1f469f674d722525414b16ca5bfd4e03",
+  "inherited_v5_contract_path": "configs/tier1_bracket_successor_v5.json",
+  "inherited_v5_contract_sha256": "d2e7ecd7c06950761d94cd9d3869aa860594fab99cd81a47491e612d575df26e",
+  "frozen_without_change": [
+    "markets",
+    "period_and_2025_holdout",
+    "features",
+    "model_family_and_hyperparameters",
+    "chronological_folds_purge_and_embargo",
+    "entry_hurdle_ranking_and_tie_breaking",
+    "costs",
+    "position_and_entry_limits",
+    "daily_loss_and_1500_usd_continuous_drawdown",
+    "coverage_thresholds",
+    "baselines",
+    "inference",
+    "promotion_gate"
+  ],
+  "source_integrity_successor": {
+    "tradable_row_without_session": "INVALID_FAIL_CLOSED",
+    "nontradable_row_without_session": "REQUIRE_COVERAGE_MEMBERSHIP_FAILURE_PROVENANCE_AND_EXACT_MINUTE_ADJACENT_SAME_SESSION_NEIGHBORS",
+    "nontradable_row_with_or_without_recovered_session": "NONEXECUTABLE_AND_ALL_DECLARED_CHECKPOINTS_IN_AFFECTED_MARKET_SESSION_EXPLICITLY_ABSTAIN",
+    "same_session_missing_or_duplicate_minute": "ALL_DECLARED_CHECKPOINTS_IN_AFFECTED_MARKET_SESSION_EXPLICITLY_ABSTAIN",
+    "unresolvable_or_trailing_orphan": "INVALID_FAIL_CLOSED",
+    "silent_drop_or_shortened_feature_window": "FORBIDDEN",
+    "whole_file_materialization": "FORBIDDEN_ITER_BATCHES_MAX_65536",
+    "source_integrity_audit_artifact": "REQUIRED_HASH_BOUND_CREATE_ONLY"
+  },
+  "evidence_addition": "SOURCE_INTEGRITY_AUDIT_COUNTS_FAILURE_CODES_AND_AFFECTED_SESSIONS",
+  "authority": {
+    "historical_execution_requires": "VERIFIED_SINGLE_USE_OPERATION_RECEIPT_BOUND_TO_V6_TRIAL_SOURCE_HASHES_OUTPUT_ROOT_AND_2025_FALSE",
+    "publication_requires_separate_approval": true,
+    "holdout_or_forward_access": false,
+    "provider_access": false,
+    "trading": false,
+    "git_actions": false
+  }
+}

@@ -177,6 +177,7 @@ def _copy_configs(boundary) -> None:
         "foundation_policy.json",
         "foundation_coverage_policy.json",
         "foundation_resource_policy.json",
+        "historical_observability_policy.json",
         "known_anomalies.json",
         "mechanical_feature_spec.json",
         "provider_data_epochs.json",
@@ -1187,10 +1188,12 @@ def test_orchestrator_has_no_research_model_outcome_or_provider_execution_import
         elif isinstance(node, ast.ImportFrom):
             modules.add(node.module or "")
             imported_names.update(alias.name for alias in node.names)
+    historical_modules = {module for module in modules if "historical_" in module}
+    assert historical_modules <= {"historical_observability"}
     assert not any(
         token in module
         for module in modules
-        for token in ("historical_", ".research", ".inference", "requests", "urllib")
+        for token in (".research", ".inference", "requests", "urllib")
     )
     assert {
         "generate_causal_outcomes",
