@@ -8,14 +8,15 @@ import pytest
 import futures_rebuild.alpha_ladder_full_regular_readiness as v1
 import futures_rebuild.alpha_ladder_full_regular_readiness_v2 as v2
 from futures_rebuild.canonical import canonical_bytes
+from futures_rebuild.errors import UnauthorizedOperation
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_v2_preserves_research_semantics_and_consumed_attempt() -> None:
-    predecessor = v1.build_plan(root=ROOT)
-    successor = v2.build_plan(root=ROOT)
+    predecessor = json.loads((ROOT / v1.PLAN_PATH).read_text(encoding="utf-8"))
+    successor = json.loads((ROOT / v2.PLAN_PATH).read_text(encoding="utf-8"))
     for key in (
         "contract_id",
         "profile_id",
@@ -51,10 +52,12 @@ def test_v2_preserves_research_semantics_and_consumed_attempt() -> None:
     assert successor["output_root"] != predecessor["output_root"]
     assert successor["execution_limits"]["maximum_attempts"] == 1
     assert successor["execution_limits"]["maximum_retries"] == 0
+    with pytest.raises(UnauthorizedOperation, match="predecessor stage did not pass"):
+        v2.build_plan(root=ROOT)
 
 
 def test_v2_plan_binds_its_lifecycle_and_has_conditional_output_topology() -> None:
-    plan = v2.build_plan(root=ROOT)
+    plan = json.loads((ROOT / v2.PLAN_PATH).read_text(encoding="utf-8"))
     for path in (
         v2.MODULE_PATH,
         v2.PREPARE_SCRIPT_PATH,

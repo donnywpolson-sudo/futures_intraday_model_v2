@@ -17,14 +17,19 @@ from .canonical import canonical_bytes, contained_path, sha256_file, sha256_json
 from .errors import IntegrityError, UnauthorizedOperation
 
 
-CONTRACT_SCHEMA = "alpha_research_ladder_contract/1.0.0"
-PROFILE_SCHEMA = "alpha_research_ladder_profile/1.0.0"
+LEGACY_CONTRACT_SCHEMA = "alpha_research_ladder_contract/1.0.0"
+CONTRACT_SCHEMA = "alpha_research_ladder_contract/2.0.0"
+LEGACY_PROFILE_SCHEMA = "alpha_research_ladder_profile/1.0.0"
+PROFILE_SCHEMA = "alpha_research_ladder_profile/2.0.0"
 POINTER_SCHEMA = "active_alpha_research_ladder/1.0.0"
 SESSION_MANIFEST_SCHEMA = "alpha_ladder_session_manifest/1.0.0"
 DECISION_SCHEMA = "alpha_ladder_stage_decision/1.0.0"
 
 ACTIVE_POINTER_PATH = Path("configs/active_alpha_research_ladder.json")
+# ``pilot`` remains an operational gate identifier for immutable registrations
+# and evidence.  It is no longer a user-visible ladder level in schema v2.
 STAGES = ("pilot", "tier_1", "tier_2", "tier_3", "holdout", "forward")
+LEVELS = ("tier_0", "tier_1", "tier_2", "tier_3", "holdout", "forward")
 PREDECESSOR = {
     "pilot": "tier_0",
     "tier_1": "pilot",
@@ -89,12 +94,14 @@ def _identity(payload: Mapping[str, object], key: str, schema: str) -> None:
         raise IntegrityError(f"{key} is invalid")
 
 
-def build_contract(*, predecessor_path: str, predecessor_sha256: str) -> dict[str, object]:
-    """Build the inactive authoritative successor semantics."""
+def _build_legacy_contract(
+    *, predecessor_path: str, predecessor_sha256: str,
+) -> dict[str, object]:
+    """Rebuild the immutable schema-v1 contract for historical validation."""
 
     _digest(predecessor_sha256, "predecessor SHA-256")
     core: dict[str, object] = {
-        "schema_version": CONTRACT_SCHEMA,
+        "schema_version": LEGACY_CONTRACT_SCHEMA,
         "classification": "PREPARED_NON_AUTHORIZING_SUCCESSOR",
         "state": "PREPARED_NOT_PUBLISHED_NOT_ACTIVE",
         "publication_layout": {
@@ -178,30 +185,154 @@ def build_contract(*, predecessor_path: str, predecessor_sha256: str) -> dict[st
     return {**core, "contract_id": sha256_json(core)}
 
 
+def build_contract(
+    *, predecessor_path: str, predecessor_sha256: str,
+    predecessor_contract_id: str,
+) -> dict[str, object]:
+    """Build the Tier-0-unified, inactive authoritative successor semantics."""
+
+    _digest(predecessor_sha256, "predecessor SHA-256")
+    _digest(predecessor_contract_id, "predecessor contract identity")
+    core: dict[str, object] = {
+        "schema_version": CONTRACT_SCHEMA,
+        "classification": "PREPARED_NON_AUTHORIZING_SUCCESSOR",
+        "state": "ACTIVE_ONLY_WHEN_REFERENCED_BY_VALID_POINTER",
+        "publication_layout": {
+            "contract_path_template": (
+                "state/alpha_ladder_registry/{contract_id}/universe_contract.json"
+            ),
+            "profile_path_template": (
+                "state/alpha_ladder_registry/{contract_id}/alpha_tiered.yaml"
+            ),
+            "active_pointer_path": ACTIVE_POINTER_PATH.as_posix(),
+            "active_pointer_written_last": True,
+        },
+        "predecessor": {
+            "path": predecessor_path,
+            "sha256": predecessor_sha256,
+            "contract_id": predecessor_contract_id,
+            "preserved_byte_for_byte": True,
+        },
+        "authority": {
+            "historical_rows": False,
+            "registration": False,
+            "execution": False,
+            "holdout_2025": False,
+            "provider_network_credentials": False,
+            "trading": False,
+        },
+        "stages": {
+            "tier_0": {
+                "role": "ENGINEERING_AND_ES_QUALIFICATION",
+                "markets": ["ES"],
+                "pass_requires_all_gates": [
+                    "synthetic_engineering", "es_pilot",
+                ],
+                "alpha_confirmation": False,
+                "gates": {
+                    "synthetic_engineering": {
+                        "role": "SYNTHETIC_ENGINEERING_ONLY",
+                        "data": "SYNTHETIC_ONLY",
+                        "historical_years": [],
+                        "alpha_evidence": False,
+                    },
+                    "es_pilot": {
+                        "role": "GO_NO_GO_SCREEN_ONLY",
+                        "data": "ROW_CERTIFIED_REAL_HISTORY",
+                        "training_sessions": 504,
+                        "evaluation_sessions": 63,
+                        "fold_selection": "FIRST_ROW_CERTIFIED_EXECUTABLE_OUTER_FOLD",
+                        "purge_and_embargo_required": True,
+                        "exact_session_ids_frozen_before_outcomes": True,
+                        "alpha_confirmation": False,
+                    },
+                },
+            },
+            "tier_1": {
+                "role": "FIRST_FORMAL_MULTI_MARKET_CONFIRMATION",
+                "markets": list(CORE),
+                "tier_0_pilot_evaluation_sessions_excluded_for_every_market": True,
+            },
+            "tier_2": {
+                "role": "FROZEN_BALANCED_REPLICATION",
+                "markets": list(BALANCED),
+                "report_core_and_additions_separately": True,
+            },
+            "tier_3": {
+                "role": "FULL_UNIVERSE_REPLICATION",
+                "markets": list(ALL_APPROVED),
+                "traditional_markets": list(TRADITIONAL),
+                "satellite_markets": list(SATELLITE),
+                "traditional_must_pass_independently": True,
+                "satellite_can_rescue_traditional_failure": False,
+            },
+            "holdout": {
+                "role": "ONE_PROJECT_LEVEL_FINAL_HOLDOUT",
+                "years": [2025],
+                "maximum_accesses": 1,
+                "terminal_tier": "tier_3",
+            },
+            "forward": {
+                "role": "MONITORING_ONLY",
+                "period": "2026_ONWARD",
+                "can_rescue_failure": False,
+            },
+        },
+        "transition_order": list(LEVELS),
+        "tier_0_gate_order": ["synthetic_engineering", "es_pilot"],
+        "operational_gate_identifiers": {
+            "tier_0.synthetic_engineering": "tier_0",
+            "tier_0.es_pilot": "pilot",
+        },
+        "gate_authority_separation_required": True,
+        "frozen_mechanism_fields": list(FROZEN_MECHANISM_FIELDS),
+        "semantic_change": "PILOT_LEVEL_MERGED_INTO_TIER_0_WITH_SEPARATE_GATES",
+        "new_counted_mechanism_restart": "TIER_0_SYNTHETIC_ENGINEERING_GATE",
+        "failed_tier_0_gate": "TIER_0_FAIL_FOR_EXACT_FROZEN_MECHANISM",
+        "failed_higher_tier": "NO_FALLBACK_SCOPE_UNLESS_PREDECLARED_BEFORE_OUTCOMES",
+        "missing_or_ambiguous_evidence": "FAIL_CLOSED",
+    }
+    return {**core, "contract_id": sha256_json(core)}
+
+
 def validate_contract(payload: Mapping[str, object]) -> dict[str, object]:
-    _identity(payload, "contract_id", CONTRACT_SCHEMA)
+    schema = payload.get("schema_version")
+    if schema not in {LEGACY_CONTRACT_SCHEMA, CONTRACT_SCHEMA}:
+        raise IntegrityError("unsupported Alpha ladder contract schema")
+    assert isinstance(schema, str)
+    _identity(payload, "contract_id", schema)
     stages = _mapping(payload.get("stages"), "stages")
     authority = _mapping(payload.get("authority"), "authority")
     if any(value is not False for value in authority.values()):
         raise IntegrityError("ladder contract cannot grant authority")
-    expected = build_contract(
-        predecessor_path=str(_mapping(payload.get("predecessor"), "predecessor").get("path", "")),
-        predecessor_sha256=str(_mapping(payload.get("predecessor"), "predecessor").get("sha256", "")),
-    )
+    predecessor = _mapping(payload.get("predecessor"), "predecessor")
+    if schema == LEGACY_CONTRACT_SCHEMA:
+        expected = _build_legacy_contract(
+            predecessor_path=str(predecessor.get("path", "")),
+            predecessor_sha256=str(predecessor.get("sha256", "")),
+        )
+        expected_stages = {"tier_0", *STAGES}
+    else:
+        expected = build_contract(
+            predecessor_path=str(predecessor.get("path", "")),
+            predecessor_sha256=str(predecessor.get("sha256", "")),
+            predecessor_contract_id=str(predecessor.get("contract_id", "")),
+        )
+        expected_stages = set(LEVELS)
     if dict(payload) != expected:
         raise IntegrityError("ladder contract semantics drifted")
-    if set(stages) != {"tier_0", *STAGES}:
+    if set(stages) != expected_stages:
         raise IntegrityError("ladder stage topology drifted")
     return dict(payload)
 
 
-def build_profile(
+def _build_legacy_profile(
     *, contract_path: str, contract_sha256: str, contract_id: str,
 ) -> dict[str, object]:
     _digest(contract_sha256, "contract SHA-256")
     _digest(contract_id, "contract identity")
     core: dict[str, object] = {
-        "schema_version": PROFILE_SCHEMA,
+        "schema_version": LEGACY_PROFILE_SCHEMA,
         "classification": "PREPARED_NON_AUTHORIZING_OPERATIONAL_VIEW",
         "state": "PREPARED_NOT_ACTIVE",
         "contract_binding": {
@@ -247,11 +378,83 @@ def build_profile(
     return {**core, "profile_id": sha256_json(core)}
 
 
+def build_profile(
+    *, contract_path: str, contract_sha256: str, contract_id: str,
+) -> dict[str, object]:
+    _digest(contract_sha256, "contract SHA-256")
+    _digest(contract_id, "contract identity")
+    core: dict[str, object] = {
+        "schema_version": PROFILE_SCHEMA,
+        "classification": "PREPARED_NON_AUTHORIZING_OPERATIONAL_VIEW",
+        "state": "ACTIVE_ONLY_WHEN_REFERENCED_BY_VALID_POINTER",
+        "contract_binding": {
+            "path": contract_path,
+            "sha256": contract_sha256,
+            "contract_id": contract_id,
+        },
+        "market_sets": {
+            "core": list(CORE),
+            "balanced": list(BALANCED),
+            "traditional": list(TRADITIONAL),
+            "satellite": list(SATELLITE),
+            "all_approved": list(ALL_APPROVED),
+        },
+        "profiles": {
+            "tier_0": {
+                "markets": ["ES"],
+                "pass_requires_all_gates": [
+                    "synthetic_engineering", "es_pilot",
+                ],
+                "alpha_confirmation": False,
+                "gates": {
+                    "synthetic_engineering": {
+                        "data": "SYNTHETIC_ONLY",
+                        "result_use": "MECHANICS_VALIDATION_ONLY",
+                    },
+                    "es_pilot": {
+                        "data": "ROW_CERTIFIED_REAL_HISTORY",
+                        "training_sessions": 504,
+                        "evaluation_sessions": 63,
+                        "result_use": "ADVANCE_OR_REJECT_EXACT_FROZEN_MECHANISM_ONLY",
+                    },
+                },
+            },
+            "tier_1": {"market_set": "core"},
+            "tier_2": {"market_set": "balanced"},
+            "tier_3": {
+                "market_set": "all_approved",
+                "mandatory_subgroups": ["traditional", "satellite"],
+                "traditional_must_pass_independently": True,
+                "satellite_can_rescue_traditional_failure": False,
+            },
+            "holdout": {"years": [2025], "maximum_accesses": 1},
+            "forward": {"period": "2026_ONWARD", "monitoring_only": True},
+        },
+        "operational_gate_identifiers": {
+            "tier_0.synthetic_engineering": "tier_0",
+            "tier_0.es_pilot": "pilot",
+        },
+        "authority": {
+            "historical_rows": False,
+            "registration": False,
+            "execution": False,
+            "holdout_2025": False,
+            "provider_network_credentials": False,
+            "trading": False,
+        },
+    }
+    return {**core, "profile_id": sha256_json(core)}
+
+
 def validate_profile(
     payload: Mapping[str, object], *, root: Path,
     prepared_contract_path: Path | None = None,
 ) -> dict[str, object]:
-    _identity(payload, "profile_id", PROFILE_SCHEMA)
+    schema = payload.get("schema_version")
+    if schema not in {LEGACY_PROFILE_SCHEMA, PROFILE_SCHEMA}:
+        raise IntegrityError("unsupported Alpha ladder profile schema")
+    assert isinstance(schema, str)
+    _identity(payload, "profile_id", schema)
     binding = _mapping(payload.get("contract_binding"), "contract binding")
     contract_path = (
         prepared_contract_path.resolve(strict=False)
@@ -264,9 +467,15 @@ def validate_profile(
     if not isinstance(contract, dict):
         raise IntegrityError("profile contract is malformed")
     validate_contract(contract)
+    expected_contract_schema = (
+        LEGACY_CONTRACT_SCHEMA if schema == LEGACY_PROFILE_SCHEMA else CONTRACT_SCHEMA
+    )
+    if contract.get("schema_version") != expected_contract_schema:
+        raise IntegrityError("ladder profile and contract schema generations differ")
     if binding.get("contract_id") != contract.get("contract_id"):
         raise IntegrityError("profile contract identity changed")
-    expected = build_profile(
+    builder = _build_legacy_profile if schema == LEGACY_PROFILE_SCHEMA else build_profile
+    expected = builder(
         contract_path=str(binding.get("path")),
         contract_sha256=str(binding.get("sha256")),
         contract_id=str(binding.get("contract_id")),
@@ -317,6 +526,37 @@ def load_active_ladder(root: Path) -> tuple[dict[str, object], dict[str, object]
         or pointer.get("profile_id") != profile.get("profile_id")
     ):
         raise IntegrityError("active Alpha ladder pointer identity drifted")
+    return contract, profile
+
+
+def load_registered_ladder(
+    root: Path, *, contract_id: str, profile_id: str,
+) -> tuple[dict[str, object], dict[str, object]]:
+    """Load one immutable ladder generation without making it active authority."""
+
+    contract_id = _digest(contract_id, "registered contract identity")
+    profile_id = _digest(profile_id, "registered profile identity")
+    registry = Path("state/alpha_ladder_registry") / contract_id
+    contract_path = contained_path(root, (registry / "universe_contract.json").as_posix())
+    profile_path = contained_path(root, (registry / "alpha_tiered.yaml").as_posix())
+    try:
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+        profile = yaml.safe_load(profile_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, ValueError, yaml.YAMLError) as exc:
+        raise IntegrityError("registered Alpha ladder generation is unreadable") from exc
+    if (
+        not isinstance(contract, dict)
+        or contract_path.read_bytes() != canonical_bytes(contract) + b"\n"
+        or not isinstance(profile, dict)
+    ):
+        raise IntegrityError("registered Alpha ladder generation is malformed")
+    validate_contract(contract)
+    validate_profile(profile, root=root)
+    if (
+        contract.get("contract_id") != contract_id
+        or profile.get("profile_id") != profile_id
+    ):
+        raise IntegrityError("registered Alpha ladder generation identity drifted")
     return contract, profile
 
 

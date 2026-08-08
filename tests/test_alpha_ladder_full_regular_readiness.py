@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import json
 from pathlib import Path
 
 import pytest
@@ -13,14 +14,18 @@ from futures_rebuild.alpha_ladder_full_regular_source_observable_successor impor
     SOURCE_ABSTENTION,
 )
 from futures_rebuild.boundary import RepoBoundary
-from futures_rebuild.errors import IntegrityError
+from futures_rebuild.errors import UnauthorizedOperation
 
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_plan_binds_exact_mechanism_tier0_ladder_calendar_and_twenty_sources() -> None:
-    plan = readiness.build_plan(root=ROOT)
+def _archived_plan() -> dict[str, object]:
+    return json.loads((ROOT / readiness.PLAN_PATH).read_text(encoding="utf-8"))
+
+
+def test_archived_plan_is_preserved_but_cannot_bind_the_new_ladder() -> None:
+    plan = _archived_plan()
     assert plan["mechanism_id"] == "cfefe8ce78e46d1e6a68184cbebdf4f4fe6d46169dc7bbfcfcd501c595563dc3"
     assert plan["contract_id"] == "d3ab84356351568473ccdef935b20eda6779dcd681478415125a668d913dfd18"
     assert plan["calendar_id"] == "ddbe0c706d6568d8d7ddefd830677d73978b428d8a99925290310224f673a7f9"
@@ -28,6 +33,8 @@ def test_plan_binds_exact_mechanism_tier0_ladder_calendar_and_twenty_sources() -
     assert all(path.endswith(".parquet") for path in plan["protected_source_paths"])
     assert plan["execution_limits"]["maximum_attempts"] == 1
     assert plan["execution_limits"]["maximum_retries"] == 0
+    with pytest.raises(UnauthorizedOperation, match="predecessor stage did not pass"):
+        readiness.build_plan(root=ROOT)
 
 
 def test_plan_construction_never_hashes_protected_payloads(monkeypatch) -> None:
@@ -39,7 +46,8 @@ def test_plan_construction_never_hashes_protected_payloads(monkeypatch) -> None:
         return original(path)
 
     monkeypatch.setattr(readiness, "sha256_file", guarded)
-    readiness.build_plan(root=ROOT)
+    with pytest.raises(UnauthorizedOperation, match="predecessor stage did not pass"):
+        readiness.build_plan(root=ROOT)
 
 
 def test_full_regular_eligibility_precedes_folds_and_accounts_for_every_row() -> None:
@@ -53,16 +61,16 @@ def test_full_regular_eligibility_precedes_folds_and_accounts_for_every_row() ->
     assert dispositions == {CALENDAR_CLOSED, HOLIDAY_ABSTENTION, SOURCE_ABSTENTION, ELIGIBLE}
 
 
-def test_plan_fails_closed_on_any_semantic_drift() -> None:
-    plan = readiness.build_plan(root=ROOT)
+def test_archived_plan_fails_closed_before_semantic_reuse() -> None:
+    plan = _archived_plan()
     changed = copy.deepcopy(plan)
     changed["coverage"]["filled_entry_verified_exit_percent"] = 99
-    with pytest.raises(IntegrityError, match="drifted"):
+    with pytest.raises(UnauthorizedOperation, match="predecessor stage did not pass"):
         readiness.validate_plan(changed, root=ROOT)
 
 
 def test_execution_consumes_authority_before_protected_verification(monkeypatch, tmp_path: Path) -> None:
-    plan = readiness.build_plan(root=ROOT)
+    plan = _archived_plan()
     calls: list[bool] = []
 
     def fake_load(*, root: Path, verify_protected: bool = False):
@@ -89,7 +97,7 @@ def test_execution_consumes_authority_before_protected_verification(monkeypatch,
 
 
 def test_required_authority_cannot_fit_predict_evaluate_register_or_access_2025() -> None:
-    plan = readiness.build_plan(root=ROOT)
+    plan = _archived_plan()
     assert plan["authority"]["historical_row_read"] is True
     for key in (
         "returns", "model_fit", "prediction_generation", "performance_evaluation",

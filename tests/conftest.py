@@ -115,6 +115,8 @@ LEGACY_RESEARCH_TEST_NODES = {
     ),
 }
 CURRENT_HIGH_RISK_TEST_FILES = {
+    "test_apex_tradovate_eod_risk.py",
+    "test_alpha_ladder_full_contract_risk_census.py",
     "test_alpha_ladder_full_regular_source_observable_successor.py",
 }
 LOCAL_EVIDENCE_TEST_FILES = {

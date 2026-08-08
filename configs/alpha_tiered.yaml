@@ -84,8 +84,18 @@ profiles:
     market_set: core
     markets: [ES]
     cohort: research
-    purpose: ENGINEERING_SMOKE_ONLY
+    purpose: ENGINEERING_AND_ES_QUALIFICATION
+    pass_requires_all_gates: [synthetic_engineering, es_pilot]
     alpha_evidence: false
+    gates:
+      synthetic_engineering:
+        data: SYNTHETIC_ONLY
+        result_use: MECHANICS_VALIDATION_ONLY
+      es_pilot:
+        data: ROW_CERTIFIED_REAL_HISTORY
+        training_sessions: 504
+        evaluation_sessions: 63
+        result_use: ADVANCE_OR_REJECT_EXACT_FROZEN_MECHANISM_ONLY
   tier_1_research:
     market_set: core
     cohort: research

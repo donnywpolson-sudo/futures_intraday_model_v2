@@ -3,16 +3,23 @@
 This is a topology guide, not authority. `CURRENT_WORKFLOW.md` controls normal
 work and every real-data or publishing action remains separately controlled.
 
-## Current reachable lanes
+## Current implementation reality
 
-| Lane | Reachable surface | Data role | Authority |
+| Classification | Surface | Reality | Authority |
 | --- | --- | --- | --- |
-| Synthetic mechanics | `futures-pipeline`; `src/futures_rebuild/pipeline.py` | Generated fixtures only | None |
-| Active Alpha state | `configs/active_alpha_research_ladder.json`; bound registry contract/profile | Defines Tier 0, ES pilot, Tier 1-3, one 2025 holdout, forward monitoring | None by itself |
-| Source/readiness preparation | Active catalog/calendar resolvers and immutable census-plan modules | Proves source compatibility without returns | Separate row-read approval required to execute |
-| Trial registration/economic execution | `src/futures_rebuild/certified_research_gateway.py` | Exact certified registration and one-use historical execution | Exact gateway authority required |
-| Cockpit | `src/futures_rebuild/live_cockpit/`; `python -m futures_rebuild.live_cockpit` | Observation only | No order or position-changing authority |
-| Historical evidence | versioned trial modules, old Phase 3-8 chain, registries, receipts, reports | Interpretation and provenance only | Retired; cannot authorize current work |
+| `CURRENT_REACHABLE` | Standard Alpha: `configs/active_alpha_research_ladder.json`; `data/active/catalog.json` | Active standard/full-contract ladder and catalog | Exact gateway authority required for real research |
+| `SYNTHETIC_ONLY` | `futures-pipeline`; `src/futures_rebuild/pipeline.py` | Generated mechanics fixtures only | No historical or alpha authority |
+| `RETIRED` | `configs/apex_micro_tier01_databento_preflight_plan.json`; obsolete `febccafd...` preparation | Preserved MES/MGC/M6E/M6A bytes, classified `SUPERSEDED_PREPARATION — MICRO_TIER1_SCOPE_RECONCILIATION`; cannot execute as current | No provider or publication authority |
+| `PREPARED_NOT_EXECUTED` | Corrected contract/profile/pointer under `state/unpublished_evidence/apex_micro_ladder_preparation_v2/`; architecture under `alpha_research_architecture_v2/` | Inactive MES/MCL/MGC/M6E successor; no active micro pointer or catalog | None |
+| `PREPARED_NOT_EXECUTED` | `scripts/prepare_apex_micro_infrastructure.py`; `configs/apex_micro_product_reference_requirements.json`; `state/unpublished_evidence/apex_micro_preparation_supersessions/micro_tier1_scope_reconciliation.json` | Deterministic create-only successor preparation and byte-bound supersession classification | No provider or activation authority |
+| `PREPARED_NOT_EXECUTED` | `configs/apex_micro_tier01_databento_metadata_preflight_v2.json`; `src/futures_rebuild/micro_alpha_databento_preflight.py` | Exact 20-definition, 51-call, metadata-only executor; synthetic tests only | Exact single-use metadata/provider approval absent |
+| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition.py` | Phase 1A create-only inactive-custody downloader implemented and adversarially tested; no provider run and no DBN output | Separate download approval absent; passing preflight and committed HEAD required first |
+| `SYNTHETIC_ONLY` | `tests/test_micro_alpha_*.py` | Corrected ladder, authorization, metadata, disk, collision, partial, cost, retry, custody, and no-decode mechanics | No provider, row, or download authority |
+| `HISTORICAL_ROW_APPROVAL_REQUIRED` | Phase 1B/2 contracts in `src/futures_rebuild/micro_alpha_pipeline.py` | Decoder/causal routing contracts are prepared; Phase 1B/2 row processing has not executed | Separate row-read approval only after acquisition |
+| `NOT_IMPLEMENTED` | `configs/active_micro_alpha_research_ladder.json`; `data/active/catalogs/apex_micro.json` | Intentionally absent until publication and Phase 2 certification | Cannot register micro research |
+| `CURRENT_REACHABLE` | `src/futures_rebuild/certified_research_gateway.py` | Standard registration and one-use historical execution | Exact certified authority required |
+| `CURRENT_REACHABLE` | `src/futures_rebuild/live_cockpit/`; `python -m futures_rebuild.live_cockpit` | Observation only | No order or position-changing authority |
+| `RETIRED` | Versioned trial modules, old Phase 3-8 chain, registries, receipts, reports | Interpretation and provenance only | Cannot authorize current work |
 
 ## Current Alpha dependency flow
 
@@ -34,6 +41,34 @@ one-use economic execution --separate approval--> PASS or REJECT
 
 No other public script or imported legacy helper is a current real-history
 trial surface. Unknown or retired operation names fail closed.
+
+## Prepared Apex micro dependency flow
+
+```text
+PROJECT_OUTLINE design
+  -> obsolete MES/MGC/M6E/M6A plan                                 RETIRED / preserved
+  -> corrected inactive MES/MCL/MGC/M6E ladder                     PREPARED_NOT_EXECUTED
+  -> metadata-only Databento preflight                             PREPARED_NOT_EXECUTED / approval absent
+  -> exact audited acquisition plan                                NOT_IMPLEMENTED until preflight PASS
+  -> Phase 1A DBN + sidecar inactive custody                       PREPARED_NOT_EXECUTED / download authority absent
+  -> Phase 1B definition/status/statistics/1m/1s decoding          row-read approval required
+  -> Phase 2 1m feature + separate 1s execution foundations        row-read approval required
+  -> source certification
+  -> micro catalog publication/activation                          NOT_IMPLEMENTED
+  -> micro mechanism Tier 0 and later research                     blocked
+```
+
+Exact intended Phase 1A destination:
+`data/dbn/<schema-folder>/<micro-root>/<year>/<interval>.dbn.zst` with an
+adjacent `.manifest.json` sidecar. The prepared source scope is MES, MCL, MGC,
+and M6E across the required Databento Standard historical schemas: definition,
+status, statistics, ohlcv-1m, and ohlcv-1s. No target micro DBN currently exists.
+
+No micro phase is labeled complete. The metadata preflight and Phase 1A
+downloader are implemented but unexecuted; Phase 1B/2 row processing is also
+unexecuted. The micro catalog is inactive, registration is blocked, and
+download authority is absent. The code currently proves fail-closed mechanics
+with synthetic records only.
 
 ## Active and protected folders
 

@@ -1,4 +1,4 @@
-"""Prepare the inactive Alpha ladder and invalid-preparation evidence only."""
+"""Prepare the inactive Tier-0-unified Alpha ladder successor only."""
 
 from __future__ import annotations
 
@@ -18,7 +18,11 @@ from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PREDECESSOR = Path("configs/research_universe_contract.json")
+PREDECESSOR = Path(
+    "state/alpha_ladder_registry/"
+    "d3ab84356351568473ccdef935b20eda6779dcd681478415125a668d913dfd18/"
+    "universe_contract.json"
+)
 CURRENT_PROFILE = Path("configs/alpha_tiered.yaml")
 SIX_MARKET_PREPARATION = Path("configs/tier1_trade_triggered_trial_protocol.json")
 OUTPUT_ROOT = Path("state/unpublished_evidence/alpha_research_ladder_preparation")
@@ -44,8 +48,10 @@ def _canonical_json(payload: dict[str, object]) -> bytes:
 
 def main() -> int:
     predecessor_sha = sha256_file(ROOT / PREDECESSOR)
+    predecessor = json.loads((ROOT / PREDECESSOR).read_text(encoding="utf-8"))
     contract = build_contract(
         predecessor_path=PREDECESSOR.as_posix(), predecessor_sha256=predecessor_sha,
+        predecessor_contract_id=str(predecessor["contract_id"]),
     )
     validate_contract(contract)
     contract_id = str(contract["contract_id"])

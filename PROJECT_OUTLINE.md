@@ -2,11 +2,12 @@
 
 ## Objective
 
-Operate a reproducible, point-in-time, bias-resistant research system over the
-approved 41-market GLBX.MDP3 universe, with immutable data releases, explicit
-trial accounting, chronological validation, net economics, locked
-holdout/forward cohorts, and an observation-only live cockpit. Automatic order
-execution is outside this project's scope.
+Operate a reproducible, point-in-time, bias-resistant research system with two
+strictly separated Alpha lanes: the approved 41-market standard/full-contract
+universe and an Apex-deployable integer-micro universe. Both use immutable data
+releases, explicit trial accounting, chronological validation, net economics,
+one sealed 2025 holdout, post-freeze forward monitoring, and an observation-only
+live cockpit. Automatic order execution is outside this project's scope.
 
 ## Source-of-truth roles
 
@@ -20,6 +21,15 @@ execution is outside this project's scope.
 - `configs/research_universe_contract.json`: canonical markets, cohorts,
   admission, and approval receipt.
 - `configs/alpha_tiered.yaml`: operational profile view.
+- `state/unpublished_evidence/alpha_research_architecture_v2/<id>/architecture.json`:
+  corrected dual-lane successor design; it is unpublished and grants no authority.
+- `configs/apex_micro_tier01_databento_preflight_plan.json`: preserved obsolete
+  MES/MGC/M6E/M6A preflight; it is superseded and cannot execute as current.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v2.json`: corrected
+  metadata-only provider preflight for MES, MCL, MGC, and M6E; it authorizes nothing.
+- `configs/apex_micro_product_reference_requirements.json`: explicit parent,
+  schedule-family, identity, continuity, economics, prelaunch, and unavailable-
+  source requirements for the current acquisition scope.
 - `configs/source_contract.json`: accepted immutable source-family boundary.
 - `configs/*.json` and `configs/*.yaml`: sessions, identity, costs, coverage,
   pipeline, audit, and packaging contracts.
@@ -90,7 +100,15 @@ state, never active inputs unless a content-addressed release and its governing
 contract explicitly admit them. Other repositories and absolute external paths
 are not active roots.
 
-## Active Alpha ladder
+## Alpha research lanes
+
+The standard/full-contract lane and Apex integer-micro lane never share
+catalogs, registrations, or promotion evidence. They do share one project-level
+sealed 2025 holdout claim: changing contract scale never grants a second 2025
+access. A registration must bind one exact lane, ladder, calendar, catalog, and
+contract scale. A source from the other lane fails closed.
+
+### Standard/full-contract 41-market lane
 
 The current ladder is loaded only through
 `configs/active_alpha_research_ladder.json`. That pointer hash-binds the
@@ -99,7 +117,8 @@ authoritative successor contract and profile. `configs/alpha_tiered.yaml` and
 remain useful for synthetic compatibility checks but do not authorize current
 research.
 
-- `tier_0`: ES engineering smoke only; never alpha evidence.
+- `tier_0`: synthetic ES engineering plus one locked 504/63 ES qualification
+  fold. Both gates must pass; this is not multi-market confirmation.
 - `tier_1_research`: core discovery/replication profile. Approved cohort rules
   determine selection eligibility.
 - `tier_1_holdout` and `tier_1_forward`: locked core validation.
@@ -110,6 +129,42 @@ research.
   traditional-universe failure.
 - `tier_3_holdout` and `tier_3_forward`: locked full-universe validation.
 - `all_raw`: source inventory only, never research evidence.
+
+The standard lane uses 2018-2022 for primary research and reports 2023-2024 as
+temporal replication rather than tuning material. Its one 2025 access remains
+sealed until the frozen candidate reaches its declared terminal tier. Forward
+monitoring begins only after the exact mechanism is frozen; the calendar year
+alone cannot make a period forward evidence.
+
+### Apex integer-micro lane
+
+The micro successor is currently prepared and synthetic-only. It is not
+published, active, registered, or backed by an active source catalog.
+Its prepared pointer remains beside the unpublished contract and profile; the
+future active path `configs/active_micro_alpha_research_ladder.json` is absent.
+
+- `tier_0`: MES synthetic engineering and one locked MES qualification fold.
+- `tier_1`: MES, MCL, MGC, and M6E. These four represent equity, energy,
+  metals, and FX.
+- `tier_2`: report the four-market core separately from the five additions
+  MNQ, MYM, M2K, M6A, and SIL.
+- `tier_3`: add MBT and MET for 11 markets. The nine traditional markets must
+  be reported separately and pass independently; the two crypto satellites
+  cannot rescue their failure.
+- `holdout`: raw 2025 bytes may enter inactive custody, but the one shared
+  project-level 2025 claim remains sealed against decoding, features, execution
+  analysis, and catalog activation.
+- `forward`: raw 2026 bytes may enter inactive custody. Decoding is blocked for
+  rows before the exact immutable mechanism-freeze timestamp; calendar year
+  alone never establishes forward evidence.
+
+Micro products use integer contracts only. Product-effective dates are
+provider-confirmed during the metadata preflight; prelaunch coverage remains
+explicit `PRODUCT_NOT_YET_EFFECTIVE_NO_EMPTY_DBN` evidence. No market inherits
+its parent contract's calendar or economics implicitly. The current acquisition
+scope is Tier 0/1 only: MES, MCL, MGC, and M6E. No micro equivalent of ZN is
+invented; any future micro rates candidate requires official Apex eligibility,
+provider availability, and economics verification before outcomes.
 
 Profiles can narrow but cannot silently expand the universe, change admission
 or selection eligibility, or unlock holdout/forward data.
@@ -136,6 +191,55 @@ executes the complete dependency order while retaining zero provider, alpha,
 prediction, sealing, holdout, and order authority. Any production adapter must
 check the corresponding exact receipt before reading protected data or writing
 an authoritative artifact.
+
+## Corrected Apex micro Phase 1A/1B/2 route
+
+This route reuses the standard folder grammar without mixing catalogs:
+
+```text
+single-use metadata-only Databento preflight (20 market/schema definitions; 51-call ceiling)
+  -> data/dbn/<schema-folder>/<micro-root>/<year>/<interval>.dbn.zst [Phase 1A]
+  -> data/raw/<micro-root>/<year>/<interval>/<release>/             [Phase 1B definition + 1m]
+  -> data/market_state/{status|statistics}/<micro-root>/...         [Phase 1B diagnostics]
+  -> data/outcome_sources/<micro-root>/...                          [Phase 1B execution]
+  -> data/causally_gated_normalized/...                             [Phase 2 1m features]
+  -> separately certified micro catalog                            [not yet active]
+```
+
+The required Databento Standard historical schemas are `definition`, `status`,
+`statistics`, `ohlcv-1m`, and `ohlcv-1s`. They must not be collectively called
+raw L0 data. Provider schemas `ohlcv-1m` and `ohlcv-1s` use the on-disk folder
+names `ohlcv_1m` and `ohlcv_1s`. Definitions use `<root>.FUT`; the other four
+schemas use `<root>.v.0`;
+`stype_out` is `instrument_id`. One-minute bars feed the causal feature
+foundation. One-second reported bars remain a separate, non-feature execution
+source. Status and statistics are diagnostics, not alpha features. Decoding
+2025 is blocked; 2026 decoding requires row timestamps at or after a prior
+immutable mechanism freeze.
+
+The Phase 1A downloader is implemented and synthetic/adversarially tested but
+has not executed. It uses one exact bounded interval per market/schema, writes
+first to inactive staging, requotes every request at exactly $0 before the
+first download, streams compressed DBN bytes without iterating rows, verifies
+size and SHA-256, creates an exact-query adjacent sidecar, refuses collisions,
+and writes one terminal attempt record last. Empty, partial, failed, oversized,
+or interrupted files remain inactive failure evidence. There is one attempt,
+zero automatic retries, and no overwrite, resume, publication, catalog
+activation, registration, evaluation, or trading path.
+
+The prepared preflight fixes no 2026 end date by assumption. A separately
+approved metadata call must confirm the latest complete provider day and freeze
+the end-exclusive boundary, exact $0 cost, estimated bytes, disk headroom, and
+destination conflicts before any acquisition plan can be created. A passing
+report freezes a separate deterministic acquisition plan bound to the committed
+implementation HEAD. Metadata approval never grants download authority.
+
+The one-second source proves reported-trade-bar evidence only. It cannot prove
+BBO availability, queue priority, guaranteed market-order execution, or precise
+within-second tick ordering. Later Phase 2 contracts require entry after causal
+availability, conservative same-bar ambiguity, explicit unfilled/no-trigger
+states, independently scheduled baselines, locked stress costs, and explicit
+missing or sparse checkpoints.
 
 ## Non-negotiable data rules
 

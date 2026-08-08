@@ -21,6 +21,7 @@ from futures_rebuild.alpha_research_ladder import (
     build_contract,
     build_profile,
     load_active_ladder,
+    load_registered_ladder,
     validate_contract,
     validate_session_manifest,
     validate_stage_decision,
@@ -41,6 +42,14 @@ from futures_rebuild.certified_research_gateway import CertifiedResearchGateway
 from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 
 
+ROOT = Path(__file__).resolve().parents[1]
+LEGACY_CONTRACT_PATH = Path(
+    "state/alpha_ladder_registry/"
+    "d3ab84356351568473ccdef935b20eda6779dcd681478415125a668d913dfd18/"
+    "universe_contract.json"
+)
+
+
 def _write_json(root: Path, relative: str, payload: dict[str, object]) -> str:
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -58,6 +67,7 @@ def _active_ladder(root: Path) -> tuple[dict[str, object], dict[str, object]]:
     predecessor_sha = _write_json(root, predecessor_path, {"preserved": True})
     contract = build_contract(
         predecessor_path=predecessor_path, predecessor_sha256=predecessor_sha,
+        predecessor_contract_id="d" * 64,
     )
     contract_path = "state/alpha_ladder_registry/contract.json"
     contract_sha = _write_json(root, contract_path, contract)
@@ -394,17 +404,36 @@ def _registration_context(
 
 
 def test_successor_contract_is_exactly_nested_and_non_authorizing(tmp_path: Path) -> None:
-    contract, _profile = _active_ladder(tmp_path)
+    contract, profile = _active_ladder(tmp_path)
     validated = validate_contract(contract)
     stages = validated["stages"]
     assert isinstance(stages, dict)
-    assert stages["tier_0"]["historical_years"] == []
-    assert stages["pilot"]["training_sessions"] == 504
-    assert stages["pilot"]["evaluation_sessions"] == 63
+    assert "pilot" not in stages
+    tier_0 = stages["tier_0"]
+    assert tier_0["pass_requires_all_gates"] == ["synthetic_engineering", "es_pilot"]
+    assert tier_0["gates"]["synthetic_engineering"]["historical_years"] == []
+    assert tier_0["gates"]["es_pilot"]["training_sessions"] == 504
+    assert tier_0["gates"]["es_pilot"]["evaluation_sessions"] == 63
+    assert validated["transition_order"] == [
+        "tier_0", "tier_1", "tier_2", "tier_3", "holdout", "forward",
+    ]
+    assert "pilot" not in profile["profiles"]
     assert stages["tier_1"]["markets"] == list(CORE)
     assert stages["tier_2"]["markets"] == list(BALANCED)
     assert stages["tier_3"]["markets"] == list(ALL_APPROVED)
     assert set(CORE) < set(BALANCED) < set(ALL_APPROVED)
+
+
+def test_schema_v1_registry_contract_remains_historically_valid() -> None:
+    legacy = json.loads((ROOT / LEGACY_CONTRACT_PATH).read_text(encoding="utf-8"))
+    assert validate_contract(legacy)["schema_version"].endswith("/1.0.0")
+    contract, profile = load_registered_ladder(
+        ROOT,
+        contract_id=str(legacy["contract_id"]),
+        profile_id="a2088ceb344f1aa44bf3a663ca2e2036e0cbea575e5521d04976ef0443a53210",
+    )
+    assert contract["contract_id"] == legacy["contract_id"]
+    assert profile["schema_version"].endswith("/1.0.0")
 
 
 def test_active_pointer_fails_closed_after_bound_contract_change(tmp_path: Path) -> None:

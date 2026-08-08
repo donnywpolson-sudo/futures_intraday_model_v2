@@ -23,7 +23,7 @@ from .alpha_ladder_reported_trade_exit_successor import (
     validate_closure,
     validate_successor,
 )
-from .alpha_research_ladder import load_active_ladder, validate_stage_decision
+from .alpha_research_ladder import load_registered_ladder, validate_stage_decision
 from .canonical import canonical_bytes, sha256_file, sha256_json
 from .errors import IntegrityError, UnauthorizedOperation
 
@@ -90,7 +90,14 @@ def validate_mechanism_context(*, root: Path) -> tuple[dict[str, object], dict[s
         mechanism, predecessor=predecessor, closure=closure, root=root,
     )
     published = verify_published_closure(root=root)
-    contract, profile = load_active_ladder(root)
+    ladder_binding = mechanism.get("ladder_binding")
+    if not isinstance(ladder_binding, Mapping):
+        raise IntegrityError("reported-trade-exit mechanism lost its ladder binding")
+    contract, profile = load_registered_ladder(
+        root,
+        contract_id=str(ladder_binding.get("contract_id", "")),
+        profile_id=str(ladder_binding.get("profile_id", "")),
+    )
     authority = mechanism.get("authority")
     outcomes = mechanism.get("outcome_access")
     if (

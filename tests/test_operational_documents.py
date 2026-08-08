@@ -1,6 +1,8 @@
 from pathlib import Path
 import subprocess
 
+import json
+
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -34,7 +36,7 @@ def test_handoff_describes_the_active_alpha_ladder_and_next_boundary() -> None:
     handoff = _text("CODEX_HANDOFF.md")
 
     for required in (
-        "d3ab8435...3dfd18",
+        "53252c8d...362815",
         "cfefe8ce...563dc3",
         "CertifiedResearchGateway",
         "a6ae7b...c82bc",
@@ -42,7 +44,11 @@ def test_handoff_describes_the_active_alpha_ladder_and_next_boundary() -> None:
         "aeff50fa...23ff9",
         "CONCLUSIVE_PILOT_ECONOMIC_REJECTION_ZERO_TRADABLE_SIGNALS",
         "Tier 1 advancement is forbidden",
-        "Publication is not authorized",
+        "26bbde28...4e71",
+        "c82f91b...b902d",
+        "7bbaefec...9defd",
+        "R and the emergency reserve",
+        "remain\nunset",
         "synthetic row-loader injection hook",
     ):
         assert required.lower() in handoff.lower()
@@ -124,3 +130,54 @@ def test_pipeline_map_names_only_the_current_real_history_gateway() -> None:
     assert "No other public script" in mapping
     assert "retired" in mapping.lower()
     assert "local_evidence" in mapping
+
+
+def test_micro_pipeline_map_distinguishes_design_from_implementation() -> None:
+    mapping = _text("PIPELINE_FOLDER_MAP.md")
+    outline = _text("PROJECT_OUTLINE.md")
+    for classification in (
+        "CURRENT_REACHABLE",
+        "PREPARED_NOT_EXECUTED",
+        "SYNTHETIC_ONLY",
+        "HISTORICAL_ROW_APPROVAL_REQUIRED",
+        "NOT_IMPLEMENTED",
+        "RETIRED",
+    ):
+        assert classification in mapping
+    for current_path in (
+        "src/futures_rebuild/micro_alpha_pipeline.py",
+        "src/futures_rebuild/micro_alpha_acquisition.py",
+        "scripts/prepare_apex_micro_infrastructure.py",
+        "configs/apex_micro_tier01_databento_metadata_preflight_v2.json",
+        "configs/apex_micro_product_reference_requirements.json",
+        "state/unpublished_evidence/apex_micro_preparation_supersessions/micro_tier1_scope_reconciliation.json",
+    ):
+        assert current_path in mapping or current_path in outline
+        assert (ROOT / current_path).exists()
+    assert list((ROOT / "state/unpublished_evidence/alpha_research_architecture_v2").glob("*/architecture.json"))
+    assert not (ROOT / "configs/active_micro_alpha_research_ladder.json").exists()
+    assert not (ROOT / "data/active/catalogs/apex_micro.json").exists()
+    assert "No micro phase is labeled complete" in mapping
+
+
+def test_micro_preflight_is_metadata_only_and_download_has_no_public_command() -> None:
+    obsolete = json.loads(
+        (ROOT / "configs/apex_micro_tier01_databento_preflight_plan.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert obsolete["plan_id"] == "c9bf6a86a9ca501cc4682ed10e63bf8cc984bfd27c3c44d35097e0aeeeba2ecc"
+    plan = json.loads(
+        (ROOT / "configs/apex_micro_tier01_databento_metadata_preflight_v2.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert plan["state"] == "PREPARED_NOT_EXECUTED"
+    assert {request["market"] for request in plan["requests"]} == {"MES", "MCL", "MGC", "M6E"}
+    assert plan["limits"]["exact_provider_call_ceiling"] == 51
+    assert plan["limits"]["maximum_external_cost_usd"] == "0"
+    assert plan["forbidden"]["timeseries_download"] is True
+    assert plan["forbidden"]["data_dbn_write"] is True
+    pyproject = _text("pyproject.toml")
+    assert "futures-pipeline = \"futures_rebuild.pipeline:main\"" in pyproject
+    assert "apex-micro-download" not in pyproject

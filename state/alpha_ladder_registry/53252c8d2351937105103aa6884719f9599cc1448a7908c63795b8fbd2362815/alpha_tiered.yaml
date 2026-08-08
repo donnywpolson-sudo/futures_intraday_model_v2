@@ -1,0 +1,161 @@
+schema_version: alpha_research_ladder_profile/2.0.0
+classification: PREPARED_NON_AUTHORIZING_OPERATIONAL_VIEW
+state: ACTIVE_ONLY_WHEN_REFERENCED_BY_VALID_POINTER
+contract_binding:
+  path: state/alpha_ladder_registry/53252c8d2351937105103aa6884719f9599cc1448a7908c63795b8fbd2362815/universe_contract.json
+  sha256: 599264b353c6f115712e8a0d56f7e23150482683bd40ac9937899862fc8ec026
+  contract_id: 53252c8d2351937105103aa6884719f9599cc1448a7908c63795b8fbd2362815
+market_sets:
+  core:
+  - ES
+  - CL
+  - ZN
+  - 6E
+  balanced:
+  - ES
+  - NQ
+  - CL
+  - NG
+  - RB
+  - GC
+  - HG
+  - SR3
+  - ZN
+  - ZB
+  - 6E
+  - 6J
+  - ZC
+  - ZS
+  - LE
+  - HE
+  traditional:
+  - ES
+  - NQ
+  - RTY
+  - YM
+  - CL
+  - NG
+  - RB
+  - HO
+  - GC
+  - SI
+  - HG
+  - PL
+  - SR3
+  - SR1
+  - ZQ
+  - TN
+  - ZT
+  - ZF
+  - ZN
+  - ZB
+  - UB
+  - 6A
+  - 6B
+  - 6C
+  - 6E
+  - 6J
+  - 6M
+  - 6N
+  - 6S
+  - ZC
+  - ZS
+  - ZL
+  - ZM
+  - ZW
+  - KE
+  - LE
+  - HE
+  - GF
+  satellite:
+  - BTC
+  - ETH
+  - PA
+  all_approved:
+  - ES
+  - NQ
+  - RTY
+  - YM
+  - CL
+  - NG
+  - RB
+  - HO
+  - GC
+  - SI
+  - HG
+  - PL
+  - SR3
+  - SR1
+  - ZQ
+  - TN
+  - ZT
+  - ZF
+  - ZN
+  - ZB
+  - UB
+  - 6A
+  - 6B
+  - 6C
+  - 6E
+  - 6J
+  - 6M
+  - 6N
+  - 6S
+  - ZC
+  - ZS
+  - ZL
+  - ZM
+  - ZW
+  - KE
+  - LE
+  - HE
+  - GF
+  - BTC
+  - ETH
+  - PA
+profiles:
+  tier_0:
+    markets:
+    - ES
+    pass_requires_all_gates:
+    - synthetic_engineering
+    - es_pilot
+    alpha_confirmation: false
+    gates:
+      synthetic_engineering:
+        data: SYNTHETIC_ONLY
+        result_use: MECHANICS_VALIDATION_ONLY
+      es_pilot:
+        data: ROW_CERTIFIED_REAL_HISTORY
+        training_sessions: 504
+        evaluation_sessions: 63
+        result_use: ADVANCE_OR_REJECT_EXACT_FROZEN_MECHANISM_ONLY
+  tier_1:
+    market_set: core
+  tier_2:
+    market_set: balanced
+  tier_3:
+    market_set: all_approved
+    mandatory_subgroups:
+    - traditional
+    - satellite
+    traditional_must_pass_independently: true
+    satellite_can_rescue_traditional_failure: false
+  holdout:
+    years:
+    - 2025
+    maximum_accesses: 1
+  forward:
+    period: 2026_ONWARD
+    monitoring_only: true
+operational_gate_identifiers:
+  tier_0.synthetic_engineering: tier_0
+  tier_0.es_pilot: pilot
+authority:
+  historical_rows: false
+  registration: false
+  execution: false
+  holdout_2025: false
+  provider_network_credentials: false
+  trading: false
+profile_id: 18fbb7a3a405ee2bcaef5dd7d6e757cfb3a69ec8485afd34e5fcf1f627aaeca6

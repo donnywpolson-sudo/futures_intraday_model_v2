@@ -215,6 +215,7 @@ def _gateway_ladder_context(
     contract = build_contract(
         predecessor_path=predecessor_relative,
         predecessor_sha256=predecessor_sha,
+        predecessor_contract_id="d" * 64,
     )
     contract_relative = "state/alpha_ladder_registry/contract.json"
     contract_path = root / contract_relative
