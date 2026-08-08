@@ -38,10 +38,11 @@ def test_handoff_describes_the_active_alpha_ladder_and_next_boundary() -> None:
         "cfefe8ce...563dc3",
         "CertifiedResearchGateway",
         "a6ae7b...c82bc",
-        "REGISTERED_NOT_CLAIMED_NOT_EXECUTED",
+        "SEALED_UNPUBLISHED_ECONOMIC_SCREEN_COMPLETE",
         "aeff50fa...23ff9",
-        "The ES pilot execution is",
-        "not authorized",
+        "CONCLUSIVE_PILOT_ECONOMIC_REJECTION_ZERO_TRADABLE_SIGNALS",
+        "Tier 1 advancement is forbidden",
+        "Publication is not authorized",
         "synthetic row-loader injection hook",
     ):
         assert required.lower() in handoff.lower()

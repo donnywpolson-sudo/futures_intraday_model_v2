@@ -6,15 +6,16 @@ and grants no authority.
 ## Live state — 2026-08-08
 
 - Repository: `C:\Users\donny\Desktop\futures_intraday_model_v2` on `main`.
-- Consolidated and pushed HEAD: `642178f68882bed26fb5156418a0276e93cbcf20`,
-  verified equal to `origin/main`; one worktree before the prepare-only package.
+- Consolidated and pushed HEAD: `d3ea3f93e83d97553c40dbe68932a3e849307a7e`,
+  verified equal to `origin/main` before the one-use pilot execution.
 - The active Alpha ladder is contract `d3ab8435...3dfd18`, profile
   `a2088ceb...a53210`.
 - The active authoritative calendar is `ddbe0c70...3a7f9` and the active source
   catalog is `data/active/catalog.json`.
-- Registered ES pilot `a6ae7b...c82bc` is
-  `REGISTERED_NOT_CLAIMED_NOT_EXECUTED`. No execution claim or 2025 holdout claim
-  exists. Counted mechanism `cfefe8ce...563dc3` remains unchanged and Tier 0 PASS.
+- Registered ES pilot `a6ae7b...c82bc` completed its only authorized attempt and
+  is `SEALED_UNPUBLISHED_ECONOMIC_SCREEN_COMPLETE` with decision `FAIL`.
+  Authorization receipt `8f6fd8c...1a60e` was consumed exactly once. Counted
+  mechanism `cfefe8ce...563dc3` remains unchanged; no 2025 holdout claim exists.
 
 ## Current architecture
 
@@ -32,24 +33,31 @@ and grants no authority.
 
 ## Current work
 
-The 67-path gateway and row-certified pilot work is secured in commits
-`0f4f9ca...aeaa1` and `642178f...cf20` on `origin/main`. The worktree now contains
-only the prepare-only ES economic-execution package. Authoritative plan
-`aeff50fa...23ff9` (SHA-256 `1ec9b67d...98411`) binds the exact registration,
-mechanism, readiness evidence, 504/1/63 sessions, three ES sources, implementation,
-dependencies, one attempt, zero retries, `$0` cost, and a 900-second ceiling.
-Verification is green: 14 focused executor tests, 107 current tests, and 851
-high-risk source-safe tests passed. Initial plan `ab6d2557...bd817e` is preserved
-as an invalid preparation because its executor retained a synthetic row-loader
-injection hook; it cannot be executed.
+The gateway, row-certified pilot, and fail-closed executor are secured on
+`origin/main`. Authoritative plan `aeff50fa...23ff9` (SHA-256
+`1ec9b67d...98411`) bound the exact registration, mechanism, readiness evidence,
+504/1/63 sessions, three ES sources, implementation, dependencies, one attempt,
+zero retries, `$0` cost, and a 900-second ceiling. Initial plan
+`ab6d2557...bd817e` remains an invalid preparation because it retained a
+synthetic row-loader injection hook; it was never executed.
+
+The pilot accounted for all 63 evaluation sessions but admitted zero candidate
+trades: 43 predictions were below the locked +0.25R hurdle, and all 20 hurdle
+passes were blocked by the standard-contract $250 planned-loss cap. It failed
+the minimum-trade, positive-stress-P&L, and true-zero-baseline gates. Audit
+`50fc9ded...e1aa2` classifies this as
+`CONCLUSIVE_PILOT_ECONOMIC_REJECTION_ZERO_TRADABLE_SIGNALS`; it found no source,
+calendar, causal-timing, leakage, arithmetic, baseline, or gate-reconstruction
+defect. Closure `6b9ab13e...f44c7` and publication manifest
+`32878ac8...010956` are prepared but unpublished.
 
 ## Next boundary
 
-After complete source-safe verification, the next boundary is exact-path staging,
-then a separate local commit and push of the prepare-only executor package. Only
-after its pushed HEAD is fixed may one separate authorization consume the ES pilot
-claim and open the three bound ES sources exactly once. The ES pilot execution is
-not authorized.
+Tier 1 advancement is forbidden for this mechanism. The next controlled boundary
+is create-only publication of the ten exact evidence, audit, and closure copies
+listed in `reports/alpha_ladder_es_pilot_failure_publication_manifest.json`.
+Publication is not authorized. Staging, commit, and push remain later separate
+boundaries; no retry, parameter rescue, or automatic successor is authorized.
 
 Staging, commit, push, deletion, relocation, provider access, publication,
 active-pointer mutation, historical-row access, and 2025 access each remain

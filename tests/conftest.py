@@ -93,7 +93,22 @@ LEGACY_RESEARCH_TEST_FILES = {
     "test_tier1_standard_only_protocol.py",
     "test_trial_bundle_inference.py",
 }
+ES_PILOT_SUPERSEDED_PREEXECUTION_TEST_NODES = {
+    (
+        "tests/test_alpha_ladder_es_pilot_execution.py::"
+        "test_plan_is_immutable_source_safe_and_has_no_direct_execution_cli"
+    ),
+    (
+        "tests/test_alpha_ladder_es_pilot_execution.py::"
+        "test_plan_or_gateway_binding_substitution_fails_closed"
+    ),
+    (
+        "tests/test_alpha_ladder_es_pilot_execution.py::"
+        "test_plan_validation_refuses_existing_output_or_failure_root"
+    ),
+}
 LEGACY_RESEARCH_TEST_NODES = {
+    *ES_PILOT_SUPERSEDED_PREEXECUTION_TEST_NODES,
     (
         "tests/test_overnight_inventory_reversal_preexecution_census_v2.py::"
         "test_parallel_successor_plan_is_hash_bound_and_preserves_consumed_attempt"
@@ -242,6 +257,11 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         "state/trial_registry/tier1_bracket_successor_v6/"
         "c92c5a6ecfd96a00d0cf89aa02319878b479dad6c6e21b703e54bd55943a8608.json"
     )
+    completed_es_pilot = root / (
+        "state/unpublished_evidence/alpha_ladder_es_pilot_execution/"
+        "a6ae7b8394906c3661b9f1456f30cf513d5a1df43a072c9e8a601bc8989c82bc/"
+        "attempt-1/pilot_decision.json"
+    )
     for item in items:
         lane = _lane_for(item)
         item.add_marker(getattr(pytest.mark, lane))
@@ -256,6 +276,18 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
                 reason=(
                     "registered V6 prepublication-only assertion is historical "
                     "after create-only publication"
+                ),
+                strict=True,
+            ))
+        if (
+            completed_es_pilot.is_file()
+            and item.nodeid in ES_PILOT_SUPERSEDED_PREEXECUTION_TEST_NODES
+        ):
+            item.add_marker(pytest.mark.xfail(
+                reason=(
+                    "preexecution-only assertion is historical after the exact "
+                    "one-use ES pilot produced terminal evidence; transition-stable "
+                    "coverage lives in test_alpha_ladder_es_pilot_execution_transition.py"
                 ),
                 strict=True,
             ))
