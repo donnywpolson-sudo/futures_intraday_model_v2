@@ -30,6 +30,7 @@ from .time_contracts import require_utc
 
 CAPTURE_RELEASE_KIND = "cme_trading_hours_capture"
 CAPTURE_SCHEMA_VERSION = "1.0.0"
+SCHEDULE_RECOVERY_CAPTURE_SCHEMA_VERSION = "1.1.0"
 CALENDAR_RELEASE_KIND = "verified_exchange_calendar"
 CALENDAR_SCHEMA_VERSION = "1.0.0"
 INDEX_RELEASE_KIND = "exchange_calendar_index"
@@ -39,6 +40,14 @@ COVERAGE_SCHEMA_VERSION = "1.0.0"
 ELIGIBILITY_RELEASE_KIND = "calendar_state_eligibility"
 ELIGIBILITY_SCHEMA_VERSION = "1.0.0"
 SERVICE_RESPONSE_SCHEMA = "cme_trading_hours_service_response/1.0.0"
+CAPTURE_APPROVAL_SCHEMA = "cme_calendar_capture_approval/1.0.0"
+CAPTURE_OPERATION = "CAPTURE_BOUNDED_PUBLIC_CME_TRADING_HOURS"
+SCHEDULE_RECOVERY_APPROVAL_SCHEMA = (
+    "cme_calendar_schedule_coverage_recovery_approval/1.0.0"
+)
+SCHEDULE_RECOVERY_OPERATION = (
+    "CAPTURE_BOUNDED_PUBLIC_CME_SCHEDULE_COVERAGE_RECOVERY"
+)
 MAPPING_APPROVAL_SCHEMA = "cme_product_mapping_approval/1.0.0"
 MAPPING_CANDIDATES_SCHEMA = "cme_product_mapping_candidates/1.0.0"
 ACTIVATION_APPROVAL_SCHEMA = "cme_calendar_activation_approval/1.0.0"
@@ -79,48 +88,21 @@ _EXPECTED_POLICY: dict[str, object] = {
         "source_timezone": CME_TIMEZONE,
         "venue": CME_VENUE,
     },
-    "contract_version": "1.0.0",
+    "contract_version": "2.0.0",
     "historical_backfill_policy": (
-        "AUTHORITATIVE_CME_BYTES_REQUIRED_NO_TEMPLATE_OR_DATABENTO_STATUS_RECONSTRUCTION"
+        "DBN_EMPIRICAL_OBSERVABILITY_NO_OFFICIAL_CALENDAR_CLAIM"
     ),
-    "states": ["CLOSED", "OPEN", "PAUSED", "PCP", "PREOPEN"],
-    "trade_date_window": {
-        "end_local": "17:00:00",
-        "start_day_offset": -1,
-        "start_local": "17:00:00",
-    },
-}
-_EXPECTED_POLICY: dict[str, object] = {
-    "activation": {
-        "general_max_age_hours": 168,
-        "holiday_finalization_window_days": 14,
-        "holiday_max_age_hours": 72,
-        "minimum_continuous_forward_days": 90,
-    },
-    "capture": {
-        "bootstrap_max_requests": 96,
-        "max_duration_seconds": 900,
-        "max_total_bytes": 268_435_456,
-        "retries": 0,
-        "steady_state_max_requests": 40,
-        "workers": 1,
-    },
-    "cme": {
-        "allowed_content_types": ["application/json", "text/html"],
-        "filters_url": (
-            "https://www.cmegroup.com/services/trading-hours-filters?isProtected"
-        ),
-        "landing_page_url": "https://www.cmegroup.com/trading-hours.html",
-        "schedule_url": (
-            "https://www.cmegroup.com/services/trading-hours-by-product"
-        ),
-        "source_timezone": CME_TIMEZONE,
-        "venue": CME_VENUE,
-    },
-    "contract_version": "1.0.0",
-    "historical_backfill_policy": (
-        "AUTHORITATIVE_CME_BYTES_REQUIRED_NO_TEMPLATE_OR_DATABENTO_STATUS_RECONSTRUCTION"
+    "historical_observability_policy_path": (
+        "configs/historical_observability_policy.json"
     ),
+    "roles": {
+        "current_forward": (
+            "AUTHORITATIVE_CME_CALENDAR_FOR_COCKPIT_AND_FORWARD_SCHEDULING"
+        ),
+        "historical_research": (
+            "IMMUTABLE_DATABENTO_DBN_EMPIRICAL_OBSERVABILITY"
+        ),
+    },
     "states": ["CLOSED", "OPEN", "PAUSED", "PCP", "PREOPEN"],
     "trade_date_window": {
         "end_local": "17:00:00",
@@ -141,17 +123,6 @@ def _read_canonical_object(path: Path, *, description: str) -> dict[str, object]
         or raw != canonical_bytes(payload) + b"\n"
     ):
         raise IntegrityError(f"{description} is not canonical JSON")
-    return payload
-
-
-def load_exchange_calendar_policy(path: Path) -> dict[str, object]:
-    payload = _read_canonical_object(
-        path, description="exchange-calendar policy"
-    )
-    if payload != _EXPECTED_POLICY:
-        raise IntegrityError(
-            "exchange-calendar policy differs from the implemented contract"
-        )
     return payload
 
 
@@ -320,6 +291,7 @@ class VerifiedExchangeCalendar:
                 "calendar_id",
                 "coverage_end_trade_date",
                 "coverage_start_trade_date",
+                "mapping_approval_receipt_id",
                 "parser_version",
                 "source_capture_release_id",
             }
@@ -336,6 +308,7 @@ class VerifiedExchangeCalendar:
             "effective_from_trade_date",
             "effective_through_trade_date",
             "holiday_notices",
+            "mapping_approval",
             "markets",
             "parser_version",
             "predecessor_calendar_release_id",
@@ -369,7 +342,7 @@ class VerifiedExchangeCalendar:
         ):
             raise IntegrityError("exchange-calendar predecessor is invalid")
         capture = _receipt(payload.get("source_capture_receipt"), name="calendar source")
-        load_cme_capture(capture, boundary=boundary)
+        capture_payload = load_cme_capture(capture, boundary=boundary)
         if (
             manifest.metadata["source_capture_release_id"] != capture.release_id
             or capture.release_id not in manifest.source_release_ids
@@ -387,6 +360,13 @@ class VerifiedExchangeCalendar:
         retrieved = _utc(
             payload.get("source_retrieved_at_utc"), name="source retrieval time"
         )
+        if retrieved != _utc(
+            capture_payload["retrieved_at_utc"],
+            name="capture retrieval time",
+        ):
+            raise IntegrityError(
+                "exchange-calendar source retrieval time is not exact"
+            )
         raw_markets = payload.get("markets")
         if not isinstance(raw_markets, list) or not raw_markets:
             raise IntegrityError("exchange-calendar market set is invalid")
@@ -487,6 +467,53 @@ class VerifiedExchangeCalendar:
             sorted(expected_markets)
         ):
             raise IntegrityError("exchange-calendar does not cover the expected universe")
+        mapping_payload = (
+            payload.get("mapping_approval")
+            if isinstance(payload.get("mapping_approval"), Mapping)
+            else {}
+        )
+        mapping_capture_release_id = str(
+            mapping_payload.get("capture_release_id", "")
+        )
+        capture_manifest = capture.verify(boundary)
+        if (
+            mapping_capture_release_id != capture.release_id
+            and mapping_capture_release_id
+            not in capture_manifest.source_release_ids
+        ):
+            raise IntegrityError(
+                "exchange-calendar mapping is not in the direct capture lineage"
+            )
+        approved_mappings = validate_mapping_approval(
+            mapping_payload,
+            capture_release_id=mapping_capture_release_id,
+            expected_markets=observed_markets,
+        )
+        expected_mappings = tuple(
+            {
+                "cme_product_code": products[market].cme_product_code,
+                "market": market,
+            }
+            for market in observed_markets
+        )
+        mapping_approval = payload["mapping_approval"]
+        assert isinstance(mapping_approval, Mapping)
+        mapping_approved_at = _utc(
+            mapping_approval["approved_at"],
+            name="mapping approval time",
+        )
+        if (
+            approved_mappings != expected_mappings
+            or manifest.metadata["mapping_approval_receipt_id"]
+            != mapping_approval["approval_receipt_id"]
+            or (
+                mapping_capture_release_id == capture.release_id
+                and mapping_approved_at < retrieved
+            )
+        ):
+            raise IntegrityError(
+                "exchange-calendar product mapping approval is not exact"
+            )
         notices = _validate_holiday_notices(payload.get("holiday_notices"))
         payload["calendar_id"] = calendar_id
         return cls(
@@ -728,10 +755,18 @@ def load_cme_capture(
     receipt: VerifiedReleaseReceipt, *, boundary: RepoBoundary
 ) -> dict[str, object]:
     manifest = receipt.verify(boundary)
+    is_recovery = (
+        manifest.schema_version
+        == SCHEDULE_RECOVERY_CAPTURE_SCHEMA_VERSION
+    )
     if (
         receipt.phase != "reference"
         or manifest.release_kind != CAPTURE_RELEASE_KIND
-        or manifest.schema_version != CAPTURE_SCHEMA_VERSION
+        or manifest.schema_version
+        not in {
+            CAPTURE_SCHEMA_VERSION,
+            SCHEDULE_RECOVERY_CAPTURE_SCHEMA_VERSION,
+        }
         or set(manifest.embedded_documents) != {"capture_receipt.json"}
         or set(manifest.metadata)
         != {
@@ -752,6 +787,7 @@ def load_cme_capture(
     expected = {
         "approval_receipt_id",
         "bounds",
+        "capture_approval",
         "capture_id",
         "coverage_end_trade_date",
         "coverage_start_trade_date",
@@ -766,6 +802,12 @@ def load_cme_capture(
         "schema_version",
         "total_bytes",
     }
+    if is_recovery:
+        expected |= {
+            "mapping_capture_release_id",
+            "network_request_count",
+            "reused_response_count",
+        }
     if set(payload) != expected:
         raise IntegrityError("CME capture receipt schema is invalid")
     capture_id = payload.pop("capture_id", None)
@@ -774,20 +816,51 @@ def load_cme_capture(
     retrieved = _utc(payload.get("retrieved_at_utc"), name="capture retrieval time")
     predecessor = payload.get("predecessor_capture_release_id")
     bounds = payload.get("bounds")
-    expected_bounds = {
-        "allow_redirects": False,
-        "max_duration_seconds": 900,
-        "max_requests": 96 if payload.get("mode") == "BOOTSTRAP" else 40,
-        "max_total_bytes": 268_435_456,
-        "retries": 0,
-        "workers": 1,
-    }
+    approval = payload.get("capture_approval")
+    if is_recovery:
+        maximum_requests = 56
+        expected_bounds = {
+            "allow_redirects": False,
+            "max_duration_seconds": 900,
+            "max_network_requests": 24,
+            "max_output_responses": maximum_requests,
+            "max_total_bytes": 268_435_456,
+            "retries": 0,
+            "workers": 1,
+        }
+        allowed_modes = {"SCHEDULE_COVERAGE_RECOVERY"}
+        approval_schema = SCHEDULE_RECOVERY_APPROVAL_SCHEMA
+        approval_operation = SCHEDULE_RECOVERY_OPERATION
+    else:
+        maximum_requests = {
+            "BOOTSTRAP": 96,
+            "PRODUCT_DISCOVERY": 3,
+            "STEADY_STATE": 40,
+        }.get(str(payload.get("mode")))
+        expected_bounds = {
+            "allow_redirects": False,
+            "max_duration_seconds": 900,
+            "max_requests": maximum_requests,
+            "max_total_bytes": 268_435_456,
+            "retries": 0,
+            "workers": 1,
+        }
+        allowed_modes = {"BOOTSTRAP", "PRODUCT_DISCOVERY", "STEADY_STATE"}
+        approval_schema = CAPTURE_APPROVAL_SCHEMA
+        approval_operation = CAPTURE_OPERATION
+    mapping_capture = payload.get("mapping_capture_release_id")
+    recovery_source_ids = (
+        tuple(sorted((str(predecessor), str(mapping_capture))))
+        if is_recovery
+        else ()
+    )
     if (
         capture_id != sha256_json(payload)
         or capture_id != manifest.metadata["capture_id"]
-        or payload.get("schema_version") != CAPTURE_SCHEMA_VERSION
+        or payload.get("schema_version") != manifest.schema_version
         or payload.get("parser_version") != PARSER_VERSION
-        or payload.get("mode") not in {"BOOTSTRAP", "STEADY_STATE"}
+        or payload.get("mode") not in allowed_modes
+        or maximum_requests is None
         or start > end
         or type(payload.get("plan_id")) is not str
         or _HASH.fullmatch(str(payload["plan_id"])) is None
@@ -801,22 +874,95 @@ def load_cme_capture(
         or payload["elapsed_milliseconds"] < 0
         or payload["elapsed_milliseconds"] > 900_000
         or bounds != expected_bounds
-        or payload["request_count"] > expected_bounds["max_requests"]
+        or not isinstance(approval, dict)
+        or payload["request_count"] > maximum_requests
         or payload["total_bytes"] > expected_bounds["max_total_bytes"]
         or predecessor is not None
         and (type(predecessor) is not str or _HASH.fullmatch(predecessor) is None)
-        or manifest.metadata["retrieved_at_utc"] != _utc_text(retrieved)
+        or is_recovery
+        and (
+            type(predecessor) is not str
+            or _HASH.fullmatch(str(predecessor)) is None
+            or
+            type(mapping_capture) is not str
+            or _HASH.fullmatch(str(mapping_capture)) is None
+            or type(payload.get("network_request_count")) is not int
+            or payload.get("network_request_count") != 24
+            or type(payload.get("reused_response_count")) is not int
+            or payload.get("reused_response_count") != 32
+            or payload["request_count"]
+            != payload["network_request_count"]
+            + payload["reused_response_count"]
+        )
+        or manifest.metadata
+        != {
+            "approval_receipt_id": payload["approval_receipt_id"],
+            "capture_id": capture_id,
+            "coverage_end_trade_date": end.isoformat(),
+            "coverage_start_trade_date": start.isoformat(),
+            "parser_version": PARSER_VERSION,
+            "plan_id": payload["plan_id"],
+            "retrieved_at_utc": _utc_text(retrieved),
+        }
         or manifest.source_release_ids
-        != ((str(predecessor),) if predecessor is not None else ())
+        != (
+            recovery_source_ids
+            if is_recovery
+            else ((str(predecessor),) if predecessor is not None else ())
+        )
     ):
         raise IntegrityError("CME capture identity or bounds are invalid")
+    approval_keys = {
+        "approval_receipt_id",
+        "approved_at",
+        "operation",
+        "plan_id",
+        "plan_sha256",
+        "schema_version",
+        "status",
+        "user_authorization_id",
+    }
+    approval_core = (
+        {
+            key: approval[key]
+            for key in approval
+            if key != "approval_receipt_id"
+        }
+        if isinstance(approval, dict)
+        else {}
+    )
+    if (
+        not isinstance(approval, dict)
+        or set(approval) != approval_keys
+        or approval.get("schema_version") != approval_schema
+        or approval.get("operation") != approval_operation
+        or approval.get("status") != "APPROVED"
+        or approval.get("plan_id") != payload["plan_id"]
+        or type(approval.get("plan_sha256")) is not str
+        or _HASH.fullmatch(str(approval["plan_sha256"])) is None
+        or type(approval.get("approved_at")) is not str
+        or _UTC_SECOND.fullmatch(str(approval["approved_at"])) is None
+        or type(approval.get("user_authorization_id")) is not str
+        or _HASH.fullmatch(str(approval["user_authorization_id"])) is None
+        or approval.get("approval_receipt_id") != sha256_json(approval_core)
+        or approval.get("approval_receipt_id")
+        != payload["approval_receipt_id"]
+        or _utc(approval["approved_at"], name="capture approval time")
+        > retrieved
+    ):
+        raise IntegrityError("CME capture approval is not durably hash-bound")
     responses = payload.get("responses")
     if not isinstance(responses, list) or len(responses) != payload["request_count"]:
         raise IntegrityError("CME capture response census is invalid")
     entries = {entry.logical_path: entry for entry in manifest.files}
     total = 0
     observed_paths: list[str] = []
-    for raw in responses:
+    request_ids: list[str] = []
+    request_kinds: list[str] = []
+    reused_count = (
+        int(payload["reused_response_count"]) if is_recovery else 0
+    )
+    for ordinal, raw in enumerate(responses):
         if not isinstance(raw, dict) or set(raw) != {
             "content_type",
             "logical_path",
@@ -854,18 +1000,66 @@ def load_cme_capture(
             or type(raw["size"]) is not int
             or raw["size"] != entries[logical].size
             or raw["sha256"] != entries[logical].sha256
-            or _utc(raw["received_at_utc"], name="response retrieval time")
-            < retrieved - timedelta(minutes=20)
+            or (
+                ordinal >= reused_count
+                and _utc(
+                    raw["received_at_utc"],
+                    name="response retrieval time",
+                )
+                < retrieved - timedelta(minutes=20)
+            )
         ):
             raise IntegrityError("CME capture response identity is invalid")
         total += raw["size"]
         observed_paths.append(logical)
+        request_ids.append(str(raw["request_id"]))
+        request_kinds.append(str(raw["request_kind"]))
     if (
         total != payload["total_bytes"]
         or sorted(observed_paths) != sorted(entries)
         or len(set(observed_paths)) != len(observed_paths)
+        or len(set(request_ids)) != len(request_ids)
+        or request_kinds.count("LANDING_PAGE") != 1
+        or request_kinds.count("FILTERS") != 1
+        or request_kinds.count("SCHEDULE") < 1
     ):
         raise IntegrityError("CME capture file closure is invalid")
+    if is_recovery:
+        predecessor_path = (
+            boundary.active_root
+            / "manifests"
+            / "data_releases"
+            / "reference"
+            / f"{predecessor}.json"
+        )
+        predecessor_receipt = VerifiedReleaseReceipt.from_manifest(
+            predecessor_path, boundary
+        )
+        predecessor_manifest = predecessor_receipt.verify(boundary)
+        predecessor_capture = load_cme_capture(
+            predecessor_receipt, boundary=boundary
+        )
+        predecessor_responses = predecessor_capture.get("responses")
+        if (
+            predecessor_receipt.schema_version != CAPTURE_SCHEMA_VERSION
+            or mapping_capture not in predecessor_manifest.source_release_ids
+            or not isinstance(predecessor_responses, list)
+            or reused_count != len(predecessor_responses)
+            or responses[:reused_count] != predecessor_responses
+            or start
+            != _date(
+                predecessor_capture["coverage_start_trade_date"],
+                name="predecessor capture start",
+            )
+            or end
+            <= _date(
+                predecessor_capture["coverage_end_trade_date"],
+                name="predecessor capture end",
+            )
+        ):
+            raise IntegrityError(
+                "CME schedule recovery source closure is invalid"
+            )
     payload["capture_id"] = capture_id
     return payload
 
@@ -873,11 +1067,25 @@ def load_cme_capture(
 def _response_page_number(url: object) -> int:
     if type(url) is not str:
         raise IntegrityError("CME schedule response URL is invalid")
-    query = urllib.parse.parse_qs(
-        urllib.parse.urlparse(url).query,
-        keep_blank_values=True,
-        strict_parsing=True,
-    )
+    raw_query = urllib.parse.urlparse(url).query
+    normalized_fields: list[str] = []
+    for field in raw_query.split("&"):
+        if field == "isProtected":
+            normalized_fields.append("isProtected=")
+        elif "=" in field:
+            normalized_fields.append(field)
+        else:
+            raise IntegrityError("CME schedule response query is malformed")
+    try:
+        query = urllib.parse.parse_qs(
+            "&".join(normalized_fields),
+            keep_blank_values=True,
+            strict_parsing=True,
+        )
+    except ValueError as exc:
+        raise IntegrityError("CME schedule response query is malformed") from exc
+    if query.get("isProtected") != [""]:
+        raise IntegrityError("CME schedule response protection flag is invalid")
     pages = query.get("pageNumber")
     if pages is None or len(pages) != 1:
         raise IntegrityError("CME schedule response pagination is absent")
@@ -904,6 +1112,16 @@ def generate_mapping_candidates(
     schedule_count = 0
     for response in responses:
         assert isinstance(response, dict)
+        if response["request_kind"] == "FILTERS":
+            path = capture_receipt.resolve_file(
+                str(response["logical_path"]), boundary
+            )
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, ValueError) as exc:
+                raise IntegrityError("CME filters response is not valid JSON") from exc
+            _merge_filters_response(raw, holiday_notices=notices)
+            continue
         if response["request_kind"] != "SCHEDULE":
             continue
         schedule_count += 1
@@ -950,9 +1168,20 @@ def publish_verified_exchange_calendar(
     predecessor_calendar_receipt: VerifiedReleaseReceipt | None = None,
 ) -> VerifiedReleaseReceipt:
     capture = load_cme_capture(capture_receipt, boundary=publisher.boundary)
+    manifest = capture_receipt.verify(publisher.boundary)
+    mapping_capture_release_id = str(
+        mapping_approval.get("capture_release_id", "")
+    )
+    if (
+        mapping_capture_release_id != capture_receipt.release_id
+        and mapping_capture_release_id not in manifest.source_release_ids
+    ):
+        raise IntegrityError(
+            "CME product mapping is not in the direct capture lineage"
+        )
     mappings = validate_mapping_approval(
         mapping_approval,
-        capture_release_id=capture_receipt.release_id,
+        capture_release_id=mapping_capture_release_id,
         expected_markets=expected_markets,
     )
     mapped_by_code = {
@@ -960,12 +1189,21 @@ def publish_verified_exchange_calendar(
     }
     products_by_code: dict[str, dict[str, object]] = {}
     holiday_notices: set[tuple[str, str]] = set()
-    manifest = capture_receipt.verify(publisher.boundary)
     responses = capture["responses"]
     assert isinstance(responses, list)
     schedule_count = 0
     for response in responses:
         assert isinstance(response, dict)
+        if response["request_kind"] == "FILTERS":
+            path = capture_receipt.resolve_file(
+                str(response["logical_path"]), publisher.boundary
+            )
+            try:
+                raw = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeDecodeError, ValueError) as exc:
+                raise IntegrityError("CME filters response is not valid JSON") from exc
+            _merge_filters_response(raw, holiday_notices=holiday_notices)
+            continue
         if response["request_kind"] != "SCHEDULE":
             continue
         schedule_count += 1
@@ -997,8 +1235,10 @@ def publish_verified_exchange_calendar(
         assert isinstance(sessions_by_date, dict)
         sessions: list[dict[str, object]] = []
         for trade_date in _dates_inclusive(start, end):
-            raw_intervals = sessions_by_date.get(trade_date.isoformat())
-            if not isinstance(raw_intervals, list):
+            raw_intervals = _product_intervals_for_date(
+                raw_product, trade_date=trade_date
+            )
+            if raw_intervals is None:
                 raise IntegrityError(
                     "CME schedule response does not continuously cover every market/date"
                 )
@@ -1054,6 +1294,7 @@ def publish_verified_exchange_calendar(
             {"name": name, "trade_date": trade_date}
             for trade_date, name in sorted(holiday_notices)
         ],
+        "mapping_approval": dict(mapping_approval),
         "markets": markets,
         "parser_version": PARSER_VERSION,
         "predecessor_calendar_release_id": predecessor_id,
@@ -1079,6 +1320,9 @@ def publish_verified_exchange_calendar(
             "calendar_id": payload["calendar_id"],
             "coverage_end_trade_date": end.isoformat(),
             "coverage_start_trade_date": start.isoformat(),
+            "mapping_approval_receipt_id": mapping_approval[
+                "approval_receipt_id"
+            ],
             "parser_version": PARSER_VERSION,
             "source_capture_release_id": capture_receipt.release_id,
         },
@@ -1091,6 +1335,285 @@ def publish_verified_exchange_calendar(
     return receipt
 
 
+_NATIVE_EVENT_STATES = {
+    "closed": "CLOSED",
+    "open": "OPEN",
+    "paused": "PAUSED",
+    "pcp": "PCP",
+    "preopen": "PREOPEN",
+}
+_NATIVE_EVENT_TIME = re.compile(r"^(?:[01]\d|2[0-3]):[0-5]\d$")
+
+
+def _merge_filters_response(
+    payload: object, *, holiday_notices: set[tuple[str, str]]
+) -> None:
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"error", "filters"}
+        or payload["error"] is not None
+        or not isinstance(payload["filters"], dict)
+    ):
+        raise IntegrityError("CME filters response schema drifted")
+    filters = payload["filters"]
+    if set(filters) != {
+        "assetClasses",
+        "checkboxOptions",
+        "dateTime",
+        "exchanges",
+        "holidays",
+    }:
+        raise IntegrityError("CME filters response schema drifted")
+    if (
+        not isinstance(filters["assetClasses"], list)
+        or not isinstance(filters["checkboxOptions"], list)
+        or type(filters["dateTime"]) is not str
+        or not isinstance(filters["exchanges"], list)
+        or not isinstance(filters["holidays"], list)
+    ):
+        raise IntegrityError("CME filters response field type is invalid")
+    try:
+        captured_at = datetime.fromisoformat(
+            filters["dateTime"].replace("Z", "+00:00")
+        )
+    except ValueError as exc:
+        raise IntegrityError("CME filters response timestamp is invalid") from exc
+    if captured_at.tzinfo != timezone.utc:
+        raise IntegrityError("CME filters response timestamp is not UTC")
+    for raw in filters["holidays"]:
+        if not isinstance(raw, dict) or set(raw) != {
+            "date",
+            "endPeriod",
+            "holiday",
+            "startPeriod",
+        }:
+            raise IntegrityError("CME filters holiday schema drifted")
+        holiday = _date(raw["date"], name="CME holiday date")
+        _date(raw["startPeriod"], name="CME holiday start")
+        _date(raw["endPeriod"], name="CME holiday end")
+        name = raw["holiday"]
+        if type(name) is not str or not name.strip():
+            raise IntegrityError("CME filters holiday is invalid")
+        holiday_notices.add((holiday.isoformat(), name.strip()))
+
+
+def _merge_native_service_response(
+    payload: Mapping[str, object],
+    *,
+    products_by_code: dict[str, dict[str, object]],
+    expected_page_number: int,
+    maximum_page_number: int,
+) -> None:
+    if set(payload) != {"products", "props"}:
+        raise IntegrityError("CME native schedule response schema drifted")
+    props = payload["props"]
+    products = payload["products"]
+    if (
+        not isinstance(props, dict)
+        or set(props)
+        != {
+            "hasEvents",
+            "pageNumber",
+            "pageSize",
+            "pageTotal",
+            "sortAsc",
+            "total",
+        }
+        or not isinstance(products, list)
+    ):
+        raise IntegrityError("CME native schedule response schema drifted")
+    if (
+        type(props["hasEvents"]) is not bool
+        or type(props["pageNumber"]) is not int
+        or type(props["pageSize"]) is not int
+        or type(props["pageTotal"]) is not int
+        or props["sortAsc"] != "true"
+        or type(props["total"]) is not int
+        or props["pageNumber"] != expected_page_number
+        or props["pageNumber"] <= 0
+        or props["pageSize"] <= 0
+        or props["pageTotal"] < props["pageNumber"]
+        or props["pageTotal"] > maximum_page_number
+        or props["total"] < len(products)
+        or len(products) > props["pageSize"]
+        or (props["pageTotal"] == 1 and props["total"] != len(products))
+        or props["hasEvents"] is not bool(products)
+    ):
+        raise IntegrityError("CME native schedule pagination overflowed")
+    for raw_product in products:
+        if not isinstance(raw_product, dict) or set(raw_product) != {
+            "foi",
+            "globex",
+            "id",
+            "name",
+            "prodGroup",
+            "tradingHours",
+            "url",
+        }:
+            raise IntegrityError("CME native product schema drifted")
+        if (
+            raw_product["foi"] != "Futures"
+            or type(raw_product["globex"]) is not str
+            or not raw_product["globex"]
+            or type(raw_product["id"]) is not int
+            or raw_product["id"] <= 0
+            or type(raw_product["name"]) is not str
+            or not raw_product["name"]
+            or type(raw_product["prodGroup"]) is not str
+            or not raw_product["prodGroup"]
+            or type(raw_product["url"]) is not str
+            or not raw_product["url"].startswith("/markets/")
+            or urllib.parse.urlparse(raw_product["url"]).path
+            != raw_product["url"]
+            or not isinstance(raw_product["tradingHours"], dict)
+        ):
+            raise IntegrityError("CME native product identity is invalid")
+        trading_hours = raw_product["tradingHours"]
+        if (
+            set(trading_hours) != {"eventCount", "schedules"}
+            or type(trading_hours["eventCount"]) is not int
+            or trading_hours["eventCount"] < 0
+            or not isinstance(trading_hours["schedules"], list)
+        ):
+            raise IntegrityError("CME native trading-hours schema drifted")
+        code = str(raw_product["id"])
+        existing = products_by_code.setdefault(
+            code,
+            {
+                "cme_product_name": raw_product["name"],
+                "native_events": {},
+                "native_source_dates": set(),
+                "product_group": raw_product["prodGroup"],
+                "sessions": {},
+            },
+        )
+        if (
+            existing["cme_product_name"] != raw_product["name"]
+            or existing["product_group"] != raw_product["prodGroup"]
+            or not isinstance(existing.get("native_events"), dict)
+            or not isinstance(existing.get("native_source_dates"), set)
+        ):
+            raise IntegrityError("CME native product identity changed within capture")
+        native_events = existing["native_events"]
+        source_dates = existing["native_source_dates"]
+        assert isinstance(native_events, dict)
+        assert isinstance(source_dates, set)
+        schedules_with_events = 0
+        for schedule in trading_hours["schedules"]:
+            if not isinstance(schedule, dict) or set(schedule) != {
+                "eventDate",
+                "events",
+                "groupCode",
+            }:
+                raise IntegrityError("CME native schedule schema drifted")
+            event_date = _date(
+                schedule["eventDate"], name="CME native event date"
+            )
+            if (
+                schedule["groupCode"]
+                not in {raw_product["globex"], raw_product["prodGroup"]}
+                or not isinstance(schedule["events"], list)
+            ):
+                raise IntegrityError("CME native schedule identity is invalid")
+            source_dates.add(event_date.isoformat())
+            if schedule["events"]:
+                schedules_with_events += 1
+            for event in schedule["events"]:
+                if not isinstance(event, dict) or set(event) != {
+                    "eventTime",
+                    "marketEventType",
+                    "tradingDate",
+                }:
+                    raise IntegrityError("CME native event schema drifted")
+                event_time = event["eventTime"]
+                event_type = event["marketEventType"]
+                trading_date = _date(
+                    event["tradingDate"], name="CME native trading date"
+                )
+                if (
+                    type(event_time) is not str
+                    or _NATIVE_EVENT_TIME.fullmatch(event_time) is None
+                    or type(event_type) is not str
+                    or event_type not in _NATIVE_EVENT_STATES
+                ):
+                    raise IntegrityError("CME native event value is invalid")
+                timestamp = f"{event_date.isoformat()}T{event_time}:00"
+                value = {
+                    "state": _NATIVE_EVENT_STATES[event_type],
+                    "trading_date": trading_date.isoformat(),
+                }
+                observed = native_events.setdefault(timestamp, value)
+                if observed != value:
+                    raise IntegrityError(
+                        "CME native event changed within one capture"
+                    )
+        if schedules_with_events != trading_hours["eventCount"]:
+            raise IntegrityError("CME native event census is inconsistent")
+
+
+def _product_intervals_for_date(
+    raw_product: Mapping[str, object], *, trade_date: date
+) -> list[dict[str, str]] | None:
+    sessions = raw_product.get("sessions")
+    if not isinstance(sessions, dict):
+        raise IntegrityError("CME product sessions are invalid")
+    raw_intervals = sessions.get(trade_date.isoformat())
+    if isinstance(raw_intervals, list):
+        return raw_intervals
+    native_events = raw_product.get("native_events")
+    source_dates = raw_product.get("native_source_dates")
+    if not isinstance(native_events, dict) or not isinstance(source_dates, set):
+        return None
+    previous = trade_date - timedelta(days=1)
+    if not {
+        previous.isoformat(),
+        trade_date.isoformat(),
+    }.issubset(source_dates):
+        return None
+    start = datetime.fromisoformat(f"{previous.isoformat()}T17:00:00")
+    end = datetime.fromisoformat(f"{trade_date.isoformat()}T17:00:00")
+    observed: list[tuple[datetime, str]] = []
+    for timestamp, event in native_events.items():
+        if type(timestamp) is not str or not isinstance(event, dict):
+            raise IntegrityError("CME native event store is invalid")
+        instant = datetime.fromisoformat(timestamp)
+        state = event.get("state")
+        if type(state) is not str or state not in ALLOWED_STATES:
+            raise IntegrityError("CME native event store is invalid")
+        observed.append((instant, state))
+    observed.sort()
+    state = "CLOSED"
+    for instant, candidate in observed:
+        if instant <= start:
+            state = candidate
+        else:
+            break
+    cursor = start
+    intervals: list[dict[str, str]] = []
+    for instant, candidate in observed:
+        if instant <= start or instant >= end:
+            continue
+        if candidate == state:
+            continue
+        intervals.append(
+            {
+                "ends_at_local": instant.isoformat(),
+                "starts_at_local": cursor.isoformat(),
+                "state": state,
+            }
+        )
+        cursor = instant
+        state = candidate
+    intervals.append(
+        {
+            "ends_at_local": end.isoformat(),
+            "starts_at_local": cursor.isoformat(),
+            "state": state,
+        }
+    )
+    return intervals
+
+
 def _merge_service_response(
     payload: object,
     *,
@@ -1099,6 +1622,14 @@ def _merge_service_response(
     expected_page_number: int,
     maximum_page_number: int,
 ) -> None:
+    if isinstance(payload, dict) and set(payload) == {"products", "props"}:
+        _merge_native_service_response(
+            payload,
+            products_by_code=products_by_code,
+            expected_page_number=expected_page_number,
+            maximum_page_number=maximum_page_number,
+        )
+        return
     if not isinstance(payload, dict) or set(payload) != {
         "holiday_notices",
         "pagination",
@@ -1307,6 +1838,8 @@ def validate_activation_approval(
         or type(payload.get("user_authorization_id")) is not str
         or _HASH.fullmatch(str(payload["user_authorization_id"])) is None
         or payload.get("approval_receipt_id") != sha256_json(core)
+        or _utc(payload["approved_at"], name="activation approval time")
+        < candidate_calendar.source_retrieved_at
     ):
         raise IntegrityError("calendar activation lacks exact hash-bound approval")
     return str(payload["approval_receipt_id"])
@@ -1334,8 +1867,10 @@ def load_calendar_index(
         raise IntegrityError("exchange-calendar index document is invalid")
     payload = dict(raw_payload)
     expected = {
+        "activation_approval",
         "activated_at_utc",
         "activation_approval_receipt_id",
+        "diff_report",
         "index_id",
         "predecessor_index_release_id",
         "schema_version",
@@ -1401,6 +1936,74 @@ def load_calendar_index(
         expected_sources.add(predecessor)
     if set(manifest.source_release_ids) != expected_sources:
         raise IntegrityError("exchange-calendar index dependency closure is invalid")
+    activation_approval = payload.get("activation_approval")
+    diff_report = payload.get("diff_report")
+    if not isinstance(activation_approval, Mapping) or not isinstance(
+        diff_report, dict
+    ):
+        raise IntegrityError("exchange-calendar activation evidence is invalid")
+    diff_expected_keys = {
+        "changed_market_dates",
+        "diff_report_id",
+        "predecessor_calendar_release_id",
+        "successor_calendar_release_id",
+    }
+    diff_core = {
+        key: diff_report[key]
+        for key in diff_report
+        if key != "diff_report_id"
+    }
+    changed = diff_report.get("changed_market_dates")
+    if (
+        set(diff_report) != diff_expected_keys
+        or diff_report.get("diff_report_id") != sha256_json(diff_core)
+        or not isinstance(changed, list)
+        or any(
+            not isinstance(item, dict)
+            or set(item) != {"change", "market", "trade_date"}
+            or item.get("change") not in {"ADDED", "CHANGED", "REMOVED"}
+            or type(item.get("market")) is not str
+            or _MARKET.fullmatch(str(item["market"])) is None
+            or type(item.get("trade_date")) is not str
+            or _date(item["trade_date"], name="calendar diff trade date") is None
+            for item in changed
+        )
+        or changed
+        != sorted(
+            changed,
+            key=lambda item: (str(item["market"]), str(item["trade_date"])),
+        )
+        or len(
+            {
+                (str(item["market"]), str(item["trade_date"]))
+                for item in changed
+            }
+        )
+        != len(changed)
+    ):
+        raise IntegrityError("exchange-calendar diff evidence is invalid")
+    candidate_id = activation_approval.get("candidate_calendar_release_id")
+    candidate = calendars.get(str(candidate_id))
+    if (
+        candidate is None
+        or diff_report.get("successor_calendar_release_id")
+        != candidate.receipt.release_id
+        or diff_report.get("predecessor_calendar_release_id")
+        != candidate.predecessor_calendar_release_id
+        or payload["activation_approval_receipt_id"]
+        != activation_approval.get("approval_receipt_id")
+        or payload["activated_at_utc"] != activation_approval.get("approved_at")
+        or validate_activation_approval(
+            activation_approval,
+            candidate_calendar=candidate,
+            predecessor_index_release_id=predecessor,
+            diff_report_id=str(diff_report["diff_report_id"]),
+        )
+        != payload["activation_approval_receipt_id"]
+    ):
+        raise IntegrityError(
+            "exchange-calendar activation approval is not exact"
+        )
     return LoadedCalendarIndex(
         receipt=receipt,
         segments=tuple(segments),
@@ -1417,6 +2020,8 @@ def publish_calendar_index(
     activation_approval: Mapping[str, object],
     publisher: AtomicPublisher,
     expected_markets: Sequence[str],
+    freshness_at: datetime,
+    minimum_forward_days: int = 90,
     predecessor_index_receipt: VerifiedReleaseReceipt | None = None,
 ) -> VerifiedReleaseReceipt:
     candidate = VerifiedExchangeCalendar.from_release(
@@ -1451,6 +2056,100 @@ def publish_calendar_index(
         ),
         diff_report_id=str(diff["diff_report_id"]),
     )
+    segments = _calendar_index_successor_segments(
+        candidate_calendar_receipt=candidate_calendar_receipt,
+        candidate=candidate,
+        predecessor=predecessor,
+    )
+    preview_calendars = (
+        dict(predecessor.calendar_by_release_id)
+        if predecessor is not None
+        else {}
+    )
+    preview_calendars[candidate.receipt.release_id] = candidate
+    preview_segments = tuple(
+        {
+            **segment,
+            "calendar_release_id": str(
+                segment["calendar_receipt"]["release_id"]  # type: ignore[index]
+            ),
+        }
+        for segment in segments
+    )
+    preview = LoadedCalendarIndex(
+        receipt=candidate_calendar_receipt,
+        segments=preview_segments,
+        calendar_by_release_id=MappingProxyType(preview_calendars),
+        index_id=sha256_json(
+            {
+                "candidate_calendar_release_id": candidate.receipt.release_id,
+                "predecessor_index_release_id": (
+                    predecessor.receipt.release_id
+                    if predecessor is not None
+                    else None
+                ),
+                "segments": segments,
+            }
+        ),
+        predecessor_index_release_id=(
+            predecessor.receipt.release_id if predecessor is not None else None
+        ),
+        boundary=publisher.boundary,
+    )
+    verify_calendar_freshness(
+        preview,
+        expected_markets=expected_markets,
+        now=freshness_at,
+        minimum_forward_days=minimum_forward_days,
+    )
+    activated_at = str(activation_approval["approved_at"])
+    core: dict[str, object] = {
+        "activation_approval": dict(activation_approval),
+        "activated_at_utc": activated_at,
+        "activation_approval_receipt_id": approval_id,
+        "diff_report": diff,
+        "predecessor_index_release_id": (
+            predecessor.receipt.release_id if predecessor is not None else None
+        ),
+        "schema_version": INDEX_SCHEMA_VERSION,
+        "segments": segments,
+    }
+    payload = {**core, "index_id": sha256_json(core)}
+    source_ids = {
+        str(segment["calendar_receipt"]["release_id"])  # type: ignore[index]
+        for segment in segments
+    }
+    if predecessor is not None:
+        source_ids.add(predecessor.receipt.release_id)
+    stage = publisher.create_stage("calendar_index")
+    release = ReleaseManifest.build(
+        stage,
+        phase="controls",
+        release_kind=INDEX_RELEASE_KIND,
+        schema_version=INDEX_SCHEMA_VERSION,
+        logical_paths={},
+        source_release_ids=tuple(sorted(source_ids)),
+        embedded_documents={"exchange_calendar_index.json": payload},
+        metadata={
+            "activated_at_utc": activated_at,
+            "activation_approval_receipt_id": approval_id,
+            "index_id": payload["index_id"],
+        },
+    )
+    path = publisher.publish(stage, release)
+    receipt = VerifiedReleaseReceipt.from_manifest(path, publisher.boundary)
+    load_calendar_index(
+        receipt, boundary=publisher.boundary, expected_markets=expected_markets
+    )
+    return receipt
+
+
+def _calendar_index_successor_segments(
+    *,
+    candidate_calendar_receipt: VerifiedReleaseReceipt,
+    candidate: VerifiedExchangeCalendar,
+    predecessor: LoadedCalendarIndex | None,
+) -> list[dict[str, object]]:
     segments: list[dict[str, object]] = []
     if predecessor is not None:
         for segment in predecessor.segments:
@@ -1493,44 +2192,7 @@ def publish_calendar_index(
         }
     )
     segments.sort(key=lambda item: str(item["effective_from_trade_date"]))
-    activated_at = str(activation_approval["approved_at"])
-    core: dict[str, object] = {
-        "activated_at_utc": activated_at,
-        "activation_approval_receipt_id": approval_id,
-        "predecessor_index_release_id": (
-            predecessor.receipt.release_id if predecessor is not None else None
-        ),
-        "schema_version": INDEX_SCHEMA_VERSION,
-        "segments": segments,
-    }
-    payload = {**core, "index_id": sha256_json(core)}
-    source_ids = {
-        str(segment["calendar_receipt"]["release_id"])  # type: ignore[index]
-        for segment in segments
-    }
-    if predecessor is not None:
-        source_ids.add(predecessor.receipt.release_id)
-    stage = publisher.create_stage("calendar_index")
-    release = ReleaseManifest.build(
-        stage,
-        phase="controls",
-        release_kind=INDEX_RELEASE_KIND,
-        schema_version=INDEX_SCHEMA_VERSION,
-        logical_paths={},
-        source_release_ids=tuple(sorted(source_ids)),
-        embedded_documents={"exchange_calendar_index.json": payload},
-        metadata={
-            "activated_at_utc": activated_at,
-            "activation_approval_receipt_id": approval_id,
-            "index_id": payload["index_id"],
-        },
-    )
-    path = publisher.publish(stage, release)
-    receipt = VerifiedReleaseReceipt.from_manifest(path, publisher.boundary)
-    load_calendar_index(
-        receipt, boundary=publisher.boundary, expected_markets=expected_markets
-    )
-    return receipt
+    return segments
 
 
 def active_pointer_payload(
@@ -1606,12 +2268,27 @@ def verify_calendar_freshness(
     holiday_max_age_hours: int = 72,
 ) -> dict[str, object]:
     instant = require_utc(now, "calendar freshness time")
-    today = instant.astimezone(ZoneInfo(CME_TIMEZONE)).date()
+    cme_zone = ZoneInfo(CME_TIMEZONE)
+    today = instant.astimezone(cme_zone).date()
     end = today + timedelta(days=minimum_forward_days - 1)
     calendars: dict[str, VerifiedExchangeCalendar] = {}
-    for trade_date in _dates_inclusive(today, end):
+    farther_holidays = sorted(
+        {
+            date.fromisoformat(notice["trade_date"])
+            for calendar in index.calendar_by_release_id.values()
+            for notice in calendar.holiday_notices
+            if date.fromisoformat(notice["trade_date"]) > end
+        }
+    )
+    required_dates = [*_dates_inclusive(today, end), *farther_holidays]
+    for trade_date in required_dates:
         for market in expected_markets:
-            calendar = index.calendar_for(market, trade_date)
+            try:
+                calendar = index.calendar_for(market, trade_date)
+            except ContractError as exc:
+                raise IntegrityError(
+                    "active exchange calendar coverage is incomplete"
+                ) from exc
             calendars[calendar.receipt.release_id] = calendar
     for calendar in calendars.values():
         age = instant - calendar.source_retrieved_at
@@ -1622,14 +2299,16 @@ def verify_calendar_freshness(
             days_until = (holiday - today).days
             if 0 <= days_until <= holiday_window_days and (
                 age > timedelta(hours=holiday_max_age_hours)
-                or calendar.source_retrieved_at.date()
+                or calendar.source_retrieved_at.astimezone(cme_zone).date()
                 < holiday - timedelta(days=holiday_window_days)
             ):
                 raise IntegrityError("upcoming CME holiday has not been revalidated")
     core: dict[str, object] = {
         "calendar_index_release_id": index.receipt.release_id,
         "checked_at_utc": _utc_text(instant),
-        "coverage_end_trade_date": end.isoformat(),
+        "coverage_end_trade_date": (
+            max([end, *farther_holidays]).isoformat()
+        ),
         "coverage_start_trade_date": today.isoformat(),
         "markets": list(expected_markets),
         "status": "CURRENT",
@@ -2061,7 +2740,31 @@ def load_calendar_state_eligibility(
         or set(counts) != ALLOWED_STATES
         or any(type(value) is not int or value < 0 for value in counts.values())
         or any(type(value) is not int or value < 0 for value in count_fields)
-        or sum(counts.values()) + payload["unresolved_rows"] != payload["row_count"]
+    ):
+        raise IntegrityError("calendar-state eligibility identity or census is invalid")
+    failed_rows = (
+        payload["unresolved_rows"]
+        + payload["mismatched_session_date_rows"]
+        + sum(counts[state] for state in NON_TRADING_STATES)
+    )
+    expected_disposition = (
+        "ELIGIBLE"
+        if failed_rows == 0 and payload["row_count"] > 0
+        else "FAIL_CALENDAR_STATE"
+    )
+    if (
+        sum(counts.values()) + payload["unresolved_rows"] != payload["row_count"]
+        or payload["mismatched_session_date_rows"] > payload["row_count"]
+        or payload.get("disposition") != expected_disposition
+        or manifest.metadata
+        != {
+            "calendar_eligibility_id": eligibility_id,
+            "disposition": payload["disposition"],
+            "interval_key": payload["interval_key"],
+            "market": payload["market"],
+            "row_count": payload["row_count"],
+            "year": payload["year"],
+        }
     ):
         raise IntegrityError("calendar-state eligibility identity or census is invalid")
     payload["calendar_eligibility_id"] = eligibility_id

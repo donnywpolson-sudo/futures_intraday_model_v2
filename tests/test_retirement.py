@@ -4,7 +4,6 @@ import json
 from pathlib import Path
 
 import futures_rebuild.retirement as retirement
-import pytest
 from futures_rebuild.retirement import (
     FINAL_AUDIT_REPORTS,
     META_REPORT,
@@ -20,12 +19,44 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def test_public_snapshot_fails_closed_without_operational_inventory() -> None:
-    with pytest.raises(
-        retirement.RetirementAuditError,
-        match="legacy retirement inventory is not readable JSON",
-    ):
-        scan_retirement_readiness(ROOT)
+def test_current_classifier_matches_evidence_without_opening_legacy_root() -> None:
+    report = scan_retirement_readiness(ROOT)
+    ready = all(item["status"] == "PASS" for item in report["checks"])
+    assert report["classification"] == (
+        "LEGACY_RETIREMENT_READY" if ready else "LEGACY_RETIREMENT_BLOCKED"
+    )
+    assert report["standalone_runtime_ready"] is ready
+    assert report["legacy_root_opened"] is False
+    by_id = {item["check_id"]: item for item in report["checks"]}
+    assert by_id["SOURCE_CONTRACT_STANDALONE_41_MARKET"]["status"] == "PASS"
+    assert by_id["APPROVED_41_MARKET_UNIVERSE"]["status"] == "PASS"
+    assert by_id["NO_PUBLIC_MIGRATION_OR_LEGACY_ENTRYPOINTS"]["status"] == "PASS"
+    assert by_id["NO_LEGACY_RUNTIME_IMPORTS"]["status"] == "PASS"
+    assert report["authority"]["legacy_delete_authorized"] is False
+
+
+def test_current_classifier_fails_closed_when_git_is_not_clean(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        retirement,
+        "_git_clean",
+        lambda _root: (False, "WORKTREE_NOT_CLEAN"),
+    )
+
+    report = scan_retirement_readiness(ROOT)
+
+    assert report["classification"] == "LEGACY_RETIREMENT_BLOCKED"
+    assert report["standalone_runtime_ready"] is False
+    assert report["legacy_root_opened"] is False
+    by_id = {item["check_id"]: item for item in report["checks"]}
+    assert by_id["CLEAN_COMMITTED_HEAD"] == {
+        "check_id": "CLEAN_COMMITTED_HEAD",
+        "status": "FAIL",
+        "evidence": [".git"],
+        "reason": "WORKTREE_NOT_CLEAN",
+    }
+    assert report["authority"]["legacy_delete_authorized"] is False
 
 
 def test_synthetic_complete_repo_can_be_classified_without_external_root(
@@ -127,7 +158,7 @@ def test_operational_absolute_legacy_path_is_detected(
         ("README.md",),
     )
     (tmp_path / "README.md").write_text(
-        r"C:\Users\example\Desktop\futures_intraday_model\api.env",
+        r"C:\Users\donny\Desktop\futures_intraday_model\api.env",
         encoding="utf-8",
     )
     passed, offenders = retirement._operational_path_scan(tmp_path)

@@ -1,0 +1,26 @@
+{
+  "schema_version": "tier1_bracket_v11_retirement_preparation/1.0.0",
+  "state": "PREPARED_REQUIRES_PUBLICATION_APPROVAL",
+  "trial_id": "4583409eb5443c89306f118b912bea1fabd6f20f437e30294395ac7786c3719b",
+  "disposition": "INVALID_POST_EXECUTION_FLAT_BASELINE_FEATURE_COVERAGE_DEPENDENCY",
+  "historical_source_rows_opened": true,
+  "model_fit": true,
+  "predictions_generated": true,
+  "historical_evaluation_executed": true,
+  "historical_results_published": false,
+  "authorization_receipt_id": "17b5b9b6f8c20adcb1b0773257b10e67c86fda52929fbd327de199a75fa6661b",
+  "authorization_claim_sha256": "3ba06bc92d929b6872940a1528e3eaed31f59b0382e1a6f2926e1e544d4ecc02",
+  "observed_trial_classification": "INCONCLUSIVE_DATA_OR_COVERAGE",
+  "performance_interpretation": "INVALID_NOT_A_STRATEGY_VERDICT",
+  "fatal_finding": "THE_TRUE_ZERO_FLAT_BASELINE_COVERAGE_GATE_REQUIRED_CAUSAL_FEATURES_EVEN_THOUGH_FLAT_NO_TRADE_HAS_NO_FEATURE_MODEL_SIGNAL_OR_OUTCOME_DEPENDENCY",
+  "valid_diagnostic_observations": {
+    "outer_candidate_feature_coverage_gate": "PASS",
+    "performance_inference_executed": false,
+    "unpublished_in_memory_result_only": true
+  },
+  "holdout_or_forward_access": false,
+  "provider_access": false,
+  "evidence_publication": false,
+  "trading": false,
+  "publication_requires_separate_approval": true
+}

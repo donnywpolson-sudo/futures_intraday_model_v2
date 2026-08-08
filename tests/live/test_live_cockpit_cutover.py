@@ -6,7 +6,10 @@ from pathlib import Path
 import pytest
 
 from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
-from futures_rebuild.live_cockpit.approval import LiveSmokeApprovalError
+from futures_rebuild.live_cockpit.approval import (
+    LiveSmokeApprovalError,
+    build_live_smoke_plan,
+)
 from futures_rebuild.live_cockpit.cutover_guard import verify_cutover
 from futures_rebuild.live_cockpit.smoke import RESULT_SCHEMA
 
@@ -19,14 +22,7 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     executable.write_bytes(b"synthetic packaged executable")
     executable_hash = sha256_file(executable)
 
-    plan = json.loads(
-        (ROOT / "configs" / "live_cockpit_smoke_plan.json").read_text(
-            encoding="utf-8"
-        )
-    )
-    plan["scope"]["prepared_executable_sha256"] = executable_hash
-    plan_core = {key: value for key, value in plan.items() if key != "plan_id"}
-    plan["plan_id"] = sha256_json(plan_core)
+    plan = build_live_smoke_plan(executable_hash)
     plan_path = tmp_path / "plan.json"
     plan_path.write_bytes(canonical_bytes(plan) + b"\n")
 

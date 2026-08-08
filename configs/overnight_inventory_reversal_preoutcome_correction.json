@@ -1,0 +1,67 @@
+{
+  "schema_version": "overnight_inventory_reversal_preoutcome_correction/1.0.0",
+  "state": "PREPARED_BEFORE_ANY_SOURCE_OR_OUTCOME_ACCESS",
+  "base_preregistration_id": "32602c0d67e4499e7d13f7c8a06a138f55516b4e84aa4020a5a4c699a9ec33c7",
+  "base_preregistration_sha256": "80fea760169a50d5b18c371eced23e4952d4a65751329c055729e1c3f3b65f24",
+  "superseded_local_trial_id": "620b6e4f3a4a7460b08e7b8dec834a7b1e5b5c5800dc0a68f3e4209b89709e28",
+  "reason": "PRE_OUTCOME_CAUSALITY_AND_INFERENCE_COMPLETENESS_CORRECTION",
+  "outcome_informed": false,
+  "source_rows_opened": false,
+  "outcome_rows_opened": false,
+  "counted_trial_number_floor": 106,
+  "mechanism_or_parameter_search_changed": false,
+  "causal_feature_correction": {
+    "decision_at_chicago": "08:30:05",
+    "reason": "THE_REPORTED_08_29_OHLCV_BAR_ENDS_AT_08_30_00_AND_IS AVAILABLE_AT_08_30_05_UNDER_THE_PINNED_SOURCE_CONTRACT",
+    "overnight_first_price": "OPEN_OF_FIRST_REPORTED_EXECUTABLE_BAR_AT_OR_AFTER_17_00_PREVIOUS_CALENDAR_DATE_WITHIN_THE_EXCHANGE_SESSION",
+    "overnight_last_price": "CLOSE_OF_EXACT_REPORTED_EXECUTABLE_08_29_BAR",
+    "entry_remains": "OPEN_OF_EXACT_08_31_REPORTED_EXECUTABLE_BAR",
+    "identity_rule": "ONE_ACTUAL_IDENTITY_ACROSS_OVERNIGHT_FEATURE_AND_08_31_THROUGH_09_31_EXECUTION_PATH"
+  },
+  "execution_clarifications": {
+    "required_path": "EVERY_EXACT_MINUTE_08_31_THROUGH_09_31_INCLUSIVE",
+    "stop_ticks": "MAX_1_FLOOR_OF_250_MINUS_10_USD_FEES_MINUS_STRESS_SLIPPAGE_USD_DIVIDED_BY_TICK_VALUE_USD",
+    "stop_fill": "ENTRY_BAR_ADVERSE_EXTREME_AT_STOP_THEN_LATER_OPEN_GAP_AT_OPEN_OR_INTRABAR_ADVERSE_EXTREME_AT_STOP",
+    "scheduled_exit": "OPEN_OF_EXACT_09_31_BAR_IF_STOP_NOT_PREVIOUSLY_FILLED",
+    "below_threshold": "COMPLETE_ZERO_PNL_NO_TRADE_SESSION"
+  },
+  "baseline_clarifications": {
+    "candidate_eligible_event_set": "EXACTLY_THE_CANDIDATE_ABS_Z_AT_LEAST_1_5_EVENTS",
+    "overnight_displacement_continuation": "SAME_SIGN_AS_STANDARDIZED_OVERNIGHT_DISPLACEMENT",
+    "fold_local_unconditional_direction_by_market": "SIGN_OF_TRAINING_ONLY_MEAN_SCHEDULED_LONG_GROSS_PNL_TIES_LONG",
+    "previous_session_sign": "SIGN_OF_PRIOR_EXCHANGE_SESSION_LAST_EXECUTABLE_CLOSE_MINUS_FIRST_EXECUTABLE_OPEN_ZERO_IS_MISSING",
+    "previous_session_sign_momentum": "SAME_AS_PREVIOUS_SESSION_SIGN",
+    "previous_session_sign_reversal": "OPPOSITE_PREVIOUS_SESSION_SIGN",
+    "risk_matched_always_long_at_candidate_eligible_events": "LONG_ON_EVERY_CANDIDATE_ELIGIBLE_EVENT",
+    "cost_path_and_stop": "IDENTICAL_TO_CANDIDATE_FOR_EACH_NONFLAT_BASELINE"
+  },
+  "inference_clarifications": {
+    "primary_unit": "ONE_COMPLETE_EXCHANGE_SESSION_WITH_ALL_FOUR_MARKET_SLEEVES_COMPLETE",
+    "incomplete_session_rule": "REPORT_DIAGNOSTICS_BUT_PRIMARY_DECISION_IS_INCONCLUSIVE",
+    "hac_lag_sessions": 5,
+    "stationary_bootstrap_mean_block_sessions": "5",
+    "stationary_bootstrap_resamples": 10000,
+    "stationary_bootstrap_seed": 20260806,
+    "romano_wolf_tail": "greater",
+    "romano_wolf_hypotheses": "CANDIDATE_MINUS_EACH_REQUIRED_BASELINE_FOR_PORTFOLIO_AND_EACH_MARKET_SLEEVE",
+    "familywise_alpha": "0.05",
+    "global_history_alpha_ceiling": "0.05_DIVIDED_BY_106",
+    "economic_null_usd_per_complete_session": "10",
+    "power_method": "TRAINING_ONLY_NORMAL_APPROXIMATION_AT_GLOBAL_HISTORY_ALPHA_CEILING_FOR_10_USD_MEES",
+    "minimum_power": "0.80",
+    "deflated_sharpe_probability_minimum": "0.95",
+    "deflated_sharpe_missing_census": "MANDATORY_INCONCLUSIVE_IF_COMPLETE_BOUND_106_TRIAL_SHARPE_CENSUS_IS_UNAVAILABLE"
+  },
+  "authority": {
+    "external_pre_outcome_anchor_present": false,
+    "source_row_access": false,
+    "outcome_row_access": false,
+    "historical_evaluation": false,
+    "holdout_2025_access": false,
+    "provider_or_network_access": false,
+    "publication": false,
+    "trading": false,
+    "stage_commit_push": false
+  },
+  "correction_id": "83fc2296d17c2c3eefba8575d26b9f1a3539eccae57b2adbbba16d1b38ff9408"
+}

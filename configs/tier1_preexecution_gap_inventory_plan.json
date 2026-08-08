@@ -1,0 +1,44 @@
+{
+  "schema_version": "tier1_preexecution_gap_inventory_plan/1.0.0",
+  "state": "PREPARED_REQUIRES_EXACT_APPROVAL",
+  "operation": "CLASSIFY_FROZEN_TIER1_DEPENDENCY_GAPS_AND_PUBLISH",
+  "purpose": "Classify exact selected-source dependency gaps versus calendar-known session-horizon abstentions only, without research outcomes.",
+  "source_record_path": "state/source_quality/tier1_preexecution_source_certification/7a7db45fb4e1a2e3825969e99781fd6f0d02b4dad7a7376b3f0163a0bb41cda5.json",
+  "source_record_id": "7a7db45fb4e1a2e3825969e99781fd6f0d02b4dad7a7376b3f0163a0bb41cda5",
+  "source_record_sha256": "6707a0be36384ea992bb8c83a0abb3fcb5cea41ae7299d7781f4b6c7ef41b531",
+  "selected_sources_id": "f61f34df0b9d8cf7b344016ce3df8bb76abeb890558740460f60d51e5ca37bde",
+  "selected_release_count": 20,
+  "calendar_release_id": "038940d82031f31e2c66ed37186e98a6ee6cff3e7248f634f2c7a8e94ea6ecf3",
+  "historical_scope": {
+    "markets": ["6E", "CL", "ES", "ZN"],
+    "years": [2018, 2019, 2020, 2021, 2022]
+  },
+  "classification_scope": [
+    "MISSING_SOURCE_DEPENDENCIES",
+    "AMBIGUOUS_SOURCE_DEPENDENCIES",
+    "PRECAUSAL_SESSION_HORIZON_ABSTENTION",
+    "COMPLETE_DEPENDENCIES"
+  ],
+  "publication": {
+    "mode": "CREATE_ONLY_ONE_HASH_BOUND_GAP_INVENTORY",
+    "record_root": "state/source_quality/tier1_preexecution_gap_inventory",
+    "event_root": "state/source_quality_events/tier1_preexecution_gap_inventory"
+  },
+  "maximum_host_runtime_seconds": 900,
+  "estimated_external_cost_usd": "0",
+  "implementation_sha256": "0d492f656626a56c25cb52862675b45abd9936abe4220378aad8cf3b9a45be9f",
+  "forbidden_actions": {
+    "access_2025": true,
+    "active_data_mutation": true,
+    "commit": true,
+    "evaluate_performance": true,
+    "fit_models": true,
+    "generate_predictions": true,
+    "provider_or_network_access": true,
+    "push": true,
+    "register_or_retire_trial": true,
+    "stage": true,
+    "trade": true
+  },
+  "plan_id": "fef8d03bae4bb3c0ad15880144eeb4b52705783b95c27ff4c5bea76f24af4075"
+}

@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "workflow_delta/1.0.0",
+  "type": "object",
+  "required": ["schema_version", "base_snapshot_id", "branch", "head", "upserts", "removals", "delta_id"],
+  "properties": {
+    "schema_version": {"const": "workflow_delta/1.0.0"},
+    "base_snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "branch": {"type": "string"},
+    "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "upserts": {"type": "array", "items": {"type": "object", "required": ["status", "path"]}},
+    "removals": {"type": "array", "items": {"type": "string"}},
+    "delta_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,40 @@
+{
+  "schema_version": "tier1_bracket_successor_v8_contract/1.0.0",
+  "state": "PREPARED_NOT_REGISTERED",
+  "classification": "POST_V7_REQUIRED_BASELINE_COVERAGE_PREREGISTERED_HISTORICAL_SCREEN",
+  "research_only": true,
+  "live_readiness": false,
+  "supersedes_v7_trial_id": "b2b1b19967418ad9d3a66f70e4fa15732f8065d9abf9f32489b2e2d44072a64e",
+  "inherited_v7_contract_path": "configs/tier1_bracket_successor_v7.json",
+  "inherited_v7_contract_sha256": "2df242ba0dd3429e27344c81ddc4d0dc072b458a760f1cf44e5919aa78682f32",
+  "frozen_without_change": [
+    "source_integrity_adapter_and_calendar",
+    "markets_period_and_2025_holdout",
+    "candidate_features_models_hyperparameters_and_predictions",
+    "splits_purge_and_embargo",
+    "entry_hurdle_ranking_and_tie_breaking",
+    "costs_and_risk_controls",
+    "independent_strategy_scheduling",
+    "candidate_coverage_inference_and_promotion_gate",
+    "evidence_artifact_set",
+    "test_runner_binding"
+  ],
+  "required_baseline_coverage_successor": {
+    "baseline_id": "fold_local_unconditional_return_by_market_session",
+    "empty_training_cell": "EXPLICIT_BASELINE_ABSTENTION_NO_DIRECTION_NO_SCORE_NO_FALLBACK_NO_POOLING",
+    "coverage_denominator": "EVERY_FROZEN_PREDICTION_OPPORTUNITY",
+    "minimum_overall_eligible_rate": "0.95",
+    "minimum_each_market_year_eligible_rate": "0.90",
+    "coverage_failure_classification": "INCONCLUSIVE_DATA_OR_COVERAGE",
+    "candidate_prediction_or_schedule_effect": "NONE",
+    "baseline_simulation": "INDEPENDENT_CAUSAL_PATH_WITH_ABSTENTIONS_RETAINED_IN_TERMINAL_LEDGER"
+  },
+  "authority": {
+    "historical_execution_requires": "VERIFIED_SINGLE_USE_OPERATION_RECEIPT_BOUND_TO_V8_TRIAL_SOURCE_HASHES_OUTPUT_ROOT_AND_2025_FALSE",
+    "publication_requires_separate_approval": true,
+    "holdout_or_forward_access": false,
+    "provider_access": false,
+    "trading": false,
+    "git_actions": false
+  }
+}

@@ -124,8 +124,8 @@ if (Test-Path -LiteralPath $startupShortcut) {
 $existingShortcuts = @(
     $shortcutPaths | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf }
 )
-if ($Upgrade -and $existingShortcuts.Count -ne $shortcutPaths.Count) {
-    throw 'Upgrade preparation requires both existing cockpit shortcuts.'
+if ($Upgrade -and $existingShortcuts.Count -eq 0) {
+    throw 'Upgrade preparation requires at least one existing cockpit shortcut.'
 }
 if (-not $Upgrade -and $existingShortcuts.Count -gt 0) {
     throw 'Use -Upgrade when cockpit shortcuts already exist.'

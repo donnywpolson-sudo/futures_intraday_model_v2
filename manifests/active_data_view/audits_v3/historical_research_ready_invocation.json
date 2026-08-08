@@ -1,0 +1,311 @@
+{
+    "schema_version":  "systematic_futures_audit/3.0.0",
+    "classification":  "NON_AUTHORIZING_EVIDENCE_CLASSIFICATION",
+    "mode":  "EVIDENCE_ONLY",
+    "audit_id":  "ACTIVE-VIEW-PREPARATION-V5-HISTORICAL_RESEARCH_READY-20260728",
+    "target_state":  "HISTORICAL_RESEARCH_READY",
+    "allowed_paths":  [
+                          "MASTER_AUDIT.md",
+                          "configs",
+                          "reports",
+                          "manifests"
+                      ],
+    "specification":  {
+                          "path":  "MASTER_AUDIT.md",
+                          "sha256":  "70913d266e7fa819e56b70d012a897d8ffe8957235ea3f31c8b1e295de5aeaec"
+                      },
+    "stage_matrix":  {
+                         "path":  "configs/master_audit_v3/stage_requirement_matrix.json",
+                         "sha256":  "6a0ec9f32010f2362a92f0d428e19774fd7a83125e4565dc0f7bf1c02692b449"
+                     },
+    "universe_contract":  {
+                              "path":  "configs/research_universe_contract.json",
+                              "sha256":  "86e38f8732bd05b10d0faa2eec93e0bd0db6aeac3e56a13fbaed8e69555035d4"
+                          },
+    "evidence":  [
+                     {
+                         "evidence_id":  "8ce1194f41cde2739696937515cec8d6ec96865e6ddb426b6ba1570a4a295a11",
+                         "path":  "configs/eight_market_successor_migration_approval.json",
+                         "sha256":  "f726c17bc0192cb1e3edc65b02aa57b79c93a441b4fb0c3a2b219b4d377e9987",
+                         "bytes":  539,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-FOUNDATION-SCHEMA7",
+                         "path":  "manifests/data_releases/foundation/637f16b3c23c9f2215858f49754965738fe9c00095661d7a29d6877d566ae5e3.json",
+                         "sha256":  "969079b6576417658ede21e63b00b9d2211856157d01ef10c3ebb0d77cca2ad9",
+                         "bytes":  16006927,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-HISTORICAL-OBSERVABILITY-POLICY",
+                         "path":  "configs/historical_observability_policy.json",
+                         "sha256":  "1b1c3b2e681cad9476d09e48610c8cea82d8da3c11da409fbebe1cf74ce389c8",
+                         "bytes":  1693,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-CURRENT-FORWARD-CALENDAR",
+                         "path":  "configs/active_exchange_calendar.json",
+                         "sha256":  "a6fc445a116023820ab009d0a87f85682cbf35873230ce8bf75ecdf764b5b9ca",
+                         "bytes":  860,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-RESEARCH-READINESS-CONTRACT",
+                         "path":  "configs/research_readiness_contract.json",
+                         "sha256":  "a0ad7a1c6a894477c4d142ceee32d779603c60fc593ab71e9cb6a1175a3cdd59",
+                         "bytes":  18407,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-MECHANICAL-FEATURE-SPEC",
+                         "path":  "configs/mechanical_feature_spec.json",
+                         "sha256":  "599688dff5b4f223562e948e9209f7a83479e3a21543cae6d15b726a41ba3df4",
+                         "bytes":  365,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-SYNTHETIC-RESEARCH-ENGINE",
+                         "path":  "configs/synthetic_research_engine.json",
+                         "sha256":  "114675fbd373ce59ec8d61c8d165a99b75686a1cdb3aded4a0c4afb99b5513b9",
+                         "bytes":  1935,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-SUITE-CLEAN-HEAD",
+                         "path":  "reports/audits/active_view_preparation_v3/full_suite_evidence.json",
+                         "sha256":  "ef64b38b44e8e1f6279965eccfe4ccc6071807f5dbd4d92fb99d32a382477cb3",
+                         "bytes":  2785,
+                         "safe_to_read":  true,
+                         "limitations":  [
+                                             "NON_AUTHORIZING_EVIDENCE_ONLY"
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-META-AUDIT",
+                         "path":  "reports/audits/active_view_preparation_v3/meta_master_audit.json",
+                         "sha256":  "4733f1f6ecf08669c7f92bca48383ac6cd7930d2cffdce5d6c5c1bc4ca740800",
+                         "bytes":  2878,
+                         "safe_to_read":  true,
+                         "limitations":  [
+                                             "NON_AUTHORIZING_EVIDENCE_ONLY"
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-ACTIVE-VIEW-PILOT",
+                         "path":  "reports/active_data_view/pilot/32dcf8b9336c545c0a8bbe4f6b35e5dcfd1470a28ba98b002c7d6d2278e5eab1/run-2/pilot_evidence.json",
+                         "sha256":  "b1786d919ae401056dc427082a589a01a58a592892c4ef1bc4b326f245b4f36e",
+                         "bytes":  5521,
+                         "safe_to_read":  true,
+                         "limitations":  [
+                                             "NON_AUTHORIZING_EVIDENCE_ONLY"
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-ACTIVE-VIEW-FULL-PENDING-PLAN",
+                         "path":  "manifests/active_data_view/plans/causal_active_full_certification_plan_v5.json",
+                         "sha256":  "99bcabb20686ef41c913d47b359bd2596131f7c16d3f647d139077144f287643",
+                         "bytes":  5946798,
+                         "safe_to_read":  true,
+                         "limitations":  [
+                                             "NON_AUTHORIZING_EVIDENCE_ONLY"
+                                         ]
+                     }
+                 ],
+    "check_results":  [
+                          {
+                              "subcheck_id":  "G1.S1",
+                              "status":  "PASS",
+                              "reason":  "CLEAN_HEAD_SUITE_REPRODUCES_NON_ALPHA_HISTORICAL_RESEARCH_MECHANICS",
+                              "evidence_refs":  [
+                                                    "E-SUITE-CLEAN-HEAD",
+                                                    "E-RESEARCH-READINESS-CONTRACT"
+                                                ],
+                              "limitations":  [
+                                                  "NO_REAL_HISTORY_ATTEMPT"
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G1.S2",
+                              "status":  "PASS",
+                              "reason":  "APPROVED_UNIVERSE_SCHEMA7_FOUNDATION_AND_RESEARCH_CONTRACT_CLOSE_PREREQUISITE_SCOPE",
+                              "evidence_refs":  [
+                                                    "8ce1194f41cde2739696937515cec8d6ec96865e6ddb426b6ba1570a4a295a11",
+                                                    "E-FOUNDATION-SCHEMA7",
+                                                    "E-RESEARCH-READINESS-CONTRACT"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G1.S3",
+                              "status":  "PASS",
+                              "reason":  "META_AUDIT_SUITE_AND_READINESS_CONTRACT_VERIFY_APPLICABILITY",
+                              "evidence_refs":  [
+                                                    "E-META-AUDIT",
+                                                    "E-SUITE-CLEAN-HEAD",
+                                                    "E-RESEARCH-READINESS-CONTRACT"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G2.S1",
+                              "status":  "PASS",
+                              "reason":  "POINT_IN_TIME_SOURCE_AND_OBSERVABILITY_LINEAGE_ARE_SCHEMA7_BOUND",
+                              "evidence_refs":  [
+                                                    "E-FOUNDATION-SCHEMA7",
+                                                    "E-HISTORICAL-OBSERVABILITY-POLICY"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G2.S2",
+                              "status":  "PASS",
+                              "reason":  "APPROVED_UNIVERSE_COHORTS_QUARANTINES_AND_NON_SELECTION_ROLES_ARE_EXPLICIT",
+                              "evidence_refs":  [
+                                                    "8ce1194f41cde2739696937515cec8d6ec96865e6ddb426b6ba1570a4a295a11",
+                                                    "E-FOUNDATION-SCHEMA7"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G2.S3",
+                              "status":  "PASS",
+                              "reason":  "HISTORICAL_DBNS_DO_NOT_CLAIM_OFFICIAL_CME_HOURS_AND_CURRENT_CALENDAR_REMAINS_SEPARATE",
+                              "evidence_refs":  [
+                                                    "E-HISTORICAL-OBSERVABILITY-POLICY",
+                                                    "E-CURRENT-FORWARD-CALENDAR"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G3.S1",
+                              "status":  "PASS",
+                              "reason":  "FEATURE_SPEC_IS_CAUSAL_MECHANICAL_AND_OUTCOME_ISOLATION_TESTS_PASS",
+                              "evidence_refs":  [
+                                                    "E-MECHANICAL-FEATURE-SPEC",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G3.S2",
+                              "status":  "PASS",
+                              "reason":  "LABEL_PURGE_EMBARGO_AND_UNRESOLVED_STATE_MECHANICS_PASS_SYNTHETIC_TESTS",
+                              "evidence_refs":  [
+                                                    "E-SYNTHETIC-RESEARCH-ENGINE",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+                                                  "NO_REAL_LABEL_MATERIALIZATION"
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G3.S3",
+                              "status":  "PASS",
+                              "reason":  "NESTED_CHRONOLOGICAL_SPLIT_AND_TRAIN_ONLY_TRANSFORM_MECHANICS_PASS",
+                              "evidence_refs":  [
+                                                    "E-SYNTHETIC-RESEARCH-ENGINE",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+                                                  "NO_MODEL_FIT"
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G4.S1",
+                              "status":  "NOT_APPLICABLE",
+                              "reason":  "NO_REAL_HISTORY_ATTEMPT_OR_CANDIDATE_EXISTS",
+                              "evidence_refs":  [
+
+                                                ],
+                              "limitations":  [
+                                                  "FIRST_ATTEMPT_REQUIRES_PRE_OUTCOME_TRIAL_DECLARATION"
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G4.S2",
+                              "status":  "NOT_APPLICABLE",
+                              "reason":  "NO_REAL_TRIAL_FAMILY_OR_MULTIPLICITY_SET_EXISTS",
+                              "evidence_refs":  [
+
+                                                ],
+                              "limitations":  [
+                                                  "MULTIPLICITY_POLICY_REQUIRED_BEFORE_FIRST_ATTEMPT"
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G4.S3",
+                              "status":  "NOT_APPLICABLE",
+                              "reason":  "NO_SEQUENTIAL_REAL_DATA_TEST_OR_OPTIONAL_STOPPING_EXISTS",
+                              "evidence_refs":  [
+
+                                                ],
+                              "limitations":  [
+                                                  "FINITE_STOP_RULE_REQUIRED_BEFORE_FIRST_ATTEMPT"
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G4.S4",
+                              "status":  "NOT_APPLICABLE",
+                              "reason":  "NO_MODEL_OR_FEATURE_CANDIDATE_HAS_BEEN_FIT_OR_COMPARED",
+                              "evidence_refs":  [
+
+                                                ],
+                              "limitations":  [
+                                                  "BASELINE_AND_COMPLEXITY_GATE_REQUIRED_BEFORE_FIRST_ATTEMPT"
+                                              ]
+                          }
+                      ],
+    "runtime":  {
+                    "max_files":  100,
+                    "max_bytes_read":  100000000,
+                    "allowed_command_classes":  [
+                                                    "static-read",
+                                                    "hash-read"
+                                                ],
+                    "forbidden_actions":  [
+                                              "network",
+                                              "provider-call",
+                                              "project-code-execution",
+                                              "holdout-row-access",
+                                              "readiness-publication",
+                                              "candidate-sealing",
+                                              "order-placement",
+                                              "legacy-write"
+                                          ]
+                }
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": "tier1_bracket_v6_retirement_preparation/1.0.0",
+  "state": "PREPARED_REQUIRES_PUBLICATION_APPROVAL",
+  "trial_id": "c92c5a6ecfd96a00d0cf89aa02319878b479dad6c6e21b703e54bd55943a8608",
+  "disposition": "INVALID_PRE_DATA_TEST_LIFECYCLE_AND_RUNNER_BINDING_DEFECT",
+  "strategy_failure_inference_allowed": false,
+  "historical_source_rows_opened": false,
+  "model_fit_performed": false,
+  "predictions_generated": false,
+  "historical_evaluation_performed": false,
+  "holdout_or_forward_accessed": false,
+  "failure_stage": "POST_REGISTRATION_SYNTHETIC_VERIFICATION_BEFORE_SOURCE_ACCESS",
+  "failure_class": "BOUND_PREPUBLICATION_ONLY_TEST_FAILS_AFTER_PUBLICATION_AND_TEST_RUNNER_WAS_NOT_REGISTRATION_BOUND",
+  "preservation": "REGISTERED_V6_DECLARATION_EVENT_CONFIG_IMPLEMENTATION_AND_TEST_BYTES_UNCHANGED",
+  "successor_change_scope": "TEST_LIFECYCLE_AND_RUNNER_BINDING_ONLY_NO_SOURCE_STRATEGY_MODEL_COST_RISK_INFERENCE_OR_PROMOTION_CHANGE",
+  "publication_authorized": false
+}

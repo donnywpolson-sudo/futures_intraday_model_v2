@@ -47,6 +47,7 @@
     "futures_rebuild.foundation.orchestrator": ["load_feature_source_input", "load_foundation_set"],
     "futures_rebuild.historical_builder": ["build_synthetic_research_run"],
     "futures_rebuild.historical_evaluator": ["evaluate_frozen_research_run"],
+    "futures_rebuild.historical_phase3": ["Phase3SampleContract", "build_phase3_outcomes", "load_phase3_outcome_release", "publish_phase3_outcome_release"],
     "futures_rebuild.historical_splitter": ["split_synthetic_research_run"],
     "futures_rebuild.producer_bridge": ["generate_causal_outcomes", "load_causal_feature_release", "load_causal_outcome_release"],
     "futures_rebuild.research.bootstrap": ["stationary_bootstrap_index_rows"],

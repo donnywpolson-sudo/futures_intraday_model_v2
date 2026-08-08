@@ -1,0 +1,3 @@
+from pathlib import Path
+from futures_rebuild.tier1_economics_reference_plan import write_tier1_economics_reference_plan
+print(write_tier1_economics_reference_plan(root=Path.cwd()))

@@ -21,7 +21,7 @@
     {"gate_id": "G2", "title": "POINT_IN_TIME_CAUSALITY_AND_FUTURES_IDENTITY", "subchecks": [
       {"subcheck_id": "G2.S1", "title": "BITEMPORAL_VINTAGE_CONTROL"},
       {"subcheck_id": "G2.S2", "title": "DATA_POPULATION_UNIVERSE_AND_TARGET_INTEGRITY"},
-      {"subcheck_id": "G2.S3", "title": "FUTURES_SESSION_ROLL_AND_VERIFIED_EXCHANGE_CALENDAR_CONTROL"}
+      {"subcheck_id": "G2.S3", "title": "FUTURES_EMPIRICAL_HISTORICAL_OBSERVABILITY_AND_CURRENT_FORWARD_CALENDAR_CONTROL"}
     ]},
     {"gate_id": "G3", "title": "SPLIT_FEATURE_LABEL_AND_PIPELINE_ISOLATION", "subchecks": [
       {"subcheck_id": "G3.S1", "title": "FEATURE_TRANSFORM_AND_SERVING_POPULATION_INTEGRITY"},
@@ -56,7 +56,7 @@
     ]},
     {"gate_id": "G8", "title": "TARGET_STATE_READINESS_GOVERNANCE_AND_RECOVERY", "subchecks": [
       {"subcheck_id": "G8.S1", "title": "STAGE_CAPABILITY_AND_SERVING_PARITY"},
-      {"subcheck_id": "G8.S2", "title": "MONITORING_FRESHNESS_AND_EXCHANGE_CALENDAR_CHANGE_DETECTION"},
+      {"subcheck_id": "G8.S2", "title": "OBSERVABILITY_BINDING_MONITORING_AND_CURRENT_FORWARD_CALENDAR_FRESHNESS"},
       {"subcheck_id": "G8.S3", "title": "ORDER_STATE_INVARIANTS_AND_OPERATIONAL_RECOVERY"},
       {"subcheck_id": "G8.S4", "title": "SUCCESSOR_CHANGE_CONTROL_INDEPENDENT_VALIDATION_AND_AUDIT_TRAIL"},
       {"subcheck_id": "G8.S5", "title": "COCKPIT_DEPENDENCY_AND_ASSET_INTEGRITY"},

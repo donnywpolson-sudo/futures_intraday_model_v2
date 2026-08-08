@@ -1,0 +1,237 @@
+{
+  "authority_class": "PROVIDER_FREE_LOCAL_TRANSITION",
+  "basis": {
+    "repository": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2",
+    "branch": "codex/task-scheduler-registration-authority",
+    "head": "8dff39af7e9cf5704522988f92e141d46b9cfdca",
+    "installation_plan_id": "b83710bc49ee1f9adb929c664eb900d5e3a3c46f9e7416dfb88a5020cc8f84f5",
+    "prepared_install_path": "C:\\Users\\donny\\AppData\\Local\\Programs\\FuturesLiveCockpit\\20260730-063817-ab15788e",
+    "failed_plan_id": "123cc86a5b5eb3545c12ce49c8626740c79371b9ac43503fcd454562fd38fbc4",
+    "failed_terminal_id": "18ef75093f97d1227d924a9f6bbf47aa75579a3d29fb3a4cf7ca47ddee8e2f0b",
+    "failure_class": "SYNTHETIC_TEST_FALSE_POSITIVE_ON_POWERSHELL_ORDERED_DICTIONARY",
+    "activation_postimage_sha256": "727313685eb90e19e516d546067a433fd2ec779adbdb4bca166213f0b8c42670",
+    "test_partial_sha256": "316ba884515f96a940f5cec0f4287e270f5e921e7bd5c15ddad42630938cefb4"
+  },
+  "actions": [
+    {
+      "id": "reconcile_observation_test_fix_preimage",
+      "type": "reconciliation",
+      "file_hashes": [
+        {
+          "path": "AGENTS.md",
+          "sha256": "31944556f8b4e25d9bb8047fada8e0ba15ffba29b5c5e5680f5ff49b8e1f03d7"
+        },
+        {
+          "path": "PROJECT_OUTLINE.md",
+          "sha256": "af142c90d994ffdeb82891e67b5b6d6d1c5a53b6bf34354bedef075120b233a9"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "4174c98b66996e0bec2906a44d1a3b3885290261274c1364baedd19919bfae1b"
+        },
+        {
+          "path": "configs/source_contract.json",
+          "sha256": "9d730e7500ca06cb0a45d13f4ef5c2a440c66bcee8489f5aac470edb7019490a"
+        },
+        {
+          "path": "configs/closure_workflow_policy.json",
+          "sha256": "d0ac4547d7829651fae04f624ec79f746a2d2cf5da4847786e1b4371ad98b862"
+        },
+        {
+          "path": "src/futures_rebuild/closure_workflow/engine.py",
+          "sha256": "db63b9fe376c70fb2421ee2dca2a5c798648d4262554392666dece63844cb25e"
+        },
+        {
+          "path": "src/futures_rebuild/closure_workflow/policy.py",
+          "sha256": "d7331318572518d7b52ab6c56c1967495da48f224756fa1fdbc770bc119b0c8b"
+        },
+        {
+          "path": "scripts/run_windows_host_root_pytest.ps1",
+          "sha256": "eb4b899dc382b6ec9a3b1865e2e93ea7a4440d875b469ebe9ee3848b36b72fdf"
+        },
+        {
+          "path": "scripts/activate_live_cockpit.ps1",
+          "sha256": "727313685eb90e19e516d546067a433fd2ec779adbdb4bca166213f0b8c42670"
+        },
+        {
+          "path": "tests/live/test_activate_live_cockpit.py",
+          "sha256": "316ba884515f96a940f5cec0f4287e270f5e921e7bd5c15ddad42630938cefb4"
+        },
+        {
+          "path": "manifests/workflow/closure/deltas/live_cockpit_activation_observation_only_test_fix.patch",
+          "sha256": "06c28f80037d6b4e6394a3f9b3c7a4b5c8037189c0af5d15e700adaf17aed258"
+        },
+        {
+          "path": "manifests/workflow/closure/preflight_tests/live_cockpit_activation_external_bindings.py",
+          "sha256": "199a39bd499dee10089d466b3bf286d8de297ac10027c9a9c4932da01da01953"
+        },
+        {
+          "path": "manifests/live_cockpit/installation/plans/b83710bc49ee1f9adb929c664eb900d5e3a3c46f9e7416dfb88a5020cc8f84f5.json",
+          "sha256": "4bd078da72c739328fc237edc8f856a93eda60df4a6e64c7adcc90f452d981a0"
+        },
+        {
+          "path": "reports/live_cockpit/installation/b83710bc49ee1f9adb929c664eb900d5e3a3c46f9e7416dfb88a5020cc8f84f5/terminal.json",
+          "sha256": "3713a2a71c4e0c611a5d33b61fbe21d880cf849ead2f90d06e243baca037846f"
+        },
+        {
+          "path": "reports/live_cockpit/bounded_live_smoke_result_attempt_2.json",
+          "sha256": "5f6f88c95826c7898027a88562445c8101a880499997f9f32a3026ed1377717a"
+        },
+        {
+          "path": "manifests/workflow/closure/plans/123cc86a5b5eb3545c12ce49c8626740c79371b9ac43503fcd454562fd38fbc4.json",
+          "sha256": "8d082075c2bd4332966f5c4c1c1d062f5e1df6c74b6d684607b3c581b0d84a1d"
+        },
+        {
+          "path": "manifests/workflow/closure/approvals/123cc86a5b5eb3545c12ce49c8626740c79371b9ac43503fcd454562fd38fbc4.json",
+          "sha256": "021dc86aefef1cb9878dc2b725189f0d3f2802ff6f7a254ae96e7b808c2170d6"
+        },
+        {
+          "path": "reports/workflow/closure/123cc86a5b5eb3545c12ce49c8626740c79371b9ac43503fcd454562fd38fbc4/attempt-001/progress.json",
+          "sha256": "37a8aa1d1acf689828e8076c4817b4049fe1b0c52eb3602c434391b7b99dcd76"
+        },
+        {
+          "path": "reports/workflow/closure/123cc86a5b5eb3545c12ce49c8626740c79371b9ac43503fcd454562fd38fbc4/attempt-001/terminal.json",
+          "sha256": "2b966808f654dca96603725f11badebcfd83da8073c33db2ad51a91041f99367"
+        },
+        {
+          "path": "reports/workflow/closure/123cc86a5b5eb3545c12ce49c8626740c79371b9ac43503fcd454562fd38fbc4/attempt-001/activation_partial_shortcut_contracts_host_root.stdout.log",
+          "sha256": "94fac2d6b5eedd46370ea1eb04834313cc19bcfd658b6cca7bc62a6015a7d1ea"
+        }
+      ]
+    },
+    {
+      "id": "verify_external_state_before_test_fix",
+      "type": "focused_pytest",
+      "argv": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "manifests\\workflow\\closure\\preflight_tests\\live_cockpit_activation_external_bindings.py"
+      ],
+      "depends_on": [
+        "reconcile_observation_test_fix_preimage"
+      ]
+    },
+    {
+      "id": "apply_observation_only_test_fix",
+      "type": "frozen_patch",
+      "target": "tests/live/test_activate_live_cockpit.py",
+      "patch": "manifests/workflow/closure/deltas/live_cockpit_activation_observation_only_test_fix.patch",
+      "patch_sha256": "06c28f80037d6b4e6394a3f9b3c7a4b5c8037189c0af5d15e700adaf17aed258",
+      "postimage_sha256": "35671d92389a6bd55e4f5fa67c3232ee6c50cc4877e3443a0d17cbf9c0b716e8",
+      "depends_on": [
+        "verify_external_state_before_test_fix"
+      ]
+    },
+    {
+      "id": "reconcile_observation_test_fix_postimage",
+      "type": "reconciliation",
+      "file_hashes": [
+        {
+          "path": "scripts/activate_live_cockpit.ps1",
+          "sha256": "727313685eb90e19e516d546067a433fd2ec779adbdb4bca166213f0b8c42670"
+        },
+        {
+          "path": "tests/live/test_activate_live_cockpit.py",
+          "sha256": "35671d92389a6bd55e4f5fa67c3232ee6c50cc4877e3443a0d17cbf9c0b716e8"
+        }
+      ],
+      "depends_on": [
+        "apply_observation_only_test_fix"
+      ]
+    },
+    {
+      "id": "verify_external_state_after_test_fix",
+      "type": "focused_pytest",
+      "argv": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "manifests\\workflow\\closure\\preflight_tests\\live_cockpit_activation_external_bindings.py"
+      ],
+      "depends_on": [
+        "reconcile_observation_test_fix_postimage"
+      ]
+    },
+    {
+      "id": "activation_contracts_host_root_after_test_fix",
+      "type": "windows_host_root_suite",
+      "argv": [
+        "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "-NoProfile",
+        "-File",
+        "scripts\\run_windows_host_root_pytest.ps1",
+        "-q",
+        "tests\\live\\test_activate_live_cockpit.py"
+      ],
+      "depends_on": [
+        "verify_external_state_after_test_fix"
+      ]
+    },
+    {
+      "id": "record_terminal",
+      "type": "terminal_recording",
+      "depends_on": [
+        "activation_contracts_host_root_after_test_fix"
+      ]
+    }
+  ],
+  "delta_bytes": 484,
+  "delta_entry_count": 1,
+  "execution_environment": "EXPLICITLY_UNSANDBOXED_WINDOWS_HOST_ROOT",
+  "full_census_count": 0,
+  "implementation_paths": [
+    "tests/live/test_activate_live_cockpit.py"
+  ],
+  "limits": {
+    "maximum_duration_seconds": 180,
+    "maximum_activations": 0,
+    "maximum_installations": 0,
+    "maximum_shortcut_changes": 0,
+    "maximum_autostart_changes": 0,
+    "maximum_provider_requests": 0,
+    "maximum_network_requests": 0,
+    "maximum_production_cache_writes": 0,
+    "maximum_live_smoke_runs": 0,
+    "maximum_test_processes": 3,
+    "maximum_workers": 1,
+    "maximum_prestart_launcher_retries": 1,
+    "maximum_retries_after_start": 0
+  },
+  "preservation": {
+    "activation_script": "RESUMABLE_PARTIAL_VALIDATED_POSTIMAGE_NO_MUTATION",
+    "test_file": "RESUMABLE_PARTIAL_CORRECT_FALSE_POSITIVE_ONLY",
+    "failed_receipt_and_log": "IMMUTABLE_BOUND_EVIDENCE",
+    "prepared_installation": "IMMUTABLE_HASH_VERIFIED_BEFORE_AND_AFTER",
+    "previous_installation": "LAST_KNOWN_GOOD_HASH_VERIFIED_BEFORE_AND_AFTER",
+    "shortcut_state": "HASH_VERIFIED_BEFORE_AND_AFTER_NO_MUTATION",
+    "credential_source": "EXISTENCE_ONLY_NO_CONTENT_READ_NO_COPY",
+    "production_cache": "NO_ACCESS_NO_MUTATION",
+    "provider_and_network": "UNREACHABLE",
+    "activation": "FORBIDDEN",
+    "unrelated_worktree": "PRESERVE_NO_STAGE_NO_COMMIT",
+    "push": "FORBIDDEN"
+  },
+  "reused_evidence": [
+    "Failed successor terminal proving both frozen patches and both external-state checks passed",
+    "Failed host-root stdout proving one false-positive assertion after two passing tests",
+    "OS-temporary clean reproduction proving the one-line test correction yields three passing tests"
+  ],
+  "rollback": {
+    "failure_after_patch": "STOP_PRESERVE_PARTIAL_ZERO_RETRIES_REVERSE_ONLY_UNDER_FRESH_EXACT_AUTHORITY",
+    "prestart_failure": "ONE_RESUME_ONLY_IF_TARGET_NOT_STARTED_APPROVAL_UNCONSUMED_AND_HASHES_REMAIN_EXACT",
+    "reverse_order": [
+      "git apply --reverse --check -- manifests/workflow/closure/deltas/live_cockpit_activation_observation_only_test_fix.patch"
+    ],
+    "installation_state": "UNCHANGED",
+    "shortcut_state": "UNCHANGED"
+  },
+  "snapshot_reused": true,
+  "success_condition": "CORRECTED_OBSERVATION_ONLY_TEST_POSTIMAGE_AND_THREE_HOST_ROOT_CONTRACT_TESTS_PASS_WITH_EXTERNAL_STATE_UNCHANGED"
+}

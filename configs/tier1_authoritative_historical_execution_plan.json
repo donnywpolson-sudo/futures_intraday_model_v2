@@ -1,0 +1,41 @@
+{
+  "schema_version": "tier1_authoritative_historical_execution_plan/1.0.0",
+  "plan_id": "70d34a441015bdca5e2d031f418640478586397ae19716328398c4a34eeec317",
+  "state": "PREPARED_REQUIRES_SEPARATE_EXECUTION_APPROVAL",
+  "operation": "EXECUTE_AUTHORITATIVE_TIER1_HISTORICAL_SCREEN_AND_STAGE_UNPUBLISHED_EVIDENCE",
+  "protocol_id": "aec0da9623b115b0d308d9460761e43c3a21d1493a6e969478397b9c4cbdf1c0",
+  "selected_sources_id": "f61f34df0b9d8cf7b344016ce3df8bb76abeb890558740460f60d51e5ca37bde",
+  "calendar_release_id": "038940d82031f31e2c66ed37186e98a6ee6cff3e7248f634f2c7a8e94ea6ecf3",
+  "source_scope": {
+    "markets": ["6E", "CL", "ES", "ZN"],
+    "years": [2018, 2019, 2020, 2021, 2022],
+    "selected_release_count": 20
+  },
+  "execution_mode": "CREATE_ONLY_SEALED_UNPUBLISHED_EVIDENCE_AND_TERMINAL_SUMMARY",
+  "maximum_host_runtime_seconds": 900,
+  "estimated_external_cost_usd": "0",
+  "success_requires_verified_unpublished_bundle": true,
+  "success_requires_post_activation_registered_context_validation": true,
+  "authorized_actions_after_separate_approval": {
+    "registered_2018_2022_source_row_read": true,
+    "model_fit": true,
+    "prediction_generation": true,
+    "historical_evaluation": true,
+    "one_local_single_use_authorization_claim": true,
+    "create_only_unpublished_evidence_staging": true
+  },
+  "forbidden_actions": {
+    "holdout_or_forward_access": true,
+    "provider_or_network_access": true,
+    "credential_access": true,
+    "evidence_publication": true,
+    "active_research_data_mutation": true,
+    "staging_git": true,
+    "commit": true,
+    "push": true,
+    "trading_or_orders": true
+  },
+  "output_root": "state/tier1_authoritative_unpublished_evidence",
+  "receipt_policy": "NEW_EXACT_SINGLE_USE_CREATE_ONLY_CLAIM_BOUND_TO_REGISTERED_TRIAL_PLAN_AND_UNPUBLISHED_OUTPUT_ROOT_BEFORE_SOURCE_OPEN",
+  "preservation_boundary": "All predecessor artifacts and source bytes remain unchanged; the sealed unpublished bundle requires separate publication approval."
+}

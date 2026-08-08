@@ -1,0 +1,201 @@
+{
+  "authority_class": "PROVIDER_FREE_LOCAL_TRANSITION",
+  "basis": {
+    "repository": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2",
+    "branch": "codex/task-scheduler-registration-authority",
+    "head": "8dff39af7e9cf5704522988f92e141d46b9cfdca",
+    "installation_plan_id": "b83710bc49ee1f9adb929c664eb900d5e3a3c46f9e7416dfb88a5020cc8f84f5",
+    "prepared_install_path": "C:\\Users\\donny\\AppData\\Local\\Programs\\FuturesLiveCockpit\\20260730-063817-ab15788e",
+    "failed_plan_id": "7ce9198d0d8a6a5ce5f0533af94f07b8f1d63faa57b7b78a9620c60306e252e4",
+    "failed_terminal_id": "53948c0b417663012dbc48d780e083464006ac9869541b2bc7295487af054d84",
+    "failure_class": "POSTIMAGE_HASH_LINE_ENDING_NORMALIZATION_MISMATCH",
+    "activation_postimage_sha256": "727313685eb90e19e516d546067a433fd2ec779adbdb4bca166213f0b8c42670",
+    "corrected_test_live_sha256": "cded9622246a643277d2aa614443c7b93c48592a8fd2466b40c294e599ebed2e",
+    "corrected_test_line_endings": "LF_ONLY"
+  },
+  "actions": [
+    {
+      "id": "reconcile_live_corrected_test_preimage",
+      "type": "reconciliation",
+      "file_hashes": [
+        {
+          "path": "AGENTS.md",
+          "sha256": "31944556f8b4e25d9bb8047fada8e0ba15ffba29b5c5e5680f5ff49b8e1f03d7"
+        },
+        {
+          "path": "PROJECT_OUTLINE.md",
+          "sha256": "af142c90d994ffdeb82891e67b5b6d6d1c5a53b6bf34354bedef075120b233a9"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "4174c98b66996e0bec2906a44d1a3b3885290261274c1364baedd19919bfae1b"
+        },
+        {
+          "path": "configs/source_contract.json",
+          "sha256": "9d730e7500ca06cb0a45d13f4ef5c2a440c66bcee8489f5aac470edb7019490a"
+        },
+        {
+          "path": "configs/closure_workflow_policy.json",
+          "sha256": "d0ac4547d7829651fae04f624ec79f746a2d2cf5da4847786e1b4371ad98b862"
+        },
+        {
+          "path": "src/futures_rebuild/closure_workflow/engine.py",
+          "sha256": "db63b9fe376c70fb2421ee2dca2a5c798648d4262554392666dece63844cb25e"
+        },
+        {
+          "path": "src/futures_rebuild/closure_workflow/policy.py",
+          "sha256": "d7331318572518d7b52ab6c56c1967495da48f224756fa1fdbc770bc119b0c8b"
+        },
+        {
+          "path": "scripts/run_windows_host_root_pytest.ps1",
+          "sha256": "eb4b899dc382b6ec9a3b1865e2e93ea7a4440d875b469ebe9ee3848b36b72fdf"
+        },
+        {
+          "path": "scripts/activate_live_cockpit.ps1",
+          "sha256": "727313685eb90e19e516d546067a433fd2ec779adbdb4bca166213f0b8c42670"
+        },
+        {
+          "path": "tests/live/test_activate_live_cockpit.py",
+          "sha256": "cded9622246a643277d2aa614443c7b93c48592a8fd2466b40c294e599ebed2e"
+        },
+        {
+          "path": "manifests/workflow/closure/preflight_tests/live_cockpit_activation_external_bindings.py",
+          "sha256": "199a39bd499dee10089d466b3bf286d8de297ac10027c9a9c4932da01da01953"
+        },
+        {
+          "path": "manifests/live_cockpit/installation/plans/b83710bc49ee1f9adb929c664eb900d5e3a3c46f9e7416dfb88a5020cc8f84f5.json",
+          "sha256": "4bd078da72c739328fc237edc8f856a93eda60df4a6e64c7adcc90f452d981a0"
+        },
+        {
+          "path": "reports/live_cockpit/installation/b83710bc49ee1f9adb929c664eb900d5e3a3c46f9e7416dfb88a5020cc8f84f5/terminal.json",
+          "sha256": "3713a2a71c4e0c611a5d33b61fbe21d880cf849ead2f90d06e243baca037846f"
+        },
+        {
+          "path": "reports/live_cockpit/bounded_live_smoke_result_attempt_2.json",
+          "sha256": "5f6f88c95826c7898027a88562445c8101a880499997f9f32a3026ed1377717a"
+        },
+        {
+          "path": "manifests/workflow/closure/plans/7ce9198d0d8a6a5ce5f0533af94f07b8f1d63faa57b7b78a9620c60306e252e4.json",
+          "sha256": "926b4dc68928992aa057ca6bb6022cd0fa4b565ac9352cf6d608790743a18e8c"
+        },
+        {
+          "path": "manifests/workflow/closure/approvals/7ce9198d0d8a6a5ce5f0533af94f07b8f1d63faa57b7b78a9620c60306e252e4.json",
+          "sha256": "daa1374a6696c46d5d0977772e20ebcbba8a8352088ecca02e04f25959ad54d8"
+        },
+        {
+          "path": "reports/workflow/closure/7ce9198d0d8a6a5ce5f0533af94f07b8f1d63faa57b7b78a9620c60306e252e4/attempt-001/progress.json",
+          "sha256": "805008846a28f2ef7dd11dc7c5f667a855d7805131213a6fb2dd8e7999a389cf"
+        },
+        {
+          "path": "reports/workflow/closure/7ce9198d0d8a6a5ce5f0533af94f07b8f1d63faa57b7b78a9620c60306e252e4/attempt-001/terminal.json",
+          "sha256": "be5420ecea38b64591525e9f71b3ba5dd6e9494ce4bb011e2cff0522e56fa0e8"
+        },
+        {
+          "path": "reports/workflow/closure/7ce9198d0d8a6a5ce5f0533af94f07b8f1d63faa57b7b78a9620c60306e252e4/attempt-001/verify_external_state_before_test_fix.stdout.log",
+          "sha256": "5ecba242b02ec850da76ffde88104df086be1f7ca54f1fa149c07ad3ca1373e6"
+        }
+      ]
+    },
+    {
+      "id": "verify_external_state_before_live_tests",
+      "type": "focused_pytest",
+      "argv": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "manifests\\workflow\\closure\\preflight_tests\\live_cockpit_activation_external_bindings.py"
+      ],
+      "depends_on": [
+        "reconcile_live_corrected_test_preimage"
+      ]
+    },
+    {
+      "id": "activation_contracts_host_root_live_postimage",
+      "type": "windows_host_root_suite",
+      "argv": [
+        "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "-NoProfile",
+        "-File",
+        "scripts\\run_windows_host_root_pytest.ps1",
+        "-q",
+        "tests\\live\\test_activate_live_cockpit.py"
+      ],
+      "depends_on": [
+        "verify_external_state_before_live_tests"
+      ]
+    },
+    {
+      "id": "verify_external_state_after_live_tests",
+      "type": "focused_pytest",
+      "argv": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "manifests\\workflow\\closure\\preflight_tests\\live_cockpit_activation_external_bindings.py"
+      ],
+      "depends_on": [
+        "activation_contracts_host_root_live_postimage"
+      ]
+    },
+    {
+      "id": "record_terminal",
+      "type": "terminal_recording",
+      "depends_on": [
+        "verify_external_state_after_live_tests"
+      ]
+    }
+  ],
+  "delta_bytes": 0,
+  "delta_entry_count": 0,
+  "execution_environment": "EXPLICITLY_UNSANDBOXED_WINDOWS_HOST_ROOT",
+  "full_census_count": 0,
+  "implementation_paths": [],
+  "limits": {
+    "maximum_duration_seconds": 180,
+    "maximum_activations": 0,
+    "maximum_installations": 0,
+    "maximum_shortcut_changes": 0,
+    "maximum_autostart_changes": 0,
+    "maximum_provider_requests": 0,
+    "maximum_network_requests": 0,
+    "maximum_production_cache_writes": 0,
+    "maximum_live_smoke_runs": 0,
+    "maximum_test_processes": 3,
+    "maximum_workers": 1,
+    "maximum_prestart_launcher_retries": 1,
+    "maximum_retries_after_start": 0
+  },
+  "preservation": {
+    "activation_script": "RESUMABLE_PARTIAL_VALIDATED_POSTIMAGE_NO_MUTATION",
+    "test_file": "CORRECTED_LIVE_POSTIMAGE_NO_MUTATION",
+    "failed_receipt": "IMMUTABLE_BOUND_EVIDENCE",
+    "prepared_installation": "IMMUTABLE_HASH_VERIFIED_BEFORE_AND_AFTER",
+    "previous_installation": "LAST_KNOWN_GOOD_HASH_VERIFIED_BEFORE_AND_AFTER",
+    "shortcut_state": "HASH_VERIFIED_BEFORE_AND_AFTER_NO_MUTATION",
+    "credential_source": "EXISTENCE_ONLY_NO_CONTENT_READ_NO_COPY",
+    "production_cache": "NO_ACCESS_NO_MUTATION",
+    "provider_and_network": "UNREACHABLE",
+    "activation": "FORBIDDEN",
+    "unrelated_worktree": "PRESERVE_NO_STAGE_NO_COMMIT",
+    "push": "FORBIDDEN"
+  },
+  "reused_evidence": [
+    "Failed recovery terminal proving the one-line correction was applied before the postimage hash mismatch",
+    "Byte-level inspection proving the corrected live test is LF-only",
+    "Passing external-state precheck after the prior failure"
+  ],
+  "rollback": {
+    "source_mutation": "NOT_APPLICABLE_VERIFICATION_ONLY",
+    "prestart_failure": "ONE_RESUME_ONLY_IF_TARGET_NOT_STARTED_APPROVAL_UNCONSUMED_AND_HASHES_REMAIN_EXACT",
+    "installation_state": "UNCHANGED",
+    "shortcut_state": "UNCHANGED"
+  },
+  "snapshot_reused": true,
+  "success_condition": "LIVE_LF_CORRECTED_TEST_POSTIMAGE_PASSES_THREE_HOST_ROOT_CONTRACT_TESTS_WITH_EXTERNAL_STATE_UNCHANGED"
+}

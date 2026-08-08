@@ -1,0 +1,22 @@
+{
+  "schema_version": "tier1_bracket_v7_retirement_preparation/1.0.0",
+  "state": "PREPARED_REQUIRES_PUBLICATION_APPROVAL",
+  "trial_id": "b2b1b19967418ad9d3a66f70e4fa15732f8065d9abf9f32489b2e2d44072a64e",
+  "disposition": "INVALID_PARTIAL_MODEL_FIT_REQUIRED_BASELINE_COVERAGE_EXCEPTION",
+  "strategy_failure_inference_allowed": false,
+  "historical_source_rows_opened": true,
+  "source_materialization_completed": true,
+  "model_fit_attempted": true,
+  "model_bundle_completed": false,
+  "predictions_generated": false,
+  "historical_evaluation_performed": false,
+  "holdout_or_forward_accessed": false,
+  "provider_or_network_accessed": false,
+  "authorization_receipt_id": "98e688ef10d8e389b9abe49ebe01e1b6daa916bb348d5a435673efc2312ab552",
+  "authorization_use_path": "state/authorization_uses/98e688ef10d8e389b9abe49ebe01e1b6daa916bb348d5a435673efc2312ab552.json",
+  "failure_stage": "MODEL_FIT_BEFORE_MODEL_BUNDLE_AND_FROZEN_PREDICTION_COMPLETION",
+  "failure_class": "REQUIRED_FOLD_LOCAL_MARKET_CHECKPOINT_BASELINE_HAS_NO_ELIGIBLE_TRAINING_OUTCOME_AND_V7_RAISES_INSTEAD_OF_ABSTAINING",
+  "preservation": "REGISTERED_V7_DECLARATION_EVENT_CONFIG_IMPLEMENTATION_TESTS_EXECUTION_PLANS_AND_AUTHORIZATION_USES_UNCHANGED",
+  "successor_change_scope": "REQUIRED_BASELINE_EMPTY_TRAINING_CELL_ABSTENTION_AND_COVERAGE_GATE_ONLY_NO_CANDIDATE_MODEL_FEATURE_COST_RISK_OR_PROMOTION_RELAXATION",
+  "publication_authorized": false
+}

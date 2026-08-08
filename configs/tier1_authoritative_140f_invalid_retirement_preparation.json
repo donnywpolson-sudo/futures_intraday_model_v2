@@ -1,0 +1,39 @@
+{
+  "schema_version": "tier1_authoritative_postcheck_invalid_retirement/1.0.0",
+  "state": "PREPARED_NOT_PUBLISHED",
+  "trial_id": "140f865ab06e68b42ab0aaa9a392bb52d12eecf696b738e7bdd40831c0e6d285",
+  "disposition": "INVALID_PRE_DATA_POSTACTIVATION_PREPUBLICATION_BUILDER_TEST_DEFECT",
+  "finding": {
+    "preactivation_passed": 284,
+    "preactivation_failed": 0,
+    "postactivation_passed": 283,
+    "postactivation_failed": 1,
+    "failed_test": "tests/test_tier1_authoritative_certified_lifecycle.py::test_prepared_trial_binds_published_692a_and_omits_mutable_pointer",
+    "automatic_pointer_rollback_verified": true,
+    "research_parameter_defect": false,
+    "strategy_outcome_observed": false
+  },
+  "research_parameter_defect": false,
+  "historical_rows_opened": false,
+  "model_fit": false,
+  "predictions_generated": false,
+  "historical_evaluation": false,
+  "holdout_2025_touched": false,
+  "provider_or_network_access": false,
+  "credential_access": false,
+  "trading": false,
+  "preserved_bindings": {
+    "state/preexecution_certificates/tier1_authoritative_trial/140f865ab06e68b42ab0aaa9a392bb52d12eecf696b738e7bdd40831c0e6d285.json": "91c9475c3d92aeef11003462eac73924be319edc9069cde4569706abe1a6b3ad",
+    "state/trial_events/tier1_authoritative_trial/140f865ab06e68b42ab0aaa9a392bb52d12eecf696b738e7bdd40831c0e6d285.json": "71693af8f044c83d5ea5c3cfe7973d60cae2a41729afd3fe153217f666a1dc85",
+    "state/trial_registry/tier1_authoritative_trial/140f865ab06e68b42ab0aaa9a392bb52d12eecf696b738e7bdd40831c0e6d285.json": "d3b65d6d6d1a76e1e4f785817a47729f0ce7b3f03bbd356a3e86080cba615757"
+  },
+  "replacement_boundary": {
+    "research_parameters_may_change": false,
+    "historical_execution_authorized": false,
+    "publication_authorized": false,
+    "holdout_access_authorized": false,
+    "provider_access_authorized": false,
+    "trading_authorized": false
+  },
+  "record_id": "f1eca826ea318c5c93c8f17d9ef883aa7d51d11f1a23c5ecf2d8c2e69d104b6b"
+}

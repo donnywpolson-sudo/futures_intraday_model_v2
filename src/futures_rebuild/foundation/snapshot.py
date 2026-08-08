@@ -148,8 +148,18 @@ class PublishedDbnRelease:
     files_index_sha256: str
 
     @classmethod
-    def open(cls, path: Path, *, boundary: RepoBoundary) -> "PublishedDbnRelease":
-        manifest = verify_data_release_manifest(path, boundary)
+    def open(
+        cls,
+        path: Path,
+        *,
+        boundary: RepoBoundary,
+        verify_files: bool = True,
+    ) -> "PublishedDbnRelease":
+        manifest = verify_data_release_manifest(
+            path,
+            boundary,
+            verify_files=verify_files,
+        )
         if (
             manifest.phase != "dbn"
             or manifest.release_kind != DBN_RELEASE_KIND

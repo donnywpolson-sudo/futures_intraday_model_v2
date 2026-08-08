@@ -12,20 +12,23 @@ from futures_rebuild.canonical import sha256_file, sha256_json
 from .feed import chart_market_universe
 
 
-PLAN_SCHEMA = "futures_live_cockpit_smoke_plan/1.1.0"
-APPROVAL_SCHEMA = "futures_live_cockpit_smoke_approval/1.1.0"
-OPERATION = "RUN_BOUNDED_OBSERVATION_ONLY_DATABENTO_SMOKE_SUCCESSOR"
+PLAN_SCHEMA = "futures_live_cockpit_smoke_plan/1.2.0"
+APPROVAL_SCHEMA = "futures_live_cockpit_smoke_approval/1.2.0"
+OPERATION = "RUN_BOUNDED_OBSERVATION_ONLY_DATABENTO_SMOKE_ATTEMPT_7"
+RESULT_OUTPUT_RELATIVE = (
+    "reports/live_cockpit/bounded_live_smoke_result_attempt_7.json"
+)
 PREDECESSOR_ATTEMPT = {
-    "plan_id": "65a2e0b45a68f595d49609822fe27ad054cfebe156a7eb7da32c84e2b9e624ac",
-    "plan_sha256": "0cfb48fbb447cc557f1a9761e73f9acd7ccfe91d214d7cac98d315a4e7212090",
+    "plan_id": "a48d467f49e8f668a69dfa421a54fa87e89c93c4dfa19b119f451d63605083bd",
+    "plan_sha256": "d1783ac245baeb6c6012f614ecbd22611d8689e87976d05d23ac7958535e3cb6",
     "approval_receipt_id": (
-        "58a968061bc50a009d26ca80fe2c7fd90b0901e554e6b90904f7619d4c050d6d"
+        "21a9a5c743900aa36750578575134f4815cdba7e835cdf5089fe83bcad733353"
     ),
-    "result_id": "e3647f34a14da41df8f9a3434d54fd1ff39581709604b450a6c6451cd4fdf74f",
+    "result_id": "e4a17604a3818a9d50ccd330375d81407688398ebb902ccde8f44d78cce01fa4",
     "result_sha256": (
-        "1dc195a4b6aba23d879eaa0d139018efe7bbf3d6a2687cafdc7d0795394a3752"
+        "8efd57b5fdcb95c055f9114e0e4ac3c26f092c8828f9f86d47e7dbdf7f5fd085"
     ),
-    "disposition": "FAIL_NO_CUTOVER",
+    "disposition": "PASS_SUPERSEDED_BY_CREDENTIAL_EXISTENCE_ONLY_RUNTIME",
 }
 _HASH = re.compile(r"[0-9a-f]{64}")
 _UTC_SECOND = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
@@ -33,6 +36,39 @@ _UTC_SECOND = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
 
 class LiveSmokeApprovalError(RuntimeError):
     """Raised before any provider client is created."""
+
+
+def build_live_smoke_plan(prepared_executable_sha256: str) -> dict[str, Any]:
+    if _HASH.fullmatch(prepared_executable_sha256) is None:
+        raise LiveSmokeApprovalError("prepared executable hash is invalid")
+    body: dict[str, Any] = {
+        "schema_version": PLAN_SCHEMA,
+        "classification": "PENDING_EXACT_HASH_BOUND_APPROVAL",
+        "operation": OPERATION,
+        "scope": {
+            "dataset": "GLBX.MDP3",
+            "overview_markets": sorted(
+                info.symbol for info in chart_market_universe()
+            ),
+            "focus_market": "ES",
+            "required_focus_market_calendar_state": "OPEN",
+            "minimum_open_window_seconds": 180,
+            "duration_seconds": 120,
+            "maximum_live_sessions": 2,
+            "historical_replay": False,
+            "cache_mutation": False,
+            "reconnect_loop": False,
+            "order_paths": False,
+            "secret_logging": False,
+            "result_output_relative": RESULT_OUTPUT_RELATIVE,
+            "prepared_executable_sha256": prepared_executable_sha256,
+            "runtime_frozen": True,
+        },
+        "execution_authorized": False,
+        "predecessor_attempt": dict(PREDECESSOR_ATTEMPT),
+    }
+    body["plan_id"] = sha256_json(body)
+    return body
 
 
 def _load_object(path: Path, name: str) -> dict[str, Any]:
@@ -57,21 +93,13 @@ def validate_live_smoke_plan(payload: Mapping[str, Any]) -> dict[str, Any]:
     }
     if set(payload) != expected_keys:
         raise LiveSmokeApprovalError("live-smoke plan fields are invalid")
-    core = {key: payload[key] for key in payload if key != "plan_id"}
-    if (
-        payload["schema_version"] != PLAN_SCHEMA
-        or payload["classification"] != "PENDING_EXACT_HASH_BOUND_APPROVAL"
-        or payload["operation"] != OPERATION
-        or payload["execution_authorized"] is not False
-        or payload["predecessor_attempt"] != PREDECESSOR_ATTEMPT
-        or payload["plan_id"] != sha256_json(core)
-    ):
-        raise LiveSmokeApprovalError("live-smoke plan identity is invalid")
     scope = payload["scope"]
     if type(scope) is not dict or set(scope) != {
         "dataset",
         "overview_markets",
         "focus_market",
+        "required_focus_market_calendar_state",
+        "minimum_open_window_seconds",
         "duration_seconds",
         "maximum_live_sessions",
         "historical_replay",
@@ -84,32 +112,12 @@ def validate_live_smoke_plan(payload: Mapping[str, Any]) -> dict[str, Any]:
         "runtime_frozen",
     }:
         raise LiveSmokeApprovalError("live-smoke scope fields are invalid")
-    markets = scope["overview_markets"]
-    approved_markets = sorted(info.symbol for info in chart_market_universe())
-    if (
-        scope["dataset"] != "GLBX.MDP3"
-        or type(markets) is not list
-        or markets != approved_markets
-        or scope["focus_market"] != "ES"
-        or scope["duration_seconds"] != 120
-        or scope["maximum_live_sessions"] != 2
-        or scope["result_output_relative"]
-        != "reports/live_cockpit/bounded_live_smoke_result_attempt_2.json"
-        or type(scope["prepared_executable_sha256"]) is not str
-        or _HASH.fullmatch(scope["prepared_executable_sha256"]) is None
-        or scope["runtime_frozen"] is not True
-        or any(
-            scope[key] is not False
-            for key in (
-                "historical_replay",
-                "cache_mutation",
-                "reconnect_loop",
-                "order_paths",
-                "secret_logging",
-            )
-        )
-    ):
-        raise LiveSmokeApprovalError("live-smoke scope is broader than allowed")
+    executable_hash = scope.get("prepared_executable_sha256")
+    if type(executable_hash) is not str:
+        raise LiveSmokeApprovalError("live-smoke plan identity is invalid")
+    expected = build_live_smoke_plan(executable_hash)
+    if dict(payload) != expected:
+        raise LiveSmokeApprovalError("live-smoke plan identity is invalid")
     return dict(payload)
 
 

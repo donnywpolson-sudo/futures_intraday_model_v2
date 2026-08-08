@@ -1,0 +1,42 @@
+{
+  "schema_version": "tier1_bracket_successor_v11_contract/1.0.0",
+  "state": "PREPARED_NOT_REGISTERED",
+  "classification": "POST_V10_INDEPENDENT_BASELINE_OPPORTUNITY_UNIVERSE_PREREGISTERED_HISTORICAL_SCREEN",
+  "research_only": true,
+  "live_readiness": false,
+  "supersedes_v10_trial_id": "53c9aa144b38187ea93acbfbe2ea10f6c76fcb382edef01a5254b3ecda38ddc3",
+  "inherited_v10_contract_path": "configs/tier1_bracket_successor_v10.json",
+  "inherited_v10_contract_sha256": "11ba47de4fa152acfdb53f339164b1e2484318bca5cc9ca4a11ca6e503040126",
+  "frozen_without_change": [
+    "calendar_sources_source_integrity_and_2025_holdout",
+    "candidate_features_model_math_hurdle_and_predictions",
+    "splits_purge_embargo_costs_and_risk_rules",
+    "causal_prefix_outcomes_ranking_tie_breaking_and_overlap",
+    "inference_thresholds_coverage_thresholds_and_promotion_gate",
+    "authorization_runtime_and_immutable_evidence_controls"
+  ],
+  "independent_baseline_universe_successor": {
+    "flat_no_trade": "EVERY_CALENDAR_CHECKPOINT_EXACT_ZERO_WITHOUT_FEATURE_MODEL_OR_OUTCOME_DEPENDENCY",
+    "previous_bar_sign_momentum": "EVERY_CALENDAR_CHECKPOINT_WITH_MISSING_CAUSAL_FEATURES_RETAINED_AS_EXPLICIT_ABSTENTIONS_INDEPENDENT_OF_CANDIDATE_MODEL_AVAILABILITY",
+    "previous_bar_sign_reversal": "EVERY_CALENDAR_CHECKPOINT_WITH_MISSING_CAUSAL_FEATURES_RETAINED_AS_EXPLICIT_ABSTENTIONS_INDEPENDENT_OF_CANDIDATE_MODEL_AVAILABILITY",
+    "risk_matched_always_long_intraday": "EVERY_CALENDAR_CHECKPOINT_WITH_MISSING_CAUSAL_FEATURES_RETAINED_AS_EXPLICIT_ABSTENTIONS_AND_ITS_OWN_250_USD_RISK_CAP_DECISION",
+    "fold_local_unconditional_return_by_market_session": "EVERY_CALENDAR_CHECKPOINT_WITH_MISSING_CAUSAL_FEATURES_OR_FOLD_LOCAL_TRAINING_RETAINED_AS_EXPLICIT_ABSTENTIONS",
+    "candidate_signal_market_order_ranking_ablation": "CANDIDATE_SIGNAL_IDENTITIES_ONLY_BY_DEFINITION_BUT_OWN_RANKING_SCHEDULE_COSTS_AND_RISK_PATH",
+    "candidate_model_unavailable": "CANNOT_CENSOR_ANY_MODEL_INDEPENDENT_BASELINE",
+    "coverage": "EACH_REQUIRED_BASELINE_HAS_ITS_OWN_DECLARED_DENOMINATOR_EXPLICIT_TERMINAL_DISPOSITION_ELIGIBILITY_METRICS_AND_HARD_GATE"
+  },
+  "anti_tuning": {
+    "strategy_or_candidate_model_parameter_change": false,
+    "cost_or_risk_change": false,
+    "promotion_standard_change": false,
+    "historical_return_used_for_selection": false
+  },
+  "authority": {
+    "historical_execution_requires": "NEW_EXACT_SINGLE_USE_OPERATION_RECEIPT_BOUND_TO_V11_TRIAL_PLAN_SOURCE_HASHES_OUTPUT_ROOT_AND_2025_FALSE",
+    "publication_requires_separate_approval": true,
+    "holdout_or_forward_access": false,
+    "provider_access": false,
+    "trading": false,
+    "git_actions": false
+  }
+}

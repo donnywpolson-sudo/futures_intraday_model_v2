@@ -1,0 +1,36 @@
+{
+  "approval_receipt_target": "configs/live_cockpit_smoke_approval_attempt_3.json",
+  "approval_to_paste": "APPROVE RUN_BOUNDED_OBSERVATION_ONLY_DATABENTO_SMOKE_ATTEMPT_3 PLAN c1553ef9cf430d7a7f80da24ad3908301eba96b7e17b570ef3ed1cc5a00958ee SHA256 48c40a66a8e562a2aacb8bb3f75cbb180c2811f0d560b2a9e97e1742422a564b",
+  "command": {
+    "argv": [
+      "C:\\Users\\donny\\AppData\\Local\\Programs\\FuturesLiveCockpit\\20260730-161439-48c40a66\\FuturesLiveCockpit.exe",
+      "--live-smoke",
+      "--approval",
+      "configs\\live_cockpit_smoke_approval_attempt_3.json",
+      "--result-output",
+      "reports\\live_cockpit\\bounded_live_smoke_result_attempt_3.json"
+    ],
+    "cwd": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2",
+    "shell": false
+  },
+  "installation_terminal_id": "5e229696a63d041d6c5e2bb227cea5fc764b176b315ae7d2c0cca55aa7ae0078",
+  "installation_terminal_sha256": "f08e63b1072cfa48372fa528b6eaadebdd993a115207fb379d11fc60afddb1b2",
+  "limits": {
+    "cache_mutation": false,
+    "duration_seconds": 120,
+    "historical_replay": false,
+    "maximum_live_sessions": 2,
+    "maximum_retries": 0,
+    "order_paths": false,
+    "reconnect_loop": false,
+    "secret_logging": false
+  },
+  "operation": "RUN_BOUNDED_OBSERVATION_ONLY_DATABENTO_SMOKE_ATTEMPT_3",
+  "plan_id": "c1553ef9cf430d7a7f80da24ad3908301eba96b7e17b570ef3ed1cc5a00958ee",
+  "plan_path": "reports/live_cockpit/package_candidate/695fbb41794bef5bbd6e052af4b590bf5647210e1d0089903101290d7ea72735/live-smoke-plan.json",
+  "plan_sha256": "48c40a66a8e562a2aacb8bb3f75cbb180c2811f0d560b2a9e97e1742422a564b",
+  "prepared_executable_sha256": "a6ce2d699953c6173805a07cfa88d43e050e918aee06879277aa240c3c93ff46",
+  "result_output": "reports/live_cockpit/bounded_live_smoke_result_attempt_3.json",
+  "schema_version": "futures_live_cockpit_smoke_approval_request/1.0.0",
+  "status": "WAITING_FOR_EXACT_USER_APPROVAL"
+}

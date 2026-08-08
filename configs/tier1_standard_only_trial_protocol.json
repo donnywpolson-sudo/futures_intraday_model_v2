@@ -1,0 +1,181 @@
+{
+  "schema_version": "tier1_standard_only_trial_protocol/1.0.0",
+  "state": "PUBLISHED_PRE_REGISTRATION_PROTOCOL_ONLY",
+  "classification": "ONE_UNVERSIONED_PREREGISTERED_TIER1_HISTORICAL_SCREEN_STANDARD_ONLY",
+  "research_only": true,
+  "live_readiness": false,
+  "lineage": {
+    "replaces_pre_registration_protocol_path": "configs/tier1_frozen_trial_protocol.json",
+    "replaces_pre_registration_protocol_id": "d647438200d54b60f9c7ddb69117adcd0abc23050b971dae542cda3fbdc21867",
+    "replaces_pre_registration_protocol_sha256": "7b6dcc144f52ef9feac7298dc87bbfbb6cb51f9f4628bfaaad773923d70a9662",
+    "replacement_reason": "STANDARD_PLAN_DOES_NOT_INCLUDE_2018_2022_L1_BBO_AND_MISSING_EXECUTION_PRICES_MUST_NOT_BE_INVENTED",
+    "replacement_timing": "BEFORE_TRIAL_REGISTRATION_MODEL_FIT_PREDICTION_GENERATION_OR_EVALUATION",
+    "prior_protocol_preserved": true,
+    "new_numbered_successor_creation": false
+  },
+  "period": {
+    "training_and_evaluation_years": [2018, 2019, 2020, 2021, 2022],
+    "locked_untouched_holdout": 2025,
+    "holdout_or_forward_access": false
+  },
+  "source": {
+    "selected_source_record_id": "7a7db45fb4e1a2e3825969e99781fd6f0d02b4dad7a7376b3f0163a0bb41cda5",
+    "selected_source_record_sha256": "6707a0be36384ea992bb8c83a0abb3fcb5cea41ae7299d7781f4b6c7ef41b531",
+    "selected_sources_id": "f61f34df0b9d8cf7b344016ce3df8bb76abeb890558740460f60d51e5ca37bde",
+    "selected_release_count": 20,
+    "calendar_release_id": "038940d82031f31e2c66ed37186e98a6ee6cff3e7248f634f2c7a8e94ea6ecf3",
+    "source_adequacy_record_id": "b3d8efbb010631922a944f13aff2de77e20d6775a2d98e5333994eca33cb5fbf",
+    "source_adequacy_record_sha256": "81057522b9038f3580f32ce51807b07435ebdd80f390ca812fad2c0cce010c9f",
+    "source_adequacy_record_path": "state/source_quality/tier1_frozen_source_adequacy/b3d8efbb010631922a944f13aff2de77e20d6775a2d98e5333994eca33cb5fbf.json",
+    "permitted_source_family": "BOUND_LOCAL_IMMUTABLE_DATABENTO_GLBX_MDP3_STANDARD_INCLUDED_L0_ONLY",
+    "historical_l1_bbo_dependency": false,
+    "terminal_execution_status_required_for_every_checkpoint": true,
+    "execution_statuses": ["COMPLETE", "EXPLICIT_UNAVAILABLE", "NOT_APPLICABLE_RISK_INELIGIBLE"],
+    "explicit_unavailable_rows_retained": true,
+    "missing_prices_or_fills_may_be_invented": false
+  },
+  "source_policy_correction": {
+    "calendar_open_checkpoints": 15343,
+    "complete_feature_windows": 15288,
+    "feature_complete_execution_complete": 15254,
+    "feature_complete_execution_unavailable": 34,
+    "unresolved_missing_execution_windows": 33,
+    "nonqualified_or_foreign_identity_windows": 1,
+    "registration_source_gate": "PASS_TERMINAL_LEDGER_AND_FEATURE_COVERAGE_WITH_EXPLICIT_EXECUTION_GAPS_RETAINED",
+    "selected_missing_execution_path": "INCONCLUSIVE_DATA_OR_COVERAGE",
+    "runner_up_substitution": false,
+    "zero_return_imputation_for_missing_execution_path": false,
+    "performance_claim_from_missing_execution_path": false,
+    "applies_equally_to_candidate_and_every_active_baseline": true
+  },
+  "decision_time": {
+    "checkpoints_chicago": ["08:30", "10:30", "13:30"],
+    "feature_bar_count": 61,
+    "feature_bar_semantics": "CAUSAL_EXECUTABLE_REPORTED_TRADE_BARS_BY_ORDINAL_NEVER_FORWARD_FILLED_OR_SYNTHESIZED",
+    "maximum_feature_span_minutes": 75,
+    "maximum_latest_bar_staleness_minutes": 5,
+    "feature_available_at_must_not_exceed_decision": true,
+    "prediction_eligibility_independent_of_future_outcome_availability": true
+  },
+  "features": {
+    "names": [
+      "bar_return_1",
+      "return_5",
+      "return_20",
+      "intrabar_range_fraction",
+      "atr_20_fraction",
+      "range_to_atr_20",
+      "realized_volatility_20",
+      "log1p_volume",
+      "volume_zscore_60",
+      "session_minute_sin",
+      "session_minute_cos"
+    ],
+    "lag_definition": "REPORTED_BAR_ORDINAL",
+    "trend_context": ["return_5", "return_20"],
+    "volatility_regime": ["atr_20_fraction", "range_to_atr_20", "realized_volatility_20"],
+    "time_of_session_context": ["session_minute_sin", "session_minute_cos"],
+    "training_only_standardization": true
+  },
+  "model": {
+    "family": "MARKET_SPECIFIC_TWO_TARGET_RIDGE",
+    "ridge_penalty": "1.0",
+    "market_identity": "SEPARATE_MODEL_PER_MARKET",
+    "chronological_outer_folds": 8,
+    "purge_minutes": 60,
+    "embargo_sessions": 1
+  },
+  "entry_and_exit": {
+    "minimum_predicted_net_r_after_stress_costs": "0.25",
+    "ranking": "PREDICTED_NET_R_DESC_THEN_ES_CL_ZN_6E",
+    "rank_before_outcome_lookup": true,
+    "runner_up_substitution_after_missing_selected_outcome": false,
+    "entry": "EXACT_OBSERVED_EXECUTABLE_BAR_AT_DECISION_PLUS_ONE_MINUTE",
+    "maximum_hold_minutes": 60,
+    "maximum_liquidation_delay_minutes": 5,
+    "stop_atr_multiple": "1.5",
+    "target_net_r": "2.0"
+  },
+  "position_and_risk": {
+    "instrument_size": "ONE_BOUND_STANDARD_CONTRACT_NO_FRACTIONAL_OR_MICRO_PROXY",
+    "standard_contract_risk_mismatch_resolution": "PLANNED_LOSS_ABOVE_250_USD_IS_A_CAUSAL_POLICY_ABSTENTION_RETAINED_AS_ZERO_POLICY_RETURN",
+    "maximum_planned_initial_loss_usd": "250",
+    "maximum_total_open_risk_usd": "250",
+    "maximum_entries_per_session": 3,
+    "maximum_open_positions": 1,
+    "daily_loss_threshold_usd": "1000",
+    "continuous_drawdown_threshold_usd": "1500",
+    "missing_risk_liquidation": "FAIL_CLOSED",
+    "continuous_marking": "FAVORABLE_THEN_ADVERSE_EXTREMES_EVERY_EXECUTABLE_BAR_INCLUDING_EXIT_BAR"
+  },
+  "costs": {
+    "label": "PROVIDER_NEUTRAL_PROVISIONAL_RESEARCH_COSTS",
+    "fee_per_side_usd": "5.00",
+    "round_trip_adverse_execution_ticks": {
+      "base": {"ES": 2, "CL": 4, "ZN": 2, "6E": 2},
+      "stress": {"ES": 4, "CL": 8, "ZN": 4, "6E": 4},
+      "extreme": {"ES": 8, "CL": 16, "ZN": 8, "6E": 8}
+    },
+    "promotion_scenario": "stress",
+    "may_be_reduced_after_outcomes": false
+  },
+  "baselines": {
+    "required": [
+      "flat_no_trade",
+      "fold_local_unconditional_return_by_market_session",
+      "previous_bar_sign_momentum",
+      "previous_bar_sign_reversal",
+      "risk_matched_always_long_intraday",
+      "candidate_signal_market_order_ranking_ablation"
+    ],
+    "flat_no_trade": "EVERY_CALENDAR_OPEN_CHECKPOINT_EXACT_ZERO_WITH_NO_FEATURE_MODEL_OUTCOME_ENTRY_OR_COST",
+    "active_baselines": "EACH_HAS_ITS_OWN_CAUSAL_UNIVERSE_SIGNAL_RANKING_SCHEDULE_COSTS_OVERLAP_ENTRY_LIMIT_DAILY_LOSS_EQUITY_AND_DRAWDOWN_PATH",
+    "missing_selected_execution_path": "SAME_INCONCLUSIVE_RULE_AS_CANDIDATE"
+  },
+  "coverage": {
+    "terminal_checkpoint_ledger_rate": "1.0",
+    "minimum_overall_causal_feature_rate": "0.95",
+    "minimum_market_year_causal_feature_rate": "0.90",
+    "minimum_market_fold_role_causal_feature_rate": "0.90",
+    "minimum_market_fold_role_complete_sessions": 30,
+    "terminal_execution_source_status_rate_before_registration": "1.0",
+    "selected_execution_path_rate_required_for_valid_evaluation": "1.0",
+    "missing_selected_path_result": "INCONCLUSIVE_DATA_OR_COVERAGE_NOT_STRATEGY_FAILURE_OR_PASS"
+  },
+  "promotion": {
+    "stress_net_pnl_positive": true,
+    "beats_true_zero_and_every_independently_simulated_baseline": true,
+    "aggregate_effect_and_multiplicity_gate": true,
+    "sleeve_tests": "DIAGNOSTIC_ONLY_BECAUSE_REQUIRING_EVERY_SPARSE_SLEEVE_TO_BE_POSITIVE_IS_STRUCTURALLY_INCOHERENT",
+    "positive_portfolio_years_of_3": 2,
+    "positive_market_years_of_12": 6,
+    "all_4_markets_require_at_least_one_positive_year": true,
+    "maximum_continuous_drawdown_usd": "1500",
+    "complete_metrics_coverage_lineage_runtime_and_authorization_required": true,
+    "maximum_label": "PASS_HISTORICAL_SCREEN",
+    "live_readiness_claim": false
+  },
+  "bindings": {
+    "configs/tier1_bracket_successor_v5.json": "d2e7ecd7c06950761d94cd9d3869aa860594fab99cd81a47491e612d575df26e",
+    "configs/tier1_bracket_successor_v11.json": "5cab17d7f4e482b7f09147e37e49758c65b3c590fc6ea96ffd65badc6fd11e0d",
+    "configs/tier1_bracket_successor_v12.json": "17a9da4b3f24d90cc2281a7a6adbca0a228eaf987c57b8bfe9d5a84eb96c9e4a",
+    "configs/tier1_bracket_preexecution_validity_certificate.json": "395125bf83155bbadf9329a342305f61c7a9467146590b3874b6be74c982f18b",
+    "configs/tier1_frozen_source_adequacy_census_plan.json": "75f956728371aec8004aa6cf911880b4f860498e49c956918e16bd96833153e0",
+    "configs/dependency_lock_receipt.json": "e6302e16d30d114b0c3140f2b075fd6850558ce4ea245475d2687b8531db1726",
+    "src/futures_rebuild/tier1_frozen_successor_source_semantics.py": "be042e6ae8a8a83bc5a719b005f39932eb9241ce0d05cf556b187376aad7d77f",
+    "src/futures_rebuild/tier1_frozen_source_adequacy_census.py": "e95a72f1074edb4766cd549452c9a44b29b046af6d0fc4466bab61e16ddd0a28",
+    "src/futures_rebuild/tier1_frozen_trial_pipeline.py": "bf07eae950b81bea1b155e8921c6d109ffb19cf6b2691962c4188d37ab57d6cb"
+  },
+  "authority": {
+    "source_policy_correction_publication_authorized": true,
+    "trial_registration_authorized": false,
+    "historical_execution_authorized": false,
+    "evaluation_evidence_publication_authorized": false,
+    "provider_or_network_access": false,
+    "credential_access": false,
+    "holdout_or_forward_access": false,
+    "stage_commit_push": false,
+    "trading": false
+  },
+  "protocol_id": "e7cea9906ef39579eacc6070ca08c06ceb248a558e8294433eb1c7d06019e7bc"
+}

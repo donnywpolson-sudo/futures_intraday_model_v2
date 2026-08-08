@@ -1,7 +1,6 @@
 import hashlib
 import json
 import shutil
-import uuid
 from pathlib import Path
 
 import pytest
@@ -18,7 +17,7 @@ from futures_rebuild.data_layout import (
     DataReleaseReceipt as VerifiedReleaseReceipt,
     PhasePublisher as AtomicPublisher,
 )
-from futures_rebuild.errors import ContractError, IntegrityError
+from futures_rebuild.errors import ContractError, IntegrityError, UnauthorizedOperation
 from futures_rebuild.legacy_evidence_snapshot import PublishedLegacyEvidenceSnapshot as PublishedSourceSnapshot
 from futures_rebuild.legacy_trial_census import (
     EXPERIMENT_LEDGER_PATH,
@@ -37,6 +36,13 @@ from futures_rebuild.legacy_trial_census import (
     load_legacy_trial_census,
     publish_legacy_trial_census,
 )
+from futures_rebuild.legacy_trial_penalty import (
+    CONSERVATIVE_CENSUS_STATUS,
+    build_conservative_penalty_payload,
+    load_conservative_penalty_census,
+    load_penalty_decision,
+    publish_conservative_penalty_census,
+)
 from futures_rebuild.migration import (
     SNAPSHOT_RECEIPT_STATUS,
     SNAPSHOT_RECEIPT_VERSION,
@@ -45,11 +51,10 @@ from futures_rebuild.trial import LegacyCensusReceipt
 
 
 @pytest.fixture
-def boundary() -> RepoBoundary:
+def boundary(short_test_root_factory) -> RepoBoundary:
     # Snapshot paths are deliberately long; use a disposable short drive-root
     # fixture so the synthetic tree remains below legacy Windows MAX_PATH.
-    root = Path(Path.cwd().anchor) / f"cns-{uuid.uuid4().hex[:8]}"
-    root.mkdir()
+    root = short_test_root_factory("cns-")
     active = root / "a"
     legacy = root / "l"
     stock = root / "s"
@@ -464,14 +469,21 @@ def _archive_receipt(
     return VerifiedReleaseReceipt.from_manifest(path, boundary)
 
 
-def _source_contract(boundary, *, downloads_authorized: bool = False) -> Path:
+def _source_contract(
+    boundary, *, downloads_authorized: bool = False, legacy_repository: str | None = None
+) -> Path:
     path = boundary.active_root / "configs" / "source_contract.json"
     path.write_bytes(
         canonical_bytes(
             {
                 "active_repository": str(boundary.active_root),
                 "discovery_policy": "manifest_only",
-                "legacy_repository": str(boundary.legacy_roots[0]),
+                "external_repository_access": "FORBIDDEN",
+                "legacy_repository": (
+                    str(boundary.legacy_roots[0])
+                    if legacy_repository is None
+                    else legacy_repository
+                ),
                 "links_allowed": False,
                 "provider": {
                     "downloads_authorized": downloads_authorized,
@@ -542,6 +554,74 @@ def test_census_is_canonical_immutable_unresolved_and_snapshot_bound(
     assert census_receipt.source_snapshot_id == snapshot.source_snapshot_id
     assert census_receipt.unresolved_reference_count == 6
     census_receipt.verify()
+
+
+def test_conservative_successor_counts_every_unresolved_reference_and_margin(
+    boundary, operation_factory, monkeypatch
+) -> None:
+    snapshot, _ = _snapshot(boundary=boundary, monkeypatch=monkeypatch)
+    publisher = _publisher(boundary, operation_factory)
+    archive_receipt = _archive_receipt(boundary, operation_factory, snapshot)
+    source_receipt = publish_legacy_trial_census(
+        snapshot=snapshot,
+        source_archive_receipt=archive_receipt,
+        boundary=boundary,
+        publisher=publisher,
+    )
+    unresolved = LegacyCensusReceipt.from_release(source_receipt, boundary)
+    with pytest.raises(ContractError, match="observed floor plus every unresolved"):
+        build_conservative_penalty_payload(
+            source_receipt,
+            boundary=boundary,
+            preregistered_penalty_count=45,
+            safety_margin=1,
+        )
+    with pytest.raises(UnauthorizedOperation, match="INVALID_TRIAL_CENSUS_UNRESOLVED"):
+        unresolved.require_executable()
+
+    receipt = publish_conservative_penalty_census(
+        source_receipt=source_receipt,
+        boundary=boundary,
+        publisher=publisher,
+        preregistered_penalty_count=46,
+        safety_margin=1,
+    )
+    payload = load_conservative_penalty_census(receipt, boundary=boundary)
+    census = LegacyCensusReceipt.from_release(receipt, boundary)
+
+    assert payload["status"] == CONSERVATIVE_CENSUS_STATUS
+    assert payload["exact_count_state"] == "INDETERMINATE"
+    assert payload["observed_attempt_floor"] == 39
+    assert payload["unresolved_reference_count"] == 6
+    assert payload["preregistered_penalty_count"] == 46
+    assert payload["trusted_gate"] is True
+    assert census.counting_attempt_count == 46
+    census.require_executable()
+
+    decision_core = {
+        "counting_rule_id": (
+            "OBSERVED_FLOOR_PLUS_EACH_UNRESOLVED_REFERENCE_PLUS_SAFETY_MARGIN"
+        ),
+        "historical_execution_authorized": False,
+        "observed_attempt_floor": 39,
+        "preregistered_penalty_count": 46,
+        "publication_authorized": False,
+        "safety_margin": 1,
+        "schema_version": "legacy_trial_penalty_decision/1.0.0",
+        "selected_by_user": "SELECT CONSERVATIVE LEGACY PENALTY 46",
+        "source_census_sha256": payload["source_census_sha256"],
+        "source_evidence_sha256": payload["source_evidence_sha256"],
+        "source_snapshot_id": payload["source_snapshot_id"],
+        "unresolved_reference_count": 6,
+    }
+    decision_path = boundary.active_root / "configs" / "legacy_trial_penalty.json"
+    decision_path.write_bytes(
+        canonical_bytes({**decision_core, "decision_id": sha256_json(decision_core)})
+        + b"\n"
+    )
+    assert load_penalty_decision(
+        decision_path, source_receipt=source_receipt, boundary=boundary
+    )["preregistered_penalty_count"] == 46
 
 
 def test_census_fails_on_duplicate_provenance_rows(
@@ -654,6 +734,30 @@ def test_cli_defaults_to_read_only_canonical_assessment(
     }
     assert not (boundary.active_root / "data" / "vault" / "releases").exists()
     assert not (boundary.active_root / "state" / "locks").exists()
+
+
+def test_cli_accepts_retired_null_legacy_root_for_snapshot_only_assessment(
+    boundary, monkeypatch, capsys
+) -> None:
+    snapshot, _ = _snapshot(boundary=boundary, monkeypatch=monkeypatch)
+    source_contract = _source_contract(boundary, legacy_repository=None)
+    payload = json.loads(source_contract.read_text(encoding="utf-8"))
+    payload["legacy_repository"] = None
+    source_contract.write_bytes(canonical_bytes(payload) + b"\n")
+
+    assert census_module.main(
+        [
+            "--repository-root",
+            str(boundary.active_root),
+            "--source-contract",
+            str(source_contract),
+            "--source-snapshot-root",
+            str(snapshot.root),
+        ]
+    ) == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["mode"] == "READ_ONLY_ASSESSMENT"
+    assert summary["observed_attempt_floor"] == 39
 
 
 def test_cli_publish_is_explicit_controlled_non_alpha_and_stays_untrusted(

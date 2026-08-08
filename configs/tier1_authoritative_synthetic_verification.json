@@ -1,0 +1,52 @@
+{
+  "schema_version": "tier1_authoritative_synthetic_verification/1.0.0",
+  "verification_id": "8bb7151b70815ff9244c1e1e579270c00bc8cc928c61165891481c88532049a9",
+  "state": "PREPARED_NOT_PUBLISHED",
+  "scope": "COMPLETE_APPLICABLE_TIER1_TREE_PLUS_TRANSITION_STABLE_AUTHORITATIVE_LIFECYCLE",
+  "test_file_count": 50,
+  "test_tree_id": "841cfc5f510fdd4a467a211fdbf90c66699ad3d23e924350425c7258d2d9d674",
+  "conftest_sha256": "ac9ecd1f29441d7ab712adee752aca3fd9d7040a603e02add7e1cbecd2e55cf3",
+  "runner_sha256": "eb4b899dc382b6ec9a3b1865e2e93ea7a4440d875b469ebe9ee3848b36b72fdf",
+  "selection": {
+    "marker": "high_risk",
+    "file_prefixes": [
+      "test_tier1_bracket",
+      "test_tier1_frozen",
+      "test_tier1_preexecution",
+      "test_tier1_standard",
+      "test_tier1_final",
+      "test_tier1_authoritative"
+    ],
+    "deselected_historical_assertions": [
+      "tests/test_tier1_bracket_v10_registration.py::test_v9_retirement_and_v10_registration_are_prepared_create_only",
+      "tests/test_tier1_final_decision_validity.py::test_final_lifecycle_is_prepared_without_publication_or_pointer_mutation"
+    ],
+    "expected_xfail": "tests/test_tier1_bracket_v6.py::test_v5_is_preserved_and_v6_prepares_without_publication"
+  },
+  "applicable_results": {
+    "passed": 283,
+    "failed": 0,
+    "deselected": 1004,
+    "expected_xfailed": 1
+  },
+  "all_v4_through_v12_controls_included": true,
+  "complete_synthetic_source_to_terminal_pipeline_tested": true,
+  "scenario_specific_risk_abstention_tested": true,
+  "conclusive_rejection_lattice_tested": true,
+  "independent_baseline_paths_tested": true,
+  "mutable_pointer_excluded_from_protocol_tested": true,
+  "prepublication_context_tested": true,
+  "postpublication_context_tested": true,
+  "failed_activation_rollback_tested": true,
+  "durable_unpublished_bundle_tested": true,
+  "single_use_authorization_tested": true,
+  "historical_rows_opened": false,
+  "provider_or_network_access": false,
+  "credential_access": false,
+  "holdout_2025_access": false,
+  "real_model_fit": false,
+  "historical_evaluation": false,
+  "trial_registration": false,
+  "publication": false,
+  "trading": false
+}

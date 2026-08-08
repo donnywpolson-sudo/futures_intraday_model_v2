@@ -13,9 +13,7 @@ execution is outside this project's scope.
 - `AGENTS.md`: durable project policy and approval boundaries.
 - `PROJECT_OUTLINE.md`: authoritative workflow, commands, gates, outputs, and
   stop conditions.
-- `PUBLIC_SNAPSHOT.md`: public omissions and non-authorizing boundary.
-- Private `CODEX_HANDOFF.md`: current multi-step continuation state,
-  intentionally omitted from the public snapshot.
+- `CODEX_HANDOFF.md`: current multi-step continuation state.
 - `README.md`: installation and operator orientation.
 - `MASTER_AUDIT.md` and `META_MASTER_AUDIT.md`: canonical project-state and
   audit-quality specifications.
@@ -56,6 +54,11 @@ authority.
 - `configs/alpha_tiered.yaml` is a validated profile view of that universe.
 - Foundation coverage, status-scope, session, identity, and economics contracts
   define acceptance for the causal foundation.
+- `configs/historical_observability_policy.json` classifies historical
+  foundation rows as immutable DBN observability. It does not establish
+  official historical CME open, close, halt, pause, or holiday states.
+- `configs/exchange_calendar_policy.json` reserves the activated official CME
+  calendar for current/forward cockpit scheduling.
 - `manifests/data_releases/**` contains content-addressed release descriptors;
   accepted payloads live in v2-owned immutable release roots.
 - `state/trial_registry/**` declares every real-data attempt before outcomes are
@@ -113,7 +116,7 @@ or selection eligibility, or unlock holdout/forward data.
 | --- | --- | --- | --- |
 | 1A | Preflight exact provider requests; ingest and verify immutable DBN/sidecar pairs | `futures-pipeline phase1a` | DBN release manifests and acquisition evidence |
 | 1B | Convert accepted DBNs and independently reconcile rows, schemas, definitions, hashes, and sidecars | `futures-pipeline phase1b` | immutable raw releases and ingest reports |
-| 2 | Build point-in-time causal, session-normalized, actual-contract data | `futures-pipeline phase2` | causal foundation releases |
+| 2 | Build point-in-time causal, trade-date-grouped, actual-contract data from observed DBN rows | `futures-pipeline phase2` | empirical-observability causal foundation releases |
 | 3 | Build outcomes with explicit entry lag, horizon, maturity, and unresolved states | `futures-pipeline phase3` | separate labeled/outcome-source releases |
 | 4 | Build leakage-audited causal feature matrices without outcome access | `futures-pipeline phase4` | immutable feature releases |
 | 5 | Freeze nested chronological split plans with purge and embargo | `futures-pipeline phase5` | split-plan manifests |
@@ -142,6 +145,12 @@ an authoritative artifact.
 - Phase 1B preserves source event semantics. Phase 2 is the first phase allowed
   to apply causal session normalization, explicit missing/degraded states, and
   trainability gates.
+- Historical Phase 2 admits actual decoded DBN rows only. It performs no gap
+  filling, interpolation, synthetic open/close generation, or inference that
+  unobserved time was closed. Its trade-date rollover is grouping logic, not
+  official historical exchange-hours authority.
+- The activated official CME calendar governs current/forward cockpit
+  scheduling only and is not retrofitted onto historical research releases.
 - Missing, sparse, degraded, unresolved, and partially decoded states remain in
   coverage denominators. They cannot become trainable through a global waiver.
 - Feature builders may not discover or read outcome, label, prediction, or
@@ -164,30 +173,31 @@ an authoritative artifact.
 
 ## Runnable commands
 
-From the repository root in the pinned Python 3.11.9 environment:
+From the repository root, use explicit executables from the pinned Python
+3.11.9 environment without depending on activation or `PATH`:
 
 ```powershell
-futures-pipeline list
-futures-pipeline validate-profiles
-futures-pipeline --output reports/pipeline_audit/synthetic-phase1a-11.json smoke
-futures-pipeline phase1a
-futures-pipeline phase1b
-futures-pipeline phase2
-futures-pipeline phase3
-futures-pipeline phase4
-futures-pipeline phase5
-futures-pipeline phase6
-futures-pipeline phase7
-futures-pipeline phase8
-futures-pipeline phase9
-futures-pipeline phase10
-futures-pipeline phase11
+.\.venv\Scripts\futures-pipeline.exe list
+.\.venv\Scripts\futures-pipeline.exe validate-profiles
+.\.venv\Scripts\futures-pipeline.exe --output reports/pipeline_audit/synthetic-phase1a-11.json smoke
+.\.venv\Scripts\futures-pipeline.exe phase1a
+.\.venv\Scripts\futures-pipeline.exe phase1b
+.\.venv\Scripts\futures-pipeline.exe phase2
+.\.venv\Scripts\futures-pipeline.exe phase3
+.\.venv\Scripts\futures-pipeline.exe phase4
+.\.venv\Scripts\futures-pipeline.exe phase5
+.\.venv\Scripts\futures-pipeline.exe phase6
+.\.venv\Scripts\futures-pipeline.exe phase7
+.\.venv\Scripts\futures-pipeline.exe phase8
+.\.venv\Scripts\futures-pipeline.exe phase9
+.\.venv\Scripts\futures-pipeline.exe phase10
+.\.venv\Scripts\futures-pipeline.exe phase11
 ```
 
 The global options precede the subcommand when using the module directly:
 
 ```powershell
-python -m futures_rebuild.pipeline --output reports/pipeline_audit/smoke.json smoke
+.\.venv\Scripts\python.exe -m futures_rebuild.pipeline --output reports/pipeline_audit/smoke.json smoke
 ```
 
 Outputs are create-only. Choose a new path for each run.
@@ -195,11 +205,20 @@ Outputs are create-only. Choose a new path for each run.
 ## Audit commands
 
 ```powershell
-futures-master-audit --invocation <frozen-invocation.json>
+.\.venv\Scripts\futures-master-audit.exe --invocation <frozen-invocation.json>
 .\.venv\Scripts\python.exe -m pytest -q --junitxml=.pytest_tmp/full-suite.xml
-futures-meta-audit --junitxml .pytest_tmp/full-suite.xml --suite-evidence-output .pytest_tmp/full-suite-evidence.json
-futures-retirement-audit
+.\.venv\Scripts\futures-meta-audit.exe --junitxml .pytest_tmp/full-suite.xml --suite-evidence-output .pytest_tmp/full-suite-evidence.json
+.\.venv\Scripts\futures-retirement-audit.exe
 ```
+
+On Windows, launch the full-suite child command through
+`.\scripts\run_windows_host_root_pytest.ps1`. The launcher first proves
+create/delete access at the repository drive root and does not start pytest on
+failure. Its default child command is the exact full-suite command above.
+Repository-local `basetemp` fallback is forbidden because prescribed synthetic
+trees can exceed legacy `MAX_PATH`. A Codex invocation must therefore grant the
+launcher Windows host-root write access; detaching a workspace-sandboxed child
+does not grant that capability.
 
 The Master Audit classifies one exact target without granting authority. The
 Meta Audit checks its independently derived threat registry, Master coverage,
@@ -210,43 +229,31 @@ repository.
 ## Cockpit workflow
 
 ```powershell
-futures-live-cockpit --self-check
-futures-live-cockpit --demo
-futures-live-cockpit --live-smoke --approval <approved-receipt.json> --result-output reports/live_cockpit/bounded_live_smoke_result_attempt_2.json
-powershell -NoProfile -File scripts/build_live_cockpit.ps1
-powershell -NoProfile -File scripts/install_live_cockpit.ps1 -Upgrade -WhatIf
-powershell -NoProfile -File scripts/activate_live_cockpit.ps1 -PreparedInstallPath <prepared-version> -LiveSmokeResult reports/live_cockpit/bounded_live_smoke_result_attempt_2.json -WhatIf
+.\.venv\Scripts\futures-live-cockpit.exe --self-check
+.\.venv\Scripts\futures-live-cockpit.exe --demo
+.\.venv\Scripts\futures-high-risk-prepare.exe --operation cockpit-live-smoke --scope duration_seconds=120 --output reports/live_cockpit/bounded_live_smoke_result.json
 ```
 
 Packaging publishes `FuturesLiveCockpit/` with exactly
 `FuturesLiveCockpit.exe` and `_internal/` at its top level.
 
-The normal UI is observation-only and may read live GLBX.MDP3 data through the
-v2-local credential locator. A provider-backed smoke requires its exact durable
-approval. Preparation installs and self-checks an isolated version without
-changing shortcuts. Shortcut activation follows only after dependency, package,
-self-check, demo, all-market, and exact package-bound approved live-smoke
-evidence pass.
+The normal UI is observation-only. Provider-backed smoke, packaging,
+installation, and activation are high-risk operations: prepare their bounded
+scope in the repository, then let Codex execute only after one plain-language
+confirmation. Existing shortcuts stay unchanged until the approved cutover has
+passed its rollback verification.
 
 ## Approval gates
 
-Separate approvals are required for:
+For day-to-day work, start with `CURRENT_WORKFLOW.md`. This outline defines the
+research pipeline; it does not add a second operational workflow.
 
-1. a provider request or download, bound to provider, dataset, symbols, dates,
-   schema, request count, cost ceiling, and destinations;
-2. copy migration, bound to source/destination mapping hashes, bytes, parent
-   release, exclusions, and rollback;
-3. each real-history trial or WFA/OOS program, after an immutable trial
-   declaration;
-4. prediction materialization;
-5. candidate sealing;
-6. holdout or forward access;
-7. bounded provider-backed cockpit smoke;
-8. paper, shadow, or live trading and every order path;
-9. remote push; and
-10. destructive deletion or cutover.
-
-Approval for one class never authorizes another.
+The project uses a two-tier workflow. Normal local work—code, documents,
+tests, and non-research generated artifacts—continues from the user’s request
+without a generated approval artifact; see `CURRENT_WORKFLOW.md` for normal
+work, staging, local-commit, and high-risk procedures. Durable trial
+declarations and immutable release validation remain required for real research
+work; historic closure material is evidence only in `docs/LEGACY_WORKFLOWS.md`.
 
 ## Evaluation and model-trust standard
 
@@ -265,7 +272,8 @@ Before a model-trust, promotion, or sealing claim, require:
 - dependence-aware uncertainty, effective independent breadth, temporal and
   parameter stability, negative controls, multiple-testing adjustment, and
   traditional-versus-satellite reporting;
-- Phase 7 prediction integrity, Phase 8 economics/portfolio/risk review, and
+- Phase 7 prediction integrity, Phase 8 all-41-market Databento economics
+  audit/rulebook and portfolio/risk review, and
   Phase 9 statistical/adversarial evidence with all blockers preserved.
 
 Passing a metric, a broad row count, or a favorable satellite result cannot
@@ -273,12 +281,11 @@ substitute for these gates.
 
 ## Bounded execution policy
 
-Any provider request, broad build, data mutation, real-history evaluation,
-WFA/model operation, prediction write, candidate/holdout action, package
-installation, live smoke, shortcut change, or destructive operation requires a
-plan that binds the exact command family, immutable inputs, approval receipt,
-scope ceilings, duration, outputs/logs, forbidden actions, rollback, and stop
-condition. If any binding is missing or stale, do not start.
+Before a high-risk action, describe its command family, scope ceiling, expected
+outputs, forbidden actions, and recovery boundary in the approval question.
+For real research, the existing trial declaration, provenance, immutable-output,
+and validation contracts still apply. On failure, preserve partial evidence and
+last-known-good state; ask before retrying, deleting, or recovering.
 
 ## Acceptance standards
 
@@ -306,6 +313,9 @@ Label material claims as `Verified`, `Inferred`, `Assumed`, or
 config/trial identity, command, result, limitations, stale-risk, and next gate.
 Never present gross-only, synthetic, warning, failed, inferred, or incomplete
 evidence as alpha, promotion, holdout, cockpit, paper, or live readiness.
+At an approval boundary, report one concise reason and the plain-language scope
+to approve. A handoff is optional and never asks the user to copy a continuation
+prompt.
 
 ## Stop conditions
 

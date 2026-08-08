@@ -8,6 +8,7 @@
   "authority_policy": {
     "eligible_contract_requires_provider_unit_qty_match": true,
     "mutable_public_urls_authorize_economics": false,
+    "non_multiplier_provider_unit_markets": ["ZQ"],
     "provider_sentinel_allowed": false,
     "rulebook_hash_bound_into_every_economics_record": true
   },

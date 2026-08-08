@@ -1,0 +1,34 @@
+{
+  "schema_version": "tier1_bracket_successor_v7_contract/1.0.0",
+  "state": "PREPARED_NOT_REGISTERED",
+  "classification": "POST_V6_GOVERNANCE_ONLY_PREREGISTERED_HISTORICAL_SCREEN",
+  "research_only": true,
+  "live_readiness": false,
+  "supersedes_v6_trial_id": "c92c5a6ecfd96a00d0cf89aa02319878b479dad6c6e21b703e54bd55943a8608",
+  "inherited_v6_contract_path": "configs/tier1_bracket_successor_v6.json",
+  "inherited_v6_contract_sha256": "ec6b547bca8724d8972dafa4cfd465e277bd13043ccff591cad798b88bea00c0",
+  "frozen_without_change": [
+    "source_integrity_adapter",
+    "markets_period_and_2025_holdout",
+    "features_models_and_hyperparameters",
+    "splits_purge_and_embargo",
+    "entry_hurdle_ranking_and_tie_breaking",
+    "costs_and_risk_controls",
+    "coverage_baselines_inference_and_promotion_gate",
+    "evidence_artifact_set"
+  ],
+  "governance_successor": {
+    "test_runner_binding": "tests/conftest.py_REQUIRED",
+    "prepublication_assertion_after_publication": "STRICT_EXPECTED_HISTORICAL_XFAIL_ONLY",
+    "active_successor_lifecycle_test": "MUST_PASS_BEFORE_AND_AFTER_CREATE_ONLY_PUBLICATION",
+    "registered_v6_bytes": "PRESERVED_UNCHANGED"
+  },
+  "authority": {
+    "historical_execution_requires": "VERIFIED_SINGLE_USE_OPERATION_RECEIPT_BOUND_TO_V7_TRIAL_SOURCE_HASHES_OUTPUT_ROOT_AND_2025_FALSE",
+    "publication_requires_separate_approval": true,
+    "holdout_or_forward_access": false,
+    "provider_access": false,
+    "trading": false,
+    "git_actions": false
+  }
+}

@@ -7,11 +7,11 @@
   "allowed_paths": ["MASTER_AUDIT.md", "docs", "configs", "reports"],
   "specification": {
     "path": "MASTER_AUDIT.md",
-    "sha256": "380888804f60e54cadb5901a58fd3c153c8d290daf7c91df7fa9d3e654942abf"
+    "sha256": "70913d266e7fa819e56b70d012a897d8ffe8957235ea3f31c8b1e295de5aeaec"
   },
   "stage_matrix": {
     "path": "configs/master_audit_v3/stage_requirement_matrix.json",
-    "sha256": "c73a140bedf69e84216cb981d537fe5f8f7e81df2de63d1abc88f844ddf15ff3"
+    "sha256": "6a0ec9f32010f2362a92f0d428e19774fd7a83125e4565dc0f7bf1c02692b449"
   },
   "universe_contract": {
     "path": "configs/research_universe_contract.json",

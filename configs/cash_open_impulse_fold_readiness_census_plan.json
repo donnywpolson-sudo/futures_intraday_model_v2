@@ -1,0 +1,52 @@
+{
+  "schema_version": "cash_open_impulse_fold_readiness_census_plan/1.0.0",
+  "state": "PREPARED_NOT_EXECUTED",
+  "operation": "CENSUS_CASH_OPEN_IMPULSE_FOLD_READINESS_ONCE",
+  "purpose": "Prove before registration that every locked fold, market, baseline, feature window, execution path, and scenario risk disposition is supported by the 20 immutable local sources.",
+  "protocol_id": "3b8e09d65015afd33fc033aa72c8bb0be22425cafac8b8b145eeccb639258067",
+  "split_manifest_path": "manifests/split_plans/tier1_core/1ef3d7de365833cb46e1a239759b018b1f85b5bfc7d342b291064f1efe66399b.json",
+  "calendar_release_id": "038940d82031f31e2c66ed37186e98a6ee6cff3e7248f634f2c7a8e94ea6ecf3",
+  "output_root": "state/unpublished_evidence/cash_open_impulse_fold_readiness/3b8e09d65015afd33fc033aa72c8bb0be22425cafac8b8b145eeccb639258067",
+  "bindings": {
+    "configs/cash_open_impulse_pre_registration_protocol.json": "8d9dbb4bc4355dc9fd753ebde8cce11086b6c7027677c168cd1c000eebeb8c30",
+    "configs/contract_economics_rules.json": "6a43960f252dc9103ea39f5ef4d082a71aa3aeefe89370c528dc29ac319e0f33",
+    "configs/prop_firm_risk_profile.json": "5f55ab6d53f02afa75996a482a7ed5e693e4e541333f1b60f574f7c593c766e3",
+    "configs/tier1_historical_checkpoint_calendar_v5.json": "a328798dca5175456f824e6c0df74398d604f9d57ee43969bdfe82ff12c2fdd8",
+    "manifests/split_plans/tier1_core/1ef3d7de365833cb46e1a239759b018b1f85b5bfc7d342b291064f1efe66399b.json": "540a245be6efda355e23af28f8532c8d422f2957416e97daed9256cbe52718e7",
+    "scripts/run_cash_open_impulse_fold_readiness_census.py": "063c795e7f791bb3418d648fe5a38cf0b4349d62b2d7abb6e0a83cb1f8f051fb",
+    "src/futures_rebuild/cash_open_impulse_census.py": "6f4fa64b9182711a34079688c47e0a5176e4fc3a7f46c9757e88439ad721031b",
+    "src/futures_rebuild/cash_open_impulse_readiness.py": "d1b239345754b90b556226b88fd1e697afe91dc94d9335cb8587759ae077b842",
+    "src/futures_rebuild/certified_research_gateway.py": "b3600dd604c4e8741bb5d339ed639cd06bb38d6a178e4cd8ef510ba9435fe37b",
+    "src/futures_rebuild/preexecution_fold_certification.py": "74be8dcdc0881cf6f5f075d459f7a8319970ab71a31d54fe6172e3b8b646562d"
+  },
+  "required_gates": {
+    "outer_fold_market_cells": 32,
+    "minimum_complete_training_sessions_per_cell": 504,
+    "minimum_complete_evaluation_sessions_per_cell": 63,
+    "feature_windows_complete_for_every_expected_session": true,
+    "potential_candidate_paths_complete_for_every_expected_session": true,
+    "active_baseline_paths_complete_for_every_expected_session": true,
+    "scenario_risk_dispositions_terminal_for_every_expected_session": true,
+    "market_year_counts_and_exclusion_reasons_complete": true,
+    "source_hashes_revalidated": true,
+    "failure_prevents_registration": true
+  },
+  "historical_economics_evaluation": false,
+  "model_fit": false,
+  "prediction_generation": false,
+  "holdout_2025_access": false,
+  "provider_or_network_access": false,
+  "publication": false,
+  "active_data_mutation": false,
+  "trading": false,
+  "limits": {
+    "maximum_attempts": 1,
+    "maximum_retries": 0,
+    "maximum_runtime_seconds": 900,
+    "worker_pool_timeout_seconds": 780,
+    "maximum_workers": 4,
+    "maximum_external_cost_usd": "0"
+  },
+  "preservation_boundary": "Create one unpublished certificate report and one authorization-use record only; preserve sources, prior evidence, registrations, and the active pointer.",
+  "plan_id": "39eae6811607ece0572cf5772a1fac090af5aa263ffab6b3222886e8e140f39b"
+}

@@ -1,0 +1,308 @@
+{
+    "schema_version":  "systematic_futures_audit/3.0.0",
+    "classification":  "NON_AUTHORIZING_EVIDENCE_CLASSIFICATION",
+    "mode":  "EVIDENCE_ONLY",
+    "audit_id":  "ACTIVE-VIEW-PREPARATION-V5-OBSERVATION_COCKPIT_READY-20260728",
+    "target_state":  "OBSERVATION_COCKPIT_READY",
+    "allowed_paths":  [
+                          "MASTER_AUDIT.md",
+                          "configs",
+                          "reports",
+                          "manifests"
+                      ],
+    "specification":  {
+                          "path":  "MASTER_AUDIT.md",
+                          "sha256":  "70913d266e7fa819e56b70d012a897d8ffe8957235ea3f31c8b1e295de5aeaec"
+                      },
+    "stage_matrix":  {
+                         "path":  "configs/master_audit_v3/stage_requirement_matrix.json",
+                         "sha256":  "6a0ec9f32010f2362a92f0d428e19774fd7a83125e4565dc0f7bf1c02692b449"
+                     },
+    "universe_contract":  {
+                              "path":  "configs/research_universe_contract.json",
+                              "sha256":  "86e38f8732bd05b10d0faa2eec93e0bd0db6aeac3e56a13fbaed8e69555035d4"
+                          },
+    "evidence":  [
+                     {
+                         "evidence_id":  "8ce1194f41cde2739696937515cec8d6ec96865e6ddb426b6ba1570a4a295a11",
+                         "path":  "configs/eight_market_successor_migration_approval.json",
+                         "sha256":  "f726c17bc0192cb1e3edc65b02aa57b79c93a441b4fb0c3a2b219b4d377e9987",
+                         "bytes":  539,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-CURRENT-FORWARD-CALENDAR",
+                         "path":  "configs/active_exchange_calendar.json",
+                         "sha256":  "a6fc445a116023820ab009d0a87f85682cbf35873230ce8bf75ecdf764b5b9ca",
+                         "bytes":  860,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-COCKPIT-SMOKE",
+                         "path":  "reports/live_cockpit/bounded_live_smoke_result_attempt_2.json",
+                         "sha256":  "5f6f88c95826c7898027a88562445c8101a880499997f9f32a3026ed1377717a",
+                         "bytes":  2155,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-COCKPIT-ACTIVATION",
+                         "path":  "reports/live_cockpit/cockpit_activation_verification.json",
+                         "sha256":  "8d99e00865e88be81dd7dc393f164b6718864dc61114a31359fffcbbdc3420d8",
+                         "bytes":  1945,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-DEPENDENCY-LOCK",
+                         "path":  "configs/dependency_lock_receipt.json",
+                         "sha256":  "14ae74a216abea4384614523aa9e41a763b4bb6cdc32817b5761207758d77a94",
+                         "bytes":  2426,
+                         "safe_to_read":  true,
+                         "limitations":  [
+
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-SUITE-CLEAN-HEAD",
+                         "path":  "reports/audits/active_view_preparation_v3/full_suite_evidence.json",
+                         "sha256":  "ef64b38b44e8e1f6279965eccfe4ccc6071807f5dbd4d92fb99d32a382477cb3",
+                         "bytes":  2785,
+                         "safe_to_read":  true,
+                         "limitations":  [
+                                             "NON_AUTHORIZING_EVIDENCE_ONLY"
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-META-AUDIT",
+                         "path":  "reports/audits/active_view_preparation_v3/meta_master_audit.json",
+                         "sha256":  "4733f1f6ecf08669c7f92bca48383ac6cd7930d2cffdce5d6c5c1bc4ca740800",
+                         "bytes":  2878,
+                         "safe_to_read":  true,
+                         "limitations":  [
+                                             "NON_AUTHORIZING_EVIDENCE_ONLY"
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-ACTIVE-VIEW-PILOT",
+                         "path":  "reports/active_data_view/pilot/32dcf8b9336c545c0a8bbe4f6b35e5dcfd1470a28ba98b002c7d6d2278e5eab1/run-2/pilot_evidence.json",
+                         "sha256":  "b1786d919ae401056dc427082a589a01a58a592892c4ef1bc4b326f245b4f36e",
+                         "bytes":  5521,
+                         "safe_to_read":  true,
+                         "limitations":  [
+                                             "NON_AUTHORIZING_EVIDENCE_ONLY"
+                                         ]
+                     },
+                     {
+                         "evidence_id":  "E-ACTIVE-VIEW-FULL-PENDING-PLAN",
+                         "path":  "manifests/active_data_view/plans/causal_active_full_certification_plan_v5.json",
+                         "sha256":  "99bcabb20686ef41c913d47b359bd2596131f7c16d3f647d139077144f287643",
+                         "bytes":  5946798,
+                         "safe_to_read":  true,
+                         "limitations":  [
+                                             "NON_AUTHORIZING_EVIDENCE_ONLY"
+                                         ]
+                     }
+                 ],
+    "check_results":  [
+                          {
+                              "subcheck_id":  "G1.S1",
+                              "status":  "PASS",
+                              "reason":  "FROZEN_PACKAGE_SMOKE_AND_CLEAN_HEAD_SUITE_INDEPENDENTLY_VERIFY_COCKPIT_BEHAVIOR",
+                              "evidence_refs":  [
+                                                    "E-COCKPIT-SMOKE",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G1.S2",
+                              "status":  "PASS",
+                              "reason":  "APPROVED_41_MARKET_UNIVERSE_MATCHES_SMOKE_AND_INSTALLED_CONFIGURATION",
+                              "evidence_refs":  [
+                                                    "8ce1194f41cde2739696937515cec8d6ec96865e6ddb426b6ba1570a4a295a11",
+                                                    "E-COCKPIT-SMOKE"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G1.S3",
+                              "status":  "PASS",
+                              "reason":  "HASH_BOUND_SMOKE_ACTIVATION_AND_META_CONTROLS_ARE_COMPLETE",
+                              "evidence_refs":  [
+                                                    "E-COCKPIT-SMOKE",
+                                                    "E-COCKPIT-ACTIVATION",
+                                                    "E-META-AUDIT"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G2.S2",
+                              "status":  "PASS",
+                              "reason":  "COCKPIT_EXPOSES_EXACT_APPROVED_41_MARKET_POPULATION",
+                              "evidence_refs":  [
+                                                    "8ce1194f41cde2739696937515cec8d6ec96865e6ddb426b6ba1570a4a295a11",
+                                                    "E-COCKPIT-SMOKE",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G8.S2",
+                              "status":  "PASS",
+                              "reason":  "CURRENT_FORWARD_CALENDAR_POINTER_AND_COCKPIT_SCHEDULING_TESTS_PASS",
+                              "evidence_refs":  [
+                                                    "E-CURRENT-FORWARD-CALENDAR",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G8.S4",
+                              "status":  "PASS",
+                              "reason":  "SEPARATE_SMOKE_AND_ACTIVATION_RECEIPTS_BIND_CUTOVER_AND_ROLLBACK",
+                              "evidence_refs":  [
+                                                    "E-COCKPIT-SMOKE",
+                                                    "E-COCKPIT-ACTIVATION"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G8.S5",
+                              "status":  "PASS",
+                              "reason":  "LOCKED_DEPENDENCY_CLOSURE_AND_BUILD_TESTS_PASS",
+                              "evidence_refs":  [
+                                                    "E-DEPENDENCY-LOCK",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G8.S6",
+                              "status":  "PASS",
+                              "reason":  "ALL_41_MARKETS_AND_GROUPS_ARE_TESTED_AND_SMOKE_VERIFIED",
+                              "evidence_refs":  [
+                                                    "8ce1194f41cde2739696937515cec8d6ec96865e6ddb426b6ba1570a4a295a11",
+                                                    "E-COCKPIT-SMOKE",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G8.S7",
+                              "status":  "PASS",
+                              "reason":  "CREDENTIAL_RESOLUTION_AND_PACKAGE_SECRET_ISOLATION_TESTS_PASS",
+                              "evidence_refs":  [
+                                                    "E-COCKPIT-ACTIVATION",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+                                                  "CREDENTIAL_VALUE_NOT_READ_BY_AUDIT"
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G8.S8",
+                              "status":  "PASS",
+                              "reason":  "PACKAGE_AND_TESTS_ENFORCE_OBSERVATION_ONLY_NO_ORDER_PATH",
+                              "evidence_refs":  [
+                                                    "E-COCKPIT-SMOKE",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G8.S9",
+                              "status":  "PASS",
+                              "reason":  "PROVIDER_FAILURE_ABSTENTION_AND_BOUNDED_SESSION_TESTS_PASS",
+                              "evidence_refs":  [
+                                                    "E-COCKPIT-SMOKE",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G8.S10",
+                              "status":  "PASS",
+                              "reason":  "PACKAGING_ASSET_AND_LOCKED_DEPENDENCY_CLOSURE_TESTS_PASS",
+                              "evidence_refs":  [
+                                                    "E-DEPENDENCY-LOCK",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G8.S11",
+                              "status":  "PASS",
+                              "reason":  "STATE_CACHE_CLEAN_SHUTDOWN_AND_RECOVERY_ARE_SMOKE_AND_TEST_VERIFIED",
+                              "evidence_refs":  [
+                                                    "E-COCKPIT-SMOKE",
+                                                    "E-COCKPIT-ACTIVATION",
+                                                    "E-SUITE-CLEAN-HEAD"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          },
+                          {
+                              "subcheck_id":  "G8.S12",
+                              "status":  "PASS",
+                              "reason":  "DESKTOP_AND_START_MENU_CUTOVER_AND_ROLLBACK_ARE_VERIFIED",
+                              "evidence_refs":  [
+                                                    "E-COCKPIT-ACTIVATION"
+                                                ],
+                              "limitations":  [
+
+                                              ]
+                          }
+                      ],
+    "runtime":  {
+                    "max_files":  100,
+                    "max_bytes_read":  100000000,
+                    "allowed_command_classes":  [
+                                                    "static-read",
+                                                    "hash-read"
+                                                ],
+                    "forbidden_actions":  [
+                                              "network",
+                                              "provider-call",
+                                              "project-code-execution",
+                                              "holdout-row-access",
+                                              "readiness-publication",
+                                              "candidate-sealing",
+                                              "order-placement",
+                                              "legacy-write"
+                                          ]
+                }
+}

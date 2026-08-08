@@ -5,6 +5,7 @@ from __future__ import annotations
 import gc
 import hashlib
 from collections.abc import Mapping
+from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator
@@ -88,6 +89,24 @@ STATISTICS_DTYPE = (
     "ts_recv", "ts_ref", "price", "quantity", "sequence", "ts_in_delta",
     "stat_type", "channel_id", "update_action", "stat_flags", "_reserved",
 )
+TRADE_DTYPE = (
+    "length", "rtype", "publisher_id", "instrument_id", "ts_event",
+    "price", "size", "action", "side", "flags", "depth", "ts_recv",
+    "ts_in_delta", "sequence",
+)
+
+
+@dataclass(frozen=True)
+class ProviderObservationHeader:
+    """Price-free identity and timing fields from a diagnostic DBN record."""
+
+    market: str
+    schema: str
+    event_at_ns: int
+    received_at_ns: int | None
+    publisher_id: int
+    instrument_id: int
+    source_file_sha256: str
 
 
 def _text(value: object, name: str) -> str:
@@ -226,6 +245,8 @@ def _chunks(
     chunks = (decoded,) if isinstance(decoded, np.ndarray) else decoded
     expected_dtypes = {
         "definition": {DEFINITION_DTYPE_V1, DEFINITION_DTYPE_V3},
+        "ohlcv-1d": {OHLCV_DTYPE},
+        "ohlcv-1h": {OHLCV_DTYPE},
         "ohlcv-1m": {OHLCV_DTYPE},
         "status": {STATUS_DTYPE},
         "statistics": {STATISTICS_DTYPE},
@@ -256,6 +277,67 @@ def _chunks(
             yield chunk
     except (NotImplementedError, TypeError, ValueError) as exc:
         raise IntegrityError("offline DBN decoding failed") from exc
+    finally:
+        del decoded
+        del store
+        gc.collect()
+        binding.verify()
+
+
+def iter_observation_headers(
+    binding: SnapshotFile,
+    *,
+    market: str,
+    expected_query_contract: Mapping[str, object],
+    schema: str,
+    batch_rows: int = 100_000,
+) -> Iterator[ProviderObservationHeader]:
+    """Decode diagnostic timing and identity without exposing price fields."""
+
+    if schema not in {"ohlcv-1s", "trades"}:
+        raise ContractError("diagnostic observation schema is unsupported")
+    if (
+        isinstance(batch_rows, bool) or not isinstance(batch_rows, int)
+        or not 1 <= batch_rows <= MAX_BATCH_ROWS
+    ):
+        raise ContractError("diagnostic decode batch size is outside its bounded range")
+    path = binding.verify()
+    store = databento.DBNStore.from_file(path)
+    _validate_metadata(
+        store, binding, schema=schema, market=market,
+        expected_query_contract=expected_query_contract,
+    )
+    decoded = store.to_ndarray(count=batch_rows)
+    chunks = (decoded,) if isinstance(decoded, np.ndarray) else decoded
+    expected_dtype = OHLCV_DTYPE if schema == "ohlcv-1s" else TRADE_DTYPE
+    try:
+        prior_received: int | None = None
+        for chunk in chunks:
+            if not isinstance(chunk, np.ndarray) or chunk.dtype.names != expected_dtype:
+                raise IntegrityError("diagnostic DBN dtype differs from the pinned schema")
+            for row in chunk:
+                event_at_ns = _integer(row["ts_event"], "ts_event", nonnegative=True)
+                if event_at_ns in {0, UINT64_NULL}:
+                    raise IntegrityError("diagnostic observation has an undefined event timestamp")
+                received_at_ns = None
+                if schema == "trades":
+                    received_at_ns = _integer(row["ts_recv"], "ts_recv", nonnegative=True)
+                    if received_at_ns in {0, UINT64_NULL}:
+                        raise IntegrityError("diagnostic trade has an undefined receive timestamp")
+                    if prior_received is not None and received_at_ns < prior_received:
+                        raise IntegrityError("diagnostic trades are not receive-time ordered")
+                    prior_received = received_at_ns
+                yield ProviderObservationHeader(
+                    market=market,
+                    schema=schema,
+                    event_at_ns=event_at_ns,
+                    received_at_ns=received_at_ns,
+                    publisher_id=_integer(row["publisher_id"], "publisher_id"),
+                    instrument_id=_integer(row["instrument_id"], "instrument_id"),
+                    source_file_sha256=binding.sha256,
+                )
+    except (NotImplementedError, TypeError, ValueError) as exc:
+        raise IntegrityError("offline diagnostic DBN decoding failed") from exc
     finally:
         del decoded
         del store
@@ -347,8 +429,8 @@ def iter_bars(
     schema: str = "ohlcv-1m",
     batch_rows: int = 100_000,
 ) -> Iterator[ProviderBar]:
-    if schema != "ohlcv-1m":
-        raise ContractError("only ohlcv-1m is canonical foundation research input")
+    if schema not in {"ohlcv-1d", "ohlcv-1m"}:
+        raise ContractError("DBN bar decoder schema is unsupported")
     ordinal = 0
     for chunk in _chunks(
         binding,

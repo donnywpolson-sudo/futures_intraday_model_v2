@@ -110,6 +110,7 @@ class EconomicsRuleBook:
     rules: Mapping[str, EconomicsRule]
     source_ids: frozenset[str]
     rulebook_hash: str
+    non_multiplier_provider_unit_markets: frozenset[str] = frozenset()
 
     @classmethod
     def from_file(cls, path: Path) -> "EconomicsRuleBook":
@@ -117,6 +118,47 @@ class EconomicsRuleBook:
             payload = json.loads(path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
             raise IntegrityError("economics rulebook JSON is invalid") from exc
+        return cls.from_payload(payload)
+
+    @classmethod
+    def from_payload(cls, payload: object) -> "EconomicsRuleBook":
+        return cls._from_payload(
+            payload,
+            allowed_versions=frozenset({_RULEBOOK_VERSION}),
+            authoritative_dbn_release_id=_AUTHORITATIVE_DBN_RELEASE_ID,
+            exact_markets=_APPROVED_MARKETS,
+            required_market=None,
+        )
+
+    @classmethod
+    def from_embedded_payload(
+        cls, payload: object, *, required_market: str
+    ) -> "EconomicsRuleBook":
+        if (
+            not isinstance(required_market, str)
+            or required_market not in _APPROVED_MARKETS
+        ):
+            raise IntegrityError(
+                "embedded economics required market is invalid"
+            )
+        return cls._from_payload(
+            payload,
+            allowed_versions=frozenset({"1.2.0", _RULEBOOK_VERSION}),
+            authoritative_dbn_release_id=None,
+            exact_markets=None,
+            required_market=required_market,
+        )
+
+    @classmethod
+    def _from_payload(
+        cls,
+        payload: object,
+        *,
+        allowed_versions: frozenset[str],
+        authoritative_dbn_release_id: str | None,
+        exact_markets: frozenset[str] | None,
+        required_market: str | None,
+    ) -> "EconomicsRuleBook":
         expected = {
             "authority_policy",
             "currency",
@@ -131,7 +173,7 @@ class EconomicsRuleBook:
         if (
             not isinstance(payload, dict)
             or set(payload) != expected
-            or payload.get("rules_version") != _RULEBOOK_VERSION
+            or payload.get("rules_version") not in allowed_versions
             or payload.get("dataset") != "GLBX.MDP3"
             or payload.get("currency") != "USD"
             or payload.get("forbidden_authorities")
@@ -144,12 +186,29 @@ class EconomicsRuleBook:
             or not isinstance(payload.get("rules"), list)
         ):
             raise IntegrityError("economics rulebook schema/policy is invalid")
-        if payload.get("authority_policy") != {
+        policy = payload.get("authority_policy")
+        expected_policy = {
             "eligible_contract_requires_provider_unit_qty_match": True,
             "mutable_public_urls_authorize_economics": False,
             "provider_sentinel_allowed": False,
             "rulebook_hash_bound_into_every_economics_record": True,
-        }:
+        }
+        non_multiplier_markets = []
+        if isinstance(policy, dict):
+            non_multiplier_markets = policy.get(
+                "non_multiplier_provider_unit_markets", []
+            )
+            policy = {
+                key: value for key, value in policy.items()
+                if key != "non_multiplier_provider_unit_markets"
+            }
+        if (
+            policy != expected_policy
+            or not isinstance(non_multiplier_markets, list)
+            or any(not isinstance(item, str) for item in non_multiplier_markets)
+            or non_multiplier_markets != sorted(set(non_multiplier_markets))
+            or (authoritative_dbn_release_id is not None and non_multiplier_markets != ["ZQ"])
+        ):
             raise IntegrityError("economics authority policy is not fail closed")
         sources = payload["verification_sources"]
         required_source_fields = {"authoritative", "binding", "locator", "role"}
@@ -170,17 +229,35 @@ class EconomicsRuleBook:
             key for key, value in sources.items() if value["authoritative"] is True
         ]
         databento_source = sources.get("DATABENTO_DEFINITION_GLBX_MDP3")
+        databento_locator = (
+            databento_source.get("locator")
+            if isinstance(databento_source, dict)
+            else None
+        )
+        if authoritative_dbn_release_id is None:
+            locator_is_valid = (
+                isinstance(databento_locator, str)
+                and re.fullmatch(
+                    (
+                        r"manifests/data_releases/dbn/[0-9a-f]{64}\.json"
+                        r"#data/dbn/definition/\{market\}/\{year\}/\{filename\}"
+                    ),
+                    databento_locator,
+                )
+                is not None
+            )
+        else:
+            locator_is_valid = databento_locator == (
+                "manifests/data_releases/dbn/"
+                f"{authoritative_dbn_release_id}.json"
+                "#data/dbn/definition/{market}/{year}/{filename}"
+            )
         if (
             authoritative != ["DATABENTO_DEFINITION_GLBX_MDP3"]
             or not isinstance(databento_source, dict)
             or databento_source.get("binding")
             != "EXACT_LAYOUT_V2_DBN_RELEASE_LOGICAL_DEFINITION_PATH_AND_PROVIDER_EVENT_TIME"
-            or databento_source.get("locator")
-            != (
-                "manifests/data_releases/dbn/"
-                f"{_AUTHORITATIVE_DBN_RELEASE_ID}.json"
-                "#data/dbn/definition/{market}/{year}/{filename}"
-            )
+            or not locator_is_valid
             or any(
             value["authoritative"] is False
             and value["binding"] != "MUTABLE_PUBLIC_REFERENCE_NOT_TRUST_EVIDENCE"
@@ -231,14 +308,25 @@ class EconomicsRuleBook:
             parsed[market] = EconomicsRule(
                 market, point, expected_qty, quote, source_ids
             )
-        if frozenset(parsed) != _APPROVED_MARKETS:
+        parsed_markets = frozenset(parsed)
+        if exact_markets is not None:
+            if parsed_markets != exact_markets:
+                raise IntegrityError(
+                    "economics rulebook must cover exactly the approved 41 markets"
+                )
+        elif (
+            not parsed_markets
+            or not parsed_markets.issubset(_APPROVED_MARKETS)
+            or required_market not in parsed_markets
+        ):
             raise IntegrityError(
-                "economics rulebook must cover exactly the approved 41 markets"
+                "embedded predecessor economics does not cover the required market"
             )
         return cls(
             MappingProxyType(parsed),
             frozenset(sources),
             sha256_json(payload),
+            frozenset(non_multiplier_markets),
         )
 
     def resolve(self, market: str, definition: ProviderDefinition) -> ResolvedEconomics:
@@ -253,6 +341,7 @@ class EconomicsRuleBook:
             rule,
             market,
             definition,
+            market not in self.non_multiplier_provider_unit_markets,
         )
 
 
@@ -262,6 +351,7 @@ def _resolve_economics(
     rule: EconomicsRule,
     market: str,
     definition: ProviderDefinition,
+    provider_unit_must_match: bool,
 ) -> ResolvedEconomics:
     """Resolve one complete immutable provider definition once per rulebook."""
 
@@ -270,13 +360,17 @@ def _resolve_economics(
     if not rulebook_hash:
         raise ContractError("economics rulebook hash is required")
     observed = definition.observed_unit_qty
-    if observed is None:
-        raise ContractError(
-            "provider unit quantity is unavailable; economics fail closed"
-        )
-    if observed != rule.expected_unit_qty:
+    if provider_unit_must_match and observed is not None and observed != rule.expected_unit_qty:
         raise ContractError("provider unit quantity contradicts the pinned market rule")
-    quantity_state = "PROVIDER_DEFINITION_CROSSCHECK_MATCH"
+    # The protected rulebook is the stable authority for multiplier/unit and
+    # quote convention.  A definition unit, where Databento supplies one,
+    # remains an independent contradiction check; historic definitions that
+    # omit it are not silently assigned a provider value.
+    quantity_state = (
+        "PROVIDER_DEFINITION_CROSSCHECK_MATCH"
+        if observed is not None and provider_unit_must_match
+        else "RULEBOOK_VALUE_PROVIDER_UNIT_QTY_UNAVAILABLE"
+    )
     tick_size = definition.min_tick
     tick_value = tick_size * rule.point_value
     if not tick_value.is_finite() or tick_value <= 0:

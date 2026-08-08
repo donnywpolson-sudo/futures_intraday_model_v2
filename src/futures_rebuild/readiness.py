@@ -37,16 +37,19 @@ from .canonical import assert_plain_file, canonical_bytes, sha256_file, sha256_j
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
 from .source_contract import legacy_roots_from_contract
 from .foundation.orchestrator import (
-    FOUNDATION_CALENDAR_SCHEMA_VERSION,
+    FOUNDATION_OBSERVABILITY_SCHEMA_VERSION,
     FOUNDATION_SET_RELEASE_KIND,
     load_foundation_set,
 )
 from .exchange_calendar import (
-    coverage_matches_active_index,
-    load_active_calendar_index,
     load_exchange_calendar_policy,
-    load_foundation_calendar_coverage,
-    verify_calendar_freshness,
+)
+from .foundation.historical_observability import (
+    CALENDAR_CLAIM as EMPIRICAL_CALENDAR_CLAIM,
+    EVIDENCE_BASIS as HISTORICAL_OBSERVABILITY_EVIDENCE_BASIS,
+    READINESS_BLOCKER as HISTORICAL_OBSERVABILITY_CONTRACT_NOT_BOUND,
+    UNCERTAINTY_RULE as HISTORICAL_OBSERVABILITY_UNCERTAINTY_RULE,
+    load_historical_observability_policy,
 )
 from .historical_capability import (
     build_foundation_research_blueprint,
@@ -84,6 +87,7 @@ ENGINE_SEED_MODULES = (
     "futures_rebuild.historical_capability",
     "futures_rebuild.historical_engine_contracts",
     "futures_rebuild.historical_evaluator",
+    "futures_rebuild.historical_phase3",
     "futures_rebuild.historical_splitter",
     "futures_rebuild.producer_bridge",
     "futures_rebuild.readiness",
@@ -1610,46 +1614,36 @@ def _calendar_readiness_codes(
     *,
     boundary: RepoBoundary,
 ) -> tuple[str, ...]:
-    if foundation.get("schema_version") != FOUNDATION_CALENDAR_SCHEMA_VERSION:
-        return ("CALENDAR_CONTRACT_NOT_BOUND",)
+    if (
+        foundation.get("schema_version")
+        != FOUNDATION_OBSERVABILITY_SCHEMA_VERSION
+    ):
+        return (HISTORICAL_OBSERVABILITY_CONTRACT_NOT_BOUND,)
     load_exchange_calendar_policy(
         boundary.active_root / "configs" / "exchange_calendar_policy.json"
     )
-    raw_coverage_receipt = foundation.get("calendar_coverage_receipt")
-    if not isinstance(raw_coverage_receipt, dict):
-        raise IntegrityError("calendar-bound foundation lacks its coverage receipt")
-    coverage_receipt = VerifiedReleaseReceipt.from_dict(raw_coverage_receipt)
-    coverage = load_foundation_calendar_coverage(
-        coverage_receipt,
-        boundary=boundary,
+    policy = load_historical_observability_policy(
+        boundary.active_root / "configs" / "historical_observability_policy.json"
     )
-    expected_markets = tuple(
-        sorted(
-            {
-                str(requirement["market"])
-                for requirement in coverage.requirements
-            }
+    coverage = foundation.get("historical_observability_coverage")
+    if (
+        not isinstance(coverage, Mapping)
+        or coverage.get("calendar_claim") != EMPIRICAL_CALENDAR_CLAIM
+        or coverage.get("evidence_basis")
+        != HISTORICAL_OBSERVABILITY_EVIDENCE_BASIS
+        or coverage.get("uncertainty_rule")
+        != HISTORICAL_OBSERVABILITY_UNCERTAINTY_RULE
+        or coverage.get("interval_count") != policy["interval_count"]
+        or coverage.get("market_count") != policy["market_count"]
+        or coverage.get("research_scope_market_year_count")
+        != policy["research_scope_market_year_count"]
+        or foundation.get("predecessor_foundation_release_id")
+        != policy["predecessor_foundation_release_id"]
+    ):
+        raise IntegrityError(
+            "historical-observability foundation binding is invalid"
         )
-    )
-    try:
-        active_index = load_active_calendar_index(
-            boundary=boundary,
-            expected_markets=expected_markets,
-        )
-    except (ContractError, IntegrityError):
-        return ("HISTORICAL_CALENDAR_SOURCE_NOT_ESTABLISHED",)
-    codes: list[str] = []
-    if not coverage_matches_active_index(coverage, active_index):
-        codes.append("CALENDAR_SUCCESSOR_REQUIRED")
-    try:
-        verify_calendar_freshness(
-            active_index,
-            expected_markets=expected_markets,
-            now=datetime.now(timezone.utc),
-        )
-    except (ContractError, IntegrityError):
-        codes.append("CALENDAR_STALE_OR_INCOMPLETE")
-    return tuple(codes)
+    return ()
 
 
 def assess_readiness(

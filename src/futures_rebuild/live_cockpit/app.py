@@ -13,7 +13,13 @@ import uuid
 from pathlib import Path
 from typing import Any, Mapping
 
+from .credentials import (
+    default_credential_locator_path,
+    default_repository_package_api_env_path,
+)
+from futures_rebuild.high_risk import confirmation_required
 from .feed import (
+    API_KEY_ENV,
     ROOT,
     SUPPORTED_CHART_TIMEFRAMES,
     chart_market_universe,
@@ -21,7 +27,6 @@ from .feed import (
     normalize_timeframe,
 )
 
-from .credentials import credential_status
 from .engine import (
     DEFAULT_VISUAL_UPDATE_MODE,
     VISUAL_UPDATE_HZ,
@@ -198,9 +203,23 @@ def self_check(*, env: Mapping[str, str] | None = None) -> dict[str, Any]:
         "databento": importlib.util.find_spec("databento") is not None,
         "webview": importlib.util.find_spec("webview") is not None,
     }
-    resolution_env = None if env is None else values
-    credentials = credential_status(resolution_env)
-    api_key_configured = credentials.configured
+    locator_path = default_credential_locator_path()
+    locator_present = bool(locator_path is not None and locator_path.is_file())
+    repository_api_env_path = default_repository_package_api_env_path()
+    repository_api_env_present = bool(
+        repository_api_env_path is not None and repository_api_env_path.is_file()
+    )
+    environment_key_present = API_KEY_ENV in values
+    credential_source_present = (
+        locator_present or repository_api_env_present or environment_key_present
+    )
+    credential_source = None
+    if locator_present:
+        credential_source = "installed credential locator (existence only)"
+    elif repository_api_env_present:
+        credential_source = "repository package api.env (existence only)"
+    elif environment_key_present:
+        credential_source = "environment variable (existence only)"
     core_pass = (
         len(markets) == 41
         and alpha_tiers.available
@@ -208,7 +227,6 @@ def self_check(*, env: Mapping[str, str] | None = None) -> dict[str, Any]:
         and asset_launch_target_local
         and all(imports.values())
         and cache_writeable
-        and credentials.error is None
     )
     return {
         "status": "PASS" if core_pass and webview2_runtime else "FAIL",
@@ -221,11 +239,13 @@ def self_check(*, env: Mapping[str, str] | None = None) -> dict[str, Any]:
         "cache_writeable": cache_writeable,
         "cache_error": cache_error,
         "webview2_runtime": webview2_runtime,
-        "api_key_configured": api_key_configured,
-        "credential_source": credentials.source,
-        "credential_locator_present": credentials.locator_present,
-        "credential_locator_valid": credentials.locator_valid,
-        "credential_error": credentials.error,
+        "credential_check_mode": "existence_only",
+        "credential_source_present": credential_source_present,
+        "api_key_configured": None,
+        "credential_source": credential_source,
+        "credential_locator_present": locator_present,
+        "credential_locator_valid": None,
+        "credential_error": None,
     }
 
 
@@ -458,22 +478,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Verify local assets and runtime dependencies without opening the app.",
     )
     parser.add_argument(
-        "--live-smoke",
+        "--prepare-live-smoke",
         action="store_true",
-        help="Run the approval-gated 120-second provider smoke without opening the app.",
-    )
-    parser.add_argument(
-        "--approval",
-        type=Path,
-        help="Exact live-smoke approval receipt; valid only with --live-smoke.",
-    )
-    parser.add_argument(
-        "--result-output",
-        type=Path,
-        help=(
-            "Create-only hash-bound smoke result path; valid only with "
-            "--live-smoke."
-        ),
+        help="Describe the bounded provider smoke; this command never runs it.",
     )
     return parser
 
@@ -508,13 +515,9 @@ def run_desktop(*, engine: CockpitEngine, state_path: Path, demo: bool) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
-    selected_modes = sum((args.self_check, args.demo, args.live_smoke))
+    selected_modes = sum((args.self_check, args.demo, args.prepare_live_smoke))
     if selected_modes > 1:
-        raise SystemExit("--self-check, --demo, and --live-smoke are mutually exclusive")
-    if args.approval is not None and not args.live_smoke:
-        raise SystemExit("--approval is valid only with --live-smoke")
-    if args.result_output is not None and not args.live_smoke:
-        raise SystemExit("--result-output is valid only with --live-smoke")
+        raise SystemExit("--self-check, --demo, and --prepare-live-smoke are mutually exclusive")
     if args.self_check:
         result = self_check()
         # PyInstaller's windowed bootloader sets stdout to None. The exit code
@@ -522,26 +525,22 @@ def main(argv: list[str] | None = None) -> int:
         if sys.stdout is not None:
             print(json.dumps(result, indent=2, sort_keys=True))
         return 0 if result["status"] == "PASS" else 1
-    if args.live_smoke:
-        if args.approval is None:
-            raise SystemExit(
-                "BLOCKED: --live-smoke requires an exact --approval receipt"
+    if args.prepare_live_smoke:
+        print(
+            json.dumps(
+                confirmation_required(
+                    "cockpit live smoke",
+                    scope={"duration_seconds": "120", "provider_requests": "bounded"},
+                    outputs=("reports/live_cockpit/bounded_live_smoke_result.json",),
+                    preservation="Leave the installed cockpit and its shortcuts unchanged.",
+                ),
+                sort_keys=True,
             )
-        if args.result_output is None:
-            raise SystemExit(
-                "BLOCKED: --live-smoke requires an exact --result-output path"
-            )
-        from .smoke import main as smoke_main
-
-        return smoke_main(
-            [
-                "--plan",
-                str(ROOT / "configs" / "live_cockpit_smoke_plan.json"),
-                "--approval",
-                str(args.approval),
-                "--result-output",
-                str(args.result_output),
-            ]
+        )
+        return 0
+    if not args.demo:
+        raise SystemExit(
+            "BLOCKED: live cockpit launch requires an approved Codex high-risk task; use --prepare-live-smoke first"
         )
 
     root = app_data_dir()

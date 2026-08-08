@@ -61,7 +61,7 @@ FINAL_AUDIT_REPORTS = {
 }
 META_REPORT = "reports/audits/final/meta_master_audit.json"
 _LEGACY_ABSOLUTE = re.compile(
-    r"(?i)c:\\users\\example\\desktop\\futures_intraday_model(?!_v2)"
+    r"(?i)c:\\users\\donny\\desktop\\futures_intraday_model(?!_v2)"
 )
 
 

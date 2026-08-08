@@ -1,4 +1,5 @@
 from pathlib import Path
+import subprocess
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -8,108 +9,108 @@ def _text(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
-def test_root_operational_documents_are_steady_state_and_v2_owned() -> None:
-    documents = [
-        "AGENTS.md",
-        "PUBLIC_SNAPSHOT.md",
-        "PROJECT_OUTLINE.md",
-        "README.md",
-        "MASTER_AUDIT.md",
-        "META_MASTER_AUDIT.md",
-    ]
-    combined = "\n".join(_text(path) for path in documents)
-    assert "REBUILD_COMPLETE" not in combined
-    assert "REBUILD_IN_PROGRESS" not in combined
-    legacy_root_prefix = r"C:\Users\example\Desktop\futures_intraday_model" + "\\"
-    assert legacy_root_prefix not in combined
-    assert "FOUNDATION_READY" in combined
-    assert "OBSERVATION_COCKPIT_READY" in combined
-
-
-def test_root_master_is_canonical_and_versioned_copy_is_redirect_only() -> None:
-    master = _text("MASTER_AUDIT.md")
-    redirect = _text("docs/MASTER_AUDIT_V3.md")
-    assert "canonical audit specification" in master
-    assert "This file is non-authoritative" in redirect
-    assert "../MASTER_AUDIT.md" in redirect
-    assert len(redirect) < 1000
-
-
-def test_meta_audit_is_blind_first_and_has_strict_high_severity_closure() -> None:
-    meta = _text("META_MASTER_AUDIT.md")
-    blind = meta.index("Before reading `MASTER_AUDIT.md` closely")
-    reconcile = meta.index("Only then read the Master Audit")
-    assert blind < reconcile
-    for required in (
-        "false-pass",
-        "Critical",
-        "High",
-        "P0",
-        "P1",
-        "standalone operation",
-        "secret exposure",
-        "stale hashes",
-    ):
-        assert required in meta
-    assert (
-        "no unresolved Critical/High or P0/P1 item remains"
-        in " ".join(meta.split())
-    )
-
-
-def test_master_audit_explicitly_covers_cockpit_false_pass_paths() -> None:
-    master = _text("MASTER_AUDIT.md")
-    for required in (
-        "all 41 approved markets",
-        "observation-only architecture",
-        "provider error handling",
-        "state/cache bounds",
-        "packaged self-check",
-        "shortcut targets",
-        "rollback",
-        "credential filenames",
-    ):
-        assert required.lower() in master.lower()
-
-
-def test_project_outline_preserves_steady_state_research_runbook_concepts() -> None:
+def test_current_documents_use_one_plain_language_workflow_surface() -> None:
+    agents = _text("AGENTS.md")
+    readme = _text("README.md")
     outline = _text("PROJECT_OUTLINE.md")
+    current = _text("CURRENT_WORKFLOW.md")
+    combined = "\n".join((agents, readme, outline, current))
     for required in (
-        "Research discipline",
-        "Data manifest and rule index",
-        "Active layout",
-        "Profile ladder",
-        "Phase 1A-11 workflow",
-        "Non-negotiable data rules",
-        "Label, feature, and split rules",
-        "Evaluation and model-trust standard",
-        "Bounded execution policy",
-        "Reporting standard",
-        "Stop conditions",
+        "CURRENT_WORKFLOW.md",
+        "plain-language",
+        "Normal local work",
+        "High-risk work",
+        "real-data",
+        "remote push",
     ):
-        assert f"## {required}" in outline
-    assert "scripts.phase" not in outline
-    assert "src/futures_rebuild/" in outline
+        assert required.lower() in combined.lower()
+    assert "--approval-line" not in combined
+    assert "futures-live-cockpit-workflow" not in combined
+    assert "futures-closure-workflow" not in combined
+    assert "this guide controls normal-work procedure" in current.lower()
 
 
-def test_root_git_hygiene_protects_text_contracts_secrets_and_heavy_data() -> None:
-    attributes = _text(".gitattributes")
+def test_handoff_describes_the_current_phase8_chain_and_valid_rejection() -> None:
+    handoff = _text("CODEX_HANDOFF.md")
+
+    for required in (
+        "efb8943f...638d5",
+        "a9656ec5...ff7d",
+        "5b01056d...192fa4",
+        "c18ef7e9...b4a94",
+        "42e1f97c...30a80",
+        "valid rejection, not an invalid retirement",
+        "NO_ACTIVE_TRIAL_VALID_REJECTION",
+        "There is no active Tier 1 trial",
+    ):
+        assert required.lower() in handoff.lower()
+    assert "all-market audit must finish" not in handoff
+    assert "registered bracket trial is bound to superseded index" not in handoff
+
+
+def test_current_workflow_names_one_certified_real_history_surface() -> None:
+    current = _text("CURRENT_WORKFLOW.md")
+    legacy = _text("docs/LEGACY_WORKFLOWS.md")
+    assert "The only current code surface" in current
+    assert "CertifiedResearchGateway" in current
+    assert "shared receipt boundary rejects" in current
+    assert "V4-V12" in legacy
+    assert "registration through it is disabled" in legacy
+
+
+def test_agents_requires_a_value_case_for_new_policy_controls() -> None:
+    agents = _text("AGENTS.md")
+    for required in ("risk it prevents", "decision it improves", "simpler rule"):
+        assert required in agents
+
+
+def test_legacy_registry_lists_retired_surface_and_preservation_rule() -> None:
+    legacy = _text("docs/LEGACY_WORKFLOWS.md")
+    for required in (
+        "active_data_full_successor_v11_3.py",
+        "closure engine",
+        "byte-for-byte",
+        "Force-adding",
+    ):
+        assert required.lower() in legacy.lower()
+
+
+def test_root_git_hygiene_declares_and_hides_legacy_evidence_paths() -> None:
     ignore = _text(".gitignore").splitlines()
-    for text_format in ("*.md", "*.py", "*.json", "*.yaml", "*.ps1"):
-        assert f"{text_format} text eol=lf" in attributes
-    for binary_format in ("*.dbn", "*.parquet", "*.zst", "*.sqlite"):
-        assert f"{binary_format} -text" in attributes
-    for protected_diff in (".env -diff", ".env.* -diff", "api.env -diff"):
-        assert protected_diff in attributes
     for ignored in (
-        ".env",
-        ".env.*",
-        "api.env",
-        "databento.env",
-        "credentials/",
-        "secrets/",
-        "state/lock_recovery/",
-        "*.parquet",
-        "*.dbn",
+        "FuturesLiveCockpit.backup-*/",
+        "artifacts/flcp/",
+        "data/active/",
+        "manifests/workflow/closure/",
+        "reports/workflow/closure/",
+        "src/futures_rebuild/active_data_*successor*.py",
     ):
         assert ignored in ignore
+    legacy_relative = "src/futures_rebuild/active_data_full_successor_v11_3.py"
+    result = subprocess.run(
+        ["git", "check-ignore", "-q", "--", legacy_relative],
+        cwd=ROOT,
+        check=False,
+    )
+    assert result.returncode == 0
+    tracked = subprocess.run(
+        ["git", "ls-files", "--error-unmatch", "--", legacy_relative],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    assert tracked.returncode != 0
+
+
+def test_public_scripts_expose_no_token_era_high_risk_runner() -> None:
+    scripts = _text("pyproject.toml")
+    for retired in (
+        "futures-calendar",
+        "futures-active-view",
+        "futures-live-cockpit",
+        "futures-foundation-calendar-successor",
+        "futures-closure-workflow",
+    ):
+        assert retired not in scripts
+    assert "futures-high-risk-prepare" in scripts

@@ -1,0 +1,41 @@
+{
+  "schema_version": "overnight_inventory_reversal_historical_execution_plan/1.0.0",
+  "state": "PREPARED_NOT_EXECUTED",
+  "operation": "RUN_OVERNIGHT_INVENTORY_REVERSAL_2018_2022_ONCE",
+  "trial_id": "24772e41730b16bfdf3187d0c9e79b2491e6118962cfdffbc16a86d4e241169c",
+  "period": [2018, 2019, 2020, 2021, 2022],
+  "markets": ["ES", "CL", "ZN", "6E"],
+  "phase5_manifest_path": "manifests/split_plans/tier1_core/1ef3d7de365833cb46e1a239759b018b1f85b5bfc7d342b291064f1efe66399b.json",
+  "phase5_manifest_sha256": "540a245be6efda355e23af28f8532c8d422f2957416e97daed9256cbe52718e7",
+  "input_market_year_pairs": 20,
+  "output_root": "state/unpublished_evidence/overnight_inventory_reversal/24772e41730b16bfdf3187d0c9e79b2491e6118962cfdffbc16a86d4e241169c",
+  "limits": {
+    "maximum_real_history_attempts": 1,
+    "maximum_retries": 0,
+    "maximum_provider_requests": 0,
+    "maximum_holdout_rows": 0,
+    "maximum_workers": 1
+  },
+  "preservation": {
+    "holdout_2025_untouched": true,
+    "provider_or_network_access": false,
+    "publication": false,
+    "trading": false,
+    "stage_commit_push": false,
+    "accepted_source_bytes_mutated": false
+  },
+  "authorization": {
+    "exact_single_use_user_approval_required": true,
+    "pre_outcome_anchor_required_before_source_open": true,
+    "execution_authorized": false
+  },
+  "bindings": {
+    "configs/overnight_inventory_reversal_preregistration.json": "80fea760169a50d5b18c371eced23e4952d4a65751329c055729e1c3f3b65f24",
+    "configs/overnight_inventory_reversal_preoutcome_correction.json": "0833c83a840a56c4ca2f6a32404bf3482f90313d84e044eb2530f9ec298d5ccf",
+    "src/futures_rebuild/overnight_inventory_reversal_execution.py": "cd4682d2c77e77bc81459bd630c80d0f1c7ff43e0b461332084d5c754bae3194",
+    "src/futures_rebuild/overnight_inventory_reversal_historical_execution.py": "ef84c9724809fee4feaf44400a295df36596f0b4391e10c8199f10290d82b0ec",
+    "state/trial_registry/overnight_inventory_reversal/24772e41730b16bfdf3187d0c9e79b2491e6118962cfdffbc16a86d4e241169c.json": "6ca9419a62133a64fcc03280ad9bb5e4f7114c72f3086b096adfc222c2c5c907",
+    "configs/dependency_lock_receipt.json": "e6302e16d30d114b0c3140f2b075fd6850558ce4ea245475d2687b8531db1726"
+  },
+  "plan_id": "ab776c0492ba48a4a12f3a5b2611afb7f63b7dc11ccf9e24476e9f62a0471750"
+}

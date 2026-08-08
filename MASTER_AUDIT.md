@@ -157,11 +157,14 @@ hashes, immutable release closure, and fail-closed applicability.
 Verify event, availability, receive, and decision-time ordering; market-year
 admission as of the decision; actual tradable contract identity; definition
 lineage; sessions, holidays, halts, limits, expiry, rolls, and missing states.
-Session rollover alone is not a trading-hours authority. Every current
-foundation must bind a verified CME calendar successor: an immutable, approved
-CME capture, exact product mapping, activated date-segment index,
-calendar-coverage receipt, and per-row scheduled-state eligibility. Continuous
-symbols are selection references, never executable identity.
+Session rollover alone is not a trading-hours authority. Historical foundation
+rows must bind the empirical-observability policy and an immutable accepted DBN
+source: actual decoded rows only, no gap filling or synthetic opens/closes, and
+unobserved time classified as missing rather than closed. That evidence makes
+no official historical CME open, close, halt, pause, or holiday claim. The
+activated, mapped, freshness-checked CME calendar is a separate authority for
+current/forward cockpit scheduling. Continuous symbols are selection
+references, never executable identity.
 
 ### G3 — Split, feature, label, and pipeline isolation
 
@@ -202,12 +205,12 @@ Historical L0 data alone cannot prove executable historical spreads.
 ### G8 — Readiness, cockpit, monitoring, and recovery
 
 Verify state capability, serving parity, change detection, abstention, recovery,
-independent validation, and audit trail. Calendar freshness and successor
-impact must be evaluated: calendar evidence must meet its
-coverage and freshness horizon; an activated correction blocks a bound
-foundation only when changed market-dates intersect its coverage. Legacy
-schema-4/5 foundations remain reproducible but are
-`CALENDAR_CONTRACT_NOT_BOUND` for current readiness. For
+independent validation, and audit trail. Current/forward calendar evidence must
+meet its coverage and freshness horizon. Historical readiness instead requires
+a schema-7 foundation bound to the exact empirical-observability policy,
+predecessor release, source DBN release, and per-interval observed-row evidence.
+Legacy schema-4/5/6 foundations remain reproducible but are
+`HISTORICAL_OBSERVABILITY_CONTRACT_NOT_BOUND` for current readiness. For
 `OBSERVATION_COCKPIT_READY`, also verify all of the following:
 
 - exact locked dependencies, assets, licenses, and packaged byte closure;
@@ -252,8 +255,11 @@ Every audit implementation and invocation must fail closed for at least:
 - universe/profile drift, silent market expansion, and satellite rescue;
 - future-known definitions, session/roll leakage, feature access to outcomes,
   and evaluation without a predeclared trial;
-- stale or incomplete CME captures, ambiguous product mappings, unknown
-  schedule states, non-OPEN bars, and intersecting calendar corrections;
+- a historical observability release that fills missing time, treats no rows as
+  closed, asserts official CME schedule authority, loses quarantines, or binds
+  the wrong predecessor/source release;
+- stale or incomplete current/forward CME captures, ambiguous product
+  mappings, unknown schedule states, and broken cockpit schedule freshness;
 - missing, unknown, or partially decoded source states;
 - secret bytes or credential filenames in tracked or packaged artifacts;
 - cockpit order paths, provider reconnect loops, cache mutation during a bounded

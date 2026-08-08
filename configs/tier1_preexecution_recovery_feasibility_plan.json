@@ -1,0 +1,50 @@
+{
+  "schema_version": "tier1_preexecution_recovery_feasibility_plan/1.0.0",
+  "state": "PREPARED_REQUIRES_SEPARATE_APPROVAL",
+  "operation": "CENSUS_FROZEN_TIER1_LOCAL_CANONICAL_RECOVERY_AND_PUBLISH",
+  "purpose": "Determine whether each exact dependency gap is present in the accepted local canonical Databento ohlcv-1m archive before any provider request or successor-data construction.",
+  "gap_record_path": "state/source_quality/tier1_preexecution_gap_inventory/874c2f97b76e8bc19077bc209bae58a4b07e09a629c823af10948e6021772d61.json",
+  "gap_record_id": "874c2f97b76e8bc19077bc209bae58a4b07e09a629c823af10948e6021772d61",
+  "gap_record_sha256": "74bdfa599e7b2f7e84f201dba3a6905cf595449f7007304ac394914140a1a167",
+  "timestamp_target_count": 5599,
+  "session_checkpoint_target_count": 9,
+  "recovery_target_set_id": "7725231e42f890c8c6c1a6de08d6fe252fe6f4d0c5177820ef82f3adb69fa6be",
+  "dbn_release_id": "086282eaef7b36a61626f88d93d06c93b87c1cb3407c936d065d0d1b9d98599e",
+  "dbn_manifest_path": "manifests/data_releases/dbn/086282eaef7b36a61626f88d93d06c93b87c1cb3407c936d065d0d1b9d98599e.json",
+  "dbn_manifest_sha256": "c2584d5e1a65103f8651a871de6f704ac31ec2c2f7ec5c2e1a941aae6a4dc8fd",
+  "calendar_release_id": "038940d82031f31e2c66ed37186e98a6ee6cff3e7248f634f2c7a8e94ea6ecf3",
+  "source_contract_path": "configs/source_contract.json",
+  "source_contract_sha256": "7dbfe0bb29e598345a3be0f8e9b1d3520d3199579635e6612b0e493d26a47b67",
+  "canonical_source_family": "dbn_ohlcv_1m",
+  "diagnostic_source_families_excluded": ["dbn_ohlcv_1s", "dbn_trades"],
+  "canonical_file_count": 20,
+  "canonical_file_catalog_id": "07552997fae49a31d072727a006ba17d5455a5071862451404a6c7f7e9d4764b",
+  "historical_scope": {
+    "markets": ["6E", "CL", "ES", "ZN"],
+    "years": [2018, 2019, 2020, 2021, 2022]
+  },
+  "publication": {
+    "mode": "CREATE_ONLY_ONE_HASH_BOUND_RECOVERY_MAP",
+    "record_root": "state/source_quality/tier1_preexecution_recovery_feasibility",
+    "event_root": "state/source_quality_events/tier1_preexecution_recovery_feasibility"
+  },
+  "maximum_host_runtime_seconds": 900,
+  "estimated_external_cost_usd": "0",
+  "implementation_sha256": "97fd1015f6f27d1334ae091aca13c7be1d45268f5248dd1e7aff94f64be23c06",
+  "forbidden_actions": {
+    "access_2025": true,
+    "active_data_mutation": true,
+    "commit": true,
+    "diagnostic_source_family_read": true,
+    "evaluate_performance": true,
+    "fit_models": true,
+    "generate_predictions": true,
+    "provider_or_network_access": true,
+    "push": true,
+    "register_or_retire_trial": true,
+    "stage": true,
+    "successor_data_creation": true,
+    "trade": true
+  },
+  "plan_id": "928d05dcee14829995a8a78b8abc3d373d2640b0105bf5b22c4d536cc0c2c56c"
+}
