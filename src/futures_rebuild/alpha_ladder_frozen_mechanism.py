@@ -16,6 +16,9 @@ from .errors import IntegrityError, UnauthorizedOperation
 
 
 MECHANISM_SCHEMA = "alpha_ladder_frozen_mechanism/1.0.0"
+COUNTED_SUCCESSOR_SCHEMAS = frozenset({
+    "alpha_ladder_full_regular_source_observable_successor/1.0.0",
+})
 TIER0_CERTIFICATE_SCHEMA = "alpha_ladder_tier0_synthetic_certificate/1.0.0"
 TIER0_DECISION_SCHEMA = "alpha_ladder_stage_decision/1.0.0"
 MANDATORY_BASELINES = (
@@ -275,7 +278,15 @@ def build_frozen_mechanism(
 
 
 def validate_frozen_mechanism(payload: Mapping[str, object]) -> dict[str, object]:
-    _identity(payload, "mechanism_id", MECHANISM_SCHEMA)
+    schema = payload.get("schema_version")
+    if schema == MECHANISM_SCHEMA:
+        _identity(payload, "mechanism_id", MECHANISM_SCHEMA)
+    elif schema in COUNTED_SUCCESSOR_SCHEMAS:
+        core = {key: value for key, value in payload.items() if key != "mechanism_id"}
+        if payload.get("mechanism_id") != sha256_json(core):
+            raise IntegrityError("mechanism_id is invalid")
+    else:
+        raise IntegrityError("mechanism schema is not registerable")
     authority = payload.get("authority")
     if not isinstance(authority, Mapping) or any(value is not False for value in authority.values()):
         raise IntegrityError("frozen mechanism cannot grant authority")
