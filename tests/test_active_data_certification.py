@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 
@@ -9,6 +10,7 @@ import pytest
 
 from futures_rebuild.active_data_certification import (
     _process_memory_bytes,
+    _verify_download_sidecar,
     canonical_parquet_fingerprint,
     canonical_parquet_sequence_fingerprint,
     compare_parquet_canonical,
@@ -19,6 +21,70 @@ from futures_rebuild.active_data_view import materialize_parquet
 from futures_rebuild.canonical import sha256_file
 from futures_rebuild.errors import IntegrityError
 from futures_rebuild.foundation.parquet import CAUSAL_BAR_SCHEMA
+
+
+def _download_sidecar() -> dict[str, object]:
+    return {
+        "api_client_version": "0.57.0",
+        "compression": "zstd",
+        "dataset": "GLBX.MDP3",
+        "downloaded_at": "2026-07-17T00:00:00Z",
+        "encoding": "dbn",
+        "end": "2011-01-01",
+        "file_sha256": "a" * 64,
+        "file_size_bytes": 123,
+        "job_id": "GLBX-TEST",
+        "market": "6N",
+        "path": "data/dbn/ohlcv_1m/6N/2010/source.dbn.zst",
+        "request_status": "ok",
+        "schema": "ohlcv-1m",
+        "start": "2010-06-06",
+        "stype_in": "parent",
+        "stype_out": "instrument_id",
+        "symbols_requested": ["6N.FUT"],
+        "vendor": "databento",
+    }
+
+
+def test_download_sidecar_accepts_bound_provenance_superset(tmp_path: Path) -> None:
+    payload = _download_sidecar()
+    payload.update(
+        {
+            "dataset_version": "2026-07-16",
+            "provenance_status": "VERIFIED",
+            "transfer_history": [],
+        }
+    )
+    path = tmp_path / "source.dbn.zst.manifest.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert _verify_download_sidecar(
+        path,
+        expected_data_path=str(payload["path"]),
+        expected_sha256=str(payload["file_sha256"]),
+        expected_size=int(payload["file_size_bytes"]),
+    ) == payload
+
+
+@pytest.mark.parametrize("field", ["dataset", "file_sha256", "job_id"])
+def test_download_sidecar_rejects_missing_or_invalid_core_provenance(
+    tmp_path: Path, field: str
+) -> None:
+    payload = _download_sidecar()
+    if field == "job_id":
+        payload[field] = ""
+    else:
+        del payload[field]
+    path = tmp_path / "source.dbn.zst.manifest.json"
+    path.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(IntegrityError, match="sidecar provenance is invalid"):
+        _verify_download_sidecar(
+            path,
+            expected_data_path="data/dbn/ohlcv_1m/6N/2010/source.dbn.zst",
+            expected_sha256="a" * 64,
+            expected_size=123,
+        )
 
 
 @pytest.mark.skipif(os.name != "nt", reason="Windows process-memory regression")

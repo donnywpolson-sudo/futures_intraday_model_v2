@@ -1,0 +1,46 @@
+{
+  "schema_version": "tier1_bracket_successor_v12_contract/1.0.0",
+  "state": "PREPARED_NOT_REGISTERED",
+  "classification": "POST_V11_FLAT_BASELINE_COVERAGE_INDEPENDENCE_PREREGISTERED_HISTORICAL_SCREEN",
+  "research_only": true,
+  "live_readiness": false,
+  "supersedes_v11_trial_id": "4583409eb5443c89306f118b912bea1fabd6f20f437e30294395ac7786c3719b",
+  "inherited_v11_contract_path": "configs/tier1_bracket_successor_v11.json",
+  "inherited_v11_contract_sha256": "5cab17d7f4e482b7f09147e37e49758c65b3c590fc6ea96ffd65badc6fd11e0d",
+  "frozen_without_change": [
+    "calendar_sources_source_integrity_and_2025_holdout",
+    "candidate_features_model_math_hurdle_and_predictions",
+    "splits_purge_embargo_costs_and_risk_rules",
+    "causal_outcomes_ranking_tie_breaking_overlap_and_independent_baseline_paths",
+    "nonflat_baseline_coverage_selected_path_and_evaluation_completeness_gates",
+    "inference_thresholds_power_effect_multiplicity_and_promotion_gate",
+    "authorization_runtime_and_immutable_evidence_controls"
+  ],
+  "flat_baseline_coverage_successor": {
+    "declared_universe": "EVERY_SCOPED_CALENDAR_CHECKPOINT",
+    "calendar_open_expected": "EVERY_CALENDAR_OPEN_CHECKPOINT",
+    "eligible": "EVERY_CALENDAR_OPEN_CHECKPOINT_REGARDLESS_OF_FEATURE_MODEL_SIGNAL_RISK_OR_OUTCOME_AVAILABILITY",
+    "terminal_disposition": "FLAT_NO_TRADE",
+    "entries": 0,
+    "costs_usd": "0",
+    "net_pnl_usd": "0",
+    "feature_or_model_dependency": false,
+    "outcome_dependency": false,
+    "required_coverage_rate": "1.0"
+  },
+  "anti_tuning": {
+    "strategy_or_candidate_model_parameter_change": false,
+    "cost_or_risk_change": false,
+    "nonflat_coverage_threshold_change": false,
+    "promotion_standard_change": false,
+    "v11_realized_performance_used_for_selection": false
+  },
+  "authority": {
+    "historical_execution_requires": "NEW_EXACT_SINGLE_USE_OPERATION_RECEIPT_BOUND_TO_V12_TRIAL_PLAN_SOURCE_HASHES_OUTPUT_ROOT_AND_2025_FALSE",
+    "publication_requires_separate_approval": true,
+    "holdout_or_forward_access": false,
+    "provider_access": false,
+    "trading": false,
+    "git_actions": false
+  }
+}

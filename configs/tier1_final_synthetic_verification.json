@@ -1,0 +1,43 @@
+{
+  "schema_version": "tier1_final_synthetic_verification/1.0.0",
+  "verification_id": "b42c630ddeaae9cdb779af5ffa16691c10ad75b1e4d2a91c3ed7e0c2f5e1837a",
+  "state": "PREPARED_NOT_PUBLISHED",
+  "scope": "COMPLETE_APPLICABLE_TIER1_HIGH_RISK_TREE_PLUS_FINAL_DECISION_VALIDITY_INTERACTIONS",
+  "test_file_count": 49,
+  "test_tree_id": "992b741c454757add846c5adec29074bcf8015a02b45d9459cc6a8466768fac7",
+  "conftest_sha256": "ac9ecd1f29441d7ab712adee752aca3fd9d7040a603e02add7e1cbecd2e55cf3",
+  "runner_sha256": "eb4b899dc382b6ec9a3b1865e2e93ea7a4440d875b469ebe9ee3848b36b72fdf",
+  "selection": {
+    "marker": "high_risk",
+    "file_prefixes": [
+      "test_tier1_bracket",
+      "test_tier1_frozen",
+      "test_tier1_preexecution",
+      "test_tier1_standard",
+      "test_tier1_final"
+    ],
+    "deselected_historical_assertion": "tests/test_tier1_bracket_v10_registration.py::test_v9_retirement_and_v10_registration_are_prepared_create_only",
+    "expected_xfail": "tests/test_tier1_bracket_v6.py::test_v5_is_preserved_and_v6_prepares_without_publication"
+  },
+  "applicable_results": {
+    "passed": 275,
+    "failed": 0,
+    "deselected": 1003,
+    "expected_xfailed": 1
+  },
+  "scenario_specific_risk_abstention_tested": true,
+  "conclusive_rejection_lattice_tested": true,
+  "missing_candidate_path_inconclusive_tested": true,
+  "durable_unpublished_bundle_tested": true,
+  "complete_synthetic_source_to_terminal_pipeline_tested": true,
+  "single_use_authorization_tested": true,
+  "historical_rows_opened": false,
+  "provider_or_network_access": false,
+  "credential_access": false,
+  "holdout_2025_access": false,
+  "real_model_fit": false,
+  "historical_evaluation": false,
+  "trial_registration": false,
+  "publication": false,
+  "trading": false
+}

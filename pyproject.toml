@@ -22,19 +22,12 @@ calendar-docs = ["pypdf==6.14.2"]
 
 [project.scripts]
 futures-dbn-catalog = "futures_rebuild.dbn_catalog:main"
-futures-accept-anomalies = "futures_rebuild.anomaly_acceptance:main"
-futures-publish-selection = "futures_rebuild.foundation.selection:main"
-futures-calendar = "futures_rebuild.calendar_cli:main"
-futures-foundation-build = "futures_rebuild.foundation.orchestrator:main"
-futures-foundation-calendar-successor = "futures_rebuild.foundation.calendar_successor:main"
 futures-readiness = "futures_rebuild.readiness:main"
 futures-master-audit = "futures_rebuild.audit.__main__:main"
-futures-verify-vault-archive = "futures_rebuild.archive:main"
 futures-pipeline = "futures_rebuild.pipeline:main"
-futures-live-cockpit = "futures_rebuild.live_cockpit.app:main"
 futures-retirement-audit = "futures_rebuild.retirement:main"
 futures-meta-audit = "futures_rebuild.meta_audit:main"
-futures-active-view = "futures_rebuild.active_data_view:main"
+futures-high-risk-prepare = "futures_rebuild.high_risk:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -43,3 +36,8 @@ where = ["src"]
 addopts = "-ra --strict-markers --strict-config"
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "current: ordinary fast local-development coverage",
+    "high_risk: confirmation-bound safety contracts",
+    "legacy: retained historic workflow compatibility",
+]

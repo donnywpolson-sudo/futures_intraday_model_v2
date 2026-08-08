@@ -1,0 +1,45 @@
+{
+  "schema_version": "tier1_authoritative_unpublished_certification_invalid/1.0.0",
+  "record_id": "465c44f709c6672dac04ca39b0b646c3b8c5ad5671a1ed81ff8a7da512230ae9",
+  "state": "PREPARED_NOT_PUBLISHED",
+  "prepared_trial_id": "461cffa140e546b57c91609a8cea18e4b7506b517c75010b320aa59295264167",
+  "prepared_certificate_id": "1e55ace09ae00e763c8e2b6f8f4292a03156b2613fd1e0a3d8b49531e314c353",
+  "disposition": "UNPUBLISHED_CERTIFICATION_INVALID_TRANSITION_TESTS_CALLED_PREPUBLICATION_LOADER_AFTER_ACTIVATION",
+  "finding": {
+    "scope": "TEST_AND_CERTIFICATION_ONLY",
+    "research_parameter_defect": false,
+    "effect": "Two tests reused prepare_authoritative_lifecycle after activation, where its compare-and-swap precondition must fail by design.",
+    "required_correction": "After publication every lifecycle test must load the registered context and immutable retirement rather than invoke the prepublication preparation path."
+  },
+  "lifecycle_status": {
+    "published": false,
+    "registered": false,
+    "activated": false,
+    "historical_rows_opened": false,
+    "authorization_claim_created": false,
+    "model_fit": false,
+    "predictions_generated": false,
+    "historical_evaluation": false,
+    "holdout_2025_touched": false,
+    "provider_or_network_access": false,
+    "credential_access": false,
+    "trading": false
+  },
+  "preserved_bindings": {
+    "configs/tier1_authoritative_historical_execution_plan.json": "4397922b29a41d554aca94d3dbbf2a7ad8b72771e9ad34289146864546af7a3c",
+    "configs/tier1_authoritative_preexecution_certificate.json": "cf25070e791805bb4b6cc5f6c8a5657228f318b35d912e7a3e79ab3cd1056b88",
+    "configs/tier1_authoritative_synthetic_verification.json": "48807c7397b389d09cf3fbac0038960a4eb95f793dd2046ca889a57191ca3d83",
+    "configs/tier1_authoritative_trial_protocol.json": "fe500321f3a219c4a77e202cf1405bddb565d04021cc20e874867d6cd0477ec2",
+    "src/futures_rebuild/tier1_authoritative_execution.py": "610eff201df10df4dcfa95b304cf14a50aaeea4b766a5e1bc1290ef245a1686f",
+    "src/futures_rebuild/tier1_authoritative_lifecycle.py": "b0104d5967d00bf48a0ca9b5d987d434c7f4fc53f033ad6af09b8a7a1e5289cb",
+    "src/futures_rebuild/tier1_authoritative_protocol.py": "6aec20afd1c94914600a7fcc5d0043d95b24a81874e9fa2600df989b16afa261",
+    "tests/test_tier1_authoritative_lifecycle.py": "4291ee3c2693626cb76188b9579b1e5d6ffca55b803eb1272f36e7fb7ff428d7"
+  },
+  "replacement_boundary": {
+    "research_parameters_may_change": false,
+    "publication_authorized": false,
+    "registration_authorized": false,
+    "activation_authorized": false,
+    "execution_authorized": false
+  }
+}

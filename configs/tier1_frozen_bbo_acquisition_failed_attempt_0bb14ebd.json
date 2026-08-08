@@ -1,0 +1,35 @@
+{
+  "acquisition_plan_id": "ebfb3338ef1fb5fdc71ec074ee682d2767675c630c8ae1cb6e434d19cacc8c82",
+  "acquisition_plan_sha256": "044fdbe91dd9e99471e406d172aeba23906e85b3bcec913b87b253232db03351",
+  "artifact_id": "f6929302c7226babe58fb0cf42e4cd18bb88cf3fa0da0ca5dd16ad408e684616",
+  "authorization_claim_path": "state/authorization_uses/0bb14ebd24e94ebfdee122b8f5cbeb73f7c16f02ea3f7324e0b6828f9dd12567.json",
+  "authorization_claim_sha256": "9278e600e44e7dcf684b02c86bb43447419b1be5503e10e27ef1b4c7dff3f4ff",
+  "authorization_receipt_id": "0bb14ebd24e94ebfdee122b8f5cbeb73f7c16f02ea3f7324e0b6828f9dd12567",
+  "claim_consumed_at_utc": "2026-08-06T03:32:08.9730657Z",
+  "disposition": "FAILED_BEFORE_FIRST_MARKET_ROW_DELIVERY",
+  "external_cost_incurred_usd": "NOT_INDEPENDENTLY_VERIFIED",
+  "fresh_cost_gate": {
+    "aggregate_condition": "LESS_THAN_OR_EQUAL_TO_1.30_USD",
+    "exact_total_persisted": false,
+    "metadata_only_call_count": 30,
+    "passed_before_download_attempt": true
+  },
+  "historical_rows_decoded": false,
+  "holdout_or_forward_access": false,
+  "market_row_files_created": 0,
+  "operation": "ACQUIRE_FROZEN_TIER1_BBO_1S_RECOVERY_STAGING_AND_PUBLISH",
+  "provider_failure": {
+    "error_class": "BentoClientError",
+    "provider_code": "account_insufficient_funds",
+    "status_code": 402
+  },
+  "publication": false,
+  "published_acquisition_events_created": 0,
+  "published_acquisition_records_created": 0,
+  "schema_version": "tier1_frozen_bbo_acquisition_failed_attempt_preparation/1.0.0",
+  "sidecars_created": 0,
+  "staging_root_created": false,
+  "state": "PREPARED_NOT_PUBLISHED_OPERATIONAL_AUDIT_ONLY",
+  "successor_source_activated": false,
+  "trading": false
+}

@@ -1,0 +1,262 @@
+{
+  "authority_class": "PROVIDER_FREE_LOCAL_TRANSITION",
+  "basis": {
+    "repository": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2",
+    "branch": "codex/task-scheduler-registration-authority",
+    "head": "ed8f955b0473c436f14eef0ce686ce5881aaf57c",
+    "failed_activation_plan_id": "b3f198a4e3133bcf48477b8a5c1438883a62a00ec5116548da33804459091ada",
+    "failed_activation_terminal_id": "1ec465068ff3f7166ac247115c54882fa9d5f1b5093eb174315cf31549a06c8f",
+    "failure_class": "PACKAGED_SELF_CHECK_READS_CREDENTIAL_CONTENTS_DESPITE_EXISTENCE_ONLY_PLAN",
+    "recovery_state": "SEMANTIC_SHORTCUT_ROLLBACK_VERIFIED_RAW_BYTES_RECREATED_WITH_NEW_HASH",
+    "smoke_result_id": "e4a17604a3818a9d50ccd330375d81407688398ebb902ccde8f44d78cce01fa4",
+    "prepared_install_path": "C:\\Users\\donny\\AppData\\Local\\Programs\\FuturesLiveCockpit\\20260731-020339-d1783ac2",
+    "active_install_path": "C:\\Users\\donny\\AppData\\Local\\Programs\\FuturesLiveCockpit\\20260726-022002-ab15788e"
+  },
+  "actions": [
+    {
+      "id": "reconcile_self_check_remediation_preimage",
+      "type": "reconciliation",
+      "file_hashes": [
+        {
+          "path": "AGENTS.md",
+          "sha256": "c5a37bed1b28665a668501c4db402f857648f64b6276c3491d7ac8fa04c87835"
+        },
+        {
+          "path": "PROJECT_OUTLINE.md",
+          "sha256": "7ca46a94380ae1311d819f1b4949167b75dd9390c32d0637a16f2a647b933828"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "7b94a52f2e3f9f90947015e55ec037e2fc1ec589e48104b90513eb85738bef63"
+        },
+        {
+          "path": "configs/source_contract.json",
+          "sha256": "9d730e7500ca06cb0a45d13f4ef5c2a440c66bcee8489f5aac470edb7019490a"
+        },
+        {
+          "path": "configs/closure_workflow_policy.json",
+          "sha256": "16b74427a92775c41b1ab826e4d4d47ca0a5e298a8ab5f23fa2033a8e50aab46"
+        },
+        {
+          "path": "src/futures_rebuild/closure_workflow/engine.py",
+          "sha256": "6448d5c9cd635fae3f3ce23168a633f5fb1c75c149a40cb748f6da2cc75fb87f"
+        },
+        {
+          "path": "src/futures_rebuild/closure_workflow/policy.py",
+          "sha256": "d7331318572518d7b52ab6c56c1967495da48f224756fa1fdbc770bc119b0c8b"
+        },
+        {
+          "path": "scripts/run_windows_host_root_pytest.ps1",
+          "sha256": "eb4b899dc382b6ec9a3b1865e2e93ea7a4440d875b469ebe9ee3848b36b72fdf"
+        },
+        {
+          "path": "src/futures_rebuild/live_cockpit/app.py",
+          "sha256": "56c2055d8a2691188957e60b4244de3c80876a14f82b56884cee8a4c4707b3cf"
+        },
+        {
+          "path": "tests/live/test_live_cockpit.py",
+          "sha256": "26928a0aecb171393d77edf53da58be79b4606235d770ef34262ef74d4211f06"
+        },
+        {
+          "path": "manifests/workflow/closure/deltas/live_cockpit_self_check_existence_only.patch",
+          "sha256": "54a5c15daf3d285e66215ee257abacc0119d38c154e827f92584e287602250c4"
+        },
+        {
+          "path": "manifests/workflow/closure/deltas/live_cockpit_self_check_existence_only_tests.patch",
+          "sha256": "b72d0e30f8cf5827126a683226d03be5acf8536e842f44e8f41b40ab966b4e5d"
+        },
+        {
+          "path": "manifests/workflow/closure/preflight_tests/live_cockpit_self_check_existence_only_bindings.py",
+          "sha256": "ce363576a9d1c20686774f73cd65266b6fadb596a134a0553ec03b46801a8608"
+        },
+        {
+          "path": "reports/live_cockpit/activation/b3f198a4e3133bcf48477b8a5c1438883a62a00ec5116548da33804459091ada/terminal.json",
+          "sha256": "0c8b0ace24bd0c0c28907c5f1210790c18b0f418fc6e859b9f3d7df3c5dbd987"
+        },
+        {
+          "path": "reports/live_cockpit/bounded_live_smoke_result_attempt_6.json",
+          "sha256": "8efd57b5fdcb95c055f9114e0e4ac3c26f092c8828f9f86d47e7dbdf7f5fd085"
+        },
+        {
+          "path": "reports/live_cockpit/installation/ab529f254a6f020c0f16a5d6dc508757d098164251bda3ffee2fa889961e0c9b/terminal.json",
+          "sha256": "a7073d693d8160794c831b7595b5a7a0600442ca4fed78fef919f938a148142f"
+        }
+      ]
+    },
+    {
+      "id": "verify_external_recovery_preimage",
+      "type": "focused_pytest",
+      "argv": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "manifests\\workflow\\closure\\preflight_tests\\live_cockpit_self_check_existence_only_bindings.py"
+      ],
+      "depends_on": [
+        "reconcile_self_check_remediation_preimage"
+      ]
+    },
+    {
+      "id": "apply_existence_only_self_check",
+      "type": "frozen_patch",
+      "target": "src/futures_rebuild/live_cockpit/app.py",
+      "patch": "manifests/workflow/closure/deltas/live_cockpit_self_check_existence_only.patch",
+      "patch_sha256": "54a5c15daf3d285e66215ee257abacc0119d38c154e827f92584e287602250c4",
+      "postimage_sha256": "1b2d6142293bee4feac06253114d5c31861b35a9a464501d2801f7bfc422f60c",
+      "depends_on": [
+        "verify_external_recovery_preimage"
+      ]
+    },
+    {
+      "id": "apply_existence_only_self_check_tests",
+      "type": "frozen_patch",
+      "target": "tests/live/test_live_cockpit.py",
+      "patch": "manifests/workflow/closure/deltas/live_cockpit_self_check_existence_only_tests.patch",
+      "patch_sha256": "b72d0e30f8cf5827126a683226d03be5acf8536e842f44e8f41b40ab966b4e5d",
+      "postimage_sha256": "4cdf167dcad406c31ec9d55c8648f43b0963e04feb9947663b0c5edaeb5888c5",
+      "depends_on": [
+        "apply_existence_only_self_check"
+      ]
+    },
+    {
+      "id": "reconcile_self_check_remediation_postimages",
+      "type": "reconciliation",
+      "file_hashes": [
+        {
+          "path": "src/futures_rebuild/live_cockpit/app.py",
+          "sha256": "1b2d6142293bee4feac06253114d5c31861b35a9a464501d2801f7bfc422f60c"
+        },
+        {
+          "path": "tests/live/test_live_cockpit.py",
+          "sha256": "4cdf167dcad406c31ec9d55c8648f43b0963e04feb9947663b0c5edaeb5888c5"
+        },
+        {
+          "path": "reports/live_cockpit/activation/b3f198a4e3133bcf48477b8a5c1438883a62a00ec5116548da33804459091ada/terminal.json",
+          "sha256": "0c8b0ace24bd0c0c28907c5f1210790c18b0f418fc6e859b9f3d7df3c5dbd987"
+        }
+      ],
+      "depends_on": [
+        "apply_existence_only_self_check_tests"
+      ]
+    },
+    {
+      "id": "run_focused_self_check_contracts",
+      "type": "focused_pytest",
+      "argv": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests\\live\\test_live_cockpit.py",
+        "-k",
+        "self_check"
+      ],
+      "depends_on": [
+        "reconcile_self_check_remediation_postimages"
+      ]
+    },
+    {
+      "id": "run_broad_live_cockpit_suite_host_root",
+      "type": "windows_host_root_suite",
+      "argv": [
+        "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "-NoProfile",
+        "-File",
+        "scripts\\run_windows_host_root_pytest.ps1",
+        "-q",
+        "tests\\live"
+      ],
+      "depends_on": [
+        "run_focused_self_check_contracts"
+      ]
+    },
+    {
+      "id": "verify_external_recovery_postimage",
+      "type": "focused_pytest",
+      "argv": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "manifests\\workflow\\closure\\preflight_tests\\live_cockpit_self_check_existence_only_bindings.py"
+      ],
+      "depends_on": [
+        "run_broad_live_cockpit_suite_host_root"
+      ]
+    },
+    {
+      "id": "record_terminal",
+      "type": "terminal_recording",
+      "depends_on": [
+        "verify_external_recovery_postimage"
+      ]
+    }
+  ],
+  "delta_bytes": 5581,
+  "delta_entry_count": 2,
+  "execution_environment": "EXPLICITLY_UNSANDBOXED_WINDOWS_HOST_ROOT",
+  "full_census_count": 0,
+  "implementation_paths": [
+    "src/futures_rebuild/live_cockpit/app.py",
+    "tests/live/test_live_cockpit.py"
+  ],
+  "limits": {
+    "maximum_duration_seconds": 600,
+    "maximum_activations": 0,
+    "maximum_installations": 0,
+    "maximum_shortcut_changes": 0,
+    "maximum_autostart_changes": 0,
+    "maximum_credential_content_reads": 0,
+    "maximum_provider_requests": 0,
+    "maximum_network_requests": 0,
+    "maximum_production_cache_writes": 0,
+    "maximum_live_smoke_runs": 0,
+    "maximum_package_builds": 0,
+    "maximum_test_processes": 4,
+    "maximum_workers": 1,
+    "maximum_prestart_launcher_retries": 1,
+    "maximum_retries_after_start": 0
+  },
+  "preservation": {
+    "credential_source_and_locator": "EXISTENCE_ONLY_NO_CONTENT_READ_NO_COPY",
+    "failed_activation_terminal": "IMMUTABLE_BOUND_EVIDENCE",
+    "prepared_installation": "IMMUTABLE_HASH_VERIFIED_BEFORE_AND_AFTER",
+    "active_installation": "LAST_KNOWN_GOOD_HASH_VERIFIED_BEFORE_AND_AFTER",
+    "shortcut_state": "RECOVERED_RAW_HASH_VERIFIED_BEFORE_AND_AFTER_NO_MUTATION",
+    "desktop_and_startup_shortcuts": "REMAIN_ABSENT",
+    "smoke_result": "IMMUTABLE_BOUND_PASS_EVIDENCE",
+    "production_cache": "NO_ACCESS_NO_MUTATION",
+    "provider_and_network": "UNREACHABLE",
+    "activation": "FORBIDDEN",
+    "installation": "FORBIDDEN",
+    "package_build": "FORBIDDEN",
+    "unrelated_worktree": "PRESERVE_NO_STAGE_NO_COMMIT",
+    "push": "FORBIDDEN"
+  },
+  "reused_evidence": [
+    "Failed-closed activation terminal with consumed authority and verified semantic rollback",
+    "Verified smoke attempt 6 PASS and side-by-side installation evidence",
+    "Isolated postimage test proving invalid locator contents are not read",
+    "Both frozen patches apply cleanly to their exact preimages",
+    "Three passing external recovery-binding tests"
+  ],
+  "rollback": {
+    "failure_after_patch": "STOP_PRESERVE_PARTIAL_ZERO_RETRIES_REVERSE_ONLY_UNDER_FRESH_EXACT_AUTHORITY",
+    "prestart_failure": "ONE_RESUME_ONLY_IF_TARGET_NOT_STARTED_APPROVAL_UNCONSUMED_AND_HASHES_REMAIN_EXACT",
+    "reverse_order": [
+      "git apply --reverse --check -- manifests/workflow/closure/deltas/live_cockpit_self_check_existence_only_tests.patch",
+      "git apply --reverse --check -- manifests/workflow/closure/deltas/live_cockpit_self_check_existence_only.patch"
+    ],
+    "installation_state": "UNCHANGED",
+    "shortcut_state": "UNCHANGED"
+  },
+  "snapshot_reused": true,
+  "success_condition": "SELF_CHECK_USES_EXISTENCE_ONLY_CREDENTIAL_STATUS_FOCUSED_AND_BROAD_LIVE_TESTS_PASS_EXTERNAL_RECOVERY_STATE_UNCHANGED"
+}

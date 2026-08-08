@@ -19,15 +19,43 @@ def _write_json(path: Path, payload: object) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
-def test_current_classifier_fails_closed_without_opening_legacy_root() -> None:
+def test_current_classifier_matches_evidence_without_opening_legacy_root() -> None:
     report = scan_retirement_readiness(ROOT)
-    assert report["classification"] == "LEGACY_RETIREMENT_BLOCKED"
+    ready = all(item["status"] == "PASS" for item in report["checks"])
+    assert report["classification"] == (
+        "LEGACY_RETIREMENT_READY" if ready else "LEGACY_RETIREMENT_BLOCKED"
+    )
+    assert report["standalone_runtime_ready"] is ready
     assert report["legacy_root_opened"] is False
     by_id = {item["check_id"]: item for item in report["checks"]}
     assert by_id["SOURCE_CONTRACT_STANDALONE_41_MARKET"]["status"] == "PASS"
     assert by_id["APPROVED_41_MARKET_UNIVERSE"]["status"] == "PASS"
     assert by_id["NO_PUBLIC_MIGRATION_OR_LEGACY_ENTRYPOINTS"]["status"] == "PASS"
     assert by_id["NO_LEGACY_RUNTIME_IMPORTS"]["status"] == "PASS"
+    assert report["authority"]["legacy_delete_authorized"] is False
+
+
+def test_current_classifier_fails_closed_when_git_is_not_clean(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        retirement,
+        "_git_clean",
+        lambda _root: (False, "WORKTREE_NOT_CLEAN"),
+    )
+
+    report = scan_retirement_readiness(ROOT)
+
+    assert report["classification"] == "LEGACY_RETIREMENT_BLOCKED"
+    assert report["standalone_runtime_ready"] is False
+    assert report["legacy_root_opened"] is False
+    by_id = {item["check_id"]: item for item in report["checks"]}
+    assert by_id["CLEAN_COMMITTED_HEAD"] == {
+        "check_id": "CLEAN_COMMITTED_HEAD",
+        "status": "FAIL",
+        "evidence": [".git"],
+        "reason": "WORKTREE_NOT_CLEAN",
+    }
     assert report["authority"]["legacy_delete_authorized"] is False
 
 

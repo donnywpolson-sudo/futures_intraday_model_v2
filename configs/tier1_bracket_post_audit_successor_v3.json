@@ -1,0 +1,132 @@
+{
+  "schema_version": "tier1_bracket_post_audit_successor/3.0.0",
+  "state": "PREPARED_NOT_REGISTERED",
+  "classification": "POST_AUDIT_NON_PRISTINE_HISTORICAL_SCREEN_ONLY",
+  "research_only": true,
+  "live_readiness": false,
+  "supersedes_invalid_trial_id": "aab8134537f5f6efa9d9ced5603adb89212d43e67282ab5a2ab7e3adb3fd011c",
+  "invalid_trial_use": "DIAGNOSIS_AND_CONSERVATIVE_TRIAL_FAMILY_COUNT_ONLY",
+  "markets": ["ES", "CL", "ZN", "6E"],
+  "period": {"discovery": "2018-2022", "evaluation": "2020-2022", "locked_untouched_holdout": "2025"},
+  "strategy": {
+    "checkpoints_chicago": ["08:30", "10:30", "13:30"],
+    "minimum_predicted_net_r_after_stress_costs": "0.25",
+    "model_family": "MARKET_SPECIFIC_TWO_TARGET_RIDGE",
+    "ridge_penalty": "1.0",
+    "training_only_standardization": true,
+    "chronological_outer_folds": 8,
+    "purge_minutes": 60,
+    "session_embargo": 1,
+    "stop_atr_multiple": "1.5",
+    "target_net_r": "2.0",
+    "maximum_hold_minutes": 60,
+    "maximum_entries_per_session": 3,
+    "maximum_open_positions": 1,
+    "maximum_standard_contract_equivalents": 1,
+    "allow_pyramiding": false,
+    "ranking": "PREDICTED_NET_R_DESC_THEN_ES_CL_ZN_6E"
+  },
+  "causality": {
+    "feature_rule": "EVERY_INPUT_AVAILABLE_AT_OR_BEFORE_DECISION",
+    "required_time_order": "feature_window_start <= feature_available_at <= decision_at < order_submitted_at <= fill_at",
+    "entry_rule": "FIRST_EXECUTABLE_NEXT_BAR_OPEN_AFTER_ONE_BAR_DELAY",
+    "missing_or_ambiguous": "EXPLICIT_ABSTENTION_IN_COVERAGE_DENOMINATOR",
+    "unobserved_time": "MISSING_NOT_CLOSED",
+    "holdout_path_guard": "REJECT_2025_BEFORE_OPEN"
+  },
+  "costs": {
+    "label": "PROVIDER_NEUTRAL_PROVISIONAL_RESEARCH_COSTS",
+    "fee_per_side_usd": "5.00",
+    "round_trip_adverse_execution_ticks": {
+      "base": {"ES": 2, "CL": 4, "ZN": 2, "6E": 2},
+      "stress": {"ES": 4, "CL": 8, "ZN": 4, "6E": 4},
+      "extreme": {"ES": 8, "CL": 16, "ZN": 8, "6E": 8}
+    },
+    "promotion_scenario": "stress",
+    "observed_spread_claim": false,
+    "may_be_reduced_after_outcomes": false
+  },
+  "risk": {
+    "profile_id": "RESEARCH_ACCOUNT_100K_V1",
+    "starting_capital_usd": "100000",
+    "maximum_planned_initial_loss_usd": "1000",
+    "maximum_total_open_risk_usd": "1000",
+    "daily_loss_threshold_usd": "1000",
+    "continuous_drawdown_threshold_usd": "5000",
+    "session_reset": "17:00 America/Chicago",
+    "breach_behavior": "LIQUIDATE_NEXT_CAUSAL_EXECUTABLE_PRICE_AND_BLOCK_ENTRIES",
+    "thresholds_are_not_loss_guarantees": true,
+    "diagnostic_segment_resets_do_not_replace_continuous_path": true
+  },
+  "ledger": {
+    "universe_built_before_features_or_outcomes": true,
+    "one_terminal_disposition_per_market_session_checkpoint": true,
+    "missing_and_rejected_rows_retained": true,
+    "exact_funnel_reconciliation_required": true
+  },
+  "baselines": [
+    "flat_no_trade",
+    "fold_local_unconditional_return_by_market_session",
+    "previous_bar_sign_momentum",
+    "previous_bar_sign_reversal",
+    "risk_matched_always_long_intraday",
+    "equal_risk_version_of_candidate_signal"
+  ],
+  "baseline_execution": "INDEPENDENT_CAUSAL_LEDGER_SIGNAL_SCHEDULER_COSTS_RISK_AND_EQUITY",
+  "inference": {
+    "primary_series": "ONE_NET_PORTFOLIO_RETURN_PER_COMPLETE_EXCHANGE_SESSION",
+    "complete_no_trade_session_return": "0",
+    "incomplete_session_behavior": "MISSING_AND_INCONCLUSIVE_NEVER_ZERO_FILLED",
+    "portfolio_mees_usd_per_complete_session": "20",
+    "portfolio_power_alternative_usd_per_complete_session": "30",
+    "declared_sleeves": 24,
+    "sleeve_mees_usd_per_complete_session": "0.8333333333333333333333333333",
+    "sleeve_power_alternative_usd_per_complete_session": "1.25",
+    "confidence_level": "0.95",
+    "minimum_complete_clusters": 30,
+    "stationary_bootstrap_resamples": 10000,
+    "training_power_resamples": 5000,
+    "minimum_power": "0.80",
+    "minimum_dsr_probability": "0.95",
+    "romano_wolf_adjusted_p_maximum": "0.05",
+    "block_sensitivity_sessions": [5, 10, 20],
+    "pbo_rule": "NOT_APPLICABLE_UNLESS_AT_LEAST_10_COMPARABLE_CONFIGURATIONS"
+  },
+  "promotion": {
+    "maximum_label": "PASS_HISTORICAL_SCREEN",
+    "stress_net_pnl_positive": true,
+    "positive_portfolio_years_of_3": 2,
+    "positive_market_years_of_12": 6,
+    "all_4_markets_require_at_least_one_positive_year": true,
+    "every_required_sleeve_must_pass": true,
+    "must_beat_every_required_baseline_in_pnl_and_adjusted_test": true,
+    "actual_continuous_drawdown_must_not_exceed_usd": "5000",
+    "complete_lineage_metrics_coverage_and_reconciliation_required": true
+  },
+  "ordered_outcomes": [
+    "INVALID",
+    "INCONCLUSIVE_DATA_OR_POWER",
+    "FAIL_NO_EDGE",
+    "FAIL_NOT_ECONOMIC",
+    "INCONCLUSIVE_EFFECT",
+    "FAIL_MULTIPLICITY_OR_CONTROL",
+    "PASS_HISTORICAL_SCREEN"
+  ],
+  "determinism": {
+    "canonical_payload_excludes_runtime_metadata": true,
+    "runtime_receipt_binds_canonical_hash": true,
+    "identical_synthetic_runs_must_be_byte_identical": true
+  },
+  "forbidden_without_separate_approval": [
+    "trial_registry_or_event_write",
+    "historical_source_row_read",
+    "feature_or_label_materialization",
+    "model_fit_or_prediction_generation",
+    "historical_evaluation",
+    "research_artifact_publication",
+    "provider_or_network_access",
+    "holdout_or_forward_access",
+    "trading_or_order_access",
+    "git_stage_commit_or_push"
+  ]
+}

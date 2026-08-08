@@ -1,0 +1,43 @@
+{
+  "schema_version": "tier1_bracket_successor_v10_historical_execution_plan/1.0.0",
+  "plan_id": "759198e5f8fe26feb1a4bed502c5c4d2230ddd5b31cb4f961238e83041bcacdb",
+  "operation": "EXECUTE_TIER1_BRACKET_SUCCESSOR_V10_HISTORICAL_SCREEN",
+  "trial_id": "53c9aa144b38187ea93acbfbe2ea10f6c76fcb382edef01a5254b3ecda38ddc3",
+  "trial_registry_sha256": "cf568f25e4b132c5ccf9a8206ff0edb2300fcf4cccf5559085fed65c3d04c96a",
+  "source_binding_id": "2ccd285d00170b31e1ad650122c466a52e0691bb27815851a93bccffe9c20a22",
+  "calendar_release_id": "038940d82031f31e2c66ed37186e98a6ee6cff3e7248f634f2c7a8e94ea6ecf3",
+  "dependency_lock_receipt_id": "854480e6fcdcc32093012b42408cb04e75628c2578959b21764a9dcc86a0dd79",
+  "source_scope": {
+    "markets": ["6E", "CL", "ES", "ZN"],
+    "years": [2018, 2019, 2020, 2021, 2022],
+    "registered_source_count": 20
+  },
+  "registered_execution_bindings": {
+    "src/futures_rebuild/tier1_bracket_v10.py": "b1e5279d46c4eb7bf6cb5b4c51def995131cbd17472a75cf82443ca1d80a63f8",
+    "src/futures_rebuild/tier1_bracket_v10_decision_validity.py": "2677adacda4e608fa911366a60c33ea35a441940b39605e087f8ca86d2c7dfbb",
+    "src/futures_rebuild/tier1_bracket_v10_pipeline.py": "0edfae84086255e3ee955e6ef957a0427522218bddff6f567d1166632044d3dc",
+    "src/futures_rebuild/tier1_bracket_v10_execution.py": "3c6217ceb3b92e1b3917cadbc219d96da316aa799b9ca6c93edab0ada46bbd82"
+  },
+  "execution_mode": "IN_MEMORY_UNPUBLISHED_RESULT",
+  "maximum_host_runtime_seconds": 900,
+  "estimated_external_cost_usd": "0",
+  "authorized_actions": {
+    "source_row_read": true,
+    "model_fit": true,
+    "prediction_generation": true,
+    "historical_evaluation": true
+  },
+  "forbidden_actions": {
+    "holdout_or_forward_access": true,
+    "provider_or_network_access": true,
+    "evidence_publication": true,
+    "active_data_mutation": true,
+    "staging": true,
+    "commit": true,
+    "push": true,
+    "trading_or_orders": true
+  },
+  "output_root": "state/tier1_bracket_successor_v10_unpublished",
+  "receipt_policy": "NEW_EXACT_SINGLE_USE_CREATE_ONLY_CLAIM_BOUND_TO_THIS_PLAN_BEFORE_SOURCE_OPEN",
+  "preservation_boundary": "V9 retirement, V10 registration, registered source bytes, prior evidence, unrelated work, and 2025 remain unchanged. Results remain in memory until a separate publication approval."
+}

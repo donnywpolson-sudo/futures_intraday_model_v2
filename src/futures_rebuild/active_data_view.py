@@ -1140,6 +1140,351 @@ def stage_view(
         raise
 
 
+def validate_materialization_input_package(
+    *,
+    repository_root: Path,
+    plan: Mapping[str, object],
+    materialization_input_path: Path,
+    materialization_input: Mapping[str, object],
+) -> dict[str, int]:
+    """Verify the exact approved staging input before any staging write."""
+
+    root = repository_root.resolve(strict=True)
+    if plan.get("operation") != "MATERIALIZE_CAUSAL_ACTIVE_VIEW":
+        raise IntegrityError("materialization plan operation is invalid")
+    if plan.get("update_mode") != UpdateMode.INITIAL.value:
+        raise IntegrityError("materialization successor must be an initial view")
+    binding = plan.get("materialization_input_binding")
+    if not isinstance(binding, dict) or set(binding) != {
+        "candidate_report_count",
+        "content_receipt_count",
+        "materialization_count",
+        "materialization_input_id",
+        "non_materialized_count",
+        "path",
+        "row_count",
+        "sha256",
+        "source_bytes",
+        "source_files",
+    }:
+        raise IntegrityError("materialization input binding is invalid")
+    try:
+        relative_input = materialization_input_path.resolve(strict=True).relative_to(
+            root
+        ).as_posix()
+    except ValueError as exc:
+        raise IntegrityError("materialization input is outside the repository") from exc
+    if (
+        relative_input != binding.get("path")
+        or sha256_file(materialization_input_path) != binding.get("sha256")
+        or materialization_input.get("schema_version")
+        != "causal_active_materialization_input/1.0.0"
+        or set(materialization_input)
+        != {
+            "certification_evidence",
+            "materialization_input_id",
+            "materializations",
+            "non_materialized_entries",
+            "schema_version",
+            "summary",
+        }
+        or materialization_input.get("materialization_input_id")
+        != sha256_json(
+            {
+                key: value
+                for key, value in materialization_input.items()
+                if key != "materialization_input_id"
+            }
+        )
+        or materialization_input.get("materialization_input_id")
+        != binding.get("materialization_input_id")
+    ):
+        raise IntegrityError("materialization input identity differs")
+    evidence = materialization_input.get("certification_evidence")
+    if not isinstance(evidence, dict) or evidence != plan.get(
+        "certification_evidence"
+    ):
+        raise IntegrityError("materialization certification evidence differs")
+    terminal_path = root / PurePosixPath(str(evidence.get("terminal_path", "")))
+    full_report_path = root / PurePosixPath(
+        str(evidence.get("full_certification_report_path", ""))
+    )
+    terminal = _load_canonical(terminal_path, "materialization terminal")
+    full_report = _load_canonical(
+        full_report_path, "materialization full-certification report"
+    )
+    if (
+        sha256_file(terminal_path) != evidence.get("terminal_sha256")
+        or terminal.get("status") != "PASS"
+        or terminal.get("transport_terminal_id") != evidence.get("terminal_id")
+        or terminal.get("transport_terminal_id")
+        != sha256_json(
+            {
+                key: value
+                for key, value in terminal.items()
+                if key != "transport_terminal_id"
+            }
+        )
+        or sha256_file(full_report_path)
+        != evidence.get("full_certification_report_sha256")
+        or full_report.get("status") != "PASS"
+        or full_report.get("candidate_count") != 562
+        or full_report.get("full_certification_report_id")
+        != evidence.get("full_certification_report_id")
+        or full_report.get("full_certification_report_id")
+        != sha256_json(
+            {
+                key: value
+                for key, value in full_report.items()
+                if key != "full_certification_report_id"
+            }
+        )
+        or terminal.get("full_certification_report_id")
+        != full_report.get("full_certification_report_id")
+    ):
+        raise IntegrityError("materialization terminal evidence is invalid")
+
+    materializations = materialization_input.get("materializations")
+    non_materialized = materialization_input.get("non_materialized_entries")
+    summary = materialization_input.get("summary")
+    entries = plan.get("entries")
+    if (
+        not isinstance(materializations, list)
+        or not isinstance(non_materialized, list)
+        or not isinstance(summary, dict)
+        or not isinstance(entries, list)
+    ):
+        raise IntegrityError("materialization input collections are invalid")
+    planned: dict[tuple[str, int], Mapping[str, object]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            raise IntegrityError("materialization plan entry is invalid")
+        key = (_plain_market(entry.get("market")), _plain_year(entry.get("year")))
+        if key in planned:
+            raise IntegrityError("materialization plan entry is duplicated")
+        planned[key] = entry
+    if len(planned) != 650:
+        raise IntegrityError("materialization plan must contain 650 entries")
+
+    materialized_keys: list[tuple[str, int]] = []
+    source_paths: set[str] = set()
+    source_bytes = 0
+    row_count = 0
+    candidate_ids: list[tuple[str, int, str, str]] = []
+    expected_materialization_keys = {
+        "certification_report_id",
+        "certification_report_path",
+        "certification_report_sha256",
+        "content_validation_receipt",
+        "content_validation_receipt_id",
+        "content_validation_receipt_path",
+        "content_validation_receipt_sha256",
+        "coverage_end",
+        "coverage_kind",
+        "coverage_start",
+        "market",
+        "row_count",
+        "schema_fingerprint",
+        "source_bindings",
+        "source_bytes",
+        "source_paths",
+        "source_sha256s",
+        "universe_contract_sha256",
+        "year",
+    }
+    for raw in materializations:
+        if not isinstance(raw, dict) or set(raw) != expected_materialization_keys:
+            raise IntegrityError("materialization entry shape is invalid")
+        market = _plain_market(raw.get("market"))
+        year = _plain_year(raw.get("year"))
+        key = (market, year)
+        planned_entry = planned.get(key)
+        if (
+            planned_entry is None
+            or planned_entry.get("disposition") != CERTIFICATION_STATE
+            or raw.get("coverage_start") != planned_entry.get("coverage_start")
+            or raw.get("coverage_end") != planned_entry.get("coverage_end")
+            or raw.get("coverage_kind") != planned_entry.get("coverage_kind")
+        ):
+            raise IntegrityError("materialization entry differs from the plan")
+        receipt_path = root / PurePosixPath(
+            str(raw.get("content_validation_receipt_path", ""))
+        )
+        report_path = root / PurePosixPath(
+            str(raw.get("certification_report_path", ""))
+        )
+        receipt = _load_canonical(receipt_path, "content validation receipt")
+        report = _load_canonical(report_path, "certification report")
+        if (
+            receipt != raw.get("content_validation_receipt")
+            or sha256_file(receipt_path)
+            != raw.get("content_validation_receipt_sha256")
+            or validate_content_validation_receipt(receipt)
+            != raw.get("content_validation_receipt_id")
+            or sha256_file(report_path) != raw.get("certification_report_sha256")
+            or report.get("status") != "PASS"
+            or report.get("certification_report_id")
+            != raw.get("certification_report_id")
+            or report.get("certification_report_id")
+            != sha256_json(
+                {
+                    report_key: value
+                    for report_key, value in report.items()
+                    if report_key != "certification_report_id"
+                }
+            )
+            or report.get("content_validation_receipt_id")
+            != raw.get("content_validation_receipt_id")
+            or report.get("market") != market
+            or report.get("year") != year
+            or report.get("source_paths") != raw.get("source_paths")
+            or report.get("source_sha256s") != raw.get("source_sha256s")
+            or report.get("canonical_market_year", {}).get("row_count")
+            != raw.get("row_count")
+            or report.get("canonical_market_year", {}).get("schema_fingerprint")
+            != raw.get("schema_fingerprint")
+        ):
+            raise IntegrityError("materialization certification binding differs")
+        paths = raw["source_paths"]
+        hashes = raw["source_sha256s"]
+        if (
+            not isinstance(paths, list)
+            or not isinstance(hashes, list)
+            or len(paths) != len(hashes)
+            or not paths
+        ):
+            raise IntegrityError("materialization source inventory is invalid")
+        entry_source_bytes = 0
+        for relative, expected_hash in zip(paths, hashes, strict=True):
+            if not isinstance(relative, str):
+                raise IntegrityError("materialization source path is invalid")
+            source = root / PurePosixPath(relative)
+            assert_plain_file(source)
+            if sha256_file(source) != expected_hash:
+                raise IntegrityError(f"materialization source changed: {relative}")
+            if relative in source_paths:
+                raise IntegrityError("materialization source is duplicated")
+            source_paths.add(relative)
+            entry_source_bytes += source.stat().st_size
+        if entry_source_bytes != raw.get("source_bytes"):
+            raise IntegrityError("materialization source-byte binding differs")
+        materialized_keys.append(key)
+        source_bytes += entry_source_bytes
+        row_count += int(raw["row_count"])
+        candidate_ids.append(
+            (
+                market,
+                year,
+                str(raw["certification_report_id"]),
+                str(raw["content_validation_receipt_id"]),
+            )
+        )
+
+    expected_non_materialized_keys = {
+        "cohort",
+        "coverage_end",
+        "coverage_kind",
+        "coverage_start",
+        "disposition",
+        "market",
+        "reason",
+        "selection_eligible",
+        "source_bindings",
+        "year",
+    }
+    non_materialized_keys: list[tuple[str, int]] = []
+    for raw in non_materialized:
+        if not isinstance(raw, dict) or set(raw) != expected_non_materialized_keys:
+            raise IntegrityError("non-materialized entry shape is invalid")
+        market = _plain_market(raw.get("market"))
+        year = _plain_year(raw.get("year"))
+        key = (market, year)
+        planned_entry = planned.get(key)
+        CatalogEntry(
+            market=market,
+            year=year,
+            coverage_start=str(raw["coverage_start"]),
+            coverage_end=str(raw["coverage_end"]),
+            coverage_kind=str(raw["coverage_kind"]),
+            cohort=str(raw["cohort"]),
+            disposition=str(raw["disposition"]),
+            selection_eligible=False,
+            permitted_uses=(),
+            source_bindings=tuple(raw["source_bindings"]),
+            reason=str(raw["reason"]),
+        )
+        if (
+            planned_entry is None
+            or planned_entry.get("disposition") == CERTIFICATION_STATE
+            or any(
+                raw.get(field) != planned_entry.get(field)
+                for field in (
+                    "cohort",
+                    "coverage_end",
+                    "coverage_kind",
+                    "coverage_start",
+                    "disposition",
+                    "market",
+                    "selection_eligible",
+                    "year",
+                )
+            )
+        ):
+            raise IntegrityError("non-materialized entry differs from the plan")
+        non_materialized_keys.append(key)
+
+    if (
+        materialized_keys != sorted(materialized_keys)
+        or non_materialized_keys != sorted(non_materialized_keys)
+        or len(set(materialized_keys)) != len(materialized_keys)
+        or len(set(non_materialized_keys)) != len(non_materialized_keys)
+        or set(materialized_keys).intersection(non_materialized_keys)
+        or set(materialized_keys).union(non_materialized_keys) != set(planned)
+        or sorted(candidate_ids)
+        != sorted(
+            (
+                str(item["market"]),
+                int(item["year"]),
+                str(item["certification_report_id"]),
+                str(item["content_validation_receipt_id"]),
+            )
+            for item in full_report["candidates"]
+        )
+    ):
+        raise IntegrityError("materialization entry partition differs")
+    observed = {
+        "candidate_report_count": len(materialized_keys),
+        "content_receipt_count": len(materialized_keys),
+        "materialization_count": len(materialized_keys),
+        "non_materialized_count": len(non_materialized_keys),
+        "row_count": row_count,
+        "source_bytes": source_bytes,
+        "source_files": len(source_paths),
+    }
+    if summary != observed or any(binding[key] != value for key, value in observed.items()):
+        raise IntegrityError("materialization summary differs")
+    limits = plan.get("limits")
+    if (
+        not isinstance(limits, dict)
+        or limits.get("maximum_materializations") != observed["materialization_count"]
+        or limits.get("maximum_non_materialized_entries")
+        != observed["non_materialized_count"]
+        or limits.get("maximum_source_files") != observed["source_files"]
+        or limits.get("maximum_source_bytes") != observed["source_bytes"]
+        or limits.get("maximum_rows") != observed["row_count"]
+        or limits.get("maximum_output_files")
+        != observed["materialization_count"] * 2 + 1
+        or shutil.disk_usage(root).free < int(limits.get("maximum_staging_bytes", 0))
+    ):
+        raise IntegrityError("materialization limits or storage headroom differ")
+    if (root / ACTIVE_ROOT).exists():
+        raise IntegrityError("materialization requires data/active to be absent")
+    expected_stage = root / STAGING_ROOT / str(plan["plan_id"])
+    if expected_stage.exists():
+        raise IntegrityError("create-only materialization staging root exists")
+    return observed
+
+
 def _load_view_catalog(
     root: Path, *, allow_unreferenced_append_files: bool
 ) -> dict[str, object]:
@@ -1289,6 +1634,230 @@ def _write_journal(
     return payload
 
 
+def validate_publication_input_binding(
+    *,
+    repository_root: Path,
+    staging: Path,
+    plan: Mapping[str, object],
+) -> dict[str, object]:
+    """Verify an exact materialized stage before any publication write."""
+
+    root = repository_root.resolve(strict=True)
+    if (
+        plan.get("operation") != "PUBLISH_CAUSAL_ACTIVE_VIEW"
+        or plan.get("update_mode") != UpdateMode.INITIAL.value
+    ):
+        raise IntegrityError("initial publication plan identity is invalid")
+    binding = plan.get("publication_input_binding")
+    expected_keys = {
+        "active_view_id",
+        "catalog_file_sha256",
+        "catalog_sha256",
+        "entry_count",
+        "materialization_approval_path",
+        "materialization_approval_receipt_id",
+        "materialization_approval_sha256",
+        "materialization_input_id",
+        "materialization_input_path",
+        "materialization_input_sha256",
+        "materialization_plan_file_sha256",
+        "materialization_plan_id",
+        "materialization_plan_path",
+        "materialization_plan_sha256",
+        "materialized_count",
+        "non_materialized_count",
+        "parquet_count",
+        "sidecar_count",
+        "staging_bytes",
+        "staging_file_count",
+        "staging_path",
+    }
+    if not isinstance(binding, dict) or set(binding) != expected_keys:
+        raise IntegrityError("publication input binding is invalid")
+
+    def bound_file(path_key: str, hash_key: str, description: str) -> Path:
+        relative = binding.get(path_key)
+        if not isinstance(relative, str):
+            raise IntegrityError(f"{description} path is invalid")
+        pure = PurePosixPath(relative)
+        if pure.is_absolute() or ".." in pure.parts:
+            raise IntegrityError(f"{description} path is outside the repository")
+        candidate = (root / pure).resolve(strict=True)
+        try:
+            candidate.relative_to(root)
+        except ValueError as exc:
+            raise IntegrityError(
+                f"{description} path is outside the repository"
+            ) from exc
+        assert_plain_file(candidate)
+        if sha256_file(candidate) != binding.get(hash_key):
+            raise IntegrityError(f"{description} file hash differs")
+        return candidate
+
+    stage = staging.resolve(strict=True)
+    try:
+        relative_stage = stage.relative_to(root).as_posix()
+    except ValueError as exc:
+        raise IntegrityError("publication stage is outside the repository") from exc
+    staging_root = (root / STAGING_ROOT).resolve(strict=True)
+    if (
+        relative_stage != binding.get("staging_path")
+        or stage.parent != staging_root
+        or is_linklike(stage)
+    ):
+        raise IntegrityError("publication stage path differs")
+
+    materialization_plan_path = bound_file(
+        "materialization_plan_path",
+        "materialization_plan_file_sha256",
+        "materialization plan",
+    )
+    materialization_approval_path = bound_file(
+        "materialization_approval_path",
+        "materialization_approval_sha256",
+        "materialization approval",
+    )
+    materialization_input_path = bound_file(
+        "materialization_input_path",
+        "materialization_input_sha256",
+        "materialization input",
+    )
+    materialization_plan = _load_canonical(
+        materialization_plan_path, "materialization plan"
+    )
+    materialization_approval = _load_canonical(
+        materialization_approval_path, "materialization approval"
+    )
+    materialization_input = _load_canonical(
+        materialization_input_path, "materialization input"
+    )
+    if (
+        materialization_plan.get("operation") != "MATERIALIZE_CAUSAL_ACTIVE_VIEW"
+        or materialization_plan.get("update_mode") != UpdateMode.INITIAL.value
+        or materialization_plan.get("plan_id")
+        != binding.get("materialization_plan_id")
+        or materialization_plan.get("plan_id")
+        != sha256_json(
+            {
+                key: value
+                for key, value in materialization_plan.items()
+                if key != "plan_id"
+            }
+        )
+        or sha256_json(materialization_plan)
+        != binding.get("materialization_plan_sha256")
+        or verify_approval(
+            materialization_approval,
+            materialization_plan,
+            expected_operation="MATERIALIZE_CAUSAL_ACTIVE_VIEW",
+        )
+        != binding.get("materialization_approval_receipt_id")
+        or materialization_input.get("materialization_input_id")
+        != binding.get("materialization_input_id")
+        or materialization_input.get("materialization_input_id")
+        != sha256_json(
+            {
+                key: value
+                for key, value in materialization_input.items()
+                if key != "materialization_input_id"
+            }
+        )
+        or materialization_plan.get("materialization_input_binding", {}).get(
+            "materialization_input_id"
+        )
+        != binding.get("materialization_input_id")
+    ):
+        raise IntegrityError("publication predecessor evidence differs")
+
+    catalog = verify_view(stage)
+    catalog_path = stage / "catalog.json"
+    entries = catalog.get("entries")
+    planned_entries = plan.get("entries")
+    predecessor_entries = materialization_plan.get("entries")
+    if (
+        not isinstance(entries, list)
+        or not isinstance(planned_entries, list)
+        or planned_entries != predecessor_entries
+        or plan.get("foundation_release_id")
+        != materialization_plan.get("foundation_release_id")
+        or plan.get("foundation_manifest_sha256")
+        != materialization_plan.get("foundation_manifest_sha256")
+        or plan.get("semantic_bindings")
+        != materialization_plan.get("semantic_bindings")
+        or catalog.get("foundation_release_id") != plan.get("foundation_release_id")
+        or catalog.get("foundation_manifest_sha256")
+        != plan.get("foundation_manifest_sha256")
+        or catalog.get("semantic_bindings") != plan.get("semantic_bindings")
+        or catalog.get("plan_id") != materialization_plan.get("plan_id")
+    ):
+        raise IntegrityError("publication catalog lineage differs")
+    projection_fields = (
+        "cohort",
+        "coverage_end",
+        "coverage_kind",
+        "coverage_start",
+        "disposition",
+        "market",
+        "selection_eligible",
+        "year",
+    )
+    projected_entries = [
+        {field: entry[field] for field in projection_fields}
+        for entry in entries
+        if isinstance(entry, dict)
+    ]
+    if projected_entries != planned_entries:
+        raise IntegrityError("publication catalog entries differ from the plan")
+
+    files = [path for path in stage.rglob("*") if path.is_file()]
+    observed = {
+        "active_view_id": catalog.get("active_view_id"),
+        "catalog_file_sha256": sha256_file(catalog_path),
+        "catalog_sha256": catalog.get("catalog_sha256"),
+        "entry_count": len(entries),
+        "materialized_count": sum(
+            entry.get("disposition") == CERTIFICATION_STATE
+            for entry in entries
+            if isinstance(entry, dict)
+        ),
+        "non_materialized_count": sum(
+            entry.get("disposition") != CERTIFICATION_STATE
+            for entry in entries
+            if isinstance(entry, dict)
+        ),
+        "parquet_count": sum(path.suffix == ".parquet" for path in files),
+        "sidecar_count": sum(
+            path.name.endswith(".parquet.manifest.json") for path in files
+        ),
+        "staging_bytes": sum(path.stat().st_size for path in files),
+        "staging_file_count": len(files),
+        "staging_path": relative_stage,
+    }
+    if any(binding.get(key) != value for key, value in observed.items()):
+        raise IntegrityError("publication stage inventory differs")
+    limits = plan.get("limits")
+    if (
+        not isinstance(limits, dict)
+        or limits.get("maximum_active_files") != observed["staging_file_count"]
+        or limits.get("maximum_catalog_entries") != observed["entry_count"]
+        or limits.get("maximum_input_bytes") != observed["staging_bytes"]
+        or limits.get("maximum_input_files") != observed["staging_file_count"]
+        or limits.get("maximum_publications") != 1
+        or limits.get("maximum_retries") != 0
+        or limits.get("maximum_workers") != 1
+    ):
+        raise IntegrityError("publication limits differ")
+    plan_id = _plain_sha256(plan.get("plan_id"), "publication plan ID")
+    if (
+        (root / ACTIVE_ROOT).exists()
+        or (root / PUBLICATION_LOCK).exists()
+        or _journal_path(root, plan_id).exists()
+        or (root / FAILED_PUBLICATION_ROOT / plan_id).exists()
+    ):
+        raise IntegrityError("publication output or writer guard exists")
+    return catalog
+
+
 def publish_initial(
     *,
     repository_root: Path,
@@ -1309,10 +1878,19 @@ def publish_initial(
     if active.exists():
         raise IntegrityError("initial active root already exists")
     stage = staging.resolve(strict=True)
-    expected_stage_parent = (root / STAGING_ROOT / plan_id).resolve(strict=False)
-    if stage != expected_stage_parent or is_linklike(stage):
-        raise ContractError("publication stage differs from the exact plan stage")
-    staged_catalog = verify_view(stage)
+    if "publication_input_binding" in plan:
+        staged_catalog = validate_publication_input_binding(
+            repository_root=root,
+            staging=stage,
+            plan=plan,
+        )
+    else:
+        expected_stage_parent = (root / STAGING_ROOT / plan_id).resolve(
+            strict=False
+        )
+        if stage != expected_stage_parent or is_linklike(stage):
+            raise ContractError("publication stage differs from the exact plan stage")
+        staged_catalog = verify_view(stage)
     active_view_id = _plain_sha256(
         staged_catalog.get("active_view_id"), "active view ID"
     )
@@ -1994,6 +2572,12 @@ def main(argv: list[str] | None = None) -> int:
         verify_plan_bindings(root, plan)
         verify_approval(
             approval, plan, expected_operation="MATERIALIZE_CAUSAL_ACTIVE_VIEW"
+        )
+        validate_materialization_input_package(
+            repository_root=root,
+            plan=plan,
+            materialization_input_path=input_path,
+            materialization_input=materialization_input,
         )
         non_materialized_raw = materialization_input.get("non_materialized_entries")
         materializations = materialization_input.get("materializations")

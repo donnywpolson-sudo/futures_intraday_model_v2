@@ -8,23 +8,22 @@ cockpit.
 The project makes no alpha or trading claim. Provider calls, real-history
 evaluation, WFA/OOS, prediction materialization, candidate sealing, holdout
 access, live smoke, trading, remote push, and destructive operations require
-separate exact approvals.
+one plain-language Codex confirmation. `api.env` remains ignored and is never
+copied into packages, installations, reports, or logs.
 
 ## If you use Codex or ChatGPT
 
 Start with:
 
 ```text
-Read AGENTS.md, PROJECT_OUTLINE.md, and CODEX_HANDOFF.md. Reconcile the handoff
-against the current repository and Git state. Tell me the safest next bounded
-step. Do not run provider calls, broad data builds, real-history research,
-prediction writes, holdout access, live smoke, trading, commits, or pushes
-unless the exact action is already authorized.
+Read CURRENT_WORKFLOW.md and AGENTS.md, then inspect current repository and Git
+state. Complete ordinary local work directly. Pause only for the one
+plain-language confirmation required before high-risk work.
 ```
 
-`PROJECT_OUTLINE.md` is the authoritative steady-state workflow. This README is
-setup and operator orientation; `CODEX_HANDOFF.md` is only current continuation
-state.
+`CURRENT_WORKFLOW.md` is the workflow authority. This README is setup and
+operator orientation; `PROJECT_OUTLINE.md` describes the research pipeline;
+`CODEX_HANDOFF.md` is optional interrupted-task context.
 
 ## Repository map
 
@@ -94,6 +93,25 @@ provider, real-history, prediction, candidate, holdout, or order authority.
 See `PROJECT_OUTLINE.md` for every phase command, output class, gate, and stop
 condition.
 
+## Phase 8 economics
+
+Phase 8 uses the protected 41-market economics rulebook and a passing immutable
+Databento actual-contract audit. The audit verifies point-in-time definitions,
+tick math, and continuous-contract roll boundaries; it does not calculate
+returns across a roll. CME documents are retained as historic/reference
+evidence and are needed only to resolve an audit conflict or unresolved
+economics signature.
+
+Phase 8's current risk default is an **Apex Trader Funding $50K EOD Performance
+Account**. The editable, source-linked profile is
+[`configs/prop_firm_risk_profile.json`](configs/prop_firm_risk_profile.json);
+see [`docs/PROP_FIRM_RISK.md`](docs/PROP_FIRM_RISK.md) before changing firms or
+starting a real evaluation. The current Tier 1 costs, sizing, risk limits,
+baselines, and metrics are locked locally in
+[`configs/tier1_phase8_evaluation.json`](configs/tier1_phase8_evaluation.json).
+Before any real-data run, use the metadata-only Phase 8 readiness audit; it
+checks the pinned releases and local controls without opening market-data rows.
+
 ## Daily use
 
 Use the pinned executables and inspect current state before work:
@@ -124,8 +142,8 @@ exchange. Pre-2025 intervals are classified
 
 This is deliberately not an official historical CME session calendar. The
 activated CME calendar remains authoritative for current/forward cockpit
-scheduling. Publishing the schema-7 historical-observability foundation still
-requires its own exact hash-bound approval.
+scheduling. Publishing the schema-7 historical-observability foundation is a
+high-risk action and needs one plain-language Codex confirmation.
 
 ## Master audits
 
@@ -152,10 +170,7 @@ repository.
 ```powershell
 .\.venv\Scripts\futures-live-cockpit.exe --self-check
 .\.venv\Scripts\futures-live-cockpit.exe --demo
-.\.venv\Scripts\futures-live-cockpit.exe --live-smoke --approval <approved-receipt.json> --result-output reports/live_cockpit/bounded_live_smoke_result_attempt_2.json
-powershell -NoProfile -File scripts/build_live_cockpit.ps1
-powershell -NoProfile -File scripts/install_live_cockpit.ps1 -Upgrade -WhatIf
-powershell -NoProfile -File scripts/activate_live_cockpit.ps1 -PreparedInstallPath <prepared-version> -LiveSmokeResult reports/live_cockpit/bounded_live_smoke_result_attempt_2.json -WhatIf
+.\.venv\Scripts\futures-high-risk-prepare.exe --operation cockpit-live-smoke --scope duration_seconds=120 --output reports/live_cockpit/bounded_live_smoke_result.json
 ```
 
 The packaged application is published directly to `FuturesLiveCockpit/`. Its
@@ -171,21 +186,22 @@ cache, persisted preferences, explicit provider errors, prediction abstention,
 and all 41 approved markets. It is observation-only: it contains no broker,
 order, or trading-control interface and creates no auto-start entry.
 
-Do not run a provider-backed smoke or replace shortcuts without its separate
-exact approval. The installer prepares a new isolated version, verifies its
-packaged self-check, records rollback metadata, and leaves both existing
-shortcuts unchanged. The activation script accepts only a create-only passing
-smoke result bound to that exact frozen executable; it restores and verifies
-the prior shortcuts if cutover fails.
+Do not run a provider-backed smoke or replace shortcuts without one
+plain-language confirmation. High-risk CLIs prepare a scope summary only;
+Codex performs the approved task while preserving the existing installation and
+shortcuts for rollback.
 
 ## Project controls
 
-- `AGENTS.md`: durable policy and authorization boundaries.
-- `PROJECT_OUTLINE.md`: authoritative Phase 1A-11 runbook.
-- `CODEX_HANDOFF.md`: current continuation state.
+- `CURRENT_WORKFLOW.md`: the single day-to-day workflow guide.
+- `AGENTS.md`: durable safety and research-integrity rules.
+- `PROJECT_OUTLINE.md`: Phase 1A-11 research runbook.
+- `CODEX_HANDOFF.md`: optional context for interrupted or high-risk work.
 - `MASTER_AUDIT.md` / `META_MASTER_AUDIT.md`: state and audit-quality controls.
 - `configs/source_contract.json`: accepted source boundary.
 - `manifests/**`: immutable release and approval evidence.
+- `docs/LEGACY_WORKFLOWS.md`: retained historic plans, approval artifacts, and
+  successor code that must not be used as new workflow instructions.
 
 All authoritative runtime imports, configuration, data discovery, credentials,
 and installed cockpit components are v2-owned. Other repositories are not
@@ -194,3 +210,7 @@ runtime dependencies.
 Local data payloads, reports, runtime state, logs, packages, caches, virtual
 environments, credentials, and installations remain outside Git unless a
 specific small durable manifest or report is explicitly approved for tracking.
+
+For normal work and high-risk boundaries, follow
+[`CURRENT_WORKFLOW.md`](CURRENT_WORKFLOW.md). This README does not define a
+second workflow. Historic workflow material remains evidence only.

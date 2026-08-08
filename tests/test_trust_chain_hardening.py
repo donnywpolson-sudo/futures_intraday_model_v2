@@ -5,7 +5,6 @@ from decimal import Decimal
 import pytest
 
 from futures_rebuild.boundary import (
-    EXTERNAL_AUTHORITY_KEYS,
     OperationClassification,
     OperationReceipt,
     RepoBoundary,
@@ -46,12 +45,9 @@ def _definition_payload(decision, *, effective_at=None):
     }
 
 
-def test_authority_registry_lifecycle_scope_and_types_are_fail_closed(
+def test_operation_receipt_lifecycle_scope_and_types_are_fail_closed(
     boundary, operation_factory
 ) -> None:
-    with pytest.raises(TypeError):
-        EXTERNAL_AUTHORITY_KEYS["TEST"] = object()
-
     receipt = operation_factory("SYNTHETIC_OP", scope={"role": "mechanics"})
     receipt.verify(
         boundary,

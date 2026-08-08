@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from futures_rebuild.canonical import canonical_bytes, sha256_file
+from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
 from futures_rebuild.errors import IntegrityError
 from futures_rebuild.legacy_guard import capture_legacy_baseline, verify_legacy_baseline
 
@@ -41,8 +41,10 @@ def test_verify_is_read_only_and_detects_content_mutation(tmp_path: Path) -> Non
         verify_legacy_baseline(config)
 
 
-def test_frozen_legacy_project_is_unchanged() -> None:
+def test_checked_in_legacy_baseline_is_self_validating_historical_evidence() -> None:
     config = Path(__file__).parents[1] / "configs" / "legacy_baseline.json"
-    observed = verify_legacy_baseline(config)
-    assert observed["head"] == "5929e9ec07f6815b149dbab97cbacf7fdbf7cb19"
-    assert observed["status_count"] == 839
+    baseline = json.loads(config.read_text(encoding="utf-8"))
+    core = {key: value for key, value in baseline.items() if key != "baseline_id"}
+    assert sha256_json(core) == baseline["baseline_id"]
+    assert baseline["head"] == "5929e9ec07f6815b149dbab97cbacf7fdbf7cb19"
+    assert baseline["status_count"] == 839

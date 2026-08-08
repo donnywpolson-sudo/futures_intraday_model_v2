@@ -110,6 +110,7 @@ class EconomicsRuleBook:
     rules: Mapping[str, EconomicsRule]
     source_ids: frozenset[str]
     rulebook_hash: str
+    non_multiplier_provider_unit_markets: frozenset[str] = frozenset()
 
     @classmethod
     def from_file(cls, path: Path) -> "EconomicsRuleBook":
@@ -185,12 +186,29 @@ class EconomicsRuleBook:
             or not isinstance(payload.get("rules"), list)
         ):
             raise IntegrityError("economics rulebook schema/policy is invalid")
-        if payload.get("authority_policy") != {
+        policy = payload.get("authority_policy")
+        expected_policy = {
             "eligible_contract_requires_provider_unit_qty_match": True,
             "mutable_public_urls_authorize_economics": False,
             "provider_sentinel_allowed": False,
             "rulebook_hash_bound_into_every_economics_record": True,
-        }:
+        }
+        non_multiplier_markets = []
+        if isinstance(policy, dict):
+            non_multiplier_markets = policy.get(
+                "non_multiplier_provider_unit_markets", []
+            )
+            policy = {
+                key: value for key, value in policy.items()
+                if key != "non_multiplier_provider_unit_markets"
+            }
+        if (
+            policy != expected_policy
+            or not isinstance(non_multiplier_markets, list)
+            or any(not isinstance(item, str) for item in non_multiplier_markets)
+            or non_multiplier_markets != sorted(set(non_multiplier_markets))
+            or (authoritative_dbn_release_id is not None and non_multiplier_markets != ["ZQ"])
+        ):
             raise IntegrityError("economics authority policy is not fail closed")
         sources = payload["verification_sources"]
         required_source_fields = {"authoritative", "binding", "locator", "role"}
@@ -308,6 +326,7 @@ class EconomicsRuleBook:
             MappingProxyType(parsed),
             frozenset(sources),
             sha256_json(payload),
+            frozenset(non_multiplier_markets),
         )
 
     def resolve(self, market: str, definition: ProviderDefinition) -> ResolvedEconomics:
@@ -322,6 +341,7 @@ class EconomicsRuleBook:
             rule,
             market,
             definition,
+            market not in self.non_multiplier_provider_unit_markets,
         )
 
 
@@ -331,6 +351,7 @@ def _resolve_economics(
     rule: EconomicsRule,
     market: str,
     definition: ProviderDefinition,
+    provider_unit_must_match: bool,
 ) -> ResolvedEconomics:
     """Resolve one complete immutable provider definition once per rulebook."""
 
@@ -339,13 +360,17 @@ def _resolve_economics(
     if not rulebook_hash:
         raise ContractError("economics rulebook hash is required")
     observed = definition.observed_unit_qty
-    if observed is None:
-        raise ContractError(
-            "provider unit quantity is unavailable; economics fail closed"
-        )
-    if observed != rule.expected_unit_qty:
+    if provider_unit_must_match and observed is not None and observed != rule.expected_unit_qty:
         raise ContractError("provider unit quantity contradicts the pinned market rule")
-    quantity_state = "PROVIDER_DEFINITION_CROSSCHECK_MATCH"
+    # The protected rulebook is the stable authority for multiplier/unit and
+    # quote convention.  A definition unit, where Databento supplies one,
+    # remains an independent contradiction check; historic definitions that
+    # omit it are not silently assigned a provider value.
+    quantity_state = (
+        "PROVIDER_DEFINITION_CROSSCHECK_MATCH"
+        if observed is not None and provider_unit_must_match
+        else "RULEBOOK_VALUE_PROVIDER_UNIT_QTY_UNAVAILABLE"
+    )
     tick_size = definition.min_tick
     tick_value = tick_size * rule.point_value
     if not tick_value.is_finite() or tick_value <= 0:

@@ -1,0 +1,22 @@
+{
+  "schema_version": "tier1_bracket_v8_retirement_preparation/1.0.0",
+  "state": "PREPARED_REQUIRES_PUBLICATION_APPROVAL",
+  "trial_id": "136f1d9c7779f48565e7100bb890c148f6aed751faaa84670795b45348cf6233",
+  "disposition": "INVALID_PARTIAL_MODEL_FIT_MARKET_FOLD_COVERAGE_EXCEPTION",
+  "strategy_failure_inference_allowed": false,
+  "historical_source_rows_opened": true,
+  "source_materialization_completed": true,
+  "model_fit_attempted": true,
+  "model_bundle_completed": false,
+  "predictions_generated": false,
+  "historical_evaluation_performed": false,
+  "holdout_or_forward_accessed": false,
+  "provider_or_network_accessed": false,
+  "authorization_receipt_id": "8ddd5886bc02b93873a3b34811dced29f03123f6cf60927f775df66698e0c82f",
+  "authorization_use_path": "state/authorization_uses/8ddd5886bc02b93873a3b34811dced29f03123f6cf60927f775df66698e0c82f.json",
+  "failure_stage": "MODEL_FIT_BEFORE_MODEL_BUNDLE_AND_FROZEN_PREDICTION_COMPLETION",
+  "failure_class": "MARKET_FOLD_HAS_NO_ELIGIBLE_TRAINING_ROWS_OR_NO_PREDICTION_ROWS_AND_V8_RAISES_INSTEAD_OF_RETAINING_COVERAGE_EVIDENCE",
+  "preservation": "REGISTERED_V8_DECLARATION_EVENT_CONFIG_IMPLEMENTATION_TESTS_EXECUTION_PLAN_AND_AUTHORIZATION_USE_UNCHANGED",
+  "successor_change_scope": "MARKET_FOLD_TRAINING_AND_TEST_COVERAGE_REPRESENTATION_ONLY_NO_FEATURE_CANDIDATE_MATH_COST_RISK_INFERENCE_THRESHOLD_OR_PROMOTION_RELAXATION",
+  "publication_authorized": false
+}

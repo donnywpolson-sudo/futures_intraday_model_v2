@@ -1,0 +1,21 @@
+{
+  "schema_version": "tier1_bracket_trial/1.0.0",
+  "trial_status": "LOCAL_IMPLEMENTATION_ONLY_NOT_REGISTERED",
+  "research_only": true,
+  "live_readiness": false,
+  "markets": ["ES", "CL", "ZN", "6E"],
+  "discovery_period": "2018-2022",
+  "locked_untouched_holdout": "2025",
+  "bar_resolution": "ohlcv_1m",
+  "entry_delay_bars": 1,
+  "directions": ["long", "short"],
+  "label_unlock_rule": "entry_at_plus_60_minutes_even_when_exit_occurs_earlier",
+  "split_purge_horizon_minutes": 60,
+  "baseline_execution_parity_required": true,
+  "forbidden_claims": [
+    "live_execution_realism",
+    "apex_readiness",
+    "exact_zn_fees",
+    "margin_or_buying_power_validation"
+  ]
+}

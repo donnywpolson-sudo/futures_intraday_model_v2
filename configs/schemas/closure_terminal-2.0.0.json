@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "closure_terminal/2.0.0",
+  "type": "object",
+  "required": ["schema_version", "plan_id", "status", "target_started", "approval_count", "control_plane_seconds", "substantive_execution_seconds", "artifact_count", "artifact_bytes", "full_census_count", "delta_entry_count", "delta_bytes", "retry_count", "terminal_id"],
+  "properties": {
+    "schema_version": {"const": "closure_terminal/2.0.0"},
+    "plan_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "status": {"enum": ["PASS", "FAILED"]},
+    "target_started": {"type": "boolean"},
+    "approval_count": {"type": "integer", "minimum": 1},
+    "control_plane_seconds": {"type": "number", "minimum": 0},
+    "substantive_execution_seconds": {"type": "number", "minimum": 0},
+    "artifact_count": {"type": "integer", "minimum": 0},
+    "artifact_bytes": {"type": "integer", "minimum": 0},
+    "full_census_count": {"type": "integer", "minimum": 0},
+    "delta_entry_count": {"type": "integer", "minimum": 0},
+    "delta_bytes": {"type": "integer", "minimum": 0},
+    "retry_count": {"type": "integer", "minimum": 0},
+    "terminal_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "additionalProperties": true
+}

@@ -1,0 +1,53 @@
+{
+  "schema_version": "tier1_frozen_preexecution_certificate_after_adequacy/1.0.0",
+  "state": "PREPARED_NOT_READY_NOT_PUBLISHED",
+  "overall_decision": "FAIL_SOURCE_EXECUTION_ADEQUACY",
+  "protocol_id": "d647438200d54b60f9c7ddb69117adcd0abc23050b971dae542cda3fbdc21867",
+  "protocol_path": "configs/tier1_frozen_trial_protocol.json",
+  "protocol_sha256": "7b6dcc144f52ef9feac7298dc87bbfbb6cb51f9f4628bfaaad773923d70a9662",
+  "synthetic_verification_id": "f8ba443874108d6ac683a5be6748e297f01cecaf5b9d29df4a8f3ec81c9e7c55",
+  "source_adequacy_record_id": "b3d8efbb010631922a944f13aff2de77e20d6775a2d98e5333994eca33cb5fbf",
+  "source_adequacy_record_path": "state/source_quality/tier1_frozen_source_adequacy/b3d8efbb010631922a944f13aff2de77e20d6775a2d98e5333994eca33cb5fbf.json",
+  "source_adequacy_record_sha256": "81057522b9038f3580f32ce51807b07435ebdd80f390ca812fad2c0cce010c9f",
+  "source_adequacy": {
+    "calendar_open_checkpoints": 15343,
+    "complete_feature_windows": 15288,
+    "feature_rate": "0.9964153033956853",
+    "feature_complete_execution_complete": 15254,
+    "feature_complete_execution_unavailable": 34,
+    "feature_abstention_execution_complete": 21,
+    "feature_abstention_execution_unavailable": 34,
+    "failed_market_year_feature_gates": 0,
+    "failed_market_fold_feature_gates": 0
+  },
+  "failed_gate": {
+    "name": "EVERY_FEATURE_COMPLETE_CHECKPOINT_HAS_COMPLETE_EXECUTION_PATH",
+    "required": "1.0",
+    "observed": "15254_OF_15288",
+    "feature_complete_failure_reasons": {
+      "exact_reported_entry_bar_absent_or_nonexecutable": 27,
+      "bounded_observed_liquidation_absent": 6,
+      "nonqualified_or_foreign_identity_inside_execution_span": 1
+    }
+  },
+  "passing_gates": {
+    "terminal_open_checkpoint_ledger_complete": true,
+    "overall_feature_rate_at_least_95_percent": true,
+    "every_market_year_feature_rate_at_least_90_percent": true,
+    "every_market_fold_role_feature_rate_at_least_90_percent_and_30_sessions": true,
+    "every_execution_path_has_terminal_source_status": true
+  },
+  "authoritative_current_trial": null,
+  "trial_registration_authorized": false,
+  "active_trial_pointer_publication_authorized": false,
+  "historical_execution_authorized": false,
+  "remediation_boundary": "SOURCE_OR_EXECUTION_OBSERVABILITY_ONLY_NO_MODEL_PARAMETER_OR_PROMOTION_GATE_TUNING",
+  "holdout_2025_touched": false,
+  "provider_access": false,
+  "diagnostic_source_families_read": false,
+  "model_fit": false,
+  "prediction_generation": false,
+  "historical_evaluation": false,
+  "trading": false,
+  "certificate_id": "551df53c15940e482c55054f0c4a25a7d54e7d2ce23479cb8f1939236e3011af"
+}

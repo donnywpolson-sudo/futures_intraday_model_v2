@@ -107,6 +107,69 @@ class LegacyCensusReceipt:
         cls, release_receipt: VerifiedReleaseReceipt, boundary: RepoBoundary
     ) -> "LegacyCensusReceipt":
         manifest = release_receipt.verify(boundary)
+        if manifest.schema_version == "4.0.0":
+            from .legacy_trial_penalty import (
+                CONSERVATIVE_CENSUS_SCHEMA_VERSION,
+                CONSERVATIVE_CENSUS_STATUS,
+                load_conservative_penalty_census,
+            )
+
+            if (
+                release_receipt.phase != "evidence"
+                or manifest.release_kind != "legacy_trial_census"
+                or manifest.schema_version != CONSERVATIVE_CENSUS_SCHEMA_VERSION
+            ):
+                raise IntegrityError("conservative legacy census release is invalid")
+            canonical = load_conservative_penalty_census(
+                release_receipt, boundary=boundary
+            )
+            status = str(canonical["status"])
+            observed_floor = canonical["observed_attempt_floor"]
+            penalty_count = canonical["preregistered_penalty_count"]
+            census_hash = str(canonical["census_sha256"])
+            rationale_hash = str(canonical["rationale_sha256"])
+            source_hash = str(canonical["source_evidence_sha256"])
+            exact_count_state = str(canonical["exact_count_state"])
+            trusted_gate = canonical["trusted_gate"]
+            source_snapshot_id = str(canonical["source_snapshot_id"])
+            unresolved_count = canonical["unresolved_reference_count"]
+            if (
+                status != CONSERVATIVE_CENSUS_STATUS
+                or type(observed_floor) is not int
+                or type(penalty_count) is not int
+                or penalty_count <= observed_floor
+                or trusted_gate is not True
+                or type(unresolved_count) is not int
+            ):
+                raise IntegrityError("conservative legacy census is not executable")
+            core = {
+                "census_sha256": census_hash,
+                "exact_count_state": exact_count_state,
+                "observed_attempt_floor": observed_floor,
+                "preregistered_penalty_count": penalty_count,
+                "rationale_sha256": rationale_hash,
+                "release_receipt_id": release_receipt.receipt_id,
+                "source_evidence_sha256": source_hash,
+                "source_snapshot_id": source_snapshot_id,
+                "status": status,
+                "trusted_gate": trusted_gate,
+                "unresolved_reference_count": unresolved_count,
+            }
+            return cls(
+                release_receipt=release_receipt,
+                status=status,
+                observed_attempt_floor=observed_floor,
+                preregistered_penalty_count=penalty_count,
+                census_sha256=census_hash,
+                rationale_sha256=rationale_hash,
+                source_evidence_sha256=source_hash,
+                receipt_id=sha256_json(core),
+                boundary=boundary,
+                exact_count_state=exact_count_state,
+                trusted_gate=trusted_gate,
+                source_snapshot_id=source_snapshot_id,
+                unresolved_reference_count=unresolved_count,
+            )
         if (
             release_receipt.phase != "evidence"
             or manifest.release_kind != "legacy_trial_census"
@@ -220,6 +283,16 @@ class LegacyCensusReceipt:
         rebuilt = type(self).from_release(self.release_receipt, self.boundary)
         if rebuilt != self:
             raise IntegrityError("legacy census receipt changed after verification")
+
+    def require_executable(self) -> None:
+        self.verify()
+        if (
+            self.status != "CONSERVATIVE_PENALTY_PREREGISTERED"
+            or self.exact_count_state != "INDETERMINATE"
+            or self.trusted_gate is not True
+            or self.preregistered_penalty_count <= self.observed_attempt_floor
+        ):
+            raise UnauthorizedOperation("INVALID_TRIAL_CENSUS_UNRESOLVED")
 
 
 @dataclass(frozen=True)
@@ -706,10 +779,7 @@ class TrialEventLedger:
         authorization: OperationReceipt,
     ) -> dict[str, object]:
         census.verify()
-        if census.status != "CONSERVATIVE_PENALTY_PREREGISTERED":
-            raise UnauthorizedOperation(
-                "real-history anchoring requires a preregistered conservative census penalty"
-            )
+        census.require_executable()
         with FileLease(self.lock_path):
             events = self._load()
             pre_anchor_head = str(events[-1]["event_hash"]) if events else "GENESIS"
@@ -823,6 +893,14 @@ class TrialRegistry:
 
     def register(self, charter: ExperimentCharter) -> Path:
         self.operation_receipt.verify(self.boundary, operation="REGISTER_TRIAL")
+        if (
+            charter.evaluation_classification
+            is EvaluationClassification.REAL_HISTORY_DISCOVERY
+        ):
+            raise UnauthorizedOperation(
+                "legacy TrialRegistry real-history registration is retired; "
+                "use CertifiedResearchGateway with row-certified readiness"
+            )
         for receipt in charter.data_release_receipts:
             receipt.verify(self.boundary)
             if receipt.receipt_id in charter.economics_release_receipt_ids:
@@ -998,8 +1076,7 @@ class TrialRegistry:
         anchor_hash = "NOT_REQUIRED"
         authorized_roles: tuple[EvaluationReleaseRole, ...]
         if charter.evaluation_classification is EvaluationClassification.REAL_HISTORY_DISCOVERY:
-            if self.census.status != "CONSERVATIVE_PENALTY_PREREGISTERED":
-                raise UnauthorizedOperation("INVALID_TRIAL_CENSUS_UNRESOLVED")
+            self.census.require_executable()
             observed_data_roles = {
                 role
                 for release_id, role in charter.release_role_bindings

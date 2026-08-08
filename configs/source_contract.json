@@ -54,9 +54,11 @@
   "overlap_resolution_contract": "configs/dbn_overlap_resolutions.json",
   "pnl_economics_gate": {
     "ambiguous_or_missing_disposition": "FAIL_CLOSED_OR_ABSTAIN",
+    "databento_all_market_audit_required": true,
     "forbidden_tick_value_authorities": [
       "min_price_increment_amount"
     ],
+    "cme_evidence_required_only_on_audit_conflict": true,
     "rates_require_quote_convention_and_two_independent_sources": true,
     "required_fields": [
       "tick_size",
@@ -64,7 +66,8 @@
       "point_value",
       "currency"
     ],
-    "verified_actual_contract_economics_release_required": true
+    "verified_actual_contract_economics_release_required": true,
+    "verified_phase8_actual_contract_economics_index_required": true
   },
   "provider": {
     "dataset": "GLBX.MDP3",
@@ -174,6 +177,13 @@
       "network_calls_authorized": false,
       "path": "data/reference/exchange_calendars",
       "role": "immutable_official_exchange_calendar_source"
+    },
+    {
+      "authority_url": "https://www.cmegroup.com/",
+      "id": "cme_contract_economics",
+      "network_calls_authorized": false,
+      "path": "data/reference/economics",
+      "role": "legacy_immutable_official_contract_economics_exception_evidence"
     }
   ],
   "vault_expectations": {

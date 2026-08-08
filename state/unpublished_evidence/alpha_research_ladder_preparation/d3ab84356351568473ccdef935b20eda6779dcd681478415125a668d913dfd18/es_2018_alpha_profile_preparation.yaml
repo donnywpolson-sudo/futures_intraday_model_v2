@@ -1,0 +1,156 @@
+schema_version: futures_operational_profiles/1.0.0
+classification: NON_AUTHORIZING_OPERATIONAL_VIEW
+canonical_universe_contract: configs/research_universe_contract.json
+
+authority:
+  provider_calls_authorized: false
+  real_history_evaluation_authorized: false
+  prediction_materialization_authorized: false
+  candidate_sealing_authorized: false
+  holdout_access_authorized: false
+  order_paths_authorized: false
+
+cohorts:
+  pre_tier1_pilot:
+    years: ["2018"]
+    locked: true
+    selection_eligible: true
+    confirmation_eligible: false
+  research:
+    years: ["2018-2022"]
+    selection_eligible: true
+  holdout:
+    years: ["2025"]
+    locked: true
+    selection_eligible: false
+  forward:
+    years: ["2026-partial"]
+    locked: true
+    selection_eligible: false
+
+market_sets:
+  core: [ES, CL, ZN, 6E]
+  balanced: [ES, NQ, CL, NG, RB, GC, HG, SR3, ZN, ZB, 6E, 6J, ZC, ZS, LE, HE]
+  traditional:
+    [ES, NQ, RTY, YM, CL, NG, RB, HO, GC, SI, HG, PL, SR3, SR1, ZQ,
+     TN, ZT, ZF, ZN, ZB, UB, 6A, 6B, 6C, 6E, 6J, 6M, 6N, 6S, ZC,
+     ZS, ZL, ZM, ZW, KE, LE, HE, GF]
+  satellite: [BTC, ETH, PA]
+  all_approved:
+    [ES, NQ, RTY, YM, CL, NG, RB, HO, GC, SI, HG, PL, SR3, SR1, ZQ,
+     TN, ZT, ZF, ZN, ZB, UB, 6A, 6B, 6C, 6E, 6J, 6M, 6N, 6S, ZC,
+     ZS, ZL, ZM, ZW, KE, LE, HE, GF, BTC, ETH, PA]
+
+market_families:
+  ES: equity_index
+  NQ: equity_index
+  RTY: equity_index
+  YM: equity_index
+  CL: energy
+  NG: energy
+  RB: energy
+  HO: energy
+  GC: metals
+  SI: metals
+  HG: metals
+  PL: metals
+  PA: metals
+  SR3: rates
+  SR1: rates
+  ZQ: rates
+  TN: rates
+  ZT: rates
+  ZF: rates
+  ZN: rates
+  ZB: rates
+  UB: rates
+  6A: fx
+  6B: fx
+  6C: fx
+  6E: fx
+  6J: fx
+  6M: fx
+  6N: fx
+  6S: fx
+  ZC: ag_livestock
+  ZS: ag_livestock
+  ZL: ag_livestock
+  ZM: ag_livestock
+  ZW: ag_livestock
+  KE: ag_livestock
+  LE: ag_livestock
+  HE: ag_livestock
+  GF: ag_livestock
+  BTC: crypto
+  ETH: crypto
+
+profiles:
+  tier_0:
+    market_set: core
+    markets: [ES]
+    cohort: research
+    purpose: ENGINEERING_SMOKE_ONLY
+    alpha_evidence: false
+  pre_tier1_economic_pilot:
+    market_set: core
+    markets: [ES]
+    cohort: pre_tier1_pilot
+    purpose: LOCKED_GO_NO_GO_ECONOMIC_PILOT
+    alpha_evidence: SCREENING_ONLY_NOT_CONFIRMATION
+    locked_scope:
+      markets: [ES]
+      years: [2018]
+    result_use: ADVANCE_OR_REJECT_EXACT_PREREGISTERED_MECHANISM_ONLY
+    parameter_changes_after_result: FORBIDDEN
+    tier_1_reuse: ES_2018_EXCLUDED_FROM_CONFIRMATORY_EVIDENCE
+  tier_1_research:
+    market_set: core
+    cohort: research
+    confirmatory_evidence_exclusions: ["ES:2018"]
+  tier_1_holdout:
+    market_set: core
+    cohort: holdout
+  tier_1_forward:
+    market_set: core
+    cohort: forward
+  tier_2_research:
+    market_set: balanced
+    cohort: research
+  tier_2_holdout:
+    market_set: balanced
+    cohort: holdout
+  tier_2_forward:
+    market_set: balanced
+    cohort: forward
+  tier_3_research:
+    market_set: all_approved
+    cohort: research
+    reporting:
+      traditional_market_set: traditional
+      satellite_market_set: satellite
+      satellite_can_rescue_traditional_failure: false
+  tier_3_holdout:
+    market_set: all_approved
+    cohort: holdout
+    reporting:
+      traditional_market_set: traditional
+      satellite_market_set: satellite
+      satellite_can_rescue_traditional_failure: false
+  tier_3_forward:
+    market_set: all_approved
+    cohort: forward
+    reporting:
+      traditional_market_set: traditional
+      satellite_market_set: satellite
+      satellite_can_rescue_traditional_failure: false
+  all_raw:
+    market_set: all_approved
+    cohort: research
+    purpose: INVENTORY_ONLY
+    alpha_evidence: false
+
+cockpit:
+  market_set: all_approved
+  behavior: OBSERVATION_ONLY
+  provider_smoke_authorized: false
+  order_paths_authorized: false

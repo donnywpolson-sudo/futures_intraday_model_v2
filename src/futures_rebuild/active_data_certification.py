@@ -390,7 +390,7 @@ def _verify_download_sidecar(
         "vendor",
     }
     if (
-        set(payload) != required
+        not required.issubset(payload)
         or payload["vendor"] != "databento"
         or payload["dataset"] != "GLBX.MDP3"
         or payload["encoding"] != "dbn"

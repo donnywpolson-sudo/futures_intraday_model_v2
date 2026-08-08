@@ -1,0 +1,21 @@
+{
+  "schema_version": "tier1_bracket_v3_retirement_preparation/1.0.0",
+  "state": "PREPARED_NOT_PUBLISHED",
+  "trial_id": "1763e644f5b3ebcd95a744971145f9a552c19d2db6b95226b540dcecef247f33",
+  "disposition": "INCOMPLETE_PRE_DATA_IMPLEMENTATION_BINDING",
+  "reason": "The declaration bound remediation primitives but no complete row-materialization, model-fitting, prediction, baseline, risk, inference, and final-decision executor.",
+  "research_evidence_contaminated": false,
+  "source_row_access": false,
+  "model_fit": false,
+  "prediction_generation": false,
+  "historical_evaluation": false,
+  "holdout_or_forward_access": false,
+  "preserved_bindings": {
+    "registry_path": "state/trial_registry/tier1_bracket_post_audit_v3/1763e644f5b3ebcd95a744971145f9a552c19d2db6b95226b540dcecef247f33.json",
+    "registry_sha256": "e61c2b10cec54dcae4477493e18fd7ad48610cefe10d2edb96ee6fcf577fa949",
+    "event_path": "state/trial_events/tier1_bracket_post_audit_v3/1763e644f5b3ebcd95a744971145f9a552c19d2db6b95226b540dcecef247f33.json",
+    "event_sha256": "1c3ce4ef484a8c1492916c2c8d807be425279c7f965ae027bb662e46fe809db9"
+  },
+  "publication_authorized": false,
+  "git_actions_authorized": false
+}

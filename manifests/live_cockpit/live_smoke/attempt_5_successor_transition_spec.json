@@ -1,0 +1,320 @@
+{
+  "authority_class": "PROVIDER_FREE_LOCAL_TRANSITION",
+  "basis": {
+    "repository": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2",
+    "branch": "codex/task-scheduler-registration-authority",
+    "head": "d4f673c1f5f628bc2e5675b483d741ffe10f71a2",
+    "attempt_4_plan_id": "dbe1b57697c5c92c4f6d8f80c3efe36853516ee9925b18f0409fe5bec559c348",
+    "attempt_4_plan_sha256": "c2059c011837cf1086017ad197d3c2c271f372bfa46d11250232ff2ed439c4e7",
+    "attempt_4_approval_receipt_id": "26d0c53dd7d486751f791ab6100c0e5e01af7cb9af2d41d192c6c4633d301c8f",
+    "attempt_4_result_id": "47c8e1cdf459d4063f6d04c9b101d07bb6b3368d651d3b597b6fca3a446067b7",
+    "attempt_4_result_sha256": "f13a010da43098b071a98033574e1bb9b51622383f5abd3f0cc4c9974ae5d82c",
+    "attempt_4_status": "INCONCLUSIVE_NO_DATA",
+    "attempt_4_started_approx_utc": "2026-07-30T21:21:25.412763Z",
+    "attempt_4_completed_utc": "2026-07-30T21:23:25.600763Z",
+    "authoritative_es_closed_interval_utc": "2026-07-30T21:00:00Z/2026-07-30T21:45:00Z",
+    "calendar_manifest_sha256": "a60ca2622835ccc4759d1d8c5b06e037cd4f31d9f856fd276fcd3a22ece25349",
+    "successor_reason": "ATTEMPT_4_EXECUTED_ENTIRELY_INSIDE_AUTHORITATIVE_ES_CLOSED_INTERVAL_AND_PRODUCED_CLEAN_INCONCLUSIVE_NO_DATA"
+  },
+  "actions": [
+    {
+      "id": "reconcile_attempt_5_successor_preimage",
+      "type": "reconciliation",
+      "file_hashes": [
+        {
+          "path": "AGENTS.md",
+          "sha256": "31944556f8b4e25d9bb8047fada8e0ba15ffba29b5c5e5680f5ff49b8e1f03d7"
+        },
+        {
+          "path": "PROJECT_OUTLINE.md",
+          "sha256": "af142c90d994ffdeb82891e67b5b6d6d1c5a53b6bf34354bedef075120b233a9"
+        },
+        {
+          "path": "pyproject.toml",
+          "sha256": "4174c98b66996e0bec2906a44d1a3b3885290261274c1364baedd19919bfae1b"
+        },
+        {
+          "path": "configs/source_contract.json",
+          "sha256": "9d730e7500ca06cb0a45d13f4ef5c2a440c66bcee8489f5aac470edb7019490a"
+        },
+        {
+          "path": "configs/closure_workflow_policy.json",
+          "sha256": "d0ac4547d7829651fae04f624ec79f746a2d2cf5da4847786e1b4371ad98b862"
+        },
+        {
+          "path": "src/futures_rebuild/closure_workflow/engine.py",
+          "sha256": "db63b9fe376c70fb2421ee2dca2a5c798648d4262554392666dece63844cb25e"
+        },
+        {
+          "path": "src/futures_rebuild/closure_workflow/policy.py",
+          "sha256": "d7331318572518d7b52ab6c56c1967495da48f224756fa1fdbc770bc119b0c8b"
+        },
+        {
+          "path": "scripts/run_windows_host_root_pytest.ps1",
+          "sha256": "eb4b899dc382b6ec9a3b1865e2e93ea7a4440d875b469ebe9ee3848b36b72fdf"
+        },
+        {
+          "path": "src/futures_rebuild/live_cockpit/approval.py",
+          "sha256": "98215a0d1c6c0d7ab46d330b648ec55d7df4170b9f88420c064f0b704b048ace"
+        },
+        {
+          "path": "tests/live/test_live_cockpit_approval.py",
+          "sha256": "1b515e84e29296245be72861aa1595eee73d9fefd2ee8494f01904d3cf09806d"
+        },
+        {
+          "path": "tests/live/test_live_cockpit_smoke.py",
+          "sha256": "16e501874ce34bb3ff03e454ae76dab873e3c4af64bbe6f8fc714e7b71808884"
+        },
+        {
+          "path": "manifests/workflow/closure/preflight_tests/live_cockpit_installation_45712_terminal_recovery_bindings.py",
+          "sha256": "f825f8d63feb57e7276fc046370e41e4925bdd62ab3b212003bef94a134b8150"
+        },
+        {
+          "path": "manifests/workflow/closure/preflight_tests/live_cockpit_attempt_5_successor_external_bindings.py",
+          "sha256": "b25e05c1dc7a6755f7d049a891ee05ebb50625ccc4e28caf1f6e829696c09bdb"
+        },
+        {
+          "path": "manifests/workflow/closure/deltas/live_cockpit_attempt_5_smoke_successor_approval.patch",
+          "sha256": "df2b0c72bc9fd6b97b15ebe86a8edbfbd5259b5809262e27b8582dd7db5d9d89"
+        },
+        {
+          "path": "manifests/workflow/closure/deltas/live_cockpit_attempt_5_smoke_successor_tests.patch",
+          "sha256": "2f12b10ccf5a58647a101049ce805ee9d6be81ae67ad1fbb6e451807fa4136d3"
+        },
+        {
+          "path": "manifests/workflow/closure/deltas/live_cockpit_attempt_4_result_lifecycle_test.patch",
+          "sha256": "bd1b8c2d2b031da2d0516252fb8be35f10a258e08c27390426355c838f8b2429"
+        },
+        {
+          "path": "configs/live_cockpit_smoke_approval_attempt_4.json",
+          "sha256": "cfcc19ba43d3d34d1686df80ae78c6e8d99301bdb1de4bfec0a5e8390bab21af"
+        },
+        {
+          "path": "reports/live_cockpit/bounded_live_smoke_result_attempt_4.json",
+          "sha256": "f13a010da43098b071a98033574e1bb9b51622383f5abd3f0cc4c9974ae5d82c"
+        },
+        {
+          "path": "manifests/data_releases/reference/bf261f90d77934c4d79f0991760446cb478fe11bfbc0fd83a2f8e17e107c71f1.json",
+          "sha256": "a60ca2622835ccc4759d1d8c5b06e037cd4f31d9f856fd276fcd3a22ece25349"
+        },
+        {
+          "path": "reports/live_cockpit/installation/45712aac0f18a2e3316ce13ffb491f250c653a1705f0aa77acc034fc91dc0565/terminal.json",
+          "sha256": "30421d473063a92ec2c8184b18c9a582cc537a80f037248371f0f4cdd80da4f6"
+        },
+        {
+          "path": "reports/live_cockpit/package_candidate/686bd4437bab082c5e296d887e991ec01b652c3576f97683a95b49ab3f5da84b/terminal.json",
+          "sha256": "77dbffc5332f456dd9f15a16f4cf0de5f25017e7232f6c88d614269a54bd9e9e"
+        }
+      ],
+      "required_absent": [
+        "configs/live_cockpit_smoke_approval_attempt_5.json",
+        "reports/live_cockpit/bounded_live_smoke_result_attempt_5.json"
+      ]
+    },
+    {
+      "id": "verify_attempt_4_closed_interval_and_external_preimage",
+      "type": "focused_pytest",
+      "argv": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "manifests\\workflow\\closure\\preflight_tests\\live_cockpit_attempt_5_successor_external_bindings.py"
+      ],
+      "depends_on": [
+        "reconcile_attempt_5_successor_preimage"
+      ]
+    },
+    {
+      "id": "make_installation_binding_test_lifecycle_aware",
+      "type": "frozen_patch",
+      "patch": "manifests/workflow/closure/deltas/live_cockpit_attempt_4_result_lifecycle_test.patch",
+      "patch_sha256": "bd1b8c2d2b031da2d0516252fb8be35f10a258e08c27390426355c838f8b2429",
+      "target": "manifests/workflow/closure/preflight_tests/live_cockpit_installation_45712_terminal_recovery_bindings.py",
+      "postimage_sha256": "21c09e4715121dfb9099c5b9dfc1f70aabdc93d31c6c9194e66ca87b4ab2a459",
+      "depends_on": [
+        "verify_attempt_4_closed_interval_and_external_preimage"
+      ]
+    },
+    {
+      "id": "apply_attempt_5_smoke_successor",
+      "type": "frozen_patch",
+      "patch": "manifests/workflow/closure/deltas/live_cockpit_attempt_5_smoke_successor_approval.patch",
+      "patch_sha256": "df2b0c72bc9fd6b97b15ebe86a8edbfbd5259b5809262e27b8582dd7db5d9d89",
+      "target": "src/futures_rebuild/live_cockpit/approval.py",
+      "postimage_sha256": "a17f72963590ac8bdcf4a34a1a489159611896077af8c0a312a46d11af664c5d",
+      "depends_on": [
+        "make_installation_binding_test_lifecycle_aware"
+      ]
+    },
+    {
+      "id": "apply_attempt_5_smoke_successor_tests",
+      "type": "frozen_patch",
+      "patch": "manifests/workflow/closure/deltas/live_cockpit_attempt_5_smoke_successor_tests.patch",
+      "patch_sha256": "2f12b10ccf5a58647a101049ce805ee9d6be81ae67ad1fbb6e451807fa4136d3",
+      "target": "tests/live/test_live_cockpit_approval.py",
+      "postimage_sha256": "eec305d5823923a8f26a0d1acd23c038cb00da9dfd7db9cf7c43c1a5083fc5ac",
+      "depends_on": [
+        "apply_attempt_5_smoke_successor"
+      ]
+    },
+    {
+      "id": "reconcile_attempt_5_successor_postimages",
+      "type": "reconciliation",
+      "file_hashes": [
+        {
+          "path": "manifests/workflow/closure/preflight_tests/live_cockpit_installation_45712_terminal_recovery_bindings.py",
+          "sha256": "21c09e4715121dfb9099c5b9dfc1f70aabdc93d31c6c9194e66ca87b4ab2a459"
+        },
+        {
+          "path": "src/futures_rebuild/live_cockpit/approval.py",
+          "sha256": "a17f72963590ac8bdcf4a34a1a489159611896077af8c0a312a46d11af664c5d"
+        },
+        {
+          "path": "tests/live/test_live_cockpit_approval.py",
+          "sha256": "eec305d5823923a8f26a0d1acd23c038cb00da9dfd7db9cf7c43c1a5083fc5ac"
+        },
+        {
+          "path": "configs/live_cockpit_smoke_approval_attempt_4.json",
+          "sha256": "cfcc19ba43d3d34d1686df80ae78c6e8d99301bdb1de4bfec0a5e8390bab21af"
+        },
+        {
+          "path": "reports/live_cockpit/bounded_live_smoke_result_attempt_4.json",
+          "sha256": "f13a010da43098b071a98033574e1bb9b51622383f5abd3f0cc4c9974ae5d82c"
+        }
+      ],
+      "required_absent": [
+        "configs/live_cockpit_smoke_approval_attempt_5.json",
+        "reports/live_cockpit/bounded_live_smoke_result_attempt_5.json"
+      ],
+      "depends_on": [
+        "apply_attempt_5_smoke_successor_tests"
+      ]
+    },
+    {
+      "id": "run_focused_attempt_5_and_smoke_contracts",
+      "type": "focused_pytest",
+      "argv": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "tests\\live\\test_live_cockpit_approval.py",
+        "tests\\live\\test_live_cockpit_smoke.py"
+      ],
+      "depends_on": [
+        "reconcile_attempt_5_successor_postimages"
+      ]
+    },
+    {
+      "id": "run_broad_live_cockpit_suite_host_root",
+      "type": "windows_host_root_suite",
+      "argv": [
+        "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+        "-NoProfile",
+        "-File",
+        "scripts\\run_windows_host_root_pytest.ps1",
+        "-q",
+        "tests\\live"
+      ],
+      "depends_on": [
+        "run_focused_attempt_5_and_smoke_contracts"
+      ]
+    },
+    {
+      "id": "verify_attempt_5_external_postimage",
+      "type": "focused_pytest",
+      "argv": [
+        ".\\.venv\\Scripts\\python.exe",
+        "-m",
+        "pytest",
+        "-q",
+        "-p",
+        "no:cacheprovider",
+        "manifests\\workflow\\closure\\preflight_tests\\live_cockpit_installation_45712_terminal_recovery_bindings.py",
+        "manifests\\workflow\\closure\\preflight_tests\\live_cockpit_attempt_5_successor_external_bindings.py"
+      ],
+      "depends_on": [
+        "run_broad_live_cockpit_suite_host_root"
+      ]
+    },
+    {
+      "id": "record_terminal",
+      "type": "terminal_recording",
+      "depends_on": [
+        "verify_attempt_5_external_postimage"
+      ]
+    }
+  ],
+  "delta_bytes": 6342,
+  "delta_entry_count": 3,
+  "execution_environment": "EXPLICITLY_UNSANDBOXED_WINDOWS_HOST_ROOT",
+  "full_census_count": 0,
+  "implementation_paths": [
+    "manifests/workflow/closure/preflight_tests/live_cockpit_installation_45712_terminal_recovery_bindings.py",
+    "src/futures_rebuild/live_cockpit/approval.py",
+    "tests/live/test_live_cockpit_approval.py"
+  ],
+  "limits": {
+    "maximum_duration_seconds": 300,
+    "maximum_activations": 0,
+    "maximum_installations": 0,
+    "maximum_shortcut_changes": 0,
+    "maximum_autostart_changes": 0,
+    "maximum_provider_requests": 0,
+    "maximum_network_requests": 0,
+    "maximum_production_cache_writes": 0,
+    "maximum_live_smoke_runs": 0,
+    "maximum_package_builds": 0,
+    "maximum_test_processes": 4,
+    "maximum_workers": 1,
+    "maximum_prestart_launcher_retries": 1,
+    "maximum_retries_after_start": 0
+  },
+  "path_classification": {
+    "manifests/workflow/closure/preflight_tests/live_cockpit_installation_45712_terminal_recovery_bindings.py": "RESUMABLE_PARTIAL_VERSION_CONTROLLED_PREIMAGE",
+    "src/futures_rebuild/live_cockpit/approval.py": "RESUMABLE_PARTIAL_VERSION_CONTROLLED_PREIMAGE",
+    "tests/live/test_live_cockpit_approval.py": "RESUMABLE_PARTIAL_VERSION_CONTROLLED_PREIMAGE",
+    "configs/live_cockpit_smoke_approval_attempt_4.json": "LAST_KNOWN_GOOD_IMMUTABLE_CONSUMED_AUTHORITY",
+    "reports/live_cockpit/bounded_live_smoke_result_attempt_4.json": "LAST_KNOWN_GOOD_IMMUTABLE_INCONCLUSIVE_RESULT",
+    ".pytest_tmp/workflow/<PLAN_ID>": "DISPOSABLE_TEMPORARY_CREATE_ONLY"
+  },
+  "preservation": {
+    "attempt_4_approval_result_and_log": "IMMUTABLE_HASH_VERIFIED_BEFORE_AND_AFTER",
+    "attempt_5_approval_and_result": "REQUIRED_ABSENT_NO_SMOKE_AUTHORIZED",
+    "candidate_and_installations": "IMMUTABLE_HASH_VERIFIED_BEFORE_AND_AFTER",
+    "credential_source_and_locators": "EXISTENCE_ONLY_NO_CONTENT_READ_NO_COPY",
+    "shortcut_state": "HASH_VERIFIED_BEFORE_AND_AFTER_NO_MUTATION",
+    "production_cache": "NO_ACCESS_NO_MUTATION",
+    "provider_network_and_smoke": "FORBIDDEN",
+    "activation": "FORBIDDEN",
+    "package_build": "FORBIDDEN",
+    "staging_and_commit": "FORBIDDEN",
+    "push": "FORBIDDEN",
+    "unrelated_worktree": "PRESERVE_NO_STAGE_NO_COMMIT"
+  },
+  "reused_evidence": [
+    "Exact consumed attempt-4 approval and canonical INCONCLUSIVE_NO_DATA result",
+    "Authoritative activated ES calendar interval proving the entire attempt ran while CLOSED",
+    "Clean two-session shutdown with zero provider failure history cache reconnect or order activity",
+    "Passing isolated nine-test attempt-5 approval postimage",
+    "Passing isolated four-test lifecycle-aware installation postimage",
+    "Passing three-test external-state and closed-interval preflight"
+  ],
+  "rollback": {
+    "failure_after_patch": "STOP_PRESERVE_PARTIAL_ZERO_RETRIES_REVERSE_ONLY_UNDER_FRESH_EXACT_AUTHORITY",
+    "reverse_order": [
+      "git apply --reverse --check -- manifests/workflow/closure/deltas/live_cockpit_attempt_5_smoke_successor_tests.patch",
+      "git apply --reverse --check -- manifests/workflow/closure/deltas/live_cockpit_attempt_5_smoke_successor_approval.patch",
+      "git apply --reverse --check -- manifests/workflow/closure/deltas/live_cockpit_attempt_4_result_lifecycle_test.patch"
+    ],
+    "prestart_failure": "ONE_RESUME_ONLY_IF_TARGET_NOT_STARTED_APPROVAL_UNCONSUMED_AND_HASHES_REMAIN_EXACT",
+    "installation_and_shortcuts": "UNCHANGED"
+  },
+  "snapshot_reused": true,
+  "success_condition": "ATTEMPT_5_SUCCESSOR_AUTHORITY_REQUIRES_AN_AUTHORITATIVE_OPEN_FOCUS_MARKET_WINDOW_AND_LIFECYCLE_FOCUSED_BROAD_EXTERNAL_CHECKS_PASS_WITHOUT_PACKAGE_INSTALL_PROVIDER_SMOKE_ACTIVATION_SHORTCUT_STAGE_COMMIT_OR_PUSH"
+}

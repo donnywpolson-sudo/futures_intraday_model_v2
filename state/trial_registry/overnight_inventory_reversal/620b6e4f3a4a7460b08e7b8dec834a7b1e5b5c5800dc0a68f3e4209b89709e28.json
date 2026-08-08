@@ -1,0 +1,23 @@
+{
+  "counted_trial_number_floor": 106,
+  "economics_evaluation": false,
+  "evaluation_authority": false,
+  "holdout_or_forward_access": false,
+  "hypothesis_id": "overnight_inventory_reversal_cash_open",
+  "model_fit": false,
+  "multiplicity_family_id": "FUTURES_INTRADAY_DIRECTIONAL_GLOBAL_SHARED_HISTORY",
+  "outcome_row_access": false,
+  "prediction_generation": false,
+  "preregistration_id": "32602c0d67e4499e7d13f7c8a06a138f55516b4e84aa4020a5a4c699a9ec33c7",
+  "preregistration_path": "configs/overnight_inventory_reversal_preregistration.json",
+  "preregistration_sha256": "80fea760169a50d5b18c371eced23e4952d4a65751329c055729e1c3f3b65f24",
+  "provider_or_network_access": false,
+  "publication": false,
+  "registered_at_utc": "2026-08-06T17:09:39.686203+00:00",
+  "schema_version": "overnight_inventory_reversal_trial_registration/1.0.0",
+  "source_row_access": false,
+  "state": "REGISTERED_BEFORE_NEW_HYPOTHESIS_OUTCOME_ACCESS",
+  "trading": false,
+  "trial_id": "620b6e4f3a4a7460b08e7b8dec834a7b1e5b5c5800dc0a68f3e4209b89709e28",
+  "trusted_external_pre_outcome_anchor": false
+}

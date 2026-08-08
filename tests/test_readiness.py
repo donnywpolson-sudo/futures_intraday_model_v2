@@ -5,7 +5,6 @@ import os
 import shutil
 import stat
 import subprocess
-import uuid
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -76,11 +75,10 @@ def _remove_readonly(function, path: str, _error) -> None:
 
 
 @pytest.fixture
-def boundary() -> RepoBoundary:
+def boundary(short_test_root_factory) -> RepoBoundary:
     # The production-derived census snapshot has deep prescribed paths. Keep
     # the synthetic repository below legacy Windows MAX_PATH.
-    root = Path(Path.cwd().anchor) / f"rdy-{uuid.uuid4().hex[:8]}"
-    root.mkdir()
+    root = short_test_root_factory("rdy-")
     active = root / "a"
     legacy = root / "l"
     stock = root / "s"

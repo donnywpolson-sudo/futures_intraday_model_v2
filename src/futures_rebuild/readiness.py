@@ -87,6 +87,7 @@ ENGINE_SEED_MODULES = (
     "futures_rebuild.historical_capability",
     "futures_rebuild.historical_engine_contracts",
     "futures_rebuild.historical_evaluator",
+    "futures_rebuild.historical_phase3",
     "futures_rebuild.historical_splitter",
     "futures_rebuild.producer_bridge",
     "futures_rebuild.readiness",

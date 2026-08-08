@@ -1,0 +1,90 @@
+{
+  "schema_version": "tier1_final_trial_protocol/1.0.0",
+  "protocol_id": "120b495a062cbb6f58b92a47f1ba4d4dbdada3b446ce2239c7ade90d3eaed1e4",
+  "state": "PREPARED_NOT_REGISTERED",
+  "classification": "ONE_FINAL_UNVERSIONED_PREREGISTERED_TIER1_HISTORICAL_SCREEN",
+  "research_only": true,
+  "live_readiness": false,
+  "lineage": {
+    "predecessor_trial_id": "221ddd3dd8816970794cff86ad1b119bfaac1b3f5678647dc8fc0bcc990ab76e",
+    "predecessor_protocol_id": "e7cea9906ef39579eacc6070ca08c06ceb248a558e8294433eb1c7d06019e7bc",
+    "predecessor_protocol_path": "configs/tier1_standard_only_trial_protocol.json",
+    "predecessor_protocol_sha256": "2b3a78f722f879dfbccc7ee17735c9a6036ecb2f01ce8fe269a8f7cbb5e55480",
+    "invalid_closure_preparation_path": "configs/tier1_standard_only_invalid_closure_preparation.json",
+    "invalid_closure_preparation_id": "c6ce9c8258517db117e04a3b2f16ed84cb0fc0e7c16ffb9e7291e4b1707cbb78",
+    "predecessor_outcomes_used_for_parameter_selection": false,
+    "predecessor_outcomes_used_for_decision_validity_diagnosis_only": true,
+    "new_numbered_version_created": false,
+    "further_successor_creation_frozen": true
+  },
+  "inherited_research_specification": {
+    "source": "INHERIT_BYTE_FOR_BYTE_FROM_PREDECESSOR_PROTOCOL",
+    "period_and_2025_lock": "INHERIT_BYTE_FOR_BYTE_FROM_PREDECESSOR_PROTOCOL",
+    "decision_times_features_models_splits_purge_embargo": "INHERIT_BYTE_FOR_BYTE_FROM_PREDECESSOR_PROTOCOL",
+    "entry_exit_ranking_tie_breaking": "INHERIT_BYTE_FOR_BYTE_FROM_PREDECESSOR_PROTOCOL",
+    "positions_costs_baselines_and_risk": "INHERIT_BYTE_FOR_BYTE_FROM_PREDECESSOR_PROTOCOL",
+    "promotion_gates": "INHERIT_BYTE_FOR_BYTE_FROM_PREDECESSOR_PROTOCOL",
+    "parameter_changes": []
+  },
+  "decision_validity_corrections": {
+    "scenario_specific_planned_loss": "COMPUTE_WITH_THE_DECLARED_COSTS_OF_EACH_BASE_STRESS_EXTREME_SCENARIO_BEFORE_RANKING",
+    "scenario_risk_cap_failure": "RISK_CAP_REJECTION_POLICY_ABSTENTION_NOT_MISSING_PRICE_PATH",
+    "rank_universe": "ONLY_SCENARIO_ELIGIBLE_CAUSAL_INTENTS_RANKED_BEFORE_OUTCOME_LOOKUP",
+    "selected_missing_candidate_path": "INCONCLUSIVE_DATA_OR_COVERAGE",
+    "missing_data_may_create_promotion": false,
+    "missing_data_may_create_rejection": false,
+    "conclusive_rejection": "A_FULLY_OBSERVED_STRESS_CANDIDATE_IS_REJECTED_IF_NET_PNL_IS_NOT_POSITIVE_OR_CONTINUOUS_DRAWDOWN_EXCEEDS_1500_USD_EVEN_WHEN_AN_UNRELATED_BASELINE_PATH_IS_MISSING",
+    "promotion": "REQUIRES_ALL_PREDECESSOR_PROMOTION_GATES_AND_COMPLETE_CANDIDATE_BASELINE_OUTER_AND_NESTED_EVIDENCE",
+    "terminal_classifications": [
+      "PASS_HISTORICAL_SCREEN",
+      "REJECT_HISTORICAL_SCREEN_MANDATORY_GATE",
+      "FAIL_PROMOTION_GATE",
+      "FAIL_MULTIPLICITY_OR_CONTROL",
+      "FAIL_NO_EDGE",
+      "INCONCLUSIVE_DATA_OR_COVERAGE"
+    ]
+  },
+  "durable_unpublished_evidence": {
+    "required": true,
+    "timing": "SAME_AUTHORIZED_PROCESS_BEFORE_TERMINAL_RESULT_IS_REPORTED",
+    "mode": "CREATE_ONLY_ATOMIC_SEALED_UNPUBLISHED_BUNDLE",
+    "required_payloads": [
+      "model",
+      "predictions",
+      "opportunity_ledger",
+      "fills",
+      "continuous_equity_marks",
+      "segmented_metrics",
+      "inference",
+      "decision",
+      "runtime_receipt",
+      "source_integrity_audit"
+    ],
+    "manifest_hashes_every_payload": true,
+    "publication": false,
+    "separate_publication_approval_required": true,
+    "process_success_forbidden_before_bundle_verifies": true
+  },
+  "execution_authority": {
+    "maximum_host_runtime_seconds": 900,
+    "estimated_external_cost_usd": "0",
+    "one_local_single_use_authorization_claim": true,
+    "historical_row_access_authorized": false,
+    "model_fit_prediction_evaluation_authorized": false,
+    "unpublished_evidence_staging_authorized": false,
+    "provider_or_network_access": false,
+    "credential_access": false,
+    "holdout_or_forward_access": false,
+    "publication": false,
+    "active_data_mutation": false,
+    "stage_commit_push": false,
+    "trading": false
+  },
+  "bindings": {
+    "configs/tier1_standard_only_trial_protocol.json": "2b3a78f722f879dfbccc7ee17735c9a6036ecb2f01ce8fe269a8f7cbb5e55480",
+    "src/futures_rebuild/tier1_final_decision_validity.py": "8520e878c10627bd0b0c1f5aa65e98ccb431879fcf6b91c25bc0e813cefa815c",
+    "src/futures_rebuild/tier1_final_pipeline.py": "5337b68ad05e4bd109deb0cefd53f5f0ecd10ce326eb0ac6c79f432cbadb2e3b",
+    "src/futures_rebuild/tier1_final_unpublished_evidence.py": "dcdb9012a8a9c6c6c38fcd4d452494e0d0990bf1570bf0a90fbd30c153865637",
+    "tests/test_tier1_final_decision_validity.py": "24490c20febf93dd0bbef287b866cf7d9f17021d54cf667e75970288f039901e"
+  }
+}

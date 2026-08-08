@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "workflow_snapshot/1.0.0",
+  "type": "object",
+  "required": ["schema_version", "repository", "branch", "head", "entries", "snapshot_id"],
+  "properties": {
+    "schema_version": {"const": "workflow_snapshot/1.0.0"},
+    "repository": {"type": "string"},
+    "branch": {"type": "string"},
+    "head": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "entries": {"type": "array", "items": {"type": "object", "required": ["status", "path"]}},
+    "snapshot_id": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  },
+  "additionalProperties": false
+}

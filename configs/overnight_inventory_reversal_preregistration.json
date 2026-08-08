@@ -1,0 +1,185 @@
+{
+  "schema_version": "overnight_inventory_reversal_preregistration/1.0.0",
+  "state": "PREPARED_NOT_REGISTERED_OUTCOMES_LOCKED",
+  "classification": "ONE_MATERIALLY_NEW_MECHANISM_DISCOVERY_TRIAL",
+  "hypothesis_id": "overnight_inventory_reversal_cash_open",
+  "hypothesis": "A large standardized overnight inventory displacement mean-reverts after the Chicago 08:30 cash-open checkpoint strongly enough to produce positive stress-cost portfolio PnL.",
+  "material_novelty": {
+    "mechanism": "OVERNIGHT_INVENTORY_DISPLACEMENT_MEAN_REVERSION",
+    "sampling": "ONE_EVENT_CONDITIONED_DECISION_PER_MARKET_SESSION",
+    "model": "DETERMINISTIC_TRAINING_SCALED_RULE_NO_PREDICTIVE_REGRESSION",
+    "entry_exit": "FIXED_CASH_OPEN_ENTRY_AND_FIXED_TIME_EXIT_WITH_DOLLAR_RISK_LIQUIDATION",
+    "portfolio": "NO_CROSS_MARKET_RANKING_EACH_MARKET_IS_AN_INDEPENDENT_SLEEVE",
+    "not_a_successor_version_of": "TIER1_BRACKET_DIRECTIONAL_NET_R_FAMILY",
+    "incremental_rescue": false
+  },
+  "prior_evidence_exposure": {
+    "sealed_trial_id": "5b01056d2ce98641262988df21695ce0cc3eae845c2276bcc12e415f1c192fa4",
+    "use": "HYPOTHESIS_GENERATION_AND_DESIGN_DIAGNOSIS_ONLY",
+    "known_before_declaration": [
+      "PRIOR_BRACKET_CANDIDATE_FAILED_STRESS_NET_PNL_AND_DRAWDOWN",
+      "PRIOR_PREDICTIONS_WERE_SPARSE_AND_RISK_CAP_CONCENTRATED",
+      "PRIOR_ADMITTED_TRADES_WERE_MARKET_AND_TIME_CONCENTRATED"
+    ],
+    "new_hypothesis_evaluation_outcomes_computed_or_examined": false,
+    "historical_period_claimed_pristine": false,
+    "multiplicity_reset_claimed": false
+  },
+  "data_policy": {
+    "discovery_period": ["2018-01-02", "2022-07-22"],
+    "markets": ["ES", "CL", "ZN", "6E"],
+    "phase5_manifest_path": "manifests/split_plans/tier1_core/1ef3d7de365833cb46e1a239759b018b1f85b5bfc7d342b291064f1efe66399b.json",
+    "phase5_manifest_sha256": "540a245be6efda355e23af28f8532c8d422f2957416e97daed9256cbe52718e7",
+    "phase5_plan_id": "1ef3d7de365833cb46e1a239759b018b1f85b5bfc7d342b291064f1efe66399b",
+    "bound_market_year_pairs": 20,
+    "outer_folds": 8,
+    "actual_contract_identity_required": true,
+    "reported_trade_bars_only": true,
+    "missing_bar_interpolation": false,
+    "missing_entry_or_exit": "INCONCLUSIVE_OUTCOME_COVERAGE",
+    "source_row_access_before_registration": false,
+    "outcome_row_access_before_registration": false,
+    "holdout_2025": {
+      "state": "LOCKED_NOT_ACCESSED",
+      "minimum_sessions": 252,
+      "release_binding": "MUST_BE_FROZEN_ONLY_AFTER_OUTER_SCREEN_PASS",
+      "access_requires_separate_approval": true,
+      "failure_closes_trial": true
+    }
+  },
+  "feature_policy": {
+    "overnight_window_start_chicago": "17:00_PREVIOUS_EXCHANGE_SESSION",
+    "overnight_window_end_chicago": "08:29_LAST_COMPLETED_REPORTED_BAR",
+    "decision_at_chicago": "08:30",
+    "overnight_return": "LOG_LAST_COMPLETED_PRICE_DIVIDED_BY_FIRST_REPORTED_OVERNIGHT_PRICE",
+    "scale_fit": "MARKET_LOCAL_TRAINING_ONLY_MEDIAN_AND_1_4826_MAD",
+    "minimum_scale_training_sessions": 252,
+    "standardized_displacement_threshold": "1.5",
+    "direction": "OPPOSITE_SIGN_OF_STANDARDIZED_OVERNIGHT_DISPLACEMENT",
+    "zero_or_nonfinite_scale": "ABSTAIN",
+    "additional_features": [],
+    "feature_selection": false,
+    "threshold_search": false
+  },
+  "target_and_execution_policy": {
+    "entry": "OPEN_OF_EXACT_08_31_CHICAGO_REPORTED_EXECUTABLE_BAR",
+    "scheduled_exit": "OPEN_OF_EXACT_09_31_CHICAGO_REPORTED_EXECUTABLE_BAR",
+    "maximum_hold_minutes": 60,
+    "profit_target": false,
+    "maximum_planned_initial_loss_usd": "250",
+    "stop_ticks": "FLOOR_OF_250_MINUS_ROUND_TRIP_COSTS_DIVIDED_BY_TICK_VALUE",
+    "minimum_stop_ticks": 1,
+    "stop_hit_ordering": "OPEN_GAP_THEN_INTRABAR_ADVERSE_EXTREME",
+    "position_size": "ONE_BOUND_STANDARD_CONTRACT",
+    "maximum_entries_per_market_session": 1,
+    "maximum_open_positions": 4,
+    "same_bar_ambiguity": "ADVERSE_STOP_FIRST",
+    "missing_path": "INCONCLUSIVE_NO_IMPUTATION_NO_RUNNER_UP",
+    "roll_or_identity_change": "ABSTAIN_ROLL_UNRESOLVED"
+  },
+  "cost_policy": {
+    "fee_per_side_usd": "5.00",
+    "round_trip_adverse_execution_ticks": {
+      "base": {"6E": 2, "CL": 4, "ES": 2, "ZN": 2},
+      "stress": {"6E": 4, "CL": 8, "ES": 4, "ZN": 4},
+      "extreme": {"6E": 8, "CL": 16, "ES": 8, "ZN": 8}
+    },
+    "promotion_scenario": "stress",
+    "zero_cost": "DIAGNOSTIC_ONLY",
+    "may_be_reduced_after_outcomes": false
+  },
+  "fold_policy": {
+    "source": "EXACT_BOUND_PHASE5_EIGHT_FOLD_EXPANDING_WINDOW",
+    "training_scale_refit": "ONCE_PER_OUTER_FOLD_USING_ONLY_OUTER_TRAINING_SESSIONS",
+    "inner_hyperparameter_selection": "NOT_APPLICABLE_SINGLE_FIXED_CONFIGURATION",
+    "purge": "REMOVE_TRAINING_LABEL_INTERVALS_OVERLAPPING_TEST_INTERVALS",
+    "embargo_sessions": 1,
+    "outer_observations_may_change_rule": false,
+    "minimum_outer_oos_sessions": 504
+  },
+  "baseline_policy": {
+    "required": [
+      "flat_no_trade",
+      "overnight_displacement_continuation",
+      "fold_local_unconditional_direction_by_market",
+      "previous_session_sign_momentum",
+      "previous_session_sign_reversal",
+      "risk_matched_always_long_at_candidate_eligible_events"
+    ],
+    "same_entry_exit_cost_and_risk": true,
+    "independent_market_schedules": true,
+    "missing_selected_path": "INCONCLUSIVE_DATA_OR_COVERAGE"
+  },
+  "inference_policy": {
+    "primary_metric": "MEAN_STRESS_COST_NET_PNL_USD_PER_COMPLETE_EVALUATION_SESSION",
+    "minimum_economically_meaningful_effect_usd_per_session": "10",
+    "primary_benchmark": "flat_no_trade",
+    "session_level_hac": true,
+    "stationary_bootstrap_resamples": 10000,
+    "romano_wolf_adjusted_one_sided_alpha": "0.05",
+    "deflated_sharpe_minimum_probability": "0.95",
+    "minimum_power": "0.80",
+    "market_sleeves": "EACH_MARKET_MUST_NOT_FAIL_OR_BE_UNDERPOWERED",
+    "positive_portfolio_years_required": "2_OF_3_MINIMUM_WHEN_THREE_COMPLETE_YEARS_EXIST",
+    "candidate_must_beat_every_required_baseline": true,
+    "promotion_requires_positive_stress_net_pnl": true,
+    "pbo": "NOT_APPLICABLE_SINGLE_PREDECLARED_CONFIGURATION"
+  },
+  "multiplicity_policy": {
+    "family_id": "FUTURES_INTRADAY_DIRECTIONAL_GLOBAL_SHARED_HISTORY",
+    "observed_legacy_attempt_floor": 39,
+    "prior_preregistered_penalty_count": 105,
+    "this_counted_trial_number_floor": 106,
+    "same_2018_2022_outcomes_do_not_reset_family": true,
+    "transferred_diagnostic_exposure_counted": true,
+    "family_split_to_reduce_penalty": false
+  },
+  "closure_policy": {
+    "pass": "ELIGIBLE_FOR_SEPARATELY_APPROVED_2025_HOLDOUT_SPEC_FREEZE_ONLY",
+    "fail": "CLOSE_MECHANISM_NO_PARAMETER_CHANGE",
+    "inconclusive": "CLOSE_MECHANISM_NO_PARAMETER_CHANGE",
+    "forbidden_incremental_successors": [
+      "THRESHOLD_CHANGE",
+      "HORIZON_CHANGE",
+      "MARKET_SUBSET_SELECTION",
+      "NEW_CONFIRMATION_FILTER",
+      "SIZING_CHANGE",
+      "COST_CHANGE",
+      "STOP_OR_EXIT_CHANGE",
+      "METRIC_OR_BASELINE_CHANGE"
+    ],
+    "v15_v16_style_rescue_trials": false,
+    "allowed_future_research": "MATERIALLY_DIFFERENT_MECHANISM_OR_GENUINELY_NEW_PROSPECTIVE_DATES"
+  },
+  "governance_bindings": {
+    "configs/research_readiness_contract.json": "820a2b20bd98ef3fae6571a6c4147cd0865cef99777c9aad19f2f40051a8d07a",
+    "docs/HISTORICAL_RESEARCH_HARNESS.md": "92baeb271b50df6f76c8d21e33e8744c78c791e55d8023439e0700f9c3a80332",
+    "docs/REBUILD_CONSTITUTION.md": "d287406857f7f066c7f61480ffd4fd943adc609bceb446d4abedaefbf32dd6d8",
+    "configs/legacy_trial_penalty_decision.json": "8444dd2c30a16c4d12bd61c8055e5a00af4fd52ca18285bb646c8f99d9939554",
+    "configs/dependency_lock_receipt.json": "e6302e16d30d114b0c3140f2b075fd6850558ce4ea245475d2687b8531db1726"
+  },
+  "authority": {
+    "trial_registration_authorized": false,
+    "external_pre_outcome_anchor_present": false,
+    "historical_feature_or_outcome_access": false,
+    "model_fit_or_prediction_generation": false,
+    "economics_evaluation": false,
+    "holdout_or_forward_access": false,
+    "provider_or_network_access": false,
+    "publication": false,
+    "trading": false,
+    "stage_commit_push": false
+  },
+  "policy_hashes": {
+    "data_policy": "9e4e483faed67e832c3c404976d15c449c104f84f48fe722e4317af4466e738c",
+    "feature_policy": "a9b7a6b7fc3fa61008075869883ea2a8123ca66b78d0d89030d9450d6a2b537e",
+    "target_and_execution_policy": "f98df0b7ac5e890ce1d30b6bd73e77d33ccd496d417b5621194b830d5bad7675",
+    "cost_policy": "b0f8162a2b6780c90b67f7ab314dd111f59f369c0cf355851f910022b7f1c950",
+    "fold_policy": "f3f1c52845f9a3370528c1dcdebe208190052d0202711787b4daa2bb91548575",
+    "baseline_policy": "bfd349da4cc0ef4cc5ff73ff19c787ea5658cba2ee905bd4c59251239e7db4b3",
+    "inference_policy": "55112f10bb0a8af6b2ddcc8a518e7daec647c7123117125a3a3393f575463ae9",
+    "multiplicity_policy": "4fb0066a26b0eb201e792d1f527c3030b64446d76496e18b34c743331db97a79",
+    "closure_policy": "08466201288ad25f1e515554b2e18b6edf9a162b533476318c237222bdc61f1f"
+  },
+  "preregistration_id": "32602c0d67e4499e7d13f7c8a06a138f55516b4e84aa4020a5a4c699a9ec33c7"
+}

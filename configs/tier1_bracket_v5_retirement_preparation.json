@@ -1,0 +1,20 @@
+{
+  "schema_version": "tier1_bracket_v5_retirement_preparation/1.0.0",
+  "state": "PREPARED_REQUIRES_PUBLICATION_APPROVAL",
+  "trial_id": "8f6fed0171979ffe76256117c29937bc1f469f674d722525414b16ca5bfd4e03",
+  "disposition": "INVALID_PRE_MODEL_FIT_SOURCE_CENSUS_IDENTITY_DEFECT",
+  "strategy_failure_inference_allowed": false,
+  "historical_source_rows_opened": true,
+  "model_fit_performed": false,
+  "predictions_generated": false,
+  "historical_evaluation_performed": false,
+  "holdout_or_forward_accessed": false,
+  "provider_or_network_accessed": false,
+  "authorization_receipt_id": "aa0fbfb1960c49676535757d24bc0c572f53c1e43f767a96327d22a142adb275",
+  "authorization_use_path": "state/authorization_uses/aa0fbfb1960c49676535757d24bc0c572f53c1e43f767a96327d22a142adb275.json",
+  "failure_stage": "SOURCE_STREAM_MATERIALIZATION_BEFORE_MODEL_FIT",
+  "failure_class": "NONTRADABLE_SOURCE_ROWS_WITHOUT_EXCHANGE_SESSION_IDENTITY_CANNOT_BE_REPRESENTED_BY_REGISTERED_V5_READER",
+  "preservation": "REGISTERED_V5_DECLARATION_EVENT_CONFIG_IMPLEMENTATION_TESTS_EXECUTION_PLAN_AND_AUTHORIZATION_USE_BYTES_UNCHANGED",
+  "successor_change_scope": "SOURCE_INTEGRITY_REPRESENTATION_ONLY_NO_STRATEGY_MODEL_COST_RISK_INFERENCE_OR_PROMOTION_CHANGE",
+  "publication_authorized": false
+}

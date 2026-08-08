@@ -28,10 +28,10 @@ FOUNDATION_ID = (
 )
 
 
-def _predecessor() -> dict[str, object]:
+def _predecessor(root: Path = ROOT) -> dict[str, object]:
     manifest = json.loads(
         (
-            ROOT
+            root
             / "manifests"
             / "data_releases"
             / "foundation"
@@ -39,6 +39,54 @@ def _predecessor() -> dict[str, object]:
         ).read_text(encoding="utf-8")
     )
     return manifest["embedded_documents"]["foundation_set.json"]
+
+
+def _synthetic_predecessor(policy: dict[str, object]) -> dict[str, object]:
+    markets = [f"M{index:02d}" for index in range(41)]
+    intervals: list[dict[str, object]] = []
+    for index in range(683):
+        market = markets[index % len(markets)]
+        if index < 82:
+            year = 2025 + (index // len(markets))
+            in_research_scope = True
+        else:
+            year = 2010 + (index % 10)
+            in_research_scope = False
+        interval_key = f"{market}/{year}/{index:04d}"
+        intervals.append(
+            {
+                "bar_query_contract_id": "1" * 64,
+                "bar_source_path": f"synthetic/{interval_key}.parquet",
+                "bar_source_sha256": "2" * 64,
+                "causal_release_receipt": {"release_id": "3" * 64},
+                "coverage_disposition": (
+                    "QUARANTINED_PENDING_REVALIDATION"
+                    if index < 6
+                    else "AUTHORITATIVE_INTERVAL"
+                ),
+                "end": f"{year}-12-31T23:59:00Z",
+                "interval_key": interval_key,
+                "market": market,
+                "start": f"{year}-01-01T00:00:00Z",
+                "status_epoch_gate": {
+                    "bar_rows": 1,
+                    "in_research_scope": in_research_scope,
+                    "interval_key": interval_key,
+                },
+                "year": year,
+            }
+        )
+    return {
+        "schema_version": "5.0.0",
+        "source_dbn_release_id": policy["source_dbn_release_id"],
+        "intervals": intervals,
+        "provider_call_count": 0,
+        "model_fit_count": 0,
+        "wfa_execution_count": 0,
+        "historical_outcome_or_label_execution": False,
+        "alpha_evidence": False,
+        "candidate_eligible": False,
+    }
 
 
 def test_active_policy_binds_exact_approval_and_semantics() -> None:
@@ -58,11 +106,13 @@ def test_active_policy_binds_exact_approval_and_semantics() -> None:
     assert policy["research_scope_market_year_count"] == 82
 
 
-def test_coverage_uses_manifest_observability_without_calendar_claims() -> None:
+def test_coverage_uses_manifest_observability_without_calendar_claims(
+    local_evidence_root: Path,
+) -> None:
     policy = load_historical_observability_policy(
         ROOT / "configs" / "historical_observability_policy.json"
     )
-    predecessor = _predecessor()
+    predecessor = _predecessor(local_evidence_root)
     coverage = build_historical_observability_coverage(
         predecessor,
         predecessor_release_id=FOUNDATION_ID,
@@ -101,7 +151,7 @@ def test_policy_and_coverage_tampering_fail_closed() -> None:
     with pytest.raises(IntegrityError, match="semantics"):
         validate_historical_observability_policy(tampered_policy)
 
-    predecessor = _predecessor()
+    predecessor = _synthetic_predecessor(policy)
     tampered_predecessor = deepcopy(predecessor)
     tampered_predecessor["intervals"][0]["status_epoch_gate"]["bar_rows"] = 0
     with pytest.raises(IntegrityError, match="observability"):
@@ -118,7 +168,7 @@ def test_builder_does_not_open_historical_source_paths(
     policy = load_historical_observability_policy(
         ROOT / "configs" / "historical_observability_policy.json"
     )
-    predecessor = _predecessor()
+    predecessor = _synthetic_predecessor(policy)
 
     def forbidden_open(*args: object, **kwargs: object) -> None:
         raise AssertionError("historical payload access is forbidden")
@@ -135,7 +185,7 @@ def test_builder_does_not_open_historical_source_paths(
 def test_schema7_successor_builder_is_metadata_only_and_content_addressed() -> None:
     policy_path = ROOT / "configs" / "historical_observability_policy.json"
     policy = load_historical_observability_policy(policy_path)
-    predecessor = _predecessor()
+    predecessor = _synthetic_predecessor(policy)
     from futures_rebuild.canonical import sha256_file
 
     successor = build_foundation_observability_successor_payload(

@@ -1,0 +1,61 @@
+diff --git a/CODEX_HANDOFF.md b/CODEX_HANDOFF.md
+--- a/CODEX_HANDOFF.md
++++ b/CODEX_HANDOFF.md
+@@ -1,39 +1,38 @@
+ # Codex handoff
+ 
+ ## Freshness and authority
+ 
+-- Observed UTC: `2026-07-31T15:10:55Z`.
++- Observed UTC: `2026-07-31T15:50:32Z`.
+ - Canonical non-reparse repository:
+   `C:\Users\donny\Desktop\futures_intraday_model_v2`; branch
+   `codex/task-scheduler-registration-authority`; basis HEAD
+-  `02108024ac050dea15117d06e40b4932e0cbc8df`.
++  `239776aa2666d0b2975a7f051397661475a65778`.
+ - Staging is empty. The broad unrelated live-cockpit and generated-output
+   worktree remains preserved and excluded.
+-- Revalidate after any HEAD, staging, census snapshot, archive receipt,
+-  recovery-terminal, intended-target, publication, or writer change.
++- Revalidate after any HEAD, staging, source-census, penalty-decision,
++  publication-target, publication-lock, trial-state, or writer change.
+ 
+ ## Current execution
+ 
+ - Phase 2 closure and the prediction-independent Phase 3 outcome core are
+   committed locally; no push occurred.
+-- Conservative legacy penalty `105`, its decision, schema-4 census successor,
+-  and trial-governance integration are implemented locally and uncommitted.
+-- The first transition passed focused validation but its complete suite found
+-  that readiness isolation omitted configuration-referenced Phase 3 source;
+-  that failed authority is consumed and its evidence is preserved.
+-- Recovery now seeds Phase 3 into the readiness source closure. The five exact
+-  prior failures and the complete provider-free suite pass with the preserved
+-  penalty postimages.
++- Conservative legacy penalty `105`, its decision, schema-4 successor, and
++  readiness recovery are committed locally; the complete suite passed with
++  `871 passed, 13 skipped`.
++- Immutable schema-4 census release
++  `a3a24c59e592baa38444fbf7380ab41df666898a638eb4454683fbc4f393e359`
++  is published from schema-3 source `dc5bf2d8...`, verified executable for
++  multiplicity accounting only, and authorizes no historical execution.
+ 
+ ## Current blocker
+ 
+-- The recovery implementation is complete but remains unstaged and uncommitted.
+-  A separately bound atomic local stage-and-commit approval is required; no
+-  push is authorized.
++- The next pipeline step is the first real-data trial declaration and bounded
++  Phase 3 outcome build. Trial registration and real-history access require
++  separate exact authority; neither has occurred.
+ 
+ ## One active action
+ 
+-Prepare and revalidate one exact atomic local commit candidate containing only
+-the conservative penalty successor and readiness recovery paths. Do not publish
+-a census, register or read a real-history trial, stage, commit, or push without
+-the applicable separate exact authority.
++Reconcile the committed Phase 3 inputs and freeze the exact first-trial
++declaration and bounded real-history Phase 3 plan. Do not register a trial,
++read real history, publish Phase 3 outputs, stage, commit, or push without the
++applicable separate exact authority.

@@ -1,0 +1,50 @@
+{
+  "acquisition_plan_id": "ebfb3338ef1fb5fdc71ec074ee682d2767675c630c8ae1cb6e434d19cacc8c82",
+  "acquisition_plan_sha256": "044fdbe91dd9e99471e406d172aeba23906e85b3bcec913b87b253232db03351",
+  "adjudication": {
+    "every_target_must_pass": true,
+    "pre_action_quote_fill_allowed": false,
+    "prices_published": false,
+    "source_activated": false
+  },
+  "causal_quote_rule": {
+    "book": "STRICTLY_POSITIVE_NON_CROSSED_BID_AND_ASK_WITH_POSITIVE_DISPLAYED_SIZE",
+    "entry_deadline_seconds_after_scheduled_arrival": 10,
+    "expected_identity_derivation": "ENTRY_USES_LAST_CAUSALLY_AVAILABLE_REPORTED_IDENTITY_AT_DECISION; LIQUIDATION_USES_THE_ADMITTED_ENTRY_INSTRUMENT_ID",
+    "instrument_identity": "EXACT_CAUSALLY_DERIVED_EXPECTED_INSTRUMENT_ID_NO_FOREIGN_IDENTITY_IN_WINDOW",
+    "liquidation_deadline_minutes_after_timeout": 5,
+    "selection": "FIRST_VALID_QUOTE_AVAILABLE_AT_OR_AFTER_ACTION_THEN_RAW_ROW_ORDINAL",
+    "timestamp": "BBO_INTERVAL_END_TS_RECV_IS_AVAILABLE_AT_AND_TS_EVENT_MUST_NOT_EXCEED_IT"
+  },
+  "diagnostic_record_id": "43afeb164e576bbbe6e343cd1356a16773240cfd22ce3fa2673ca5f8e78b0cc9",
+  "diagnostic_record_sha256": "bfbbdc9c86115628c88959ba139bb97033554364d5a219daa90d5a5db90bdefd",
+  "expected_target_counts": {
+    "ENTRY": 27,
+    "LIQUIDATION": 6
+  },
+  "forbidden_actions": {
+    "access_2025_or_forward_data": true,
+    "activate_or_mutate_active_research_data": true,
+    "alter_protocol": true,
+    "commit": true,
+    "evaluate_performance": true,
+    "fit_models": true,
+    "generate_predictions": true,
+    "provider_or_network_access": true,
+    "publish_prices": true,
+    "push": true,
+    "register_or_retire_trial": true,
+    "stage_git_index": true,
+    "trade_or_access_order_path": true
+  },
+  "implementation_sha256": "7f78e992fd4cbec0d95d25444974018cd3b962c130e5b7b74ff3254b5e5d8fb9",
+  "maximum_external_cost_usd": "0",
+  "maximum_host_runtime_seconds": 900,
+  "operation": "CENSUS_FROZEN_TIER1_BBO_RECOVERY_ADEQUACY_AND_PUBLISH",
+  "plan_id": "a17199f24248452c2b6adb3d4485d6d399d20df370b0452017ebf2ed0ad38099",
+  "protocol_id": "d647438200d54b60f9c7ddb69117adcd0abc23050b971dae542cda3fbdc21867",
+  "protocol_sha256": "7b6dcc144f52ef9feac7298dc87bbfbb6cb51f9f4628bfaaad773923d70a9662",
+  "publication_mode": "CREATE_ONLY_SOURCE_QUALITY_RECORD_ONLY",
+  "schema_version": "tier1_frozen_quote_recovery_adequacy_plan/1.0.0",
+  "state": "PREPARED_AWAITING_ACQUISITION_AND_SEPARATE_ROW_READ_APPROVAL"
+}

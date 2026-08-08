@@ -423,6 +423,7 @@ def test_economics_rulebook_treats_mutable_urls_as_non_authoritative_and_fails_o
     assert payload["authority_policy"] == {
         "eligible_contract_requires_provider_unit_qty_match": True,
         "mutable_public_urls_authorize_economics": False,
+        "non_multiplier_provider_unit_markets": ["ZQ"],
         "provider_sentinel_allowed": False,
         "rulebook_hash_bound_into_every_economics_record": True,
     }
@@ -458,10 +459,10 @@ def test_economics_rulebook_treats_mutable_urls_as_non_authoritative_and_fails_o
         row_ordinal=0,
         row_sha256="d" * 64,
     )
-    with pytest.raises(ContractError, match="economics fail closed"):
-        EconomicsRuleBook.from_file(
-            REPO / "configs" / "contract_economics_rules.json"
-        ).resolve("ES", definition)
+    resolved = EconomicsRuleBook.from_file(
+        REPO / "configs" / "contract_economics_rules.json"
+    ).resolve("ES", definition)
+    assert resolved.provider_unit_qty_state == "RULEBOOK_VALUE_PROVIDER_UNIT_QTY_UNAVAILABLE"
 
 
 @pytest.mark.parametrize(
@@ -545,15 +546,18 @@ def test_eight_market_successor_economics_are_provider_quantity_bound(
     assert resolved.tick_value == Decimal(tick_value)
     assert resolved.quote_convention == quote_convention
 
-    with pytest.raises(ContractError, match="contradicts the pinned market rule"):
-        rulebook.resolve(
-            market,
-            replace(
-                definition,
-                unit_of_measure_qty_nano=(unit_qty + 1) * 1_000_000_000,
-                row_sha256="e" * 64,
-            ),
+    changed_unit = replace(
+        definition,
+        unit_of_measure_qty_nano=(unit_qty + 1) * 1_000_000_000,
+        row_sha256="e" * 64,
+    )
+    if market == "ZQ":
+        assert rulebook.resolve(market, changed_unit).provider_unit_qty_state == (
+            "RULEBOOK_VALUE_PROVIDER_UNIT_QTY_UNAVAILABLE"
         )
+    else:
+        with pytest.raises(ContractError, match="contradicts the pinned market rule"):
+            rulebook.resolve(market, changed_unit)
 
 
 def test_economics_asset_classes_cover_the_exact_41_market_universe() -> None:

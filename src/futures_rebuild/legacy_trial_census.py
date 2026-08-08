@@ -1421,19 +1421,19 @@ def _cli_boundary(repository_root: Path, source_contract: Path) -> RepoBoundary:
     if (
         type(active) is not str
         or not active
-        or type(legacy) is not str
-        or not legacy
+        or (legacy is not None and (type(legacy) is not str or not legacy))
         or not isinstance(provider, dict)
         or provider.get("paid_calls_authorized") is not False
         or provider.get("downloads_authorized") is not False
         or contract.get("discovery_policy") != "manifest_only"
         or contract.get("recursive_fallbacks_allowed") is not False
         or contract.get("links_allowed") is not False
+        or contract.get("external_repository_access") != "FORBIDDEN"
     ):
         raise ContractError("source contract does not preserve offline census safety")
     boundary = RepoBoundary(
         Path(active),
-        legacy_roots=(Path(legacy),),
+        legacy_roots=(() if legacy is None else (Path(legacy),)),
         foreign_roots=(
             Path.home() / "Desktop" / "US_stocks_swing_model",
             Path.home() / "Desktop" / "US_stocks_swing_model_v2",

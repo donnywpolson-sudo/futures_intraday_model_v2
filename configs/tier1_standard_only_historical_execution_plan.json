@@ -1,0 +1,41 @@
+{
+  "schema_version": "tier1_standard_only_historical_execution_plan/1.0.0",
+  "plan_id": "040d5ee833f27920a6df731e710759af232f1d2fcc99263bda27576b8e7c7024",
+  "state": "PREPARED_REQUIRES_SEPARATE_EXECUTION_APPROVAL",
+  "operation": "EXECUTE_TIER1_STANDARD_ONLY_HISTORICAL_SCREEN",
+  "protocol_id": "e7cea9906ef39579eacc6070ca08c06ceb248a558e8294433eb1c7d06019e7bc",
+  "selected_sources_id": "f61f34df0b9d8cf7b344016ce3df8bb76abeb890558740460f60d51e5ca37bde",
+  "calendar_release_id": "038940d82031f31e2c66ed37186e98a6ee6cff3e7248f634f2c7a8e94ea6ecf3",
+  "source_scope": {
+    "markets": ["6E", "CL", "ES", "ZN"],
+    "years": [2018, 2019, 2020, 2021, 2022],
+    "selected_release_count": 20
+  },
+  "execution_mode": "IN_MEMORY_UNPUBLISHED_RESULT",
+  "maximum_host_runtime_seconds": 900,
+  "estimated_external_cost_usd": "0",
+  "selected_missing_execution_path_result": "INCONCLUSIVE_DATA_OR_COVERAGE",
+  "runner_up_substitution": false,
+  "zero_return_imputation": false,
+  "authorized_actions": {
+    "registered_2018_2022_source_row_read": true,
+    "model_fit": true,
+    "prediction_generation": true,
+    "historical_evaluation": true,
+    "one_local_single_use_authorization_claim": true
+  },
+  "forbidden_actions": {
+    "holdout_or_forward_access": true,
+    "provider_or_network_access": true,
+    "credential_access": true,
+    "evidence_publication": true,
+    "active_data_mutation": true,
+    "staging": true,
+    "commit": true,
+    "push": true,
+    "trading_or_orders": true
+  },
+  "output_root": "state/tier1_standard_only_unpublished",
+  "receipt_policy": "NEW_EXACT_SINGLE_USE_CREATE_ONLY_CLAIM_BOUND_TO_REGISTERED_TRIAL_AND_THIS_PLAN_BEFORE_SOURCE_OPEN",
+  "preservation_boundary": "The registered declaration, source bytes, prior evidence, unrelated work, and 2025 remain unchanged. The first result remains in memory until separately authorized publication."
+}

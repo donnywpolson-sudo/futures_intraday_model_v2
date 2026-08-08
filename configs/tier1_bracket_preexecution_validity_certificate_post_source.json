@@ -1,0 +1,36 @@
+{
+  "schema_version": "tier1_bracket_preexecution_validity_certificate_successor/1.0.0",
+  "state": "PREPARED_NOT_READY_NOT_PUBLISHED",
+  "overall_decision": "NOT_READY",
+  "certification_target": "UNVERSIONED_FROZEN_SUCCESSOR_SNAPSHOT",
+  "supersedes_certificate_path": "configs/tier1_bracket_preexecution_validity_certificate.json",
+  "supersedes_certificate_sha256": "395125bf83155bbadf9329a342305f61c7a9467146590b3874b6be74c982f18b",
+  "source_certification_record_id": "7a7db45fb4e1a2e3825969e99781fd6f0d02b4dad7a7376b3f0163a0bb41cda5",
+  "source_certification_record_path": "state/source_quality/tier1_preexecution_source_certification/7a7db45fb4e1a2e3825969e99781fd6f0d02b4dad7a7376b3f0163a0bb41cda5.json",
+  "source_certification_decision": "FAIL",
+  "source_set_binding": {
+    "status": "PASS",
+    "candidate_release_count_assessed": 61,
+    "selected_market_year_sources": 20,
+    "selection_is_hash_bound": true
+  },
+  "source_coverage": {
+    "status": "FAIL",
+    "market_years_passed": 1,
+    "market_years_failed": 19,
+    "only_passing_market_year": "ES/2022",
+    "required_gate": "COMPLETE_FEATURE_EXECUTION_AND_JOINT_DEPENDENCIES_WITH_ZERO_MISSING_OR_AMBIGUOUS_SESSIONS"
+  },
+  "authoritative_trial_pointer": {
+    "status": "FAIL",
+    "trial_id": null,
+    "reason": "SOURCE_COVERAGE_FAILED_NO_TRIAL_MAY_BE_REGISTERED"
+  },
+  "inherited_passing_mechanics_gates_remain_bound_to_superseded_certificate": true,
+  "holdout_2025_touched": false,
+  "provider_access": false,
+  "model_fit": false,
+  "prediction_generation": false,
+  "historical_evaluation": false,
+  "trading": false
+}

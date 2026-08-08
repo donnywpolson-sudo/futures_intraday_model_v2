@@ -109,6 +109,7 @@ def _reset_live(monkeypatch: pytest.MonkeyPatch) -> None:
     _Live.instances = []
     _Live.control_record = None
     _Live.emit_data = True
+    monkeypatch.setattr(cockpit_engine, "FOCUS_MAPPING_WAIT_SECONDS", 0.0)
     monkeypatch.setattr(cockpit_engine, "FOCUS_SWITCH_DEBOUNCE_SECONDS", 0.0)
     monkeypatch.setattr(cockpit_engine, "RENDER_INTERVAL_SECONDS_OVERRIDE", 0.01)
     monkeypatch.setattr(

@@ -320,83 +320,29 @@ def run_smoke(
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m live_cockpit.smoke",
-        description="Run the fixed 120-second, two-session Databento cockpit smoke.",
+        description="Describe the fixed cockpit smoke; this command never runs it.",
     )
-    parser.add_argument("--plan", type=Path, required=True)
-    parser.add_argument("--approval", type=Path, required=True)
-    parser.add_argument("--result-output", type=Path, required=True)
+    parser.add_argument(
+        "--prepare",
+        action="store_true",
+        help="Emit the plain-language confirmation summary.",
+    )
     return parser
 
 
 def main(argv: list[str] | None = None, *, stdout: TextIO | None = sys.stdout) -> int:
     args = build_arg_parser().parse_args(argv)
-    plan_path = args.plan.resolve(strict=True)
-    approval_path = args.approval.resolve(strict=True)
-    try:
-        approval_id = verify_live_smoke_approval(
-            plan_path=plan_path,
-            approval_path=approval_path,
-        )
-        plan = validate_live_smoke_plan(
-            json.loads(plan_path.read_text(encoding="utf-8"))
-        )
-        expected_relative = Path(str(plan["scope"]["result_output_relative"]))
-        result_output = args.result_output.resolve(strict=False)
-        expected_output = (Path.cwd().resolve() / expected_relative).resolve(
-            strict=False
-        )
-        if result_output != expected_output:
-            raise LiveSmokeApprovalError(
-                "live-smoke result output differs from the approved relative path"
-            )
-        if result_output.exists():
-            raise LiveSmokeApprovalError(
-                "live-smoke result output already exists; no overwrite is allowed"
-            )
-        _verify_package_runtime(plan)
-    except (LiveSmokeApprovalError, OSError, UnicodeError, json.JSONDecodeError) as exc:
-        if stdout is not None:
-            print(f"BLOCKED: {exc}", file=stdout)
-        return 2
-    result = run_smoke(approval_receipt_id=approval_id)
-    runtime = result.summary.get("runtime")
-    runtime_matches = (
-        type(runtime) is dict
-        and runtime.get("frozen") is plan["scope"]["runtime_frozen"]
-        and runtime.get("executable_sha256")
-        == plan["scope"]["prepared_executable_sha256"]
+    from futures_rebuild.high_risk import confirmation_required
+
+    receipt = confirmation_required(
+        "cockpit live smoke",
+        scope={"duration_seconds": "120", "sessions": "2"},
+        outputs=("reports/live_cockpit/bounded_live_smoke_result.json",),
+        preservation="Do not change the installed cockpit or its shortcuts.",
     )
-    if not runtime_matches:
-        result.summary["status"] = "FAIL"
-        result.summary["reasons"] = [
-            *list(result.summary.get("reasons", [])),
-            "runtime executable does not match the approved prepared package",
-        ]
-        result = SmokeResult(status="FAIL", exit_code=1, summary=result.summary)
-    core = {
-        "schema_version": RESULT_SCHEMA,
-        "status": result.status,
-        "plan_id": plan["plan_id"],
-        "plan_sha256": sha256_file(plan_path),
-        "approval_receipt_id": approval_id,
-        "completed_at": _utc_text(),
-        "result_output_relative": expected_relative.as_posix(),
-        "summary": result.summary,
-    }
-    receipt = {**core, "result_id": sha256_json(core)}
-    result_output.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with result_output.open("xb") as stream:
-            stream.write(canonical_bytes(receipt) + b"\n")
-            stream.flush()
-            os.fsync(stream.fileno())
-    except OSError as exc:
-        if stdout is not None:
-            print(f"FAIL: could not publish live-smoke result: {exc}", file=stdout)
-        return 1
     if stdout is not None:
         print(json.dumps(receipt, sort_keys=True), file=stdout)
-    return result.exit_code
+    return 0
 
 
 if __name__ == "__main__":

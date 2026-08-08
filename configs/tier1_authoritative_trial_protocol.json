@@ -1,0 +1,77 @@
+{
+  "schema_version": "tier1_authoritative_trial_protocol/1.0.0",
+  "protocol_id": "aec0da9623b115b0d308d9460761e43c3a21d1493a6e969478397b9c4cbdf1c0",
+  "state": "PREPARED_NOT_REGISTERED",
+  "classification": "ONE_AUTHORITATIVE_UNVERSIONED_PREREGISTERED_TIER1_HISTORICAL_SCREEN",
+  "research_only": true,
+  "live_readiness": false,
+  "lineage": {
+    "failed_trial_id": "72566d6f80073a2c592f7b13436c98a1bb956e6b135bac297aa8f5636fb09541",
+    "failed_trial_closure_preparation_id": "db49dd79099a9601e8297247bb78fd553c5e80a760e4ba40e81cd37f79e5fc85",
+    "research_predecessor_protocol_id": "e7cea9906ef39579eacc6070ca08c06ceb248a558e8294433eb1c7d06019e7bc",
+    "standard_only_invalid_retirement_id": "20ea50ded16c0a0999bdccf171a577ba5cd4b651eb06ade74bc104dc60522647",
+    "standard_only_invalid_retirement_path": "state/trial_registry/tier1_standard_only_invalid_retirement/20ea50ded16c0a0999bdccf171a577ba5cd4b651eb06ade74bc104dc60522647.json",
+    "standard_only_invalid_retirement_sha256": "568eae76298526382c6a78bb3a48974c4dbc0d0610c64928f02834853f1ed3b8",
+    "failed_trial_outcomes_used_for_parameter_selection": false,
+    "failed_trial_observations_used_for_lifecycle_diagnosis_only": true,
+    "new_numbered_version_created": false,
+    "further_successor_creation_frozen": true
+  },
+  "inherited_research_specification": {
+    "source": "INHERIT_BYTE_FOR_BYTE_FROM_STANDARD_ONLY_PROTOCOL",
+    "period_and_2025_lock": "INHERIT_BYTE_FOR_BYTE_FROM_STANDARD_ONLY_PROTOCOL",
+    "features_models_splits_purge_embargo": "INHERIT_BYTE_FOR_BYTE_FROM_STANDARD_ONLY_PROTOCOL",
+    "entry_exit_ranking_tie_breaking": "INHERIT_BYTE_FOR_BYTE_FROM_STANDARD_ONLY_PROTOCOL",
+    "positions_costs_baselines_risk_and_promotion": "INHERIT_BYTE_FOR_BYTE_FROM_STANDARD_ONLY_PROTOCOL",
+    "parameter_changes": []
+  },
+  "lifecycle_validity": {
+    "predecessor_preservation_source": "IMMUTABLE_RETIREMENT_AND_REGISTRATION_RECORDS_ONLY",
+    "mutable_active_pointer_is_protocol_binding": false,
+    "active_pointer_validation_scope": "REGISTERED_EXECUTION_CONTEXT_ONLY",
+    "prepublication_expected_pointer_is_compare_and_swap_condition_only": true,
+    "pre_and_post_publication_validation_are_both_required": true,
+    "publication_failure_leaves_prior_pointer_active": true,
+    "published_failed_trial_retirement_required_before_activation": true
+  },
+  "decision_validity": {
+    "scenario_specific_planned_loss": true,
+    "scenario_risk_cap_failure": "RISK_CAP_REJECTION_POLICY_ABSTENTION_NOT_MISSING_PRICE_PATH",
+    "fully_observed_failed_mandatory_candidate_gate": "CONCLUSIVE_REJECTION",
+    "missing_selected_candidate_path": "INCONCLUSIVE_DATA_OR_COVERAGE",
+    "missing_data_may_create_promotion": false,
+    "missing_data_may_create_rejection": false,
+    "independent_baseline_universes_and_account_paths": true
+  },
+  "durable_unpublished_evidence": {
+    "required_before_terminal_result": true,
+    "mode": "CREATE_ONLY_ATOMIC_SEALED_UNPUBLISHED_BUNDLE",
+    "manifest_hashes_every_payload": true,
+    "publication": false,
+    "separate_publication_approval_required": true
+  },
+  "execution_authority": {
+    "maximum_host_runtime_seconds": 900,
+    "estimated_external_cost_usd": "0",
+    "one_local_single_use_authorization_claim": true,
+    "historical_row_access_authorized": false,
+    "model_fit_prediction_evaluation_authorized": false,
+    "unpublished_evidence_staging_authorized": false,
+    "provider_or_network_access": false,
+    "credential_access": false,
+    "holdout_or_forward_access": false,
+    "publication": false,
+    "active_data_mutation": false,
+    "stage_commit_push": false,
+    "trading": false
+  },
+  "bindings": {
+    "configs/tier1_final_pointer_binding_invalid_closure_preparation.json": "cfeda8af184a6667c07b3e29020664483824b3a2a6f1b60d38f8017bfc49a2fe",
+    "configs/tier1_standard_only_trial_protocol.json": "2b3a78f722f879dfbccc7ee17735c9a6036ecb2f01ce8fe269a8f7cbb5e55480",
+    "src/futures_rebuild/tier1_authoritative_protocol.py": "6aec20afd1c94914600a7fcc5d0043d95b24a81874e9fa2600df989b16afa261",
+    "src/futures_rebuild/tier1_final_decision_validity.py": "8520e878c10627bd0b0c1f5aa65e98ccb431879fcf6b91c25bc0e813cefa815c",
+    "src/futures_rebuild/tier1_final_pipeline.py": "5337b68ad05e4bd109deb0cefd53f5f0ecd10ce326eb0ac6c79f432cbadb2e3b",
+    "src/futures_rebuild/tier1_final_unpublished_evidence.py": "dcdb9012a8a9c6c6c38fcd4d452494e0d0990bf1570bf0a90fbd30c153865637",
+    "state/trial_registry/tier1_standard_only_invalid_retirement/20ea50ded16c0a0999bdccf171a577ba5cd4b651eb06ade74bc104dc60522647.json": "568eae76298526382c6a78bb3a48974c4dbc0d0610c64928f02834853f1ed3b8"
+  }
+}

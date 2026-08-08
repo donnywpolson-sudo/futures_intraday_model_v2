@@ -1,0 +1,89 @@
+{
+  "schema_version": "tier1_authoritative_certified_synthetic_verification/1.0.0",
+  "state": "PREPARED_NOT_PUBLISHED",
+  "scope": "ONE_IDENTICAL_COMPLETE_APPLICABLE_TIER1_SUITE_BEFORE_AND_AFTER_ACTIVATION",
+  "test_file_count": 52,
+  "test_tree_id": "8bfdc1ed82d5527d6e4a13ba537026c24bbdf77727ada605b866fae47bdf0949",
+  "conftest_sha256": "ac9ecd1f29441d7ab712adee752aca3fd9d7040a603e02add7e1cbecd2e55cf3",
+  "runner_sha256": "eb4b899dc382b6ec9a3b1865e2e93ea7a4440d875b469ebe9ee3848b36b72fdf",
+  "selection": {
+    "marker": "high_risk",
+    "file_prefixes": [
+      "test_tier1_bracket",
+      "test_tier1_frozen",
+      "test_tier1_preexecution",
+      "test_tier1_standard",
+      "test_tier1_final",
+      "test_tier1_authoritative"
+    ],
+    "ignored_invalid_test_files": [
+      "tests/test_tier1_authoritative_lifecycle.py",
+      "tests/test_tier1_authoritative_stable_lifecycle.py"
+    ],
+    "deselected_historical_assertions": [
+      "tests/test_tier1_bracket_v10_registration.py::test_v9_retirement_and_v10_registration_are_prepared_create_only",
+      "tests/test_tier1_final_decision_validity.py::test_final_lifecycle_is_prepared_without_publication_or_pointer_mutation",
+      "tests/test_tier1_final_decision_validity.py::test_final_protocol_preserves_parameters_and_closes_predecessor_only",
+      "tests/test_tier1_final_decision_validity.py::test_final_execution_plan_requires_registration_and_durable_staging"
+    ],
+    "same_arguments_required_pre_and_post_activation": true,
+    "expected_xfail": "tests/test_tier1_bracket_v6.py::test_v5_is_preserved_and_v6_prepares_without_publication"
+  },
+  "replacement_control_map": {
+    "tests/test_tier1_authoritative_lifecycle.py": [
+      "test_692a_is_preserved_and_classified_invalid_without_research_change",
+      "test_certified_protocol_keeps_parameters_and_pointer_out_of_bindings",
+      "test_certified_plan_keeps_execution_separately_authorized_and_sealed",
+      "test_suite_selection_is_explicit_and_identical_by_construction",
+      "test_transition_documents_validate_in_rollback_or_active_state",
+      "test_transition_validator_rejects_pointer_retirement_and_gate_drift",
+      "test_failed_activation_restores_pointer_bytes_exactly",
+      "test_certified_execution_claim_remains_exact_and_single_use",
+      "test_certified_entrypoints_do_not_import_provider_holdout_or_trading_modules",
+      "test_transition_selection_uses_pointer_identity_not_registry_presence",
+      "test_prepared_trial_binds_published_692a_and_omits_mutable_pointer",
+      "test_current_pointer_is_fail_closed_until_separate_publication"
+    ],
+    "tests/test_tier1_authoritative_stable_lifecycle.py": [
+      "test_692a_is_preserved_and_classified_invalid_without_research_change",
+      "test_certified_protocol_keeps_parameters_and_pointer_out_of_bindings",
+      "test_certified_plan_keeps_execution_separately_authorized_and_sealed",
+      "test_suite_selection_is_explicit_and_identical_by_construction",
+      "test_transition_documents_validate_in_rollback_or_active_state",
+      "test_transition_validator_rejects_pointer_retirement_and_gate_drift",
+      "test_failed_activation_restores_pointer_bytes_exactly",
+      "test_certified_execution_claim_remains_exact_and_single_use",
+      "test_certified_entrypoints_do_not_import_provider_holdout_or_trading_modules",
+      "test_transition_selection_uses_pointer_identity_not_registry_presence",
+      "test_prepared_trial_binds_published_692a_and_omits_mutable_pointer",
+      "test_current_pointer_is_fail_closed_until_separate_publication"
+    ]
+  },
+  "applicable_results": {
+    "passed": 284,
+    "failed": 0,
+    "deselected": 26,
+    "expected_xfailed": 1
+  },
+  "all_v4_through_v12_controls_included": true,
+  "complete_synthetic_source_to_terminal_pipeline_tested": true,
+  "scenario_specific_risk_abstention_tested": true,
+  "conclusive_rejection_lattice_tested": true,
+  "independent_baseline_paths_tested": true,
+  "prepublication_context_tested": true,
+  "postpublication_context_tested": true,
+  "rollback_context_tested": true,
+  "failed_activation_rollback_tested": true,
+  "durable_unpublished_bundle_tested": true,
+  "single_use_authorization_tested": true,
+  "historical_rows_opened": false,
+  "provider_or_network_access": false,
+  "credential_access": false,
+  "holdout_2025_access": false,
+  "real_model_fit": false,
+  "historical_evaluation": false,
+  "trial_registration": false,
+  "publication": false,
+  "trading": false,
+  "verification_id": "b3c19cf01af257267d222e8fd5d2f8060e149f8a03b2b91b6eea725c6427ab0f"
+}

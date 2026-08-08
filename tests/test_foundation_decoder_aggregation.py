@@ -78,6 +78,63 @@ def _decode_chunks(
     )
 
 
+def _decode_diagnostic_headers(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    *,
+    schema: str,
+) -> list[decoder.ProviderObservationHeader]:
+    source = tmp_path / "2010-06-06_2011-01-01.dbn.zst"
+    source.write_bytes(b"synthetic-offline-dbn")
+    dtype_names = decoder.OHLCV_DTYPE if schema == "ohlcv-1s" else decoder.TRADE_DTYPE
+    rows = np.zeros(1, dtype=[(name, np.int64) for name in dtype_names])
+    rows["publisher_id"] = 7
+    rows["instrument_id"] = 11
+    rows["ts_event"] = _boundary_ns("2010-06-07")
+    if schema == "trades":
+        rows["ts_recv"] = _boundary_ns("2010-06-07") + 5
+    metadata = SimpleNamespace(
+        dataset=decoder.DATASET,
+        schema=schema,
+        stype_out="instrument_id",
+        ts_out=False,
+        limit=None,
+        start=_boundary_ns("2010-06-06"),
+        end=_boundary_ns("2011-01-01"),
+        stype_in="continuous",
+        symbols=["6A.v.0"],
+    )
+    store = SimpleNamespace(metadata=metadata, to_ndarray=lambda *, count: rows)
+    monkeypatch.setattr(
+        decoder.databento,
+        "DBNStore",
+        SimpleNamespace(from_file=lambda path: store),
+    )
+    binding = SimpleNamespace(
+        relative_path=(
+            f"dbn/{schema.replace('-', '_')}/6A/2010/"
+            "2010-06-06_2011-01-01.dbn.zst"
+        ),
+        verify=lambda: source,
+        sha256="a" * 64,
+    )
+    query = build_query_contract(
+        schema=schema,
+        market="6A",
+        start="2010-06-06",
+        end="2011-01-01",
+        stype_in="continuous",
+        symbols=["6A.v.0"],
+    )
+    return list(decoder.iter_observation_headers(
+        binding,
+        market="6A",
+        expected_query_contract=query,
+        schema=schema,
+        batch_rows=100,
+    ))
+
+
 @pytest.mark.parametrize("schema", ("ohlcv-1h", "ohlcv-1d"))
 def test_pinned_aggregate_schemas_decode_offline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, schema: str
@@ -126,3 +183,18 @@ def test_unapproved_ohlcv_schema_remains_unsupported(
             monkeypatch,
             requested_schema="ohlcv-1s",
         )
+
+
+@pytest.mark.parametrize("schema", ("ohlcv-1s", "trades"))
+def test_diagnostic_decoder_exposes_only_timing_and_identity_headers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, schema: str,
+) -> None:
+    headers = _decode_diagnostic_headers(tmp_path, monkeypatch, schema=schema)
+    assert len(headers) == 1
+    assert headers[0].schema == schema
+    assert headers[0].publisher_id == 7
+    assert headers[0].instrument_id == 11
+    assert set(headers[0].__dataclass_fields__) == {
+        "market", "schema", "event_at_ns", "received_at_ns",
+        "publisher_id", "instrument_id", "source_file_sha256",
+    }
