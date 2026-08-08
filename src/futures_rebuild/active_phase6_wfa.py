@@ -235,6 +235,16 @@ def run_tier1_phase6_prediction_only_wfa(*, boundary: RepoBoundary, maximum_seco
     only after the create-only registration document exists.  It uses sufficient
     statistics, so each bound pair is opened once rather than once per fold.
     """
+    from .current_research_surface import reject_retired_real_history_surface
+
+    del boundary, maximum_seconds
+    reject_retired_real_history_surface("legacy Tier 1 Phase 6 WFA")
+    raise AssertionError("unreachable")
+
+
+def _retired_run_tier1_phase6_prediction_only_wfa(*, boundary: RepoBoundary, maximum_seconds: int = 1_200) -> dict[str, object]:
+    """Preserved implementation body; unreachable from current research."""
+
     started = time.monotonic()
     binding = prepare_tier1_phase6_binding(boundary=boundary)
     contract = prepare_phase6_prediction_only_trial(binding=binding)

@@ -15,6 +15,7 @@ from typing import Any, Sequence
 import numpy as np
 
 from .canonical import canonical_bytes, sha256_json
+from .alpha_research_ladder import load_active_ladder
 from .historical_builder import build_synthetic_research_run
 from .historical_engine_contracts import (
     HistoricalResearchDataset,
@@ -327,6 +328,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             }
         elif args.command == "validate-profiles":
             result = validate_profiles(profiles, repository_root=root)
+            contract, profile = load_active_ladder(root)
+            result["active_alpha_ladder"] = {
+                "contract_id": contract["contract_id"],
+                "profile_id": profile["profile_id"],
+                "state": "ACTIVE_HASH_BOUND",
+            }
         else:
             full = run_synthetic_pipeline(
                 profile_path=profiles, repository_root=root

@@ -18,6 +18,7 @@ from .active_phase5_splits import ReleasePair, discover_tier1_release_pairs
 from .boundary import RepoBoundary
 from .canonical import canonical_bytes, sha256_file, sha256_json
 from .errors import IntegrityError
+from .current_research_surface import reject_retired_project_execution
 from .tier1_bracket_trial import load_tier1_bracket_trial_contract
 from .tier1_phase8_evaluation_config import (
     CONFIG_RELATIVE_PATH,
@@ -88,6 +89,8 @@ def persist_tier1_bracket_model_contract(
 ) -> dict[str, str]:
     """Create the model contract exactly once, prior to any row processing."""
 
+    reject_retired_project_execution(root=root, surface="Tier 1 bracket model registration")
+
     target = root / MODEL_CONTRACT_RELATIVE_ROOT / f"{contract.trial_id}.json"
     if target.exists():
         raise IntegrityError("Tier 1 bracket model contract already exists")
@@ -153,6 +156,8 @@ def persist_tier1_bracket_signal_contract(
     *, root: Path, contract: Tier1BracketPipelineDeclaration
 ) -> dict[str, str]:
     """Create the immutable signal contract and evidence event exactly once."""
+
+    reject_retired_project_execution(root=root, surface="Tier 1 bracket signal registration")
 
     registry = root / SIGNAL_CONTRACT_RELATIVE_ROOT / f"{contract.trial_id}.json"
     event = root / SIGNAL_EVENT_RELATIVE_ROOT / f"{contract.trial_id}.json"
@@ -253,6 +258,8 @@ def build_tier1_bracket_pipeline_declaration(
 def prepare_tier1_bracket_pipeline_registration(*, root: Path) -> Tier1BracketPipelineDeclaration:
     """Verify metadata-only prerequisites and form the first declaration."""
 
+    reject_retired_project_execution(root=root, surface="Tier 1 bracket trial preparation")
+
     readiness = audit_tier1_phase8_bracket_readiness(root=root)
     if readiness.status != "LOCAL_BRACKET_IMPLEMENTATION_READY_FOR_SEPARATE_TRIAL_REGISTRATION_APPROVAL":
         raise IntegrityError("bracket trial is not locally ready for registration")
@@ -277,6 +284,8 @@ def persist_tier1_bracket_pipeline_registration(
     *, root: Path, declaration: Tier1BracketPipelineDeclaration
 ) -> dict[str, str]:
     """Persist exactly one immutable declaration and event using create-only I/O."""
+
+    reject_retired_project_execution(root=root, surface="Tier 1 bracket trial registration")
 
     registry = root / REGISTRY_RELATIVE_ROOT / f"{declaration.trial_id}.json"
     event = root / EVENT_RELATIVE_ROOT / f"{declaration.trial_id}.json"
@@ -313,6 +322,8 @@ def persist_tier1_bracket_pipeline_registration(
 
 def register_tier1_bracket_pipeline(*, root: Path) -> dict[str, str]:
     """High-risk orchestration seam: declare the bracket trial, without row reads."""
+
+    reject_retired_project_execution(root=root, surface="Tier 1 bracket trial registration")
 
     return persist_tier1_bracket_pipeline_registration(
         root=root,

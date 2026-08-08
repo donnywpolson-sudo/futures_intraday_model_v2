@@ -16,6 +16,7 @@ from .boundary import RepoBoundary
 from .canonical import sha256_file, sha256_json
 from .data_layout import DataReleaseReceipt
 from .errors import IntegrityError
+from .current_research_surface import reject_retired_project_execution
 from .foundation.materialize import load_causal_interval
 from .foundation.support import VerifiedFoundationPolicies
 from .phase8_economics_index import (
@@ -77,6 +78,10 @@ def stage_indexed_bracket_market_year(
     agree before the first Parquet batch is opened.  A completed checkpoint is
     exact-reuse only; a changed input creates a different checkpoint location.
     """
+
+    reject_retired_project_execution(
+        root=root, surface="Tier 1 bracket historical source staging"
+    )
 
     boundary = RepoBoundary(root)
     index = _receipt(root, "reference", phase8_index_release_id, boundary)

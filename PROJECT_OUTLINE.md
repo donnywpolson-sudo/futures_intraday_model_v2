@@ -90,10 +90,14 @@ state, never active inputs unless a content-addressed release and its governing
 contract explicitly admit them. Other repositories and absolute external paths
 are not active roots.
 
-## Profile ladder
+## Active Alpha ladder
 
-Profiles are defined by `configs/alpha_tiered.yaml` and checked against the
-canonical universe.
+The current ladder is loaded only through
+`configs/active_alpha_research_ladder.json`. That pointer hash-binds the
+authoritative successor contract and profile. `configs/alpha_tiered.yaml` and
+`configs/research_universe_contract.json` are retained predecessor views; they
+remain useful for synthetic compatibility checks but do not authorize current
+research.
 
 - `tier_0`: ES engineering smoke only; never alpha evidence.
 - `tier_1_research`: core discovery/replication profile. Approved cohort rules
@@ -110,7 +114,7 @@ canonical universe.
 Profiles can narrow but cannot silently expand the universe, change admission
 or selection eligibility, or unlock holdout/forward data.
 
-## Phase 1A-11 workflow
+## Synthetic Phase 1A-11 mechanics
 
 | Phase | Purpose | V2 interface | Main output |
 | --- | --- | --- | --- |
@@ -127,7 +131,7 @@ or selection eligibility, or unlock holdout/forward data.
 | 10 | Seal an explicitly approved candidate and its complete serving bundle | `futures-pipeline phase10` | immutable candidate bundle/receipt |
 | 11 | Guard one authorized locked-holdout or forward evaluation using only the sealed bundle | `futures-pipeline phase11` | guarded evaluation evidence |
 
-The public CLI defaults to generated synthetic mechanics. Synthetic mode
+The public CLI is generated synthetic mechanics only. Synthetic mode
 executes the complete dependency order while retaining zero provider, alpha,
 prediction, sealing, holdout, and order authority. Any production adapter must
 check the corresponding exact receipt before reading protected data or writing
@@ -229,12 +233,13 @@ repository.
 ## Cockpit workflow
 
 ```powershell
-.\.venv\Scripts\futures-live-cockpit.exe --self-check
-.\.venv\Scripts\futures-live-cockpit.exe --demo
+.\.venv\Scripts\python.exe -m futures_rebuild.live_cockpit --self-check
+.\.venv\Scripts\python.exe -m futures_rebuild.live_cockpit --demo
 .\.venv\Scripts\futures-high-risk-prepare.exe --operation cockpit-live-smoke --scope duration_seconds=120 --output reports/live_cockpit/bounded_live_smoke_result.json
 ```
 
-Packaging publishes `FuturesLiveCockpit/` with exactly
+There is no installed `futures-live-cockpit.exe` command. Packaging, if
+separately approved, publishes `FuturesLiveCockpit/` with exactly
 `FuturesLiveCockpit.exe` and `_internal/` at its top level.
 
 The normal UI is observation-only. Provider-backed smoke, packaging,

@@ -87,6 +87,7 @@ LEGACY_RESEARCH_TEST_FILES = {
     "test_tier1_bracket_v8.py",
     "test_tier1_bracket_v9.py",
     "test_tier1_final_decision_validity.py",
+    "test_tier1_phase8_real_adapter.py",
     "test_tier1_standard_only_execution.py",
     "test_tier1_standard_only_lifecycle.py",
     "test_tier1_standard_only_protocol.py",

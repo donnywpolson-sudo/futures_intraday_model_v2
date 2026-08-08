@@ -10,6 +10,7 @@ from futures_rebuild.active_phase3_validation import ActivePhase3MechanicsValida
 from futures_rebuild.active_phase4_features import ActivePhase4FeatureBinding, build_active_phase4_features
 from futures_rebuild.boundary import RepoBoundary
 from futures_rebuild.canonical import sha256_file, sha256_json
+from futures_rebuild.current_research_surface import reject_retired_project_execution
 
 MARKETS = ("ES", "CL", "ZN", "6E")
 YEARS = tuple(range(2018, 2023))
@@ -65,6 +66,10 @@ def _parse_pairs(values: Iterable[str] | None) -> tuple[tuple[str, int], ...]:
     return tuple(pairs)
 
 def run_pairs(*, boundary: RepoBoundary, pairs: Iterable[tuple[str, int]]) -> list[dict[str, object]]:
+    reject_retired_project_execution(
+        root=boundary.active_root,
+        surface="legacy Tier 1 Phase 3/4 foundation runner",
+    )
     spec_path = boundary.active_root / "configs/mechanical_feature_spec.json"
     spec = json.loads(spec_path.read_text(encoding="utf-8"))
     spec_hash = sha256_file(spec_path)

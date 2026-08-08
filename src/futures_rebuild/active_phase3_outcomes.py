@@ -78,6 +78,11 @@ def _load_rows(parquet_path: Path) -> list[Mapping[str, object]]:
 
 def build_active_phase3_outcomes(*, boundary: RepoBoundary, validation: ActivePhase3MechanicsValidation) -> dict[str, str | int]:
     """Read the one bound active input and create an immutable outcome-only release."""
+    from .current_research_surface import reject_retired_project_execution
+
+    reject_retired_project_execution(
+        root=boundary.active_root, surface="legacy active Phase 3 outcome builder",
+    )
     if type(validation) is not ActivePhase3MechanicsValidation:
         raise ContractError("active Phase 3 outcome build requires exact mechanics preflight")
     parquet = boundary.assert_active_path(boundary.active_root / validation.active_input.parquet_path, purpose="active Phase 3 outcomes parquet", subtree="data/active")

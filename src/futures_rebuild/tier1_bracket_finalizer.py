@@ -16,6 +16,10 @@ from .errors import IntegrityError
 from .tier1_bracket_checkpoint import load_checkpoint
 from .boundary import RepoBoundary, OperationReceipt, OperationClassification
 from .data_layout import DataReleaseManifest, PhasePublisher, DataReleaseReceipt
+from .current_research_surface import (
+    reject_retired_path_execution,
+    reject_retired_project_execution,
+)
 
 MARKETS = ("ES", "CL", "ZN", "6E")
 YEARS = tuple(range(2018, 2023))
@@ -34,6 +38,7 @@ class CanonicalBracketCheckpoint:
 
 def load_canonical_bracket_checkpoints(*, root: Path) -> tuple[CanonicalBracketCheckpoint, ...]:
     """Return exactly one complete, hash-verified checkpoint per Tier 1 year."""
+    reject_retired_project_execution(root=root, surface="Tier 1 bracket checkpoint selection")
     expected = {f"{market}-{year}" for market in MARKETS for year in YEARS}
     candidates: dict[str, list[CanonicalBracketCheckpoint]] = {name: [] for name in expected}
     for path in (root / "state" / "tier1_bracket_checkpoints").glob("*/*.json"):
@@ -117,6 +122,7 @@ def stage_canonical_bracket_artifacts(*, root: Path, stage: Path) -> dict[str, o
 
 def build_bracket_chronological_split_plan(*, stage: Path) -> dict[str, object]:
     """Freeze chronological session folds from mature bracket rows only."""
+    reject_retired_path_execution(path=stage, surface="Tier 1 bracket split construction")
     import pyarrow.parquet as pq
     manifest=json.loads((stage/"canonical_bracket_stage.json").read_text(encoding="utf-8"))
     sessions=set()
@@ -139,6 +145,8 @@ def build_bracket_chronological_split_plan(*, stage: Path) -> dict[str, object]:
 
 def write_frozen_bracket_predictions(*, stage: Path, output: Path) -> dict[str, object]:
     """Fit two fixed Ridge models per chronological fold and freeze test rows."""
+    reject_retired_path_execution(path=stage, surface="Tier 1 bracket model fitting")
+    reject_retired_path_execution(path=output, surface="Tier 1 bracket prediction writing")
     import numpy as np
     import pyarrow as pa
     import pyarrow.parquet as pq
@@ -206,6 +214,7 @@ def prediction_market_year_coverage(*, staged_payload: Path) -> dict[str, object
     prediction release.  Keeping that distinction explicit prevents a caller
     from accidentally publishing in-sample scores as frozen predictions.
     """
+    reject_retired_path_execution(path=staged_payload, surface="Tier 1 bracket prediction reading")
     import pyarrow.parquet as pq
 
     if not staged_payload.is_file():
@@ -270,6 +279,7 @@ def publish_partitioned_frozen_bracket_predictions(
     audit_receipt_id: str, expected_market_years: frozenset[tuple[str, int]],
 ) -> tuple[DataReleaseReceipt, ...]:
     """Publish only the explicitly approved, out-of-sample prediction releases."""
+    reject_retired_project_execution(root=root, surface="Tier 1 bracket prediction publication")
     import pyarrow.parquet as pq
 
     _require_sha256(trial_id, name="trial ID")
@@ -335,6 +345,7 @@ def publish_tier1_bracket_prediction_index(
     phase8_index_release_id: str, audit_receipt_id: str, split_plan: Mapping[str, object],
 ) -> DataReleaseReceipt:
     """Publish the one aggregate receipt that makes the 20 releases discoverable."""
+    reject_retired_project_execution(root=root, surface="Tier 1 bracket index publication")
     _require_sha256(trial_id, name="trial ID")
     _require_sha256(phase8_index_release_id, name="Phase 8 index release ID")
     _require_sha256(audit_receipt_id, name="audit receipt ID")

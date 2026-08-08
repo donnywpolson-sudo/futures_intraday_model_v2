@@ -59,6 +59,11 @@ pilot attempt from being spent on a mechanism that cannot advance to Tier 1.
 Economic PASS decisions are recomputed against the immutable mechanism's
 stage-specific stress, baseline, trade-count, breadth, drawdown, subgroup, and
 formal-test gates; a bare PASS label is never sufficient.
+The active ladder pointer, not `configs/alpha_tiered.yaml` by itself, is the
+current operational truth. `futures-pipeline` is synthetic-only. Current
+real-history actions consist only of a separately authorized immutable
+readiness census followed, after a passing certificate, by registration and
+execution through `CertifiedResearchGateway`.
 Any row-certified preparatory census also consumes its own authorization even
 when it times out or produces no report. A successor must use a new immutable
 plan and approval; it may not silently reuse the consumed claim.

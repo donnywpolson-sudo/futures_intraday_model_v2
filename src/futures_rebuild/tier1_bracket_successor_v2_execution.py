@@ -20,6 +20,7 @@ from zoneinfo import ZoneInfo
 
 from .boundary import OperationClassification, OperationReceipt, RepoBoundary
 from .canonical import canonical_bytes, sha256_file, sha256_json
+from .current_research_surface import reject_retired_project_execution
 from .data_layout import DataReleaseManifest, DataReleaseReceipt, PhasePublisher
 from .errors import IntegrityError
 from .foundation.materialize import load_causal_interval
@@ -796,6 +797,8 @@ def persist_execution_binding(*, root: Path, payload: Mapping[str, object]) -> P
 
 def execute_registered_successor_v2(*, root: Path) -> dict[str, object]:
     """Execute and publish the approved successor exactly once."""
+
+    reject_retired_project_execution(root=root, surface="tier1_bracket_successor_v2_execution")
 
     import pyarrow as pa
     import pyarrow.parquet as pq

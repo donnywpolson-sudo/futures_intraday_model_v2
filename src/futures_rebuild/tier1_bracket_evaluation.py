@@ -16,6 +16,7 @@ from typing import Mapping
 
 from .boundary import OperationClassification, OperationReceipt, RepoBoundary
 from .canonical import canonical_bytes, sha256_file, sha256_json
+from .current_research_surface import reject_retired_project_execution
 from .data_layout import DataReleaseManifest, DataReleaseReceipt, PhasePublisher
 from .errors import IntegrityError
 from .tier1_bracket_finalizer import (
@@ -483,6 +484,7 @@ def _report_payload(*, candidates: tuple[_Candidate, ...], evaluation_config: Ma
 
 def evaluate_and_publish_tier1_bracket(*, root: Path, prediction_index_release_id: str, evaluation_config: Mapping[str, object]) -> DataReleaseReceipt:
     """Run the approved local evaluation and conditionally publish one report release."""
+    reject_retired_project_execution(root=root, surface="tier1_bracket_evaluation")
     index, entries = _read_prediction_index(root=root, release_id=prediction_index_release_id)
     predictions, receipts = _prediction_rows(root=root, entries=entries)
     stage = root / "state/tier1_bracket_canonical_stage/457d01715d13d82248ac33794d02b6e7a8471fc38f12aac8a6349228b91858de"

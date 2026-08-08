@@ -44,6 +44,11 @@ class Tier1Phase8Preparation:
         return {**core,"preparation_id":sha256_json(core)}
 
 def prepare_tier1_phase8(*, root: Path, settings: Mapping[str, object] | None = None) -> Tier1Phase8Preparation:
+    from .current_research_surface import reject_retired_project_execution
+
+    reject_retired_project_execution(
+        root=root, surface="legacy Tier 1 Phase 8 preparation",
+    )
     trial=_json(root/"state"/"trial_registry"/"phase6_prediction_only"/f"{TRIAL_ID}.json")
     if trial.get("state")!="REGISTERED_BEFORE_OUTCOME_OPEN" or not isinstance(trial.get("input_pairs"),list) or len(trial["input_pairs"])!=20: raise IntegrityError("Phase 8 requires the fixed registered 20-pair Phase 6 trial")
     index=_json(root/"manifests"/"data_releases"/"reference"/f"{INDEX_RELEASE_ID}.json")

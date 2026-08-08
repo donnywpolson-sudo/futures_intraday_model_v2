@@ -229,9 +229,12 @@ def read_pinned_phase8_rows(*, pinned: PinnedPhase8Inputs) -> None:
 
 
 def _approved_real_read_for_codex_task() -> _ApprovedCodexRealRead:
-    """Internal orchestration seam; never expose this through a repository CLI."""
+    """Retired opaque-token factory retained only for historical imports."""
 
-    return _ApprovedCodexRealRead(_READ_SCOPE_SECRET)
+    from .current_research_surface import reject_retired_real_history_surface
+
+    reject_retired_real_history_surface("legacy Tier 1 Phase 8 opaque read token")
+    raise AssertionError("unreachable")
 
 
 def _read_pinned_rows_after_approval(

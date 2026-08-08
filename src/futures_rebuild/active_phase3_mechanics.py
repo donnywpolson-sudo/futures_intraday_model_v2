@@ -11,6 +11,7 @@ from .active_phase3_validation import ActivePhase3MechanicsValidation
 from .boundary import RepoBoundary
 from .canonical import canonical_bytes, sha256_json
 from .errors import ContractError, IntegrityError
+from .current_research_surface import reject_retired_project_execution
 
 
 REPORT_SCHEMA_VERSION = "active_phase3_mechanics_report/1.0.0"
@@ -119,6 +120,10 @@ def run_active_phase3_mechanics_check(
     row_read_cap: int = MAXIMUM_ROW_READS,
 ) -> ActivePhase3MechanicsReport:
     """Read at most ``row_read_cap`` local rows and publish one non-alpha report."""
+
+    reject_retired_project_execution(
+        root=boundary.active_root, surface="active Phase 3 mechanics row reader"
+    )
 
     if type(validation) is not ActivePhase3MechanicsValidation:
         raise ContractError("Phase 3 mechanics check requires its exact preflight")

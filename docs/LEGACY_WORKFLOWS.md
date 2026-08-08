@@ -80,3 +80,13 @@ byte-for-byte. Schema and artifact readers remain available for interpretation.
 Current high-risk work uses the prepare-only interface and a plain-language
 Codex confirmation, while trial declarations, release validation, protected
 data boundaries, and the no-trading cockpit rule still fail closed.
+
+## Retired Phase 3-8 execution chain
+
+The former direct foundation, Phase 5 split, Phase 6 WFA, Phase 7 audit, Phase
+8 opaque-token adapter, bracket evaluator, and bracket-successor executors are
+historical evidence surfaces. On the live Alpha repository they fail before
+opening or hashing caller-supplied protected payloads. Their public scripts and
+functions must not be used for current registration, fitting, prediction,
+evaluation, or publication. Current real research uses an immutable readiness
+census and `CertifiedResearchGateway` only.

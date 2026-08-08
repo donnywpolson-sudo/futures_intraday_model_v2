@@ -208,6 +208,12 @@ def build_tier1_phase5_split_plan(
     progress: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     """Create one immutable Phase 5 schedule for the exact Tier 1 release set."""
+    from .current_research_surface import reject_retired_project_execution
+
+    reject_retired_project_execution(
+        root=boundary.active_root,
+        surface="legacy Tier 1 Phase 5 split builder",
+    )
     bound_pairs = tuple(discover_tier1_release_pairs(boundary=boundary) if pairs is None else pairs)
     if not bound_pairs:
         raise IntegrityError("Phase 5 requires bound release pairs")

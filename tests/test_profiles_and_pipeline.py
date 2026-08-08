@@ -65,6 +65,16 @@ def test_cli_blocks_real_history_before_output(tmp_path: Path) -> None:
     assert not output.exists()
 
 
+def test_cli_profile_validation_includes_the_active_alpha_ladder(capsys) -> None:
+    assert main(["validate-profiles"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["active_alpha_ladder"] == {
+        "contract_id": "d3ab84356351568473ccdef935b20eda6779dcd681478415125a668d913dfd18",
+        "profile_id": "a2088ceb344f1aa44bf3a663ca2e2036e0cbea575e5521d04976ef0443a53210",
+        "state": "ACTIVE_HASH_BOUND",
+    }
+
+
 def test_cli_output_is_content_addressed_and_no_overwrite(tmp_path: Path) -> None:
     output = tmp_path / "smoke.json"
     assert main(["--output", str(output), "smoke"]) == 0

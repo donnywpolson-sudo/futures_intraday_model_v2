@@ -3262,6 +3262,12 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if not args.execute:
         parser.error("foundation publication requires explicit --execute")
+    from ..current_research_surface import reject_retired_project_execution
+
+    reject_retired_project_execution(
+        root=args.repository_root,
+        surface="legacy direct foundation publication CLI",
+    )
     boundary = _boundary_from_contract(args.repository_root, args.source_contract)
     feature_spec = _load_feature_spec(args.feature_spec, boundary=boundary)
     dbn_receipt = VerifiedReleaseReceipt.from_manifest(

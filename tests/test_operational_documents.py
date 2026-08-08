@@ -30,22 +30,21 @@ def test_current_documents_use_one_plain_language_workflow_surface() -> None:
     assert "this guide controls normal-work procedure" in current.lower()
 
 
-def test_handoff_describes_the_current_phase8_chain_and_valid_rejection() -> None:
+def test_handoff_describes_the_active_alpha_ladder_and_next_boundary() -> None:
     handoff = _text("CODEX_HANDOFF.md")
 
     for required in (
-        "efb8943f...638d5",
-        "a9656ec5...ff7d",
-        "5b01056d...192fa4",
-        "c18ef7e9...b4a94",
-        "42e1f97c...30a80",
-        "valid rejection, not an invalid retirement",
+        "d3ab8435...3dfd18",
+        "cfefe8ce...563dc3",
+        "CertifiedResearchGateway",
+        "readiness census",
         "NO_ACTIVE_TRIAL_VALID_REJECTION",
-        "There is no active Tier 1 trial",
+        "No trial is active",
+        "create another mechanism automatically",
     ):
         assert required.lower() in handoff.lower()
-    assert "all-market audit must finish" not in handoff
-    assert "registered bracket trial is bound to superseded index" not in handoff
+    assert "codex/tier1-phase8-economics" not in handoff
+    assert "103 and 852" not in handoff
 
 
 def test_current_workflow_names_one_certified_real_history_surface() -> None:
@@ -114,3 +113,11 @@ def test_public_scripts_expose_no_token_era_high_risk_runner() -> None:
     ):
         assert retired not in scripts
     assert "futures-high-risk-prepare" in scripts
+
+
+def test_pipeline_map_names_only_the_current_real_history_gateway() -> None:
+    mapping = _text("PIPELINE_FOLDER_MAP.md")
+    assert "CertifiedResearchGateway" in mapping
+    assert "No other public script" in mapping
+    assert "retired" in mapping.lower()
+    assert "local_evidence" in mapping

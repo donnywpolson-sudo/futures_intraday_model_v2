@@ -208,6 +208,11 @@ def build_active_phase4_features(
     *, boundary: RepoBoundary, binding: ActivePhase4FeatureBinding
 ) -> dict[str, str | int]:
     """Create one immutable, outcome-independent ES 2019 feature release."""
+    from .current_research_surface import reject_retired_project_execution
+
+    reject_retired_project_execution(
+        root=boundary.active_root, surface="legacy active Phase 4 feature builder",
+    )
     if type(binding) is not ActivePhase4FeatureBinding:
         raise ContractError("active Phase 4 feature build requires an exact binding")
     parquet = boundary.assert_active_path(
