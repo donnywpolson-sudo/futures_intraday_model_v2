@@ -37,10 +37,12 @@ def test_handoff_describes_the_active_alpha_ladder_and_next_boundary() -> None:
         "d3ab8435...3dfd18",
         "cfefe8ce...563dc3",
         "CertifiedResearchGateway",
-        "readiness census",
-        "NO_ACTIVE_TRIAL_VALID_REJECTION",
-        "No trial is active",
-        "create another mechanism automatically",
+        "a6ae7b...c82bc",
+        "REGISTERED_NOT_CLAIMED_NOT_EXECUTED",
+        "aeff50fa...23ff9",
+        "The ES pilot execution is",
+        "not authorized",
+        "synthetic row-loader injection hook",
     ):
         assert required.lower() in handoff.lower()
     assert "codex/tier1-phase8-economics" not in handoff

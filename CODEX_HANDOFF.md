@@ -6,17 +6,15 @@ and grants no authority.
 ## Live state — 2026-08-08
 
 - Repository: `C:\Users\donny\Desktop\futures_intraday_model_v2` on `main`.
-- Revalidated starting HEAD: `dd133f0188af5fef3d00345f36078a2a92eaf8fd`,
-  aligned with the locally recorded `origin/main`; one worktree.
+- Consolidated and pushed HEAD: `642178f68882bed26fb5156418a0276e93cbcf20`,
+  verified equal to `origin/main`; one worktree before the prepare-only package.
 - The active Alpha ladder is contract `d3ab8435...3dfd18`, profile
   `a2088ceb...a53210`.
 - The active authoritative calendar is `ddbe0c70...3a7f9` and the active source
   catalog is `data/active/catalog.json`.
-- `configs/active_tier1_trial.json` is the
-  `NO_ACTIVE_TRIAL_VALID_REJECTION` tombstone. No trial is active and no 2025
-  holdout claim exists.
-- Counted mechanism `cfefe8ce...563dc3` remains unpublished, unregistered, and
-  synthetically Tier 0 PASS. Its bytes and Tier 0 evidence are unchanged.
+- Registered ES pilot `a6ae7b...c82bc` is
+  `REGISTERED_NOT_CLAIMED_NOT_EXECUTED`. No execution claim or 2025 holdout claim
+  exists. Counted mechanism `cfefe8ce...563dc3` remains unchanged and Tier 0 PASS.
 
 ## Current architecture
 
@@ -34,27 +32,24 @@ and grants no authority.
 
 ## Current work
 
-This worktree contains an unstaged, source-safe remediation that closes legacy
-real-history shortcuts, reconciles operational documents, refreshes audits and
-filesystem/cockpit evidence, and prepares immutable 2018-2022 readiness plan
-`b5f37425...e3aca` (SHA-256 `5dfb2245...593d3`) for mechanism
-`cfefe8ce...563dc3`. Verification is green: 107 current tests and 830 high-risk
-tests passed. The 739 legacy and 34 `local_evidence` tests are separately
-classified and were not silently counted as passing.
+The 67-path gateway and row-certified pilot work is secured in commits
+`0f4f9ca...aeaa1` and `642178f...cf20` on `origin/main`. The worktree now contains
+only the prepare-only ES economic-execution package. Authoritative plan
+`aeff50fa...23ff9` (SHA-256 `1ec9b67d...98411`) binds the exact registration,
+mechanism, readiness evidence, 504/1/63 sessions, three ES sources, implementation,
+dependencies, one attempt, zero retries, `$0` cost, and a 900-second ceiling.
+Verification is green: 14 focused executor tests, 107 current tests, and 851
+high-risk source-safe tests passed. Initial plan `ab6d2557...bd817e` is preserved
+as an invalid preparation because its executor retained a synthetic row-loader
+injection hook; it cannot be executed.
 
 ## Next boundary
 
-After all source-safe suites pass and the immutable plan validates, the single
-next approval is a $0 read-only 2018-2022 ES/CL/ZN/6E readiness census. It may
-read only the plan-bound local sources and must produce unpublished price-free
-readiness evidence. It may not compute returns, fit models, generate
-predictions, evaluate economics, register a trial, access providers,
-credentials, 2025, trading, or mutate active data.
-
-If readiness passes 100%, publication and pilot registration remain separately
-controlled. If readiness fails, preserve the rejection and choose explicitly
-between repairing the source family and abandoning the mechanism; do not
-create another mechanism automatically.
+After complete source-safe verification, the next boundary is exact-path staging,
+then a separate local commit and push of the prepare-only executor package. Only
+after its pushed HEAD is fixed may one separate authorization consume the ES pilot
+claim and open the three bound ES sources exactly once. The ES pilot execution is
+not authorized.
 
 Staging, commit, push, deletion, relocation, provider access, publication,
 active-pointer mutation, historical-row access, and 2025 access each remain
