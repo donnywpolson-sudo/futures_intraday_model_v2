@@ -20,7 +20,7 @@ from futures_rebuild.micro_alpha_databento_preflight import (
     MetadataProviderApis,
     OPERATION,
 )
-from futures_rebuild.micro_alpha_databento_preflight_v18 import (
+from futures_rebuild.micro_alpha_databento_preflight_v19 import (
     PLAN_PATH,
     PREDECESSOR_REPORT_ID,
     REPORT_PATH,
@@ -149,6 +149,8 @@ class FakeMetadataProvider:
         end = str(kwargs["end_date"])
         effective = max(self.effective_dates[market], start)
         partial: object = ["OPAQUE"] if effective > start else []
+        if market == "M6E" and start == "2010-01-01":
+            partial = []
         if start == self.effective_dates[market]:
             partial = ["OPAQUE_POST_EFFECTIVE_STATUS"]
         entries = [{"d0": effective, "d1": end, "s": 123}]
@@ -208,7 +210,7 @@ def _run(root: Path, provider: FakeMetadataProvider) -> dict[str, object]:
     )
 
 
-def test_v18_plan_preserves_exact_scope_and_v17_failure() -> None:
+def test_v19_plan_preserves_exact_scope_and_v18_failure() -> None:
     plan = validate_plan(
         json.loads((ROOT / PLAN_PATH).read_text(encoding="utf-8")), root=ROOT
     )
@@ -233,15 +235,15 @@ def test_v18_plan_preserves_exact_scope_and_v17_failure() -> None:
     assert plan["forbidden"]["timeseries_download"] is True
     assert (
         load_predecessor_failure(root=ROOT)["failure_code"]
-        == "POST_EFFECTIVE_COVERAGE_DRIFT"
+        == "PRELAUNCH_PARTIAL_DISPOSITION_DRIFT"
     )
     assert (
-        plan["correction"]["parent_result_intervals_claim_roll_continuity"]
+        plan["correction"]["discovery_partial_semantics_interpreted"]
         is False
     )
     assert (
-        plan["correction"]["continuous_result_intervals_claim_roll_continuity"]
-        is True
+        plan["correction"]["partial_presence_required_for_prelaunch_date"]
+        is False
     )
 
 
@@ -297,6 +299,58 @@ def test_exact_echo_and_interval_gates_remain_fail_closed() -> None:
         _symbology_summary(
             _response(entries=[{"d0": "2000-01-01", "d1": "2001-01-01", "s": 1}]),
             symbol="MCL.FUT",
+            stype_in="parent",
+            query_start="2010-01-01",
+            end="2026-08-09",
+            allow_discovery_partial=True,
+            coverage_role="PARENT_FAMILY",
+        )
+
+
+def test_prelaunch_effective_date_does_not_interpret_opaque_partial_presence() -> None:
+    summaries = []
+    for partial in ([], ["OPAQUE"]):
+        summaries.append(
+            _symbology_summary(
+                _response(
+                    symbol="M6E.FUT",
+                    start="2010-01-01",
+                    entries=[
+                        {"d0": "2010-03-23", "d1": "2026-08-09", "s": 123}
+                    ],
+                    partial=partial,
+                ),
+                symbol="M6E.FUT",
+                stype_in="parent",
+                query_start="2010-01-01",
+                end="2026-08-09",
+                allow_discovery_partial=True,
+                coverage_role="PARENT_FAMILY",
+            )
+        )
+    assert {summary["first_effective_date"] for summary in summaries} == {
+        "2010-03-23"
+    }
+    assert {
+        summary["effective_date_disposition"] for summary in summaries
+    } == {"PROVIDER_PRELAUNCH_FIRST_VALIDATED_MAPPING_DATE"}
+    assert all(summary["partial_semantics_interpreted"] is False for summary in summaries)
+    assert all(
+        summary["product_effective_date_basis"]
+        == "FIRST_VALIDATED_PARENT_MAPPING_INTERVAL_ONLY"
+        for summary in summaries
+    )
+
+
+def test_malformed_partial_shape_still_fails_closed() -> None:
+    with pytest.raises(IntegrityError, match="exact string list"):
+        _symbology_summary(
+            _response(
+                symbol="M6E.FUT",
+                entries=[{"d0": "2010-03-23", "d1": "2026-08-09", "s": 123}],
+                partial="OPAQUE",
+            ),
+            symbol="M6E.FUT",
             stype_in="parent",
             query_start="2010-01-01",
             end="2026-08-09",
@@ -367,7 +421,7 @@ def test_continuous_roll_gap_and_parent_boundary_drift_fail_closed() -> None:
         )
 
 
-def test_v18_full_bounded_metadata_mechanics_pass(tmp_path: Path) -> None:
+def test_v19_full_bounded_metadata_mechanics_pass(tmp_path: Path) -> None:
     root = _copy_root(tmp_path)
     report = _run(root, FakeMetadataProvider())
     assert report["state"] == "PASS_METADATA_ONLY"
@@ -389,6 +443,10 @@ def test_v18_full_bounded_metadata_mechanics_pass(tmp_path: Path) -> None:
     assert parent["roll_continuity_claimed"] is False
     assert continuous["post_effective_gap_free_coverage"] is True
     assert continuous["roll_continuity_claimed"] is True
+    m6e = report["symbology_summaries"]["M6E"]["discovery_parent"]
+    assert m6e["partial_present"] is False
+    assert m6e["partial_semantics_interpreted"] is False
+    assert m6e["first_effective_date"] == "2010-03-23"
 
 
 def test_bad_provider_group_key_is_classified_without_value(tmp_path: Path) -> None:
@@ -411,7 +469,7 @@ def test_nonzero_cost_still_fails_without_retry_or_download(tmp_path: Path) -> N
     assert report["dbn_files_created"] == 0
 
 
-def test_v18_documentation_matches_execution_reality() -> None:
+def test_v19_documentation_matches_execution_reality() -> None:
     outline = (ROOT / "PROJECT_OUTLINE.md").read_text(encoding="utf-8")
     folder_map = (ROOT / "PIPELINE_FOLDER_MAP.md").read_text(encoding="utf-8")
     assert "v18 preflight -> FAIL_CLOSED_METADATA_ONLY (13 calls" in outline

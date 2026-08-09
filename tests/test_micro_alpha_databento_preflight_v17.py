@@ -321,9 +321,9 @@ def test_nonzero_cost_still_fails_without_retry_or_download(tmp_path: Path) -> N
 def test_v17_documentation_matches_execution_reality() -> None:
     outline = (ROOT / "PROJECT_OUTLINE.md").read_text(encoding="utf-8")
     folder_map = (ROOT / "PIPELINE_FOLDER_MAP.md").read_text(encoding="utf-8")
-    assert "v17 preflight -> FAIL_CLOSED_METADATA_ONLY (8 calls" in outline
-    assert "immutable v18 parent-family-aware successor" in outline
-    assert "before v18 may contact Databento" in " ".join(outline.split())
-    assert "RETIRED / fail-closed parent-family continuity evidence" in folder_map
-    assert "immutable v18 parent-family-aware successor" in folder_map
-    assert "passing v18 preflight and committed HEAD required first" in folder_map
+    assert "v18 preflight -> FAIL_CLOSED_METADATA_ONLY (13 calls" in outline
+    assert "immutable v19 opaque-partial-semantic-safe successor" in outline
+    assert "before v19 may contact Databento" in " ".join(outline.split())
+    assert "RETIRED / fail-closed discovery-partial-semantic evidence" in folder_map
+    assert "immutable v19 opaque-partial-semantic-safe successor" in folder_map
+    assert "passing v19 preflight and committed HEAD required first" in folder_map

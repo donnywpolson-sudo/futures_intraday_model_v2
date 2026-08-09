@@ -371,9 +371,9 @@ def test_v13_documentation_preserves_implementation_reality() -> None:
     folder_map = (ROOT / "PIPELINE_FOLDER_MAP.md").read_text(encoding="utf-8")
     normalized_outline = " ".join(outline.split())
     assert "v14 preflight -> FAIL_CLOSED_METADATA_ONLY" in outline
-    assert "immutable v18 parent-family-aware successor" in outline
-    assert "v18 may contact Databento" in normalized_outline
+    assert "immutable v19 opaque-partial-semantic-safe successor" in outline
+    assert "v19 may contact Databento" in normalized_outline
     assert "v14 provider-result-group-safe predecessor" in folder_map
     assert "RETIRED / fail-closed post-effective partial evidence" in folder_map
-    assert "immutable v18 parent-family-aware successor" in folder_map
-    assert "passing v18 preflight and committed HEAD required first" in folder_map
+    assert "immutable v19 opaque-partial-semantic-safe successor" in folder_map
+    assert "passing v19 preflight and committed HEAD required first" in folder_map

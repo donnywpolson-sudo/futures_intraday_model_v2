@@ -343,8 +343,8 @@ def test_v16_documentation_matches_execution_reality() -> None:
     outline = (ROOT / "PROJECT_OUTLINE.md").read_text(encoding="utf-8")
     folder_map = (ROOT / "PIPELINE_FOLDER_MAP.md").read_text(encoding="utf-8")
     assert "v15 preflight -> FAIL_CLOSED_METADATA_ONLY (6 calls" in outline
-    assert "immutable v18 parent-family-aware successor" in outline
-    assert "before v18 may contact Databento" in " ".join(outline.split())
+    assert "immutable v19 opaque-partial-semantic-safe successor" in outline
+    assert "before v19 may contact Databento" in " ".join(outline.split())
     assert "RETIRED / fail-closed continuous-interval evidence" in folder_map
-    assert "immutable v18 parent-family-aware successor" in folder_map
-    assert "passing v18 preflight and committed HEAD required first" in folder_map
+    assert "immutable v19 opaque-partial-semantic-safe successor" in folder_map
+    assert "passing v19 preflight and committed HEAD required first" in folder_map
