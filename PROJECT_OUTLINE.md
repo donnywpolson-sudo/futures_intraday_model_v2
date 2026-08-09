@@ -55,11 +55,17 @@ live cockpit. Automatic order execution is outside this project's scope.
   remediation candidate. Its $0 report and consumed authorization are
   preserved; it cannot run again.
 - `configs/apex_micro_tier01_databento_metadata_preflight_v8.json`: immutable
-  success-echo-safe successor. It preserves exact empty JSON lists for
-  `partial` and `not_found`, requires integer status zero, accepts only the
-  bounded success-message allowlist, and reports only sanitized field names on
-  structural failure. The exact 20 definitions and no-download surface remain
-  unchanged.
+  executed success-echo-safe successor. Its approved attempt reached the first
+  broad MES parent resolve and failed closed on a nonempty symbology status,
+  consistent with but not assumed to be a prelaunch gap. Its sanitized
+  classifier mislabeled the affected field as `symbols`; its $0 report and
+  consumed authorization are preserved and it cannot run again.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v9.json`: immutable
+  two-stage prelaunch-discovery successor. Discovery permits only an empty
+  `partial` list or the exact single requested parent symbol, always requires
+  empty `not_found`, derives the first mapping date, and then re-resolves parent
+  and continuous symbology from that date with both status lists empty. It has
+  20 definitions, a 375-call ceiling, and no download surface.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -263,7 +269,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> v5 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; first broad-range symbology request rejected)
   -> v6 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; local list-shape validator defect)
   -> v7 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; over-strict success echo)
-  -> immutable v8 success-echo-safe annual successor (20 definitions; at most 180 annual requests)
+  -> v8 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; broad prelaunch status rejected)
+  -> immutable v9 two-stage prelaunch successor (20 definitions; at most 180 annual requests)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -342,8 +349,18 @@ not as a recorded provider fact. It incurred $0, made no download, read no
 rows, and created no DBN. V8 preserves v7's list
 checks, requires integer status zero, permits only the exact empty-or-`OK`
 success-message allowlist, and emits sanitized field-specific failures without
-recording provider values. A new separate approval is required before v8 may
-contact Databento. Only a passing report may freeze a deterministic
+recording provider values. Its one approved run made four calls and failed
+closed when the broad MES parent query returned a nonempty symbology status;
+the sanitized field classifier reported `symbols`, so the report does not
+claim whether the provider field was `partial` or `not_found`. V9 corrects the
+diagnostic order and requires two-stage proof: a discovery query may accept
+only the exact requested parent as a single `partial`, then parent and
+continuous queries beginning at the discovered date must both have empty
+status lists. A discovery beginning at the provider dataset start remains an
+unresolved exact-product-date failure. The maximum call ceiling is 375, with
+the same 300-second runtime, 30-second call timeout, $0 cost, and zero retries.
+A new separate approval is required before v9 may contact Databento. Only a
+passing report may freeze a deterministic
 acquisition plan bound to the then-committed implementation HEAD. Metadata
 approval never grants download authority.
 
