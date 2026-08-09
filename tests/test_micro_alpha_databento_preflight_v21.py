@@ -356,4 +356,6 @@ def test_v21_documentation_matches_executed_metadata_only_reality() -> None:
     assert "apex_micro_metadata_preflight_v21" in folder_map
     assert "CURRENT_REACHABLE" in folder_map
     assert "grants no download authority" in folder_map
-    assert "separate exact download approval remains absent" in folder_map
+    assert "7,200-second global ceiling" in folder_map
+    assert "zero accepted/finalized pairs" in folder_map
+    assert "no provider or download authority" in folder_map

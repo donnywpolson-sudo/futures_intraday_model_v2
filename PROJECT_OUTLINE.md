@@ -153,13 +153,23 @@ live cockpit. Automatic order execution is outside this project's scope.
   zero retries, downloads, row reads, or DBNs. The sealed report fixes the
   provider-complete end-exclusive date at 2026-08-09 and requires exact annual
   cost requotes immediately before any download. Its authorization is consumed.
-- `src/futures_rebuild/micro_alpha_acquisition_v21.py` and
-  `scripts/prepare_apex_micro_phase1a_acquisition_v21.py`: prepared, unexecuted
-  v21-report-bound annual acquisition successor. It preserves the older
-  v7-bound downloader unchanged, freezes 160 DBN/sidecar pairs only after the
-  successor implementation is committed, and exposes at most one sequential
-  cost client plus two isolated download clients. No acquisition plan or DBN
-  has been created yet.
+- `src/futures_rebuild/micro_alpha_acquisition_v21.py`, its exact plan/audit,
+  authorization use, and
+  `state/unpublished_evidence/apex_micro_phase1a_acquisition_v21_failure/`:
+  immutable consumed acquisition attempt. Its fresh cost census completed at
+  $0, then the 7,200-second global runtime ceiling stopped download scheduling.
+  Thirty-six complete DBN/sidecar staging pairs were hash-verified and sealed
+  read-only as failed-attempt evidence; none was accepted or finalized, and no
+  destination under `data/dbn` exists. V21 cannot retry or supply successor
+  bytes.
+- `src/futures_rebuild/micro_alpha_acquisition_v22.py` and
+  `scripts/prepare_apex_micro_phase1a_acquisition_v22.py`: local prepare-only
+  non-resuming successor. It retains the exact 160 annual requests and existing
+  cost, byte, disk, file, and two-download concurrency ceilings, extends only
+  the global runtime to 43,200 seconds, captures provider warning categories
+  and counts without message text, and rolls back partial finalization links.
+  Its create-only plan/audit outputs are deliberately absent until the
+  implementation is committed; it has no provider or download authority.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -262,10 +272,17 @@ frozen. After the passing v21 metadata run, both the source-safe standard
 topology report and cleanup v5 policy reconstructed exactly with no row reads,
 candidate freeze, move, delete, or relabel. Cleanup therefore remains a later
 separately approved boundary and does not create a second active data source.
-`scripts/prepare_safe_cleanup_candidate_census_v6.py` is prepared to freeze
-only exact untracked, Git-ignored cache directories after the acquisition
-successor commit. Its output will be bound into the download-plan audit, but it
-cannot delete, move, relabel, or authorize any cleanup target.
+`scripts/prepare_safe_cleanup_candidate_census_v6.py` froze 13 exact untracked,
+Git-ignored cache-directory candidates after the acquisition successor commit.
+The create-only census is bound into the download-plan audit and records no row
+read or cleanup mutation. It cannot delete, move, relabel, or authorize any
+cleanup target; execution still requires a separate exact cleanup approval and
+fresh revalidation.
+The v21 failed-attempt staging tree is excluded from cleanup candidates and is
+preserved read-only. A v7 census successor is prepared locally to bind the
+sealed failure report while retaining the same no-mutation boundary; its
+create-only output is deferred until the v22 implementation has a committed
+HEAD.
 
 ## Alpha research lanes
 
@@ -387,7 +404,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> sealed official CME launch dates for MES/MCL/MGC/M6E
   -> v20 cumulative successor -> FAIL_CLOSED_METADATA_ONLY (68 calls; annual size timeout)
   -> v21 timeout-safe successor -> PASS_METADATA_ONLY (20 cost ranges + 160 annual size estimates; 180 calls; $0)
-  -> prepared v21-bound annual acquisition successor (160 pairs; one cost + two download clients; no plan yet)
+  -> exact v21-bound annual acquisition plan -> FAIL_CLOSED (runtime ceiling; 36 staged pairs; 0 accepted)
+  -> non-resuming v22 successor (same 160 annual requests; 43,200-second ceiling; plan deferred until commit)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -417,23 +435,29 @@ Prelaunch intervals produce disposition records and no fabricated empty DBN.
 Multi-year DBNs, wrong-year folders, hyphenated schema folders, duplicate
 destinations, and alternate micro-root layouts fail closed.
 
-The v21-bound Phase 1A downloader successor is implemented and
-synthetic/adversarially tested but has not executed. It uses one exact bounded
-interval per market/schema/year, writes
-first to inactive staging, requotes every request at exactly $0 before the
-first download, and then uses at most two isolated Databento download clients.
-The worker queues stop scheduling after the first failure; an already-running
-second request may finish into inactive staging and is preserved as evidence.
-This bounded concurrency improves network utilization without sharing an SDK
-client, retrying, overwriting, or weakening byte ceilings. The locked Databento
-`get_range` wire contract is recorded explicitly as DBN plus Zstandard in each
-plan request and adjacent sidecar. It streams compressed DBN bytes without
-iterating rows, verifies
-size and SHA-256, creates an exact-query adjacent sidecar, refuses collisions,
-and writes one terminal attempt record last. Empty, partial, failed, oversized,
-or interrupted files remain inactive failure evidence. There is one attempt,
-zero automatic retries, and no overwrite, resume, publication, catalog
-activation, registration, evaluation, or trading path.
+The v21-bound Phase 1A downloader was implemented, tested, plan-audited, and
+executed once under its separate approval. Its plan ID is
+`a21652882790dfe2a9d56ebce9edab7b223e5d29d49af7edcae2774e3517899b`
+and its audit ID is `33c4a63c5b4a6dc371ed5816be2c170b8c64a6eb4efe36c2b8a7d1ff2d846707`.
+It used one exact bounded interval per market/schema/year, wrote first to
+inactive staging, requoted every request at exactly $0 before the first
+download, and used at most two isolated Databento download clients. The run
+completed its 160 zero-cost checks and 36 downloads before the global
+7,200-second ceiling failed closed. Exactly 36 complete staging pairs
+(512,142,314 DBN bytes) plus terminal evidence are preserved read-only; zero
+pairs were accepted or finalized and all intended final paths remain absent.
+No DBN row or 2025/2026 payload was opened. The consumed authorization cannot
+be retried, and its staging bytes cannot be resumed or promoted.
+
+V22 is a non-resuming local successor: after its own committed plan, audit, and
+separate approval, it must re-download all 160 annual requests into a distinct
+staging root. It preserves the 900-second per-download bound, $0 cost, 320-call
+ceiling, one attempt, zero retries, 11,350,292,377-byte ceiling, and at most two
+isolated download clients. The sole scheduling change is a 43,200-second global
+ceiling sized from observed v21 throughput. Its thread-aware warning router
+stores only categories and counts, never warning messages; warnings cannot
+certify or activate a source. Any mid-pair final-link failure is rolled back
+while staging bytes remain preserved.
 
 The executed v2 preflight fixed no 2026 end date: it failed closed at the
 second metadata call when the deliberately narrowed 10-second SDK timeout was
@@ -587,12 +611,14 @@ estimated 10,318,447,616 bytes, froze an 11,350,292,377-byte ceiling and a
 conflicts. Prelaunch intervals are explicit no-DBN dispositions. Any malformed source,
 unapproved host, identity drift, mapping-date substitution, malformed provider
 response, nonzero cost, disk shortfall, destination collision, or other existing
-gate failure remains fail closed. The prepared v21-bound acquisition successor
-must be committed before it may freeze a deterministic 160-request plan bound
-to that exact implementation HEAD. The plan will require one sequential fresh
-annual zero-cost census, at most two isolated downloads, 320 calls total, one
-attempt, zero retries, inactive staging, DBN/Zstandard sidecars, and a separate
-exact raw-download approval. Metadata approval never grants download authority.
+gate failure remains fail closed. The deterministic v21 plan was bound to exact
+HEAD `a89fa8f3f31423a5422f008846cdac35a34b3355`; its separately approved
+authorization is consumed. The run made 160 cost calls and 36 download calls at
+$0 before the global runtime ceiling stopped the next request. It made zero
+retries, accepted and finalized zero pairs, decoded zero rows, and changed no
+catalog or active pointer. V22 must receive its own committed plan/audit and
+separate raw-download approval. Metadata approval and the consumed v21 download
+approval grant no v22 authority.
 
 The one-second source proves reported-trade-bar evidence only. It cannot prove
 BBO availability, queue priority, guaranteed market-order execution, or precise

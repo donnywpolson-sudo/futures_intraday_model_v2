@@ -13,7 +13,7 @@ work and every real-data or publishing action remains separately controlled.
 | `CURRENT_REACHABLE` | `scripts/audit_standard_data_topology_source_safe.py`; `state/unpublished_evidence/standard_data_topology_source_safe_audit/report.json` | Source-safe PASS verifies catalog self-hash, foundation/DBN release bindings, 562 active sidecars, and referenced Phase 1B/2 paths without opening payloads | Does not recertify rows or grant research authority |
 | `RETIRED` | `scripts/prepare_safe_cleanup_inventory_v4.py`; `state/unpublished_evidence/safe_cleanup_preparation_v4/plan.json` | Preserved no-delete preparation bound to pre-commit HEAD `558ee094...`; it became stale after the approved implementation commit and cannot authorize cleanup | Execution forbidden; no cleanup occurred |
 | `PREPARED_NOT_EXECUTED` | `scripts/prepare_safe_cleanup_inventory_v5.py`; `state/unpublished_evidence/safe_cleanup_preparation_v5/plan.json` | Stable preserve-first cleanup policy with no frozen candidates or prepared-HEAD claim; exact literal cache census and execution HEAD are deliberately deferred until all prior writes finish | Separate exact cleanup approval required after a fresh census; all gates rerun immediately before/after mutation |
-| `PREPARED_NOT_EXECUTED` | `scripts/prepare_safe_cleanup_candidate_census_v6.py` | Post-commit metadata-only census freezes only exact untracked, Git-ignored cache directories outside data/state/config roots; records filesystem counts but never opens DBN or Parquet payloads | Census output is deferred until the acquisition successor is committed; it grants no delete/move authority and still requires a separate exact cleanup approval plus immediate revalidation |
+| `PREPARED_NOT_EXECUTED` | `scripts/prepare_safe_cleanup_candidate_census_v6.py`; `state/unpublished_evidence/safe_cleanup_candidate_census_v6/census.json` | Post-commit metadata-only census froze 13 exact untracked, Git-ignored cache directories outside data/state/config roots; records filesystem counts but never opens DBN or Parquet payloads | Grants no delete/move authority; separate exact cleanup approval and immediate revalidation remain required |
 | `RETIRED` | `safe_cleanup_preparation` v1-v3 plans and supersession records | Preserved prepare-only drafts; v1/v2 had self-referential inventory drift and v3 used an unsuitable dynamic worktree binding | Execution forbidden; no cleanup occurred |
 | `SYNTHETIC_ONLY` | `futures-pipeline`; `src/futures_rebuild/pipeline.py` | Generated mechanics fixtures only | No historical or alpha authority |
 | `RETIRED` | `configs/apex_micro_tier01_databento_preflight_plan.json`; obsolete `febccafd...` preparation | Preserved MES/MGC/M6E/M6A bytes, classified `SUPERSEDED_PREPARATION — MICRO_TIER1_SCOPE_RECONCILIATION`; cannot execute as current | No provider or publication authority |
@@ -43,7 +43,8 @@ work and every real-data or publishing action remains separately controlled.
 | `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v20.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v20.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v20/report.json` | One approved v20 attempt reused sealed v19 metadata evidence and made 68 annual cost/size calls before the MES ohlcv-1s 2020 billable-size request timed out; $0, zero retries/downloads/rows/DBNs | RETIRED / consumed authorization cannot execute again; immutable timeout evidence |
 | `CURRENT_REACHABLE` | `configs/apex_micro_tier01_databento_metadata_preflight_v21.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v21.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v21/report.json` | One approved timeout-safe metadata-only run completed 20 full-range zero-cost proofs and 160 annual byte estimates in exactly 180 calls; `PASS_METADATA_ONLY`, end-exclusive 2026-08-09, $0, zero retries/downloads/rows/DBNs, and zero destination conflicts | Authorization consumed; report is price-free evidence for plan preparation only and grants no download authority |
 | `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition.py` | Preserved unexecuted predecessor downloader is bound to the older v7 report shape and cannot consume the sealed v21 PASS evidence as current | No acquisition authority; retained because v21 evidence hashes it |
-| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition_v21.py`; `scripts/prepare_apex_micro_phase1a_acquisition_v21.py` | V21-bound 160-request annual create-only inactive-custody successor; canonical `data/dbn/<schema>/<market>/<year>/` tree, explicit DBN/Zstandard sidecars, one sequential exact-cost client plus at most two isolated download clients, 320 calls, stop-after-first-failure, one attempt, zero retries | Successor commit required before create-only acquisition plan/audit generation; separate exact download approval remains absent; no DBN output |
+| `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v21.py`; exact plan/audit; consumed authorization; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v21_failure/report.json` | One separately approved run completed 160 $0 cost calls and 36 downloads, then failed closed on the 7,200-second global ceiling; 36 hash-verified pairs are read-only failed-attempt staging evidence, with zero accepted/finalized pairs and zero final destinations | Authorization consumed; no retry, resume, promotion, decoding, or research-source authority |
+| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition_v22.py`; `scripts/prepare_apex_micro_phase1a_acquisition_v22.py`; `scripts/prepare_safe_cleanup_candidate_census_v7.py` | Non-resuming exact-request successor keeps all v21 cost/byte/disk/file/concurrency controls, extends only global runtime to 43,200 seconds, sanitizes concurrent provider warnings, and rolls back partial final links | Local implementation only; create-only plan/audit deferred until committed HEAD; no provider or download authority |
 | `SYNTHETIC_ONLY` | `tests/test_micro_alpha_*.py` | Corrected ladder, authorization, metadata, disk, collision, partial, cost, retry, custody, and no-decode mechanics | No provider, row, or download authority |
 | `HISTORICAL_ROW_APPROVAL_REQUIRED` | Phase 1B/2 contracts in `src/futures_rebuild/micro_alpha_pipeline.py` | Decoder/causal routing contracts are prepared; Phase 1B/2 row processing has not executed | Separate row-read approval only after acquisition |
 | `NOT_IMPLEMENTED` | `configs/active_micro_alpha_research_ladder.json`; `data/active/catalogs/apex_micro.json` | Intentionally absent until publication and Phase 2 certification | Cannot register micro research |
@@ -99,9 +100,9 @@ PROJECT_OUTLINE design
   -> official CME product-effective-date evidence                  CURRENT_REACHABLE / all four markets sealed
   -> v20 launch-date-separated cumulative metadata successor       RETIRED / 68 calls / provider timeout
   -> v21 timeout-safe cumulative metadata successor                CURRENT_REACHABLE / PASS_METADATA_ONLY / 180 calls / $0
-  -> v21-bound annual acquisition successor                       PREPARED_NOT_EXECUTED / 160 pairs / no plan yet
-  -> exact audited acquisition plan                                NOT_IMPLEMENTED until preflight PASS
-  -> Phase 1A DBN + sidecar inactive custody                       PREPARED_NOT_EXECUTED / download authority absent
+  -> v21-bound annual acquisition successor                       RETIRED / runtime fail-closed / 36 staged / 0 accepted
+  -> v22 non-resuming annual acquisition successor                PREPARED_NOT_EXECUTED / plan deferred until commit
+  -> Phase 1A DBN + sidecar inactive custody                       PREPARED_NOT_EXECUTED / no final micro DBN exists
   -> Phase 1B definition/status/statistics/1m/1s decoding          row-read approval required
   -> Phase 2 1m feature + separate 1s execution foundations        row-read approval required
   -> source certification
@@ -122,12 +123,17 @@ No micro row-processing phase is labeled complete. The v2, v4, v5, v6, v7, v8, v
 executed once each and produced only preserved fail-closed metadata evidence.
 The two official CME product-date reports are sealed for MES, MCL, MGC, and
 M6E. V20 executed once and is preserved as fail-closed timeout evidence. The
-timeout-safe cumulative v21 successor executed once and passed metadata-only;
-its authorization is consumed and it grants no download authority. The
-v21-bound Phase 1A downloader successor is implemented but unexecuted, and its
-exact plan is intentionally deferred until the successor is committed. Phase 1B/2 row processing is
+timeout-safe cumulative v21 successor executed once and passed metadata-only.
+The v21 Phase 1A downloader then executed once under a separate approval and
+failed closed at its 7,200-second global runtime ceiling after 36 downloads.
+Those complete staging pairs and terminal are preserved read-only, but zero
+pairs were accepted or finalized and no target under `data/dbn` exists. Its
+authorization is consumed and cannot authorize a retry. The v22 non-resuming
+successor exists only as local prepare-only code; its exact plan/audit are
+deferred until a committed implementation HEAD and it has no provider authority.
+Phase 1B/2 row processing is
 also unexecuted. The micro catalog is
-inactive, registration is blocked, and download authority is absent. Apart
+inactive, registration is blocked, and current download authority is absent. Apart
 from the preserved price-free v2, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, and v20 failure reports and the v21 PASS report, the code proves downloader mechanics
 with synthetic records only.
 

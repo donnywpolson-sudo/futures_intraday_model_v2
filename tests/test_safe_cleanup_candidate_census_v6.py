@@ -18,6 +18,9 @@ def _head() -> str:
 
 
 def test_cleanup_candidate_census_is_deterministic_metadata_only_and_no_mutation() -> None:
+    output = cleanup.ROOT / cleanup.OUTPUT
+    before = output.read_bytes()
+    before_mtime = output.stat().st_mtime_ns
     first = cleanup.build_census(root=cleanup.ROOT, committed_head=_head())
     second = cleanup.build_census(root=cleanup.ROOT, committed_head=_head())
     assert first == second
@@ -38,7 +41,8 @@ def test_cleanup_candidate_census_is_deterministic_metadata_only_and_no_mutation
         "year_2025_or_2026_payload_opened": False,
         "inventory_from_filesystem_metadata_only": True,
     }
-    assert not (cleanup.ROOT / cleanup.OUTPUT).exists()
+    assert output.read_bytes() == before
+    assert output.stat().st_mtime_ns == before_mtime
 
 
 def test_cleanup_candidates_are_exact_ignored_caches_outside_protected_roots() -> None:

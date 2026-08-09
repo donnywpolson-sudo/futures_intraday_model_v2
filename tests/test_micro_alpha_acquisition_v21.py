@@ -190,21 +190,32 @@ def _run(root: Path, fleet: FakeFleet) -> dict[str, object]:
     )
 
 
-def test_live_v21_pass_report_builds_exact_plan_without_writing() -> None:
+def test_live_v21_plan_is_preserved_after_successor_implementation_drift() -> None:
+    plan_path = ROOT / acquisition.PLAN_PATH
+    before = plan_path.read_bytes()
+    before_mtime = plan_path.stat().st_mtime_ns
     report = json.loads(
         (ROOT / acquisition.PREFLIGHT_REPORT_PATH).read_text(encoding="utf-8")
     )
     core = dict(report)
     report_id = core.pop("report_id")
     assert report_id == acquisition.PREFLIGHT_REPORT_ID == sha256_json(core)
-    plan = acquisition.build_acquisition_plan(
+    stored = json.loads(before)
+    stored_core = dict(stored)
+    stored_id = stored_core.pop("plan_id")
+    assert stored_id == (
+        "a21652882790dfe2a9d56ebce9edab7b223e5d29d49af7edcae2774e3517899b"
+    ) == sha256_json(stored_core)
+    reconstructed_under_successor_code = acquisition.build_acquisition_plan(
         root=ROOT,
         committed_head=acquisition._git_head(ROOT),
     )
-    assert len(plan["requests"]) == 160
-    assert plan["limits"]["maximum_total_bytes"] == 11_350_292_377
-    assert plan["limits"]["required_free_disk_bytes"] == 12_424_034_201
-    assert not (ROOT / acquisition.PLAN_PATH).exists()
+    assert len(stored["requests"]) == 160
+    assert stored["limits"]["maximum_total_bytes"] == 11_350_292_377
+    assert stored["limits"]["required_free_disk_bytes"] == 12_424_034_201
+    assert reconstructed_under_successor_code != stored
+    assert plan_path.read_bytes() == before
+    assert plan_path.stat().st_mtime_ns == before_mtime
 
 
 def test_plan_freezes_exact_scope_annual_paths_prelaunch_and_wire_format(
