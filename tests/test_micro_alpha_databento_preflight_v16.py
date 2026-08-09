@@ -20,12 +20,10 @@ from futures_rebuild.micro_alpha_databento_preflight import (
     MetadataProviderApis,
     OPERATION,
 )
-from futures_rebuild.micro_alpha_databento_preflight_v12 import (
-    MAXIMUM_STATUS_INTEGER_MAGNITUDE,
-    MAXIMUM_STATUS_STRING_LENGTH,
+from futures_rebuild.micro_alpha_databento_preflight_v16 import (
     PLAN_PATH,
+    PREDECESSOR_REPORT_ID,
     REPORT_PATH,
-    _opaque_application_status,
     _symbology_summary,
     build_plan,
     execute_preflight,
@@ -37,7 +35,33 @@ from futures_rebuild.micro_alpha_databento_preflight_v12 import (
 
 pytestmark = [pytest.mark.current, pytest.mark.high_risk]
 ROOT = Path(__file__).resolve().parents[1]
-_AUTO_PARTIAL = object()
+
+
+def _response(
+    *,
+    symbol: str = "MES.v.0",
+    stype_in: str = "continuous",
+    start: str = "2019-05-06",
+    end: str = "2026-08-09",
+    entries: list[dict[str, object]] | None = None,
+    partial: object = None,
+) -> dict[str, object]:
+    return {
+        "result": {
+            symbol: entries
+            if entries is not None
+            else [{"d0": start, "d1": end, "s": 123}]
+        },
+        "symbols": [symbol],
+        "stype_in": stype_in,
+        "stype_out": "instrument_id",
+        "start_date": start,
+        "end_date": end,
+        "partial": ["OPAQUE"] if partial is None else partial,
+        "not_found": [],
+        "message": "Resolved successfully",
+        "status": 200,
+    }
 
 
 def _copy_root(tmp_path: Path) -> Path:
@@ -79,12 +103,10 @@ class FakeMetadataProvider:
     def __init__(
         self,
         *,
-        status: object = 200,
-        partial: object = _AUTO_PARTIAL,
+        continuous_mode: str = "span_boundaries",
         cost: object = 0,
     ) -> None:
-        self.status = status
-        self.partial = partial
+        self.continuous_mode = continuous_mode
         self.cost = cost
         self.calls: list[str] = []
         self.effective_dates = {
@@ -126,23 +148,27 @@ class FakeMetadataProvider:
         self.calls.append("resolve")
         symbol = str(kwargs["symbols"][0])
         market = symbol.split(".")[0]
-        query_start = str(kwargs["start_date"])
-        effective = max(self.effective_dates[market], query_start)
-        partial = (
-            ["OPAQUE_A", "OPAQUE_B"]
-            if self.partial is _AUTO_PARTIAL and effective > query_start
-            else []
-            if self.partial is _AUTO_PARTIAL
-            else self.partial
-        )
+        start = str(kwargs["start_date"])
+        end = str(kwargs["end_date"])
+        effective = max(self.effective_dates[market], start)
+        partial: object = ["OPAQUE"] if effective > start else []
+        if start == self.effective_dates[market]:
+            partial = ["OPAQUE_POST_EFFECTIVE_STATUS"]
+        entries = [{"d0": effective, "d1": end, "s": 123}]
+        if str(kwargs["stype_in"]) == "continuous" and start == effective:
+            if self.continuous_mode == "span_boundaries":
+                entries = [
+                    {"d0": "2009-12-31", "d1": "2099-01-01", "s": 123},
+                ]
+            elif self.continuous_mode == "outside":
+                entries = [{"d0": "2000-01-01", "d1": "2001-01-01", "s": 123}]
         return _response(
             symbol=symbol,
             stype_in=str(kwargs["stype_in"]),
-            start=query_start,
-            end=str(kwargs["end_date"]),
-            effective=effective,
+            start=start,
+            end=end,
+            entries=entries,
             partial=partial,
-            status=self.status,
         )
 
     def get_cost(self, **_kwargs: object) -> object:
@@ -164,30 +190,6 @@ class FakeMetadataProvider:
         )
 
 
-def _response(
-    *,
-    symbol: str = "MES.FUT",
-    stype_in: str = "parent",
-    start: str = "2010-01-01",
-    end: str = "2026-08-09",
-    effective: str = "2019-05-06",
-    partial: object = None,
-    status: object = 200,
-) -> dict[str, object]:
-    return {
-        "result": {symbol: [{"d0": effective, "d1": end, "s": 123}]},
-        "symbols": [symbol],
-        "stype_in": stype_in,
-        "stype_out": "instrument_id",
-        "start_date": start,
-        "end_date": end,
-        "partial": ["OPAQUE"] if partial is None else partial,
-        "not_found": [],
-        "message": "OK",
-        "status": status,
-    }
-
-
 def _run(root: Path, provider: FakeMetadataProvider) -> dict[str, object]:
     return execute_preflight(
         root=root,
@@ -199,7 +201,7 @@ def _run(root: Path, provider: FakeMetadataProvider) -> dict[str, object]:
     )
 
 
-def test_v12_plan_preserves_exact_scope_and_forbids_download() -> None:
+def test_v16_plan_preserves_exact_scope_and_v15_failure() -> None:
     plan = validate_plan(
         json.loads((ROOT / PLAN_PATH).read_text(encoding="utf-8")), root=ROOT
     )
@@ -211,132 +213,138 @@ def test_v12_plan_preserves_exact_scope_and_forbids_download() -> None:
         "MGC",
         "M6E",
     }
+    assert {request["schema"] for request in plan["requests"]} == {
+        "definition",
+        "status",
+        "statistics",
+        "ohlcv-1m",
+        "ohlcv-1s",
+    }
+    assert plan["predecessor_execution"]["report_id"] == PREDECESSOR_REPORT_ID
+    assert plan["limits"]["exact_provider_call_ceiling"] == 375
+    assert plan["limits"]["maximum_external_cost_usd"] == "0"
+    assert plan["limits"]["maximum_retries"] == 0
     assert plan["forbidden"]["timeseries_download"] is True
-    assert plan["forbidden"]["historical_row_read"] is True
-    assert plan["checks"]["application_status_bounded_opaque_scalar_shape"] is True
+    assert load_predecessor_failure(root=ROOT)["failed_validation_field"] == "interval"
 
 
-def test_v12_preserves_v11_failure_byte_for_byte() -> None:
-    report = load_predecessor_failure(root=ROOT)
-    assert report["report_id"] == (
-        "86541273eff2dcfc3e20912b00d91e6c742a2c62f5411528d3b312d68bf0405a"
+def test_boundary_spanning_intervals_are_clipped_only_for_gap_proof() -> None:
+    response = _response(
+        entries=[
+            {"d0": "2019-01-01", "d1": "2020-01-01", "s": 1},
+            {"d0": "2020-01-01", "d1": "2027-01-01", "s": 2},
+        ]
     )
-    assert report["failed_validation_field"] == "status"
-    assert report["timeseries_download_calls"] == 0
-
-
-@pytest.mark.parametrize("value", [0, 200, -1, "OK", "success"])
-def test_v12_accepts_bounded_opaque_status_shapes(value: object) -> None:
-    disposition = _opaque_application_status(value)
-    assert disposition.endswith("VALUE_NOT_RECORDED")
-    assert str(value) not in disposition
+    summary = _symbology_summary(
+        response,
+        symbol="MES.v.0",
+        stype_in="continuous",
+        query_start="2019-05-06",
+        end="2026-08-09",
+        allow_bounded_partial=True,
+    )
+    assert summary["post_effective_gap_free_coverage"] is True
+    assert summary["left_boundary_clipped_interval_count"] == 1
+    assert summary["right_boundary_clipped_interval_count"] == 1
+    assert summary["raw_interval_values_recorded"] is False
 
 
 @pytest.mark.parametrize(
-    "value",
+    ("entries", "match"),
     [
-        None,
-        True,
-        1.0,
-        "",
-        "x" * (MAXIMUM_STATUS_STRING_LENGTH + 1),
-        MAXIMUM_STATUS_INTEGER_MAGNITUDE + 1,
+        ([{"d0": "2010-01-01", "d1": "2011-01-01", "s": 1}], "wholly outside"),
+        ([{"d0": "2030-01-01", "d1": "2031-01-01", "s": 1}], "wholly outside"),
+        ([{"d0": "2020-01-01", "d1": "2020-01-01", "s": 1}], "nonpositive"),
+        ([{"d0": "invalid", "d1": "2020-01-01", "s": 1}], "date shape"),
+        ([{"d0": "2019-05-06", "d1": "2020-01-01", "s": 1, "x": 2}], "field shape"),
     ],
 )
-def test_v12_rejects_malformed_or_unbounded_status(value: object) -> None:
-    with pytest.raises(IntegrityError, match="application status"):
-        _opaque_application_status(value)
-
-
-def test_v12_summary_records_status_shape_not_value() -> None:
-    summary = _symbology_summary(
-        _response(status=200),
-        symbol="MES.FUT",
-        stype_in="parent",
-        query_start="2010-01-01",
-        end="2026-08-09",
-        allow_discovery_partial=True,
-    )
-    assert summary["application_status_shape"] == "BOUNDED_INTEGER_VALUE_NOT_RECORDED"
-    assert summary["application_status_value_recorded"] is False
-    assert 200 not in summary.values()
-
-
-def test_v12_status_correction_does_not_weaken_exact_echo_gate() -> None:
-    response = _response(status=200)
-    response["symbols"] = ["MCL.FUT"]
-    with pytest.raises(IntegrityError, match="symbols echo drifted"):
+def test_invalid_interval_dispositions_fail_closed(
+    entries: list[dict[str, object]], match: str
+) -> None:
+    with pytest.raises(IntegrityError, match=match):
         _symbology_summary(
-            response,
-            symbol="MES.FUT",
-            stype_in="parent",
-            query_start="2010-01-01",
+            _response(entries=entries),
+            symbol="MES.v.0",
+            stype_in="continuous",
+            query_start="2019-05-06",
             end="2026-08-09",
-            allow_discovery_partial=True,
+            allow_bounded_partial=True,
         )
 
 
-def test_v12_full_synthetic_metadata_mechanics_pass_without_download(
-    tmp_path: Path,
-) -> None:
+def test_duplicate_and_gap_still_fail_closed() -> None:
+    duplicate = {"d0": "2019-05-06", "d1": "2026-08-09", "s": 1}
+    with pytest.raises(IntegrityError, match="duplicated"):
+        _symbology_summary(
+            _response(entries=[duplicate, dict(duplicate)]),
+            symbol="MES.v.0",
+            stype_in="continuous",
+            query_start="2019-05-06",
+            end="2026-08-09",
+            allow_bounded_partial=True,
+        )
+    with pytest.raises(IntegrityError, match="coverage gap"):
+        _symbology_summary(
+            _response(
+                entries=[
+                    {"d0": "2019-05-06", "d1": "2020-01-01", "s": 1},
+                    {"d0": "2020-01-02", "d1": "2026-08-09", "s": 2},
+                ]
+            ),
+            symbol="MES.v.0",
+            stype_in="continuous",
+            query_start="2019-05-06",
+            end="2026-08-09",
+            allow_bounded_partial=True,
+        )
+
+
+def test_v16_successful_bounded_metadata_mechanics(tmp_path: Path) -> None:
     root = _copy_root(tmp_path)
-    report = _run(root, FakeMetadataProvider(status=200))
+    report = _run(root, FakeMetadataProvider())
     assert report["state"] == "PASS_METADATA_ONLY"
+    assert report["provider_call_total"] <= 375
     assert report["external_cost_incurred_usd"] == "0"
+    assert report["automatic_retries"] == 0
     assert report["timeseries_download_calls"] == 0
     assert report["historical_rows_read"] is False
     assert report["dbn_files_created"] == 0
-    assert report["annual_market_schema_request_count"] <= 180
-    assert report["provider_call_total"] <= 375
+    assert report["request_definition_count"] == 20
     assert (root / REPORT_PATH).is_file()
-    assert not (root / "data/dbn").exists()
+    continuous = report["symbology_summaries"]["MES"]["continuous"]
+    assert continuous["left_boundary_clipped_interval_count"] == 1
+    assert continuous["right_boundary_clipped_interval_count"] == 1
 
 
-def test_v12_malformed_live_status_fails_closed_and_sanitized(
+def test_wholly_outside_provider_interval_is_classified_without_values(
     tmp_path: Path,
 ) -> None:
     root = _copy_root(tmp_path)
-    report = _run(root, FakeMetadataProvider(status={"secret": "value"}))
+    report = _run(root, FakeMetadataProvider(continuous_mode="outside"))
     assert report["state"] == "FAIL_CLOSED_METADATA_ONLY"
-    assert report["failure_code"] == "OPAQUE_APPLICATION_STATUS_SHAPE"
-    assert report["failed_validation_field"] == "status"
-    assert report["provider_call_total"] == 4
+    assert report["failure_code"] == "INTERVAL_OUTSIDE_QUERY"
+    assert report["failed_validation_field"] == "interval"
     assert report["provider_error_message_recorded"] is False
-    assert "secret" not in json.dumps(report)
-    assert report["timeseries_download_calls"] == 0
+    assert "symbology_summaries" not in report
 
 
-def test_v12_nonzero_cost_still_fails_closed(tmp_path: Path) -> None:
+def test_nonzero_cost_still_fails_without_retry_or_download(tmp_path: Path) -> None:
     root = _copy_root(tmp_path)
-    report = _run(root, FakeMetadataProvider(status=200, cost="0.01"))
+    report = _run(root, FakeMetadataProvider(cost="0.01"))
     assert report["state"] == "FAIL_CLOSED_METADATA_ONLY"
     assert report["failure_code"] == "UNEXPECTED_NONZERO_COST"
     assert report["automatic_retries"] == 0
     assert report["timeseries_download_calls"] == 0
+    assert report["dbn_files_created"] == 0
 
 
-def test_v12_report_is_create_only(tmp_path: Path) -> None:
-    root = _copy_root(tmp_path)
-    first = _run(root, FakeMetadataProvider(status=200))
-    assert first["state"] == "PASS_METADATA_ONLY"
-    with pytest.raises(IntegrityError, match="create-only"):
-        _run(root, FakeMetadataProvider(status=200))
-
-
-def test_v12_documentation_preserves_implementation_reality() -> None:
+def test_v16_documentation_matches_execution_reality() -> None:
     outline = (ROOT / "PROJECT_OUTLINE.md").read_text(encoding="utf-8")
     folder_map = (ROOT / "PIPELINE_FOLDER_MAP.md").read_text(encoding="utf-8")
-    normalized_outline = " ".join(outline.split())
-    assert "v11 preflight -> FAIL_CLOSED_METADATA_ONLY" in outline
-    assert "v12 preflight -> FAIL_CLOSED_METADATA_ONLY" in outline
-    assert "v14 preflight -> FAIL_CLOSED_METADATA_ONLY" in outline
+    assert "v15 preflight -> FAIL_CLOSED_METADATA_ONLY (6 calls" in outline
     assert "immutable v16 bounded interval-overlap-safe successor" in outline
-    assert "v16 may contact Databento" in normalized_outline
-    assert "v11 bounded opaque-partial-flag successor" in folder_map
-    assert "RETIRED / fail-closed status-semantic evidence" in folder_map
-    assert "v12 SDK-contract-safe status successor" in folder_map
-    assert "RETIRED / fail-closed message-semantic evidence" in folder_map
-    assert "v14 provider-result-group-safe predecessor" in folder_map
-    assert "RETIRED / fail-closed post-effective partial evidence" in folder_map
+    assert "before v16 may contact Databento" in " ".join(outline.split())
+    assert "RETIRED / fail-closed continuous-interval evidence" in folder_map
     assert "immutable v16 bounded interval-overlap-safe successor" in folder_map
     assert "passing v16 preflight and committed HEAD required first" in folder_map

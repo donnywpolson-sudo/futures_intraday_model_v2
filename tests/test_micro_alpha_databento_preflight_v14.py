@@ -457,9 +457,9 @@ def test_v14_documentation_preserves_implementation_reality() -> None:
     folder_map = (ROOT / "PIPELINE_FOLDER_MAP.md").read_text(encoding="utf-8")
     normalized_outline = " ".join(outline.split())
     assert "v14 preflight -> FAIL_CLOSED_METADATA_ONLY" in outline
-    assert "immutable v15 gap-proof bounded-partial-safe successor" in outline
-    assert "v15 may contact Databento" in normalized_outline
+    assert "immutable v16 bounded interval-overlap-safe successor" in outline
+    assert "v16 may contact Databento" in normalized_outline
     assert "v14 provider-result-group-safe predecessor" in folder_map
     assert "RETIRED / fail-closed post-effective partial evidence" in folder_map
-    assert "immutable v15 gap-proof bounded-partial-safe successor" in folder_map
-    assert "passing v15 preflight and committed HEAD required first" in folder_map
+    assert "immutable v16 bounded interval-overlap-safe successor" in folder_map
+    assert "passing v16 preflight and committed HEAD required first" in folder_map
