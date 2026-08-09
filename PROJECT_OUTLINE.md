@@ -61,11 +61,18 @@ live cockpit. Automatic order execution is outside this project's scope.
   classifier mislabeled the affected field as `symbols`; its $0 report and
   consumed authorization are preserved and it cannot run again.
 - `configs/apex_micro_tier01_databento_metadata_preflight_v9.json`: immutable
-  two-stage prelaunch-discovery successor. Discovery permits only an empty
-  `partial` list or the exact single requested parent symbol, always requires
-  empty `not_found`, derives the first mapping date, and then re-resolves parent
-  and continuous symbology from that date with both status lists empty. It has
-  20 definitions, a 375-call ceiling, and no download surface.
+  executed two-stage prelaunch-discovery successor. Its approved attempt made
+  four calls and proved the affected field was `partial`, then failed closed
+  because its local validator required the provider's opaque nonempty list to
+  equal the requested parent symbol exactly. Its $0 report and consumed authorization are
+  preserved; it cannot run again.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v10.json`: immutable
+  opaque-single-partial-safe successor. Discovery accepts only zero or one
+  string entry by cardinality while independently requiring the exact
+  single-symbol request echo and result key. It never records the opaque entry;
+  `not_found` remains empty, and parent plus continuous verification from the
+  discovered date requires both status lists empty. It retains 20 definitions,
+  a 375-call ceiling, and no download surface.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -270,7 +277,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> v6 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; local list-shape validator defect)
   -> v7 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; over-strict success echo)
   -> v8 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; broad prelaunch status rejected)
-  -> immutable v9 two-stage prelaunch successor (20 definitions; at most 180 annual requests)
+  -> v9 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; opaque partial content compared locally)
+  -> immutable v10 opaque-single-partial successor (20 definitions; at most 180 annual requests)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -359,8 +367,19 @@ continuous queries beginning at the discovered date must both have empty
 status lists. A discovery beginning at the provider dataset start remains an
 unresolved exact-product-date failure. The maximum call ceiling is 375, with
 the same 300-second runtime, 30-second call timeout, $0 cost, and zero retries.
-A new separate approval is required before v9 may contact Databento. Only a
-passing report may freeze a deterministic
+Its one approved attempt made four calls and failed closed at the first MES
+discovery resolve because the response contained a nonempty `partial` string
+list that did not equal the exact requested-symbol singleton. The
+report records only the field name, never its value; it incurred $0, made no
+download, read no rows, and created no DBN. V10 corrects only that local
+assumption. Under an exact one-symbol request, exact response `symbols` echo,
+and exact single result key, discovery permits one opaque string entry by
+cardinality and never records its content. Two or more entries, any non-string,
+any `not_found`, echo drift, result-key drift, or post-effective nonempty status
+still fails closed. V10 retains the exact v9 markets, schemas, 375-call ceiling,
+300-second runtime, 30-second call timeout, $0 cost, zero retries, and
+metadata-only surface. A new separate approval is required before v10 may
+contact Databento. Only a passing report may freeze a deterministic
 acquisition plan bound to the then-committed implementation HEAD. Metadata
 approval never grants download authority.
 
