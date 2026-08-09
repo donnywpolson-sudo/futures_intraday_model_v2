@@ -344,14 +344,16 @@ def test_executor_has_only_cost_and_size_provider_call_surfaces() -> None:
     assert "read_dbn" not in source.lower()
 
 
-def test_v21_documentation_matches_preexecution_reality() -> None:
+def test_v21_documentation_matches_executed_metadata_only_reality() -> None:
     outline = " ".join((ROOT / "PROJECT_OUTLINE.md").read_text(encoding="utf-8").split())
     folder_map = " ".join(
         (ROOT / "PIPELINE_FOLDER_MAP.md").read_text(encoding="utf-8").split()
     )
     assert "v20" in outline and "68 metadata calls" in outline
-    assert "prepared v21" in outline
-    assert "180" in outline and "six isolated" in outline
+    assert "PASS_METADATA_ONLY" in outline
+    assert "executed v21 timeout-safe successor" in outline
+    assert "180" in outline and "Six isolated" in outline
     assert "apex_micro_metadata_preflight_v21" in folder_map
-    assert "PREPARED_NOT_EXECUTED" in folder_map
-    assert "download authority remains absent" in folder_map
+    assert "CURRENT_REACHABLE" in folder_map
+    assert "grants no download authority" in folder_map
+    assert "separate exact download approval remains absent" in folder_map

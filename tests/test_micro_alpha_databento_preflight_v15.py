@@ -501,8 +501,9 @@ def test_v15_documentation_preserves_implementation_reality() -> None:
     normalized_outline = " ".join(outline.split())
     assert "v14 preflight -> FAIL_CLOSED_METADATA_ONLY" in outline
     assert "immutable v19 opaque-partial-semantic-safe successor" in outline
-    assert "prepared v21 timeout-safe successor" in normalized_outline
+    assert "executed v21 timeout-safe successor" in normalized_outline
     assert "v14 provider-result-group-safe predecessor" in folder_map
     assert "RETIRED / fail-closed post-effective partial evidence" in folder_map
     assert "v21 timeout-safe cumulative metadata successor" in folder_map
-    assert "committed HEAD and separate single-use metadata approval required" in folder_map
+    assert "Authorization consumed" in folder_map
+    assert "grants no download authority" in folder_map

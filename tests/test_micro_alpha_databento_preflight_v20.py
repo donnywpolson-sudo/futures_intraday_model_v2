@@ -298,4 +298,4 @@ def test_v20_documentation_matches_execution_reality() -> None:
     assert "RETIRED" in folder_map
     assert "apex_micro_metadata_preflight_v20" in folder_map
     assert "v21 timeout-safe cumulative metadata successor" in folder_map
-    assert "download authority remains absent" in folder_map
+    assert "grants no download authority" in folder_map

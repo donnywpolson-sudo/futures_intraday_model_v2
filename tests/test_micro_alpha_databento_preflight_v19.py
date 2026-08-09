@@ -484,5 +484,5 @@ def test_v19_documentation_matches_execution_reality() -> None:
         in folder_map
     assert "Complete official four-market date scope" in folder_map
     assert "v21 timeout-safe cumulative metadata successor" in folder_map
-    assert "committed HEAD and separate single-use metadata approval required" \
-        in folder_map
+    assert "Authorization consumed" in folder_map
+    assert "grants no download authority" in folder_map

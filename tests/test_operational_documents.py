@@ -158,7 +158,8 @@ def test_micro_pipeline_map_distinguishes_design_from_implementation() -> None:
     assert list((ROOT / "state/unpublished_evidence/alpha_research_architecture_v2").glob("*/architecture.json"))
     assert not (ROOT / "configs/active_micro_alpha_research_ladder.json").exists()
     assert not (ROOT / "data/active/catalogs/apex_micro.json").exists()
-    assert "No micro phase is labeled complete" in mapping
+    assert "No micro row-processing phase is labeled complete" in mapping
+    assert "PASS_METADATA_ONLY" in mapping
 
 
 def test_micro_preflight_is_metadata_only_and_download_has_no_public_command() -> None:

@@ -144,14 +144,22 @@ live cockpit. Automatic order execution is outside this project's scope.
   the `MES` `ohlcv-1s` 2020 annual billable-size request reached the 30-second
   per-call timeout. The create-only report records `PROVIDER_TIMEOUT`, $0,
   zero retries, downloads, rows, or DBNs. V20 cannot execute again.
-- `configs/apex_micro_tier01_databento_metadata_preflight_v21.json` and
-  `src/futures_rebuild/micro_alpha_databento_preflight_v21.py`: prepared,
-  unpublished timeout-safe successor. It retains 160 exact annual byte
-  estimates, proves zero cost over each of the 20 complete market/schema
-  acquisition ranges, and requires exact annual cost requotes immediately
-  before download. At most six isolated metadata clients execute 180 calls
-  under a 300-second total and 90-second per-call ceiling, stop scheduling on
-  the first failure, and never retry. It has not contacted Databento.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v21.json`,
+  `src/futures_rebuild/micro_alpha_databento_preflight_v21.py`, and
+  `state/unpublished_evidence/apex_micro_metadata_preflight_v21/report.json`:
+  immutable executed timeout-safe successor. Its one authorized metadata-only
+  run completed all 20 full-range zero-cost proofs and 160 exact annual byte
+  estimates in 180 calls, returned `PASS_METADATA_ONLY`, incurred $0, and made
+  zero retries, downloads, row reads, or DBNs. The sealed report fixes the
+  provider-complete end-exclusive date at 2026-08-09 and requires exact annual
+  cost requotes immediately before any download. Its authorization is consumed.
+- `src/futures_rebuild/micro_alpha_acquisition_v21.py` and
+  `scripts/prepare_apex_micro_phase1a_acquisition_v21.py`: prepared, unexecuted
+  v21-report-bound annual acquisition successor. It preserves the older
+  v7-bound downloader unchanged, freezes 160 DBN/sidecar pairs only after the
+  successor implementation is committed, and exposes at most one sequential
+  cost client plus two isolated download clients. No acquisition plan or DBN
+  has been created yet.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -250,7 +258,14 @@ prove that no catalog, manifest, receipt, plan, or worktree item binds a target,
 obtain a separate exact cleanup approval, and rerun catalog/provenance/tests and
 micro disk/destination gates afterward. Cleanup that could affect acquisition
 paths or free-disk state must finish before the final micro acquisition plan is
-frozen.
+frozen. After the passing v21 metadata run, both the source-safe standard
+topology report and cleanup v5 policy reconstructed exactly with no row reads,
+candidate freeze, move, delete, or relabel. Cleanup therefore remains a later
+separately approved boundary and does not create a second active data source.
+`scripts/prepare_safe_cleanup_candidate_census_v6.py` is prepared to freeze
+only exact untracked, Git-ignored cache directories after the acquisition
+successor commit. Its output will be bound into the download-plan audit, but it
+cannot delete, move, relabel, or authorize any cleanup target.
 
 ## Alpha research lanes
 
@@ -371,7 +386,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> immutable v19 opaque-partial-semantic-safe successor -> FAIL_CLOSED_METADATA_ONLY (15 calls; exchange launch date unresolved)
   -> sealed official CME launch dates for MES/MCL/MGC/M6E
   -> v20 cumulative successor -> FAIL_CLOSED_METADATA_ONLY (68 calls; annual size timeout)
-  -> prepared v21 timeout-safe successor (20 cost ranges + 160 annual size estimates; 180 calls; six isolated clients)
+  -> v21 timeout-safe successor -> PASS_METADATA_ONLY (20 cost ranges + 160 annual size estimates; 180 calls; $0)
+  -> prepared v21-bound annual acquisition successor (160 pairs; one cost + two download clients; no plan yet)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -401,15 +417,18 @@ Prelaunch intervals produce disposition records and no fabricated empty DBN.
 Multi-year DBNs, wrong-year folders, hyphenated schema folders, duplicate
 destinations, and alternate micro-root layouts fail closed.
 
-The Phase 1A downloader is implemented and synthetic/adversarially tested but
-has not executed. It uses one exact bounded interval per market/schema/year, writes
+The v21-bound Phase 1A downloader successor is implemented and
+synthetic/adversarially tested but has not executed. It uses one exact bounded
+interval per market/schema/year, writes
 first to inactive staging, requotes every request at exactly $0 before the
 first download, and then uses at most two isolated Databento download clients.
 The worker queues stop scheduling after the first failure; an already-running
 second request may finish into inactive staging and is preserved as evidence.
 This bounded concurrency improves network utilization without sharing an SDK
-client, retrying, overwriting, or weakening byte ceilings. It streams compressed
-DBN bytes without iterating rows, verifies
+client, retrying, overwriting, or weakening byte ceilings. The locked Databento
+`get_range` wire contract is recorded explicitly as DBN plus Zstandard in each
+plan request and adjacent sidecar. It streams compressed DBN bytes without
+iterating rows, verifies
 size and SHA-256, creates an exact-query adjacent sidecar, refuses collisions,
 and writes one terminal attempt record last. Empty, partial, failed, oversized,
 or interrupted files remain inactive failure evidence. There is one attempt,
@@ -556,19 +575,24 @@ evidence. V20 bound both source reports and the complete v19 evidence, did not
 repeat the 15 passed metadata/symbology calls, and exposed only annual zero-cost
 and billable-size queries. Its authorized run failed closed after 68 metadata
 calls when the MES `ohlcv-1s` 2020 billable-size request exceeded the 30-second
-per-call bound. The prepared v21 timeout-safe successor preserves that immutable failure and retains 160
+per-call bound. The executed v21 timeout-safe successor preserved that immutable failure and retained 160
 annual market-schema intervals: MES 8 years x 5 schemas, MCL 6 x 5, MGC 9 x
 5, and M6E 9 x 5. It replaces duplicate annual cost checks with 20 zero-cost
 full-range proofs whose annual subsets are still requoted exactly immediately
-before download. Six isolated clients make at most 180 calls under the same
-300-second total ceiling and a 90-second per-call bound. Prelaunch intervals
-are explicit no-DBN dispositions. V21 is PREPARED_NOT_EXECUTED and requires a
-committed implementation plus a separate single-use metadata approval. Any malformed source,
+before download. Six isolated clients completed exactly 180 calls under the
+same 300-second total ceiling and a 90-second per-call bound. The create-only
+report is `PASS_METADATA_ONLY`, fixed the end-exclusive date at 2026-08-09,
+estimated 10,318,447,616 bytes, froze an 11,350,292,377-byte ceiling and a
+12,424,034,201-byte free-disk requirement, and found zero destination
+conflicts. Prelaunch intervals are explicit no-DBN dispositions. Any malformed source,
 unapproved host, identity drift, mapping-date substitution, malformed provider
 response, nonzero cost, disk shortfall, destination collision, or other existing
-gate failure remains fail closed. Only a passing successor report may freeze a
-deterministic acquisition plan bound to the then-committed implementation HEAD.
-Metadata approval never grants download authority.
+gate failure remains fail closed. The prepared v21-bound acquisition successor
+must be committed before it may freeze a deterministic 160-request plan bound
+to that exact implementation HEAD. The plan will require one sequential fresh
+annual zero-cost census, at most two isolated downloads, 320 calls total, one
+attempt, zero retries, inactive staging, DBN/Zstandard sidecars, and a separate
+exact raw-download approval. Metadata approval never grants download authority.
 
 The one-second source proves reported-trade-bar evidence only. It cannot prove
 BBO availability, queue priority, guaranteed market-order execution, or precise
