@@ -149,6 +149,7 @@ def test_micro_pipeline_map_distinguishes_design_from_implementation() -> None:
         "src/futures_rebuild/micro_alpha_acquisition.py",
         "scripts/prepare_apex_micro_infrastructure.py",
         "configs/apex_micro_tier01_databento_metadata_preflight_v2.json",
+        "configs/apex_micro_tier01_databento_metadata_preflight_v4.json",
         "configs/apex_micro_product_reference_requirements.json",
         "state/unpublished_evidence/apex_micro_preparation_supersessions/micro_tier1_scope_reconciliation.json",
     ):
@@ -178,6 +179,51 @@ def test_micro_preflight_is_metadata_only_and_download_has_no_public_command() -
     assert plan["limits"]["maximum_external_cost_usd"] == "0"
     assert plan["forbidden"]["timeseries_download"] is True
     assert plan["forbidden"]["data_dbn_write"] is True
+    report = json.loads(
+        (
+            ROOT
+            / "state/unpublished_evidence/apex_micro_metadata_preflight_v2/report.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert report["state"] == "FAIL_CLOSED_METADATA_ONLY"
+    assert report["exception_type"] == "ReadTimeout"
+    assert report["provider_call_counts"] == {
+        "list_datasets": 1,
+        "list_schemas": 1,
+    }
+    assert report["external_cost_incurred_usd"] == "0"
+    assert report["automatic_retries"] == 0
+    assert report["timeseries_download_calls"] == 0
+    invalid_preparation = json.loads(
+        (
+            ROOT
+            / "configs/apex_micro_tier01_databento_metadata_preflight_v3.json"
+        ).read_text(encoding="utf-8")
+    )
+    supersession = json.loads(
+        (
+            ROOT
+            / "state/unpublished_evidence/apex_micro_metadata_preflight_v3_supersession.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert supersession["classification"] == "SUPERSEDED_LOCAL_PREPARATION"
+    assert supersession["plan_id"] == invalid_preparation["plan_id"]
+    assert supersession["provider_access_performed"] is False
+    assert supersession["execution_forbidden"] is True
+    successor = json.loads(
+        (
+            ROOT
+            / "configs/apex_micro_tier01_databento_metadata_preflight_v4.json"
+        ).read_text(encoding="utf-8")
+    )
+    assert successor["state"] == "PREPARED_NOT_EXECUTED"
+    assert successor["predecessor_execution"]["report_id"] == report["report_id"]
+    assert successor["correction"]["scope_change"] == (
+        "TIMEOUT_ONLY_NO_MARKET_SCHEMA_OR_ENDPOINT_CHANGE"
+    )
+    assert successor["limits"]["per_call_timeout_seconds"] == 30
+    assert successor["limits"]["maximum_runtime_seconds"] == 300
+    assert successor["forbidden"]["timeseries_download"] is True
     pyproject = _text("pyproject.toml")
     assert "futures-pipeline = \"futures_rebuild.pipeline:main\"" in pyproject
     assert "apex-micro-download" not in pyproject

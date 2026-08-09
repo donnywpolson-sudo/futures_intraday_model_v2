@@ -25,8 +25,16 @@ live cockpit. Automatic order execution is outside this project's scope.
   corrected dual-lane successor design; it is unpublished and grants no authority.
 - `configs/apex_micro_tier01_databento_preflight_plan.json`: preserved obsolete
   MES/MGC/M6E/M6A preflight; it is superseded and cannot execute as current.
-- `configs/apex_micro_tier01_databento_metadata_preflight_v2.json`: corrected
-  metadata-only provider preflight for MES, MCL, MGC, and M6E; it authorizes nothing.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v2.json`: preserved
+  executed metadata-only plan for MES, MCL, MGC, and M6E. Its one authorized
+  attempt failed closed on a `list_schemas` read timeout after two calls; its
+  report and consumed-authorization record are immutable evidence, not authority.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v3.json`: preserved
+  unexecuted local preparation superseded before staging when its executor
+  self-hash drifted; it cannot execute and contacted no provider.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v4.json`: immutable
+  timeout-only successor with the same exact 20 requests, $0 ceiling, and no
+  download capability; it is prepared but unexecuted and authorizes nothing.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -197,7 +205,9 @@ an authoritative artifact.
 This route reuses the standard folder grammar without mixing catalogs:
 
 ```text
-single-use metadata-only Databento preflight (20 market/schema definitions; 51-call ceiling)
+v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; no rows)
+  -> v3 local preparation superseded before staging/execution
+  -> separately approved immutable v4 successor (same 20 definitions; 51-call ceiling)
   -> data/dbn/<schema-folder>/<micro-root>/<year>/<interval>.dbn.zst [Phase 1A]
   -> data/raw/<micro-root>/<year>/<interval>/<release>/             [Phase 1B definition + 1m]
   -> data/market_state/{status|statistics}/<micro-root>/...         [Phase 1B diagnostics]
@@ -227,12 +237,19 @@ or interrupted files remain inactive failure evidence. There is one attempt,
 zero automatic retries, and no overwrite, resume, publication, catalog
 activation, registration, evaluation, or trading path.
 
-The prepared preflight fixes no 2026 end date by assumption. A separately
-approved metadata call must confirm the latest complete provider day and freeze
-the end-exclusive boundary, exact $0 cost, estimated bytes, disk headroom, and
-destination conflicts before any acquisition plan can be created. A passing
-report freezes a separate deterministic acquisition plan bound to the committed
-implementation HEAD. Metadata approval never grants download authority.
+The executed v2 preflight fixed no 2026 end date: it failed closed at the
+second metadata call when the deliberately narrowed 10-second SDK timeout was
+reached. It incurred $0, performed zero retries and zero timeseries downloads,
+read no rows, and created no DBNs. Its create-only report and consumed
+authorization remain unpublished evidence. An unexecuted v3 local preparation
+was preserved and superseded when its executor self-hash drifted before
+staging. The prepared v4 successor changes only the provider-call timeout to 30
+seconds under a 300-second total ceiling; it retains the
+same markets, schemas, symbology, call ceiling, zero-cost requirement, zero
+retries, and forbidden operations. A new separate approval is required before
+v4 may contact Databento. Only a passing report may freeze a deterministic
+acquisition plan bound to the then-committed implementation HEAD. Metadata
+approval never grants download authority.
 
 The one-second source proves reported-trade-bar evidence only. It cannot prove
 BBO availability, queue priority, guaranteed market-order execution, or precise

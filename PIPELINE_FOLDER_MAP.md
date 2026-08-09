@@ -12,7 +12,9 @@ work and every real-data or publishing action remains separately controlled.
 | `RETIRED` | `configs/apex_micro_tier01_databento_preflight_plan.json`; obsolete `febccafd...` preparation | Preserved MES/MGC/M6E/M6A bytes, classified `SUPERSEDED_PREPARATION — MICRO_TIER1_SCOPE_RECONCILIATION`; cannot execute as current | No provider or publication authority |
 | `PREPARED_NOT_EXECUTED` | Corrected contract/profile/pointer under `state/unpublished_evidence/apex_micro_ladder_preparation_v2/`; architecture under `alpha_research_architecture_v2/` | Inactive MES/MCL/MGC/M6E successor; no active micro pointer or catalog | None |
 | `PREPARED_NOT_EXECUTED` | `scripts/prepare_apex_micro_infrastructure.py`; `configs/apex_micro_product_reference_requirements.json`; `state/unpublished_evidence/apex_micro_preparation_supersessions/micro_tier1_scope_reconciliation.json` | Deterministic create-only successor preparation and byte-bound supersession classification | No provider or activation authority |
-| `PREPARED_NOT_EXECUTED` | `configs/apex_micro_tier01_databento_metadata_preflight_v2.json`; `src/futures_rebuild/micro_alpha_databento_preflight.py` | Exact 20-definition, 51-call, metadata-only executor; synthetic tests only | Exact single-use metadata/provider approval absent |
+| `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v2.json`; `src/futures_rebuild/micro_alpha_databento_preflight.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v2/report.json` | One approved metadata-only attempt executed and failed closed on `list_schemas` `ReadTimeout` after two calls; $0, zero retries/downloads/rows/DBNs; report and authorization use preserved | Consumed authorization cannot execute again; report grants no acquisition authority |
+| `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v3.json`; `state/unpublished_evidence/apex_micro_metadata_preflight_v3_supersession.json` | Unexecuted local preparation preserved after executor self-hash drift before staging; no provider access, authorization, or report | Execution forbidden; grants no authority |
+| `PREPARED_NOT_EXECUTED` | `configs/apex_micro_tier01_databento_metadata_preflight_v4.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v4.py` | Immutable timeout-only successor: same exact 20 definitions and 51-call/$0/zero-retry scope, separate create-only report, 30-second call bound under 300 seconds; synthetic tests only | New exact staging, commit, and single-use metadata/provider approvals required |
 | `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition.py` | Phase 1A create-only inactive-custody downloader implemented and adversarially tested; no provider run and no DBN output | Separate download approval absent; passing preflight and committed HEAD required first |
 | `SYNTHETIC_ONLY` | `tests/test_micro_alpha_*.py` | Corrected ladder, authorization, metadata, disk, collision, partial, cost, retry, custody, and no-decode mechanics | No provider, row, or download authority |
 | `HISTORICAL_ROW_APPROVAL_REQUIRED` | Phase 1B/2 contracts in `src/futures_rebuild/micro_alpha_pipeline.py` | Decoder/causal routing contracts are prepared; Phase 1B/2 row processing has not executed | Separate row-read approval only after acquisition |
@@ -48,7 +50,9 @@ trial surface. Unknown or retired operation names fail closed.
 PROJECT_OUTLINE design
   -> obsolete MES/MGC/M6E/M6A plan                                 RETIRED / preserved
   -> corrected inactive MES/MCL/MGC/M6E ladder                     PREPARED_NOT_EXECUTED
-  -> metadata-only Databento preflight                             PREPARED_NOT_EXECUTED / approval absent
+  -> v2 metadata-only Databento preflight                          RETIRED / fail-closed timeout evidence
+  -> v3 local preparation                                          RETIRED / pre-execution self-hash drift
+  -> immutable v4 timeout-only successor                           PREPARED_NOT_EXECUTED / approval absent
   -> exact audited acquisition plan                                NOT_IMPLEMENTED until preflight PASS
   -> Phase 1A DBN + sidecar inactive custody                       PREPARED_NOT_EXECUTED / download authority absent
   -> Phase 1B definition/status/statistics/1m/1s decoding          row-read approval required
@@ -64,11 +68,13 @@ adjacent `.manifest.json` sidecar. The prepared source scope is MES, MCL, MGC,
 and M6E across the required Databento Standard historical schemas: definition,
 status, statistics, ohlcv-1m, and ohlcv-1s. No target micro DBN currently exists.
 
-No micro phase is labeled complete. The metadata preflight and Phase 1A
-downloader are implemented but unexecuted; Phase 1B/2 row processing is also
-unexecuted. The micro catalog is inactive, registration is blocked, and
-download authority is absent. The code currently proves fail-closed mechanics
-with synthetic records only.
+No micro phase is labeled complete. The v2 metadata-only attempt executed once
+and produced only fail-closed metadata evidence; the v4 successor and Phase 1A
+downloader are implemented but
+unexecuted. Phase 1B/2 row processing is also unexecuted. The micro catalog is
+inactive, registration is blocked, and download authority is absent. Apart
+from the preserved price-free v2 failure report, the code proves mechanics with
+synthetic records only.
 
 ## Active and protected folders
 
