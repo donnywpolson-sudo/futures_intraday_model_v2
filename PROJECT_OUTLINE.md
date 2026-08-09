@@ -103,13 +103,19 @@ live cockpit. Automatic order execution is outside this project's scope.
   `MES.v.0`. Its sealed report records only the field and price-free call
   context; it incurred $0 with zero retries, downloads, row reads, or DBNs.
 - `configs/apex_micro_tier01_databento_metadata_preflight_v16.json`: immutable
-  v16 bounded interval-overlap-safe successor. It retains exact response echoes,
-  exact `d0`/`d1`/`s` entry fields, positive instrument identities, positive ISO
-  ranges, and all prior opaque-status gates. Every mapping interval must overlap
-  the exact query, and only then may its boundaries be clipped to that query for
-  the gap-free coverage proof. Wholly outside, malformed, duplicate, unrelated,
-  or gapped mappings fail closed without recording interval values. It retains
-  20 definitions, a 375-call ceiling, and no download surface.
+  executed v16 interval-overlap-safe predecessor. Its approved attempt made
+  seven metadata calls and passed MES discovery, parent, and continuous gates,
+  then failed closed because MCL parent expansion returned a bounded group key
+  outside the locally assumed market-root prefix. Its sealed report records only
+  the field and price-free call context; it incurred $0 with zero retries,
+  downloads, row reads, or DBNs.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v17.json`: immutable
+  v17 bounded opaque-group-key successor. Expanded provider group identifiers
+  are bound by exact request echoes and must be nonempty bounded printable ASCII,
+  but their values and market-root prefixes are neither interpreted nor
+  recorded. Exact `d0`/`d1`/`s` fields, positive identities, interval
+  overlap/clipping, gap proof, status, cost, disk, and collision gates remain.
+  It retains 20 definitions, a 375-call ceiling, and no download surface.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -321,7 +327,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> v13 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; exact-single-result-key assumption rejected)
   -> v14 preflight -> FAIL_CLOSED_METADATA_ONLY (5 calls; post-effective parent partial rejected)
   -> v15 preflight -> FAIL_CLOSED_METADATA_ONLY (6 calls; strict continuous interval bound rejected)
-  -> immutable v16 bounded interval-overlap-safe successor (20 definitions; at most 180 annual requests)
+  -> v16 preflight -> FAIL_CLOSED_METADATA_ONLY (7 calls; MCL expanded group-root assumption rejected)
+  -> immutable v17 bounded opaque-group-key successor (20 definitions; at most 180 annual requests)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -476,19 +483,23 @@ interval union had to cover the exact post-effective query continuously through
 the end-exclusive bound. Its approved attempt made six calls, passed MES
 discovery and post-effective parent validation, then failed closed at the
 strict interval-bound gate for the `MES.v.0` continuous response. The sealed
-report records only the affected field and price-free call context. V16 does
-not infer that an interval spanning a query boundary is missing coverage. It
-requires the exact request echoes, exact `d0`/`d1`/`s` entry fields, positive
-instrument identities, positive ISO ranges, and overlap with the exact query;
-only validated overlapping intervals are clipped to the query for a gap-free
-coverage union. Any wholly outside, malformed, duplicate, unrelated, or gapped
-interval, nonempty `not_found`, or other existing gate failure remains fail
-closed, and no interval values are recorded. V16 retains the exact v15 markets,
-schemas, 375-call ceiling, 300-second runtime, 30-second call timeout, $0 cost,
-zero retries, and metadata-only surface. A new separate approval is required
-before v16 may contact Databento. Only a passing report may freeze a
-deterministic acquisition plan bound to the then-committed implementation HEAD.
-Metadata approval never grants download authority.
+report records only the affected field and price-free call context. V16 did not
+infer that an interval spanning a query boundary was missing coverage. It
+required exact request echoes, exact `d0`/`d1`/`s` entry fields, positive
+identities, positive ISO ranges, query overlap, and a gap-free clipped union.
+Its approved attempt made seven calls and passed all three MES symbology gates,
+then failed closed because MCL parent expansion returned a bounded group key
+outside the locally assumed market-root prefix. V17 removes only that unsupported
+semantic assumption: result-group identifiers remain bounded, printable ASCII,
+and unrecorded, while the exact request echoes bind the provider response. Any
+malformed or unbounded group key, echo drift, invalid identity, wholly outside,
+duplicate, or gapped interval, nonempty `not_found`, or other existing gate
+failure remains fail closed. V17 retains the exact v16 markets, schemas,
+375-call ceiling, 300-second runtime, 30-second call timeout, $0 cost, zero
+retries, and metadata-only surface. A new separate approval is required before
+v17 may contact Databento. Only a passing report may freeze a deterministic
+acquisition plan bound to the then-committed implementation HEAD. Metadata
+approval never grants download authority.
 
 The one-second source proves reported-trade-bar evidence only. It cannot prove
 BBO availability, queue priority, guaranteed market-order execution, or precise
