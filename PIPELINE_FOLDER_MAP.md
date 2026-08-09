@@ -45,7 +45,8 @@ work and every real-data or publishing action remains separately controlled.
 | `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition.py` | Preserved unexecuted predecessor downloader is bound to the older v7 report shape and cannot consume the sealed v21 PASS evidence as current | No acquisition authority; retained because v21 evidence hashes it |
 | `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v21.py`; exact plan/audit; consumed authorization; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v21_failure/report.json` | One separately approved run completed 160 $0 cost calls and 36 downloads, then failed closed on the 7,200-second global ceiling; 36 hash-verified pairs are read-only failed-attempt staging evidence, with zero accepted/finalized pairs and zero final destinations | Authorization consumed; no retry, resume, promotion, decoding, or research-source authority |
 | `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v22.py`; exact plan/audit; v7 cleanup census; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v22_supersession/report.json` | Unexecuted plan preparation exposed a self-referential worktree snapshot: reconstructing after its three create-only outputs appeared changed the v7 census; all artifacts are preserved and sealed as `SUPERSEDED_PREPARATION_SELF_REFERENTIAL_CENSUS` | No authorization, provider calls, downloads, or cleanup mutation; v22 cannot execute as current |
-| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition_v23.py`; `scripts/prepare_apex_micro_phase1a_acquisition_v23.py`; `scripts/prepare_safe_cleanup_candidate_census_v8.py` | Reconstruction-stable non-resuming successor excludes only its three declared create-only outputs from the worktree snapshot while binding them separately; preserves v22 runtime, warning, rollback, cost, byte, disk, file, and concurrency protections | Local implementation only; plan/audit deferred until a new committed HEAD; no provider or download authority |
+| `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v23.py`; exact plan/audit; v8 cleanup census; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v23_supersession/report.json` | Its plan and cleanup census reconstruct exactly, but the unexecuted audit self-hashed a volatile exact free-disk byte reading and therefore changed after unrelated filesystem writes; preserved as `SUPERSEDED_PREPARATION_VOLATILE_CAPACITY_SNAPSHOT` | No authorization, provider calls, downloads, or cleanup mutation; v23 is removed from the current preparatory-operation allowlist |
+| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition_v24.py`; `scripts/prepare_apex_micro_phase1a_acquisition_v24.py`; `scripts/prepare_safe_cleanup_candidate_census_v9.py` | Volatile-capacity-safe successor retains the exact 160-request acquisition mechanics, records only the durable disk requirement/pass decision in the self-hashed audit, and requires fresh live free-space checks at plan creation and immediately before execution | Local implementation only; plan/audit deferred until a new committed HEAD; no provider or download authority |
 | `SYNTHETIC_ONLY` | `tests/test_micro_alpha_*.py` | Corrected ladder, authorization, metadata, disk, collision, partial, cost, retry, custody, and no-decode mechanics | No provider, row, or download authority |
 | `HISTORICAL_ROW_APPROVAL_REQUIRED` | Phase 1B/2 contracts in `src/futures_rebuild/micro_alpha_pipeline.py` | Decoder/causal routing contracts are prepared; Phase 1B/2 row processing has not executed | Separate row-read approval only after acquisition |
 | `NOT_IMPLEMENTED` | `configs/active_micro_alpha_research_ladder.json`; `data/active/catalogs/apex_micro.json` | Intentionally absent until publication and Phase 2 certification | Cannot register micro research |
@@ -103,7 +104,8 @@ PROJECT_OUTLINE design
   -> v21 timeout-safe cumulative metadata successor                CURRENT_REACHABLE / PASS_METADATA_ONLY / 180 calls / $0
   -> v21-bound annual acquisition successor                       RETIRED / runtime fail-closed / 36 staged / 0 accepted
   -> v22 non-resuming annual acquisition successor                RETIRED / unexecuted self-referential census preparation
-  -> v23 reconstruction-stable acquisition successor             PREPARED_NOT_EXECUTED / plan deferred until commit
+  -> v23 reconstruction-stable acquisition successor             RETIRED / unexecuted volatile-capacity audit preparation
+  -> v24 volatile-capacity-safe acquisition successor            PREPARED_NOT_EXECUTED / plan deferred until commit
   -> Phase 1A DBN + sidecar inactive custody                       PREPARED_NOT_EXECUTED / no final micro DBN exists
   -> Phase 1B definition/status/statistics/1m/1s decoding          row-read approval required
   -> Phase 2 1m feature + separate 1s execution foundations        row-read approval required
@@ -134,10 +136,14 @@ authorization is consumed and cannot authorize a retry. The v22 non-resuming
 implementation was committed, but its first unexecuted plan/audit preparation
 revealed that v7 recorded the worktree before its own three create-only outputs
 appeared. The exact v22 artifacts are preserved and superseded; no authorization
-was consumed and no provider call occurred. V23 corrects only that local
-determinism defect by excluding those three exact output status paths while
-binding their artifacts separately. Its plan/audit remain deferred until a new
-committed implementation HEAD and it has no provider authority.
+was consumed and no provider call occurred. V23 corrected that worktree defect,
+but its unexecuted audit self-hashed an exact live free-disk byte count and did
+not reconstruct after unrelated filesystem writes. Its exact outputs are
+preserved and superseded without provider access. V24 omits the volatile byte
+count from its self-hashed audit while retaining the durable required-free-space
+value, the pass/fail gate, and mandatory fresh live checks before execution.
+Its plan/audit remain deferred until a new committed implementation HEAD and it
+has no provider authority.
 Phase 1B/2 row processing is
 also unexecuted. The micro catalog is
 inactive, registration is blocked, and current download authority is absent. Apart

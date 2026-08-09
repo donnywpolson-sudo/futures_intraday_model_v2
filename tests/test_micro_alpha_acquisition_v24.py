@@ -9,18 +9,16 @@ import threading
 import warnings
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 
 import pytest
 
-from futures_rebuild import micro_alpha_acquisition_v23 as acquisition
-from futures_rebuild import research_gateway_policy
+from futures_rebuild import micro_alpha_acquisition_v24 as acquisition
 from futures_rebuild.boundary import (
     OperationClassification,
     OperationReceipt,
     RepoBoundary,
 )
-from futures_rebuild.canonical import sha256_file, sha256_json
+from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
 from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 from futures_rebuild.research_gateway_policy import PREPARATORY_REAL_HISTORY_OPERATIONS
 
@@ -31,16 +29,22 @@ HEAD = "d" * 40
 COPY_PATHS = (
     "configs/apex_micro_tier01_phase1a_acquisition_plan_v21.json",
     "configs/apex_micro_tier01_phase1a_acquisition_plan_v22.json",
+    "configs/apex_micro_tier01_phase1a_acquisition_plan_v23.json",
     "configs/dependency_lock_receipt.json",
-    "scripts/prepare_apex_micro_phase1a_acquisition_v23.py",
+    "scripts/prepare_apex_micro_phase1a_acquisition_v24.py",
     "scripts/prepare_apex_micro_phase1a_acquisition_v22_supersession.py",
+    "scripts/prepare_apex_micro_phase1a_acquisition_v23_supersession.py",
+    "scripts/audit_standard_data_topology_source_safe.py",
+    "scripts/prepare_safe_cleanup_candidate_census_v6.py",
+    "scripts/prepare_safe_cleanup_candidate_census_v7.py",
     "scripts/prepare_safe_cleanup_candidate_census_v8.py",
+    "scripts/prepare_safe_cleanup_candidate_census_v9.py",
     "src/futures_rebuild/boundary.py",
     "src/futures_rebuild/canonical.py",
     "src/futures_rebuild/live_cockpit/databento_auth.py",
     "src/futures_rebuild/micro_alpha_acquisition.py",
     "src/futures_rebuild/micro_alpha_acquisition_v21.py",
-    "src/futures_rebuild/micro_alpha_acquisition_v23.py",
+    "src/futures_rebuild/micro_alpha_acquisition_v24.py",
     "src/futures_rebuild/micro_alpha_pipeline.py",
     "src/futures_rebuild/research_gateway_policy.py",
     "src/futures_rebuild/runtime_environment.py",
@@ -51,6 +55,9 @@ COPY_PATHS = (
     "state/unpublished_evidence/apex_micro_phase1a_acquisition_plan_v22/audit.json",
     "state/unpublished_evidence/apex_micro_phase1a_acquisition_v22_supersession/report.json",
     "state/unpublished_evidence/safe_cleanup_candidate_census_v7/census.json",
+    "state/unpublished_evidence/apex_micro_phase1a_acquisition_plan_v23/audit.json",
+    "state/unpublished_evidence/apex_micro_phase1a_acquisition_v23_supersession/report.json",
+    "state/unpublished_evidence/safe_cleanup_candidate_census_v8/census.json",
 )
 
 
@@ -66,7 +73,7 @@ def test_prepare_script_supports_direct_path_execution_imports(
     ]
     monkeypatch.setattr(sys, "path", direct_path)
     namespace = runpy.run_path(
-        str(script_root / "prepare_apex_micro_phase1a_acquisition_v23.py"),
+        str(script_root / "prepare_apex_micro_phase1a_acquisition_v24.py"),
         run_name="_direct_script_import_probe",
     )
     assert namespace["CLEANUP_CENSUS_PATH"] == acquisition.CLEANUP_CENSUS_PATH
@@ -179,18 +186,10 @@ def _run(
         "mark_immutable": lambda _path: None,
     }
     arguments.update(overrides)
-    synthetic_operations = frozenset(
-        {*PREPARATORY_REAL_HISTORY_OPERATIONS, acquisition.OPERATION}
-    )
-    with patch.object(
-        research_gateway_policy,
-        "PREPARATORY_REAL_HISTORY_OPERATIONS",
-        synthetic_operations,
-    ):
-        return acquisition.execute_authorized_acquisition(**arguments)
+    return acquisition.execute_authorized_acquisition(**arguments)
 
 
-def test_v23_plan_is_exact_annual_non_resuming_successor(
+def test_v24_plan_is_exact_annual_non_resuming_successor(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _copy_root(tmp_path, monkeypatch)
@@ -220,8 +219,12 @@ def test_v23_plan_is_exact_annual_non_resuming_successor(
     assert plan["superseded_v22_preparation"][
         "provider_execution_performed"
     ] is False
+    assert plan["superseded_v23_preparation"]["execute_as_current"] is False
+    assert plan["superseded_v23_preparation"][
+        "provider_execution_performed"
+    ] is False
     assert plan["custody"]["successor_redownloads_every_request"] is True
-    assert acquisition.STAGING_ROOT.as_posix().endswith("apex_micro_tier01_v23")
+    assert acquisition.STAGING_ROOT.as_posix().endswith("apex_micro_tier01_v24")
     for item in plan["requests"]:
         assert f"/{item['year']}/" in item["dbn_destination"]
         assert item["sidecar_destination"] == (
@@ -234,6 +237,68 @@ def test_v23_plan_is_exact_annual_non_resuming_successor(
         else:
             assert query["stype_in"] == "continuous"
             assert query["symbols"] == [f"{item['market']}.v.0"]
+
+
+def test_v24_audit_is_exactly_reconstructible_across_free_space_drift(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _copy_root(tmp_path, monkeypatch)
+    topology_core = {
+        "state": "PASS_SOURCE_SAFE_PROVENANCE_METADATA_ONLY",
+        "payload_safety": {"historical_rows_read": 0},
+    }
+    topology = {**topology_core, "report_id": sha256_json(topology_core)}
+    cleanup_core = {
+        "state": "PREPARED_NO_MUTATION_SEPARATE_EXACT_CLEANUP_APPROVAL_REQUIRED",
+        "committed_head": HEAD,
+        "candidate_count": 0,
+        "cleanup_execution": {"performed": False},
+        "payload_safety": {"historical_rows_read": False},
+    }
+    cleanup = {**cleanup_core, "census_id": sha256_json(cleanup_core)}
+    for relative, value in (
+        (acquisition.STANDARD_TOPOLOGY_PATH, topology),
+        (acquisition.CLEANUP_CENSUS_PATH, cleanup),
+    ):
+        destination = root / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(canonical_bytes(value) + b"\n")
+    first = acquisition.build_plan_audit(
+        root=root,
+        fresh_standard_topology_report=topology,
+        fresh_cleanup_census=cleanup,
+        disk_usage=lambda _path: SimpleNamespace(free=10**12),
+    )
+    second = acquisition.build_plan_audit(
+        root=root,
+        fresh_standard_topology_report=topology,
+        fresh_cleanup_census=cleanup,
+        disk_usage=lambda _path: SimpleNamespace(free=10**12 - 999_999),
+    )
+    assert first == second
+    assert first["capacity"]["observed_free_disk_bytes_recorded"] is False
+    assert "observed_free_disk_bytes" not in first["capacity"]
+    assert first["capacity"][
+        "live_capacity_recheck_required_immediately_before_execution"
+    ] is True
+    with pytest.raises(UnauthorizedOperation, match="insufficient disk"):
+        acquisition.build_plan_audit(
+            root=root,
+            fresh_standard_topology_report=topology,
+            fresh_cleanup_census=cleanup,
+            disk_usage=lambda _path: SimpleNamespace(free=0),
+        )
+
+
+def test_v24_execution_rechecks_live_disk_before_consuming_authority(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _copy_root(tmp_path, monkeypatch)
+    fleet = FakeFleet()
+    with pytest.raises(UnauthorizedOperation, match="insufficient disk capacity"):
+        _run(root, fleet, disk_usage=lambda _path: SimpleNamespace(free=0))
+    assert fleet.factory_calls == 0
+    assert not (root / acquisition.STAGING_ROOT).exists()
 
 
 def test_success_is_bounded_and_warning_messages_are_redacted(
@@ -345,8 +410,8 @@ def test_nonzero_cost_and_destination_collision_fail_before_download(
     assert collision_fleet.factory_calls == 0
 
 
-def test_v23_operation_is_retired_and_executor_has_no_decode_surface() -> None:
-    assert acquisition.OPERATION not in PREPARATORY_REAL_HISTORY_OPERATIONS
+def test_v24_operation_is_allowlisted_but_executor_has_no_decode_surface() -> None:
+    assert acquisition.OPERATION in PREPARATORY_REAL_HISTORY_OPERATIONS
     source = inspect.getsource(acquisition)
     assert "read_dbn" not in source
     assert "DBNStore" not in source
