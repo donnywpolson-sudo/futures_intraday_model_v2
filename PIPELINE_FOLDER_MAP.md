@@ -28,8 +28,9 @@ work and every real-data or publishing action remains separately controlled.
 | `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v9.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v9.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v9/report.json` | One approved two-stage discovery attempt made four metadata calls and failed closed at the first MES resolve because the local validator required an opaque nonempty `partial` list to equal the requested-symbol singleton; the sealed report records only the field name, not list contents or cardinality; $0, zero retries/downloads/rows/DBNs | Consumed authorization cannot execute again; report grants no acquisition authority |
 | `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v10.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v10.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v10/report.json` | One approved opaque-single-partial attempt made four metadata calls and failed closed at the first MES resolve because the exact-string `partial` list did not satisfy the local one-entry ceiling; the sealed report records neither contents nor exact cardinality; $0, zero retries/downloads/rows/DBNs | Consumed authorization cannot execute again; report grants no acquisition authority |
 | `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v11.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v11.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v11/report.json` | One approved bounded opaque-partial attempt made four metadata calls and failed closed at the first MES resolve because the local validator guessed exact integer zero for the SDK-opaque application `status` field; the sealed report records only the field name; $0, zero retries/downloads/rows/DBNs | Consumed authorization cannot execute again; report grants no acquisition authority |
-| `PREPARED_NOT_EXECUTED` | `configs/apex_micro_tier01_databento_metadata_preflight_v12.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v12.py` | Exact-scope SDK-contract-safe successor requires a bounded scalar shape for opaque application `status` without recording its value, while retaining exact request/echo/result/message/date, partial/not-found, entitlement, cost, byte, disk and collision gates; 20 definitions and a 375-call/$0/zero-retry ceiling with no download surface | Exact staging, commit, and new single-use metadata/provider approval required |
-| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition.py` | Phase 1A annual market-year create-only inactive-custody downloader implemented and adversarially tested; canonical `data/dbn/<schema>/<market>/<year>/` tree only; at most two isolated download clients, stop-after-first-failure scheduling, and no DBN output | Separate download approval absent; passing v12 preflight and committed HEAD required first |
+| `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v12.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v12.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v12/report.json` | One approved SDK-contract-safe status attempt made four metadata calls and failed closed at the first MES resolve because the local validator guessed an exact empty-or-OK allowlist for the SDK-opaque `message` field; the sealed report records only the field name; $0, zero retries/downloads/rows/DBNs | Consumed authorization cannot execute again; report grants no acquisition authority |
+| `PREPARED_NOT_EXECUTED` | `configs/apex_micro_tier01_databento_metadata_preflight_v13.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v13.py` | Exact-scope SDK-opaque-message-safe successor requires bounded scalar status and bounded exact-string message shapes without recording values, while retaining exact request/echo/result/date, partial/not-found, entitlement, cost, byte, disk and collision gates; 20 definitions and a 375-call/$0/zero-retry ceiling with no download surface | Exact staging, commit, and new single-use metadata/provider approval required |
+| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition.py` | Phase 1A annual market-year create-only inactive-custody downloader implemented and adversarially tested; canonical `data/dbn/<schema>/<market>/<year>/` tree only; at most two isolated download clients, stop-after-first-failure scheduling, and no DBN output | Separate download approval absent; passing v13 preflight and committed HEAD required first |
 | `SYNTHETIC_ONLY` | `tests/test_micro_alpha_*.py` | Corrected ladder, authorization, metadata, disk, collision, partial, cost, retry, custody, and no-decode mechanics | No provider, row, or download authority |
 | `HISTORICAL_ROW_APPROVAL_REQUIRED` | Phase 1B/2 contracts in `src/futures_rebuild/micro_alpha_pipeline.py` | Decoder/causal routing contracts are prepared; Phase 1B/2 row processing has not executed | Separate row-read approval only after acquisition |
 | `NOT_IMPLEMENTED` | `configs/active_micro_alpha_research_ladder.json`; `data/active/catalogs/apex_micro.json` | Intentionally absent until publication and Phase 2 certification | Cannot register micro research |
@@ -74,7 +75,8 @@ PROJECT_OUTLINE design
   -> v9 two-stage prelaunch successor                              RETIRED / fail-closed opaque-partial evidence
   -> v10 opaque-single-partial successor                           RETIRED / fail-closed cardinality evidence
   -> v11 bounded opaque-partial-flag successor                     RETIRED / fail-closed status-semantic evidence
-  -> immutable v12 SDK-contract-safe successor                     PREPARED_NOT_EXECUTED / approval absent
+  -> v12 SDK-contract-safe status successor                        RETIRED / fail-closed message-semantic evidence
+  -> immutable v13 SDK-opaque-message-safe successor               PREPARED_NOT_EXECUTED / approval absent
   -> exact audited acquisition plan                                NOT_IMPLEMENTED until preflight PASS
   -> Phase 1A DBN + sidecar inactive custody                       PREPARED_NOT_EXECUTED / download authority absent
   -> Phase 1B definition/status/statistics/1m/1s decoding          row-read approval required
@@ -93,12 +95,12 @@ explicit and multi-year DBNs are forbidden. The prepared source scope is MES, MC
 and M6E across the required Databento Standard historical schemas: definition,
 status, statistics, ohlcv-1m, and ohlcv-1s. No target micro DBN currently exists.
 
-No micro phase is labeled complete. The v2, v4, v5, v6, v7, v8, v9, v10, and v11 metadata-only attempts
+No micro phase is labeled complete. The v2, v4, v5, v6, v7, v8, v9, v10, v11, and v12 metadata-only attempts
 executed once each and produced only preserved fail-closed metadata evidence.
-The v12 successor and Phase 1A downloader are implemented but unexecuted. Phase
+The v13 successor and Phase 1A downloader are implemented but unexecuted. Phase
 1B/2 row processing is also unexecuted. The micro catalog is
 inactive, registration is blocked, and download authority is absent. Apart
-from the preserved price-free v2, v4, v5, v6, v7, v8, v9, v10, and v11 failure reports, the code proves mechanics
+from the preserved price-free v2, v4, v5, v6, v7, v8, v9, v10, v11, and v12 failure reports, the code proves mechanics
 with synthetic records only.
 
 ## Active and protected folders
