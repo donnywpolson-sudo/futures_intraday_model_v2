@@ -13,11 +13,18 @@ from futures_rebuild.micro_alpha_acquisition_v21 import (
     write_acquisition_plan_create_only,
     write_plan_audit_create_only,
 )
-from scripts.audit_standard_data_topology_source_safe import build_report
-from scripts.prepare_safe_cleanup_candidate_census_v6 import (
-    OUTPUT as CLEANUP_CENSUS_PATH,
-    write_census_create_only,
-)
+if __package__:
+    from scripts.audit_standard_data_topology_source_safe import build_report
+    from scripts.prepare_safe_cleanup_candidate_census_v6 import (
+        OUTPUT as CLEANUP_CENSUS_PATH,
+        write_census_create_only,
+    )
+else:
+    from audit_standard_data_topology_source_safe import build_report
+    from prepare_safe_cleanup_candidate_census_v6 import (
+        OUTPUT as CLEANUP_CENSUS_PATH,
+        write_census_create_only,
+    )
 
 
 ROOT = Path(__file__).resolve().parents[1]

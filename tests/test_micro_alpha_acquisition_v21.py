@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import inspect
 import json
+import runpy
 import shutil
+import sys
 import threading
 from pathlib import Path
 from types import SimpleNamespace
@@ -41,6 +43,27 @@ COPY_PATHS = (
     "state/unpublished_evidence/apex_micro_metadata_preflight_v21/report.json",
     "state/unpublished_evidence/standard_data_topology_source_safe_audit/report.json",
 )
+
+
+def test_prepare_script_supports_direct_path_execution_imports(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    script_root = ROOT / "scripts"
+    root_text = str(ROOT.resolve()).casefold()
+    direct_path = [str(script_root)] + [
+        item
+        for item in sys.path
+        if item and str(Path(item).resolve()).casefold() != root_text
+    ]
+    monkeypatch.setattr(sys, "path", direct_path)
+
+    namespace = runpy.run_path(
+        str(script_root / "prepare_apex_micro_phase1a_acquisition_v21.py"),
+        run_name="_direct_script_import_probe",
+    )
+
+    assert namespace["CLEANUP_CENSUS_PATH"] == acquisition.CLEANUP_CENSUS_PATH
+    assert callable(namespace["build_report"])
 
 
 def _copy_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
