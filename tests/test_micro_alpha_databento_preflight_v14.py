@@ -20,12 +20,15 @@ from futures_rebuild.micro_alpha_databento_preflight import (
     MetadataProviderApis,
     OPERATION,
 )
-from futures_rebuild.micro_alpha_databento_preflight_v12 import (
+from futures_rebuild.micro_alpha_databento_preflight_v14 import (
+    MAXIMUM_MESSAGE_STRING_LENGTH,
+    MAXIMUM_RESULT_GROUPS,
     MAXIMUM_STATUS_INTEGER_MAGNITUDE,
     MAXIMUM_STATUS_STRING_LENGTH,
     PLAN_PATH,
     REPORT_PATH,
     _opaque_application_status,
+    _opaque_success_message,
     _symbology_summary,
     build_plan,
     execute_preflight,
@@ -80,12 +83,16 @@ class FakeMetadataProvider:
         self,
         *,
         status: object = 200,
+        message: object = "Resolved successfully",
         partial: object = _AUTO_PARTIAL,
         cost: object = 0,
+        expanded_result_groups: bool = True,
     ) -> None:
         self.status = status
+        self.message = message
         self.partial = partial
         self.cost = cost
+        self.expanded_result_groups = expanded_result_groups
         self.calls: list[str] = []
         self.effective_dates = {
             "MES": "2019-05-06",
@@ -135,7 +142,7 @@ class FakeMetadataProvider:
             if self.partial is _AUTO_PARTIAL
             else self.partial
         )
-        return _response(
+        response = _response(
             symbol=symbol,
             stype_in=str(kwargs["stype_in"]),
             start=query_start,
@@ -143,7 +150,14 @@ class FakeMetadataProvider:
             effective=effective,
             partial=partial,
             status=self.status,
+            message=self.message,
         )
+        if self.expanded_result_groups:
+            response["result"] = {
+                f"{market}A": [{"d0": effective, "d1": str(kwargs["end_date"]), "s": 123}],
+                f"{market}B": [{"d0": effective, "d1": str(kwargs["end_date"]), "s": 124}],
+            }
+        return response
 
     def get_cost(self, **_kwargs: object) -> object:
         self.calls.append("get_cost")
@@ -173,6 +187,7 @@ def _response(
     effective: str = "2019-05-06",
     partial: object = None,
     status: object = 200,
+    message: object = "Resolved successfully",
 ) -> dict[str, object]:
     return {
         "result": {symbol: [{"d0": effective, "d1": end, "s": 123}]},
@@ -183,7 +198,7 @@ def _response(
         "end_date": end,
         "partial": ["OPAQUE"] if partial is None else partial,
         "not_found": [],
-        "message": "OK",
+        "message": message,
         "status": status,
     }
 
@@ -199,7 +214,7 @@ def _run(root: Path, provider: FakeMetadataProvider) -> dict[str, object]:
     )
 
 
-def test_v12_plan_preserves_exact_scope_and_forbids_download() -> None:
+def test_v14_plan_preserves_exact_scope_and_forbids_download() -> None:
     plan = validate_plan(
         json.loads((ROOT / PLAN_PATH).read_text(encoding="utf-8")), root=ROOT
     )
@@ -214,19 +229,22 @@ def test_v12_plan_preserves_exact_scope_and_forbids_download() -> None:
     assert plan["forbidden"]["timeseries_download"] is True
     assert plan["forbidden"]["historical_row_read"] is True
     assert plan["checks"]["application_status_bounded_opaque_scalar_shape"] is True
+    assert plan["checks"]["symbology_success_message_bounded_opaque_string_shape"] is True
+    assert plan["checks"]["bounded_root_consistent_result_groups"] is True
+    assert plan["limits"]["maximum_result_groups"] == MAXIMUM_RESULT_GROUPS
 
 
-def test_v12_preserves_v11_failure_byte_for_byte() -> None:
+def test_v14_preserves_v13_failure_byte_for_byte() -> None:
     report = load_predecessor_failure(root=ROOT)
     assert report["report_id"] == (
-        "86541273eff2dcfc3e20912b00d91e6c742a2c62f5411528d3b312d68bf0405a"
+        "000f5e3878fe694b0e0c75db7712f454395e50677233b5147f2ad2ae726e6c84"
     )
-    assert report["failed_validation_field"] == "status"
+    assert report["failed_validation_field"] == "result"
     assert report["timeseries_download_calls"] == 0
 
 
 @pytest.mark.parametrize("value", [0, 200, -1, "OK", "success"])
-def test_v12_accepts_bounded_opaque_status_shapes(value: object) -> None:
+def test_v13_accepts_bounded_opaque_status_shapes(value: object) -> None:
     disposition = _opaque_application_status(value)
     assert disposition.endswith("VALUE_NOT_RECORDED")
     assert str(value) not in disposition
@@ -243,12 +261,29 @@ def test_v12_accepts_bounded_opaque_status_shapes(value: object) -> None:
         MAXIMUM_STATUS_INTEGER_MAGNITUDE + 1,
     ],
 )
-def test_v12_rejects_malformed_or_unbounded_status(value: object) -> None:
+def test_v13_rejects_malformed_or_unbounded_status(value: object) -> None:
     with pytest.raises(IntegrityError, match="application status"):
         _opaque_application_status(value)
 
 
-def test_v12_summary_records_status_shape_not_value() -> None:
+@pytest.mark.parametrize("value", ["", "OK", "Resolved successfully", "x" * 1024])
+def test_v13_accepts_bounded_opaque_message_shapes(value: str) -> None:
+    disposition = _opaque_success_message(value)
+    assert disposition.endswith("VALUE_NOT_RECORDED")
+    if value:
+        assert value not in disposition
+
+
+@pytest.mark.parametrize(
+    "value",
+    [None, True, 200, ["OK"], {"message": "OK"}, "x" * (MAXIMUM_MESSAGE_STRING_LENGTH + 1)],
+)
+def test_v13_rejects_nonstring_or_unbounded_message(value: object) -> None:
+    with pytest.raises(IntegrityError, match="success message"):
+        _opaque_success_message(value)
+
+
+def test_v13_summary_records_status_and_message_shapes_not_values() -> None:
     summary = _symbology_summary(
         _response(status=200),
         symbol="MES.FUT",
@@ -259,10 +294,90 @@ def test_v12_summary_records_status_shape_not_value() -> None:
     )
     assert summary["application_status_shape"] == "BOUNDED_INTEGER_VALUE_NOT_RECORDED"
     assert summary["application_status_value_recorded"] is False
+    assert summary["success_message_shape"] == (
+        "BOUNDED_NONEMPTY_STRING_VALUE_NOT_RECORDED"
+    )
+    assert summary["success_message_value_recorded"] is False
     assert 200 not in summary.values()
+    assert "Resolved successfully" not in summary.values()
 
 
-def test_v12_status_correction_does_not_weaken_exact_echo_gate() -> None:
+def test_v14_accepts_bounded_root_consistent_result_groups_without_recording_values() -> None:
+    response = _response()
+    response["result"] = {
+        "MESM9": [{"d0": "2019-05-06", "d1": "2026-08-09", "s": 123}],
+        "MESU9": [{"d0": "2019-05-06", "d1": "2026-08-09", "s": "124"}],
+    }
+    summary = _symbology_summary(
+        response,
+        symbol="MES.FUT",
+        stype_in="parent",
+        query_start="2010-01-01",
+        end="2026-08-09",
+        allow_discovery_partial=True,
+    )
+    assert summary["result_group_count"] == 2
+    assert summary["mapping_interval_count"] == 2
+    assert summary["requested_result_group_present"] is False
+    assert summary["result_group_keys_recorded"] is False
+    assert summary["instrument_identity_values_recorded"] is False
+    assert "MESM9" not in summary.values()
+    assert "MESU9" not in summary.values()
+    assert 123 not in summary.values()
+    assert "123" not in summary.values()
+
+
+def test_v14_rejects_unrelated_result_group_root() -> None:
+    response = _response()
+    response["result"] = {
+        "MCLA": [{"d0": "2019-05-06", "d1": "2026-08-09", "s": 123}]
+    }
+    with pytest.raises(IntegrityError, match="root is unrelated"):
+        _symbology_summary(
+            response,
+            symbol="MES.FUT",
+            stype_in="parent",
+            query_start="2010-01-01",
+            end="2026-08-09",
+            allow_discovery_partial=True,
+        )
+
+
+@pytest.mark.parametrize("identity", [None, True, 0, -1, "", "ABC", 2**64])
+def test_v14_rejects_invalid_instrument_identity(identity: object) -> None:
+    response = _response()
+    response["result"] = {
+        "MESA": [{"d0": "2019-05-06", "d1": "2026-08-09", "s": identity}]
+    }
+    with pytest.raises(IntegrityError, match="instrument identity"):
+        _symbology_summary(
+            response,
+            symbol="MES.FUT",
+            stype_in="parent",
+            query_start="2010-01-01",
+            end="2026-08-09",
+            allow_discovery_partial=True,
+        )
+
+
+def test_v14_rejects_result_group_ceiling() -> None:
+    response = _response()
+    response["result"] = {
+        f"MES{index}": [{"d0": "2019-05-06", "d1": "2026-08-09", "s": index + 1}]
+        for index in range(MAXIMUM_RESULT_GROUPS + 1)
+    }
+    with pytest.raises(IntegrityError, match="group ceiling"):
+        _symbology_summary(
+            response,
+            symbol="MES.FUT",
+            stype_in="parent",
+            query_start="2010-01-01",
+            end="2026-08-09",
+            allow_discovery_partial=True,
+        )
+
+
+def test_v13_status_correction_does_not_weaken_exact_echo_gate() -> None:
     response = _response(status=200)
     response["symbols"] = ["MCL.FUT"]
     with pytest.raises(IntegrityError, match="symbols echo drifted"):
@@ -276,7 +391,7 @@ def test_v12_status_correction_does_not_weaken_exact_echo_gate() -> None:
         )
 
 
-def test_v12_full_synthetic_metadata_mechanics_pass_without_download(
+def test_v14_full_synthetic_metadata_mechanics_pass_without_download(
     tmp_path: Path,
 ) -> None:
     root = _copy_root(tmp_path)
@@ -292,7 +407,7 @@ def test_v12_full_synthetic_metadata_mechanics_pass_without_download(
     assert not (root / "data/dbn").exists()
 
 
-def test_v12_malformed_live_status_fails_closed_and_sanitized(
+def test_v13_malformed_live_status_fails_closed_and_sanitized(
     tmp_path: Path,
 ) -> None:
     root = _copy_root(tmp_path)
@@ -306,7 +421,21 @@ def test_v12_malformed_live_status_fails_closed_and_sanitized(
     assert report["timeseries_download_calls"] == 0
 
 
-def test_v12_nonzero_cost_still_fails_closed(tmp_path: Path) -> None:
+def test_v13_malformed_live_message_fails_closed_and_sanitized(
+    tmp_path: Path,
+) -> None:
+    root = _copy_root(tmp_path)
+    report = _run(root, FakeMetadataProvider(message={"secret": "value"}))
+    assert report["state"] == "FAIL_CLOSED_METADATA_ONLY"
+    assert report["failure_code"] == "OPAQUE_SUCCESS_MESSAGE_SHAPE"
+    assert report["failed_validation_field"] == "message"
+    assert report["provider_call_total"] == 4
+    assert report["provider_error_message_recorded"] is False
+    assert "secret" not in json.dumps(report)
+    assert report["timeseries_download_calls"] == 0
+
+
+def test_v13_nonzero_cost_still_fails_closed(tmp_path: Path) -> None:
     root = _copy_root(tmp_path)
     report = _run(root, FakeMetadataProvider(status=200, cost="0.01"))
     assert report["state"] == "FAIL_CLOSED_METADATA_ONLY"
@@ -315,7 +444,7 @@ def test_v12_nonzero_cost_still_fails_closed(tmp_path: Path) -> None:
     assert report["timeseries_download_calls"] == 0
 
 
-def test_v12_report_is_create_only(tmp_path: Path) -> None:
+def test_v13_report_is_create_only(tmp_path: Path) -> None:
     root = _copy_root(tmp_path)
     first = _run(root, FakeMetadataProvider(status=200))
     assert first["state"] == "PASS_METADATA_ONLY"
@@ -323,19 +452,13 @@ def test_v12_report_is_create_only(tmp_path: Path) -> None:
         _run(root, FakeMetadataProvider(status=200))
 
 
-def test_v12_documentation_preserves_implementation_reality() -> None:
+def test_v14_documentation_preserves_implementation_reality() -> None:
     outline = (ROOT / "PROJECT_OUTLINE.md").read_text(encoding="utf-8")
     folder_map = (ROOT / "PIPELINE_FOLDER_MAP.md").read_text(encoding="utf-8")
     normalized_outline = " ".join(outline.split())
-    assert "v11 preflight -> FAIL_CLOSED_METADATA_ONLY" in outline
-    assert "v12 preflight -> FAIL_CLOSED_METADATA_ONLY" in outline
     assert "v13 preflight -> FAIL_CLOSED_METADATA_ONLY" in outline
     assert "immutable v14 provider-result-group-safe successor" in outline
     assert "v14 may contact Databento" in normalized_outline
-    assert "v11 bounded opaque-partial-flag successor" in folder_map
-    assert "RETIRED / fail-closed status-semantic evidence" in folder_map
-    assert "v12 SDK-contract-safe status successor" in folder_map
-    assert "RETIRED / fail-closed message-semantic evidence" in folder_map
     assert "v13 SDK-opaque-message-safe predecessor" in folder_map
     assert "RETIRED / fail-closed result-group evidence" in folder_map
     assert "immutable v14 provider-result-group-safe successor" in folder_map

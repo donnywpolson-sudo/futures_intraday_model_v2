@@ -85,14 +85,20 @@ live cockpit. Automatic order execution is outside this project's scope.
   sealed $0 report records only the field name; the consumed authorization
   cannot run again.
 - `configs/apex_micro_tier01_databento_metadata_preflight_v13.json`: immutable
-  SDK-opaque-message-safe successor. The installed Databento SDK requires both
-  `status` and `message` keys but does not interpret either value when
-  constructing the instrument map. V13 accepts only bounded scalar status and
-  bounded exact-string message shapes, records no values, and still requires
-  exact single-symbol request, echo, result-key, mapping-date, `partial`, and
-  `not_found` proof. Parent plus continuous verification from the discovered date requires both status
-  lists empty. It retains 20 definitions, a 375-call ceiling, and no download
-  surface.
+  executed SDK-opaque-message-safe successor. Its approved attempt made four
+  calls and reached the first MES response's `result` field, then failed closed
+  because the local validator incorrectly required the result map to contain
+  exactly the requested symbol as its sole group key. Its sealed $0 report
+  records only the field name; the consumed authorization cannot run again.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v14.json`: immutable
+  v14 provider-result-group-safe successor. The installed Databento SDK
+  iterates every returned result group and does not require group keys to equal
+  the single request echo. V14 retains exact request echoes and validates every
+  bounded root-consistent group, every instrument ID and every mapping date
+  without recording group keys or identity values. Parent plus continuous
+  verification from the discovered date still requires empty post-effective
+  `partial` and `not_found` lists. It retains 20 definitions, a 375-call
+  ceiling, and no download surface.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -301,7 +307,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> v10 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; exact-one partial ceiling rejected)
   -> v11 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; guessed exact-zero status semantic rejected)
   -> v12 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; guessed message allowlist rejected)
-  -> immutable v13 SDK-opaque-message-safe successor (20 definitions; at most 180 annual requests)
+  -> v13 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; exact-single-result-key assumption rejected)
+  -> immutable v14 provider-result-group-safe successor (20 definitions; at most 180 annual requests)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -434,10 +441,21 @@ assumption: it requires an exact bounded string shape, records only whether the
 string is empty or nonempty, and never records its content. The installed SDK's
 HTTP error rejection plus exact echo, result, interval, status, prelaunch, and
 post-effective gates remain the success basis. Non-string or over-1,024-character
-messages fail closed. V13 retains the exact v12 markets, schemas, 375-call
+messages fail closed. V13 retained the exact v12 markets, schemas, 375-call
 ceiling, 300-second runtime, 30-second call timeout, $0 cost, zero retries, and
-metadata-only surface. A new separate approval is required before v13 may
-contact Databento. Only a passing report may freeze a deterministic
+metadata-only surface. Its approved attempt made four calls and failed closed
+at the first MES discovery response because the local validator required the
+`result` map to contain exactly `MES.FUT` as its sole key. The sealed report
+records only the `result` field name, incurred $0, made no download, read no
+rows, and created no DBN. V14 corrects only that local assumption: it retains
+the exact request echo as the request binding, permits only bounded
+market-root-consistent result groups, validates every positive instrument ID
+and bounded mapping interval, and records neither result-group keys nor
+identity values. Unrelated roots, malformed or duplicate intervals, invalid
+identities, excessive groups, and excessive intervals fail closed. V14 retains
+the exact v13 markets, schemas, 375-call ceiling, 300-second runtime, 30-second
+call timeout, $0 cost, zero retries, and metadata-only surface. A new separate
+approval is required before v14 may contact Databento. Only a passing report may freeze a deterministic
 acquisition plan bound to the then-committed implementation HEAD. Metadata
 approval never grants download authority.
 

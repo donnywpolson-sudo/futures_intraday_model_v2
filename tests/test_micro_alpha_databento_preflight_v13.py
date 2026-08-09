@@ -370,10 +370,10 @@ def test_v13_documentation_preserves_implementation_reality() -> None:
     outline = (ROOT / "PROJECT_OUTLINE.md").read_text(encoding="utf-8")
     folder_map = (ROOT / "PIPELINE_FOLDER_MAP.md").read_text(encoding="utf-8")
     normalized_outline = " ".join(outline.split())
-    assert "v11 preflight -> FAIL_CLOSED_METADATA_ONLY" in outline
-    assert "immutable v13 SDK-opaque-message-safe successor" in outline
-    assert "v13 may contact Databento" in normalized_outline
-    assert "v11 bounded opaque-partial-flag successor" in folder_map
-    assert "RETIRED / fail-closed status-semantic evidence" in folder_map
-    assert "immutable v13 SDK-opaque-message-safe successor" in folder_map
-    assert "passing v13 preflight and committed HEAD required first" in folder_map
+    assert "v13 preflight -> FAIL_CLOSED_METADATA_ONLY" in outline
+    assert "immutable v14 provider-result-group-safe successor" in outline
+    assert "v14 may contact Databento" in normalized_outline
+    assert "v13 SDK-opaque-message-safe predecessor" in folder_map
+    assert "RETIRED / fail-closed result-group evidence" in folder_map
+    assert "immutable v14 provider-result-group-safe successor" in folder_map
+    assert "passing v14 preflight and committed HEAD required first" in folder_map
