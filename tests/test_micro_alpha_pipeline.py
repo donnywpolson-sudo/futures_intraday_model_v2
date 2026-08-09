@@ -18,6 +18,7 @@ from futures_rebuild.micro_alpha_pipeline import (
     TIER_2_ADDITIONS,
     TIER_2_MARKETS,
     TIER_3_MARKETS,
+    annual_market_year_intervals,
     build_product_reference_requirements,
     build_phase2_contract,
     classify_product_session,
@@ -77,18 +78,55 @@ def test_phase1a_destinations_match_standard_folder_shape(market: str, schema: s
     assert paths["sidecar"] == paths["dbn"] + ".manifest.json"
 
 
+def test_phase1a_splits_launch_and_current_bounds_into_distinct_market_years() -> None:
+    intervals = annual_market_year_intervals(
+        start="2019-05-06", end_exclusive="2026-08-08",
+    )
+    assert intervals[0] == {
+        "year": 2019,
+        "start": "2019-05-06",
+        "end_exclusive": "2020-01-01",
+        "interval": "2019-05-06_2020-01-01",
+        "partial_launch_year": True,
+        "partial_latest_year": False,
+    }
+    assert intervals[-1] == {
+        "year": 2026,
+        "start": "2026-01-01",
+        "end_exclusive": "2026-08-08",
+        "interval": "2026-01-01_2026-08-08",
+        "partial_launch_year": False,
+        "partial_latest_year": True,
+    }
+    assert len(intervals) == 8
+
+
+def test_phase1a_rejects_multi_year_and_wrong_year_destinations() -> None:
+    with pytest.raises(ContractError, match="one market-year"):
+        phase1a_paths(
+            market="MES", schema="ohlcv-1m", year=2019,
+            interval="2019-05-06_2021-01-01",
+        )
+    with pytest.raises(ContractError, match="one market-year"):
+        phase1a_paths(
+            market="MES", schema="ohlcv-1m", year=2020,
+            interval="2019-05-06_2020-01-01",
+        )
+
+
 def test_phase1b_routes_features_execution_and_diagnostics_separately() -> None:
     release = "a" * 64
+    interval = "2024-01-01_2025-01-01"
     assert phase1b_role("ohlcv-1m") == "CAUSAL_FEATURE_FOUNDATION_INPUT"
     assert phase1b_role("ohlcv-1s") == "CAUSAL_EXECUTION_EVIDENCE_INPUT"
     assert phase1b_destination(
-        market="MES", schema="ohlcv-1m", year=2024, interval="x", release_id=release,
+        market="MES", schema="ohlcv-1m", year=2024, interval=interval, release_id=release,
     ).startswith("data/raw/MES/2024/")
     assert phase1b_destination(
-        market="MES", schema="ohlcv-1s", year=2024, interval="x", release_id=release,
+        market="MES", schema="ohlcv-1s", year=2024, interval=interval, release_id=release,
     ).startswith("data/outcome_sources/MES/2024/")
     assert phase1b_destination(
-        market="MES", schema="statistics", year=2024, interval="x", release_id=release,
+        market="MES", schema="statistics", year=2024, interval=interval, release_id=release,
     ).startswith("data/market_state/statistics/MES/2024/")
 
 

@@ -22,8 +22,9 @@ from .boundary import OperationClassification, OperationReceipt, RepoBoundary
 from .canonical import canonical_bytes, sha256_file, sha256_json
 from .errors import IntegrityError, UnauthorizedOperation
 from .live_cockpit.databento_auth import resolve_databento_api_key
-from .micro_alpha_databento_preflight import (
+from .micro_alpha_databento_preflight_v5 import (
     CREDENTIAL_SOURCE,
+    MAXIMUM_ANNUAL_REQUESTS,
     MAXIMUM_TOTAL_ACQUISITION_BYTES,
     PLAN_PATH as PREFLIGHT_PLAN_PATH,
     REPORT_PATH as PREFLIGHT_REPORT_PATH,
@@ -32,9 +33,11 @@ from .micro_alpha_pipeline import (
     CURRENT_ACQUISITION_MARKETS,
     DATASET,
     SCHEMAS,
+    annual_market_year_intervals,
     build_product_reference_requirements,
     phase1a_paths,
     validate_phase1a_request,
+    validate_annual_market_year_interval,
     validate_product_effective_date,
 )
 from .runtime_environment import require_locked_repository_environment
@@ -45,8 +48,8 @@ OPERATION: Final = "ACQUIRE_APEX_MICRO_TIER01_RAW_DBN_INACTIVE_CUSTODY_ONCE"
 STAGING_ROOT: Final = Path("state/provider_acquisition_staging/apex_micro_tier01")
 MAXIMUM_RUNTIME_SECONDS: Final = 7200
 MAXIMUM_RETRIES: Final = 0
-MAXIMUM_DBN_FILES: Final = 20
-MAXIMUM_SIDECARS: Final = 20
+MAXIMUM_DBN_FILES: Final = MAXIMUM_ANNUAL_REQUESTS
+MAXIMUM_SIDECARS: Final = MAXIMUM_ANNUAL_REQUESTS
 DISK_SAFETY_BYTES: Final = 1024**3
 
 
@@ -104,13 +107,20 @@ def _validate_preflight_report(*, root: Path) -> dict[str, object]:
     core = dict(report)
     report_id = core.pop("report_id", None)
     preflight_plan = _object(root / PREFLIGHT_PLAN_PATH, "metadata preflight plan")
+    annual_count = report.get("annual_market_schema_request_count")
+    if type(annual_count) is not int or not (1 <= annual_count <= MAXIMUM_ANNUAL_REQUESTS):
+        raise IntegrityError("metadata preflight annual request count is invalid")
+    expected_call_total = 11 + (2 * annual_count)
     if (
         report_id != sha256_json(core)
         or report.get("state") != "PASS_METADATA_ONLY"
         or report.get("plan_id") != preflight_plan.get("plan_id")
         or report.get("plan_sha256") != sha256_file(root / PREFLIGHT_PLAN_PATH)
         or report.get("request_definition_count") != 20
-        or report.get("provider_call_total") != 51
+        or report.get("provider_call_total") != expected_call_total
+        or report.get("maximum_annual_market_schema_requests") != MAXIMUM_ANNUAL_REQUESTS
+        or report.get("file_partition")
+        != "ONE_DBN_AND_ADJACENT_SIDECAR_PER_MARKET_SCHEMA_CALENDAR_YEAR"
         or report.get("maximum_external_cost_usd") != "0"
         or report.get("external_cost_incurred_usd") != "0"
         or report.get("timeseries_download_calls") != 0
@@ -119,8 +129,8 @@ def _validate_preflight_report(*, root: Path) -> dict[str, object]:
         or report.get("destination_conflict_count") != 0
         or report.get("catalog_activated") is not False
         or report.get("provider_call_counts") != {
-            "get_billable_size": 20,
-            "get_cost": 20,
+            "get_billable_size": annual_count,
+            "get_cost": annual_count,
             "get_dataset_range": 1,
             "list_datasets": 1,
             "list_schemas": 1,
@@ -129,7 +139,7 @@ def _validate_preflight_report(*, root: Path) -> dict[str, object]:
     ):
         raise UnauthorizedOperation("passing Apex micro metadata preflight is absent or drifted")
     estimates = report.get("request_estimates")
-    if not isinstance(estimates, list) or len(estimates) != 20:
+    if not isinstance(estimates, list) or len(estimates) != annual_count:
         raise IntegrityError("metadata preflight request estimates are incomplete")
     requests = preflight_plan.get("requests")
     product_dates = report.get("product_effective_dates")
@@ -166,45 +176,83 @@ def _validate_preflight_report(*, root: Path) -> dict[str, object]:
     }
     if len(request_by_id) != 20:
         raise IntegrityError("metadata request identities are not unique")
-    observed_ids: set[object] = set()
+    expected_intervals: dict[tuple[object, str, str], Mapping[str, object]] = {}
+    for request_id, request in request_by_id.items():
+        market = str(request["market"])
+        for annual in annual_market_year_intervals(
+            start=max("2018-01-01", str(product_dates[market])),
+            end_exclusive=str(end),
+        ):
+            expected_intervals[
+                (request_id, str(annual["start"]), str(annual["end_exclusive"]))
+            ] = annual
+    if len(expected_intervals) != annual_count:
+        raise IntegrityError("metadata annual request expansion drifted")
+    observed_intervals: set[tuple[object, str, str]] = set()
+    observed_acquisition_ids: set[object] = set()
+    observed_destinations: set[str] = set()
     total_estimated = 0
     for estimate in estimates:
-        if not isinstance(estimate, Mapping) or set(estimate) != {
-            "request_id", "estimated_bytes", "estimated_cost_usd",
-            "product_effective_date", "acquisition_start", "end_exclusive",
-            "dbn_destination", "sidecar_destination",
-        }:
+        if not isinstance(estimate, Mapping):
             raise IntegrityError("metadata request estimate fields drifted")
-        request_id = estimate.get("request_id")
+        estimate_core = dict(estimate)
+        acquisition_request_id = estimate_core.pop("acquisition_request_id", None)
+        if set(estimate_core) != {
+            "request_definition_id", "market", "schema", "year",
+            "estimated_bytes", "estimated_cost_usd", "product_effective_date",
+            "acquisition_start", "end_exclusive", "partial_launch_year",
+            "partial_latest_year", "dbn_destination", "sidecar_destination",
+        } or acquisition_request_id != sha256_json(estimate_core):
+            raise IntegrityError("metadata request estimate identity drifted")
+        request_id = estimate.get("request_definition_id")
         request = request_by_id.get(request_id)
-        if request is None or request_id in observed_ids:
-            raise IntegrityError("metadata estimate identity is missing or duplicated")
-        observed_ids.add(request_id)
+        key = (
+            request_id,
+            str(estimate.get("acquisition_start")),
+            str(estimate.get("end_exclusive")),
+        )
+        annual = expected_intervals.get(key)
+        if (
+            request is None
+            or annual is None
+            or key in observed_intervals
+            or acquisition_request_id in observed_acquisition_ids
+        ):
+            raise IntegrityError("metadata annual estimate is missing or duplicated")
+        observed_intervals.add(key)
+        observed_acquisition_ids.add(acquisition_request_id)
         market = str(request["market"])
         effective = str(product_dates[market])
-        start = max("2018-01-01", effective)
         size = estimate.get("estimated_bytes")
         if (
             type(size) is not int or size < 0
             or estimate.get("estimated_cost_usd") != "0"
+            or estimate.get("market") != market
+            or estimate.get("schema") != request["schema"]
+            or estimate.get("year") != annual["year"]
             or estimate.get("product_effective_date") != effective
-            or estimate.get("acquisition_start") != start
-            or estimate.get("end_exclusive") != end
+            or estimate.get("partial_launch_year") != annual["partial_launch_year"]
+            or estimate.get("partial_latest_year") != annual["partial_latest_year"]
         ):
             raise IntegrityError("metadata estimate date, cost, or bytes drifted")
         expected_paths = phase1a_paths(
-            market=market, schema=str(request["schema"]), year=int(start[:4]),
-            interval=f"{start}_{end}",
+            market=market, schema=str(request["schema"]), year=int(annual["year"]),
+            interval=str(annual["interval"]),
         )
         if (
             estimate.get("dbn_destination") != expected_paths["dbn"]
             or estimate.get("sidecar_destination") != expected_paths["sidecar"]
         ):
             raise IntegrityError("metadata estimate destination drifted")
+        for destination in expected_paths.values():
+            if destination in observed_destinations:
+                raise IntegrityError("metadata annual destinations collide")
+            observed_destinations.add(destination)
         total_estimated += size
     byte_ceiling = total_estimated + max(total_estimated // 10, 1024**2)
     if (
-        observed_ids != set(request_by_id)
+        observed_intervals != set(expected_intervals)
+        or len(observed_destinations) != 2 * annual_count
         or report.get("total_estimated_bytes") != total_estimated
         or report.get("total_acquisition_byte_ceiling") != byte_ceiling
         or report.get("fixed_maximum_total_acquisition_bytes") != MAXIMUM_TOTAL_ACQUISITION_BYTES
@@ -234,7 +282,7 @@ def _exact_query(
 def build_acquisition_plan(
     *, root: Path, committed_head: str, require_destination_absence: bool = True,
 ) -> dict[str, object]:
-    """Freeze the exact 20 DBNs only after a passing metadata preflight."""
+    """Freeze the exact annual DBNs only after a passing metadata preflight."""
 
     root = root.resolve(strict=True)
     if committed_head != _git_head(root):
@@ -245,18 +293,18 @@ def build_acquisition_plan(
     estimates = report["request_estimates"]
     if not isinstance(requests, list) or len(requests) != 20:
         raise IntegrityError("metadata preflight request definitions are incomplete")
-    estimate_by_id = {
-        item.get("request_id"): item for item in estimates if isinstance(item, Mapping)
+    request_by_id = {
+        item.get("request_id"): item for item in requests if isinstance(item, Mapping)
     }
     frozen: list[dict[str, object]] = []
     prelaunch: list[dict[str, object]] = []
     destination_paths: list[str] = []
-    for request in requests:
-        if not isinstance(request, Mapping):
-            raise IntegrityError("metadata preflight request is malformed")
-        estimate = estimate_by_id.get(request.get("request_id"))
+    for estimate in estimates:
         if not isinstance(estimate, Mapping):
-            raise IntegrityError("metadata estimate is missing for a request")
+            raise IntegrityError("metadata annual estimate is malformed")
+        request = request_by_id.get(estimate.get("request_definition_id"))
+        if not isinstance(request, Mapping):
+            raise IntegrityError("metadata request definition is missing for an annual estimate")
         query = _exact_query(request, estimate)
         estimated_bytes = estimate.get("estimated_bytes")
         if type(estimated_bytes) is not int or estimated_bytes < 0:
@@ -270,7 +318,13 @@ def build_acquisition_plan(
             raise IntegrityError("hyphen-versus-underscore destination mismatch")
         destination_paths.extend((dbn, sidecar))
         frozen.append({
-            "request_id": request["request_id"],
+            "request_id": estimate["acquisition_request_id"],
+            "request_definition_id": request["request_id"],
+            "market": request["market"],
+            "schema": request["schema"],
+            "year": estimate["year"],
+            "partial_launch_year": estimate["partial_launch_year"],
+            "partial_latest_year": estimate["partial_latest_year"],
             "query": query,
             "estimated_cost_usd": "0",
             "estimated_bytes": estimated_bytes,
@@ -278,15 +332,21 @@ def build_acquisition_plan(
             "dbn_destination": dbn,
             "sidecar_destination": sidecar,
         })
-        if query["start"] > "2018-01-01":
+        effective = str(estimate["product_effective_date"])
+        if effective > "2018-01-01" and query["start"] == effective:
             prelaunch.append({
                 "market": request["market"],
                 "schema": request["schema"],
                 "start": "2018-01-01",
-                "end_exclusive": query["start"],
+                "end_exclusive": effective,
                 "disposition": "PRODUCT_NOT_YET_EFFECTIVE_NO_EMPTY_DBN",
             })
-    if len(frozen) != 20 or len(set(destination_paths)) != 40:
+    exact_request_count = int(report["annual_market_schema_request_count"])
+    if (
+        len(frozen) != exact_request_count
+        or len(frozen) > MAXIMUM_DBN_FILES
+        or len(set(destination_paths)) != 2 * exact_request_count
+    ):
         raise IntegrityError("acquisition request or destination count drifted")
     if require_destination_absence and any((root / path).exists() for path in destination_paths):
         raise IntegrityError("acquisition destination already exists")
@@ -295,12 +355,12 @@ def build_acquisition_plan(
         raise IntegrityError("metadata report byte ceiling is invalid")
     implementation_paths = (
         "src/futures_rebuild/micro_alpha_pipeline.py",
-        "src/futures_rebuild/micro_alpha_databento_preflight.py",
+        "src/futures_rebuild/micro_alpha_databento_preflight_v5.py",
         "src/futures_rebuild/micro_alpha_acquisition.py",
         "src/futures_rebuild/alpha_research_architecture.py",
     )
     core: dict[str, object] = {
-        "schema_version": "apex_micro_phase1a_acquisition_plan/1.0.0",
+        "schema_version": "apex_micro_phase1a_acquisition_plan/2.0.0",
         "state": "PREPARED_REQUIRES_SEPARATE_DOWNLOAD_APPROVAL",
         "operation": OPERATION,
         "committed_implementation_head": committed_head,
@@ -314,6 +374,7 @@ def build_acquisition_plan(
             "sha256": sha256_file(root / PREFLIGHT_REPORT_PATH),
         },
         "preflight_plan_sha256": sha256_file(root / PREFLIGHT_PLAN_PATH),
+        "file_partition": "ONE_DBN_AND_ADJACENT_SIDECAR_PER_MARKET_SCHEMA_CALENDAR_YEAR",
         "product_reference_requirements_id": build_product_reference_requirements()["requirements_id"],
         "product_reference_requirements_sha256": sha256_file(
             root / "configs/apex_micro_product_reference_requirements.json"
@@ -324,8 +385,8 @@ def build_acquisition_plan(
         "requests": frozen,
         "prelaunch_coverage": prelaunch,
         "limits": {
-            "exact_request_count": 20,
-            "maximum_provider_calls": 40,
+            "exact_request_count": exact_request_count,
+            "maximum_provider_calls": 2 * exact_request_count,
             "maximum_dbn_files": MAXIMUM_DBN_FILES,
             "maximum_sidecars": MAXIMUM_SIDECARS,
             "maximum_total_bytes": report_ceiling,
@@ -389,8 +450,16 @@ def load_acquisition_plan(
     if plan != expected:
         raise IntegrityError("acquisition plan does not reconstruct exactly")
     requests = plan.get("requests")
-    if not isinstance(requests, list) or len(requests) != 20:
-        raise IntegrityError("acquisition plan must freeze exactly 20 requests")
+    exact_count = plan.get("limits", {}).get("exact_request_count")
+    if (
+        type(exact_count) is not int
+        or not (1 <= exact_count <= MAXIMUM_DBN_FILES)
+        or not isinstance(requests, list)
+        or len(requests) != exact_count
+        or plan.get("file_partition")
+        != "ONE_DBN_AND_ADJACENT_SIDECAR_PER_MARKET_SCHEMA_CALENDAR_YEAR"
+    ):
+        raise IntegrityError("acquisition plan annual request count drifted")
     destinations: list[str] = []
     for item in requests:
         if not isinstance(item, Mapping) or set(item.get("query", {})) != {
@@ -407,12 +476,21 @@ def load_acquisition_plan(
         ):
             raise IntegrityError("frozen acquisition query is outside scope")
         expected_stype = "parent" if query["schema"] == "definition" else "continuous"
-        market = str(item["dbn_destination"]).split("/")[3]
+        destination_parts = str(item["dbn_destination"]).split("/")
+        if len(destination_parts) != 6:
+            raise IntegrityError("frozen acquisition destination depth drifted")
+        market = destination_parts[3]
+        year = int(destination_parts[4])
+        validate_annual_market_year_interval(
+            year=year, interval=f'{query["start"]}_{query["end"]}',
+        )
+        if item.get("market") != market or item.get("year") != year:
+            raise IntegrityError("frozen acquisition market-year routing drifted")
         expected_symbol = f"{market}.FUT" if expected_stype == "parent" else f"{market}.v.0"
         if query["stype_in"] != expected_stype or query["symbols"] != [expected_symbol]:
             raise IntegrityError("frozen acquisition symbology drifted")
         destinations.extend((str(item["dbn_destination"]), str(item["sidecar_destination"])))
-    if len(set(destinations)) != 40:
+    if len(set(destinations)) != 2 * exact_count:
         raise IntegrityError("frozen acquisition destinations collide")
     return plan
 
@@ -426,14 +504,16 @@ def verify_completed_acquisition(*, root: Path, terminal_path: Path) -> dict[str
     terminal_core = dict(terminal)
     terminal_id = terminal_core.pop("terminal_id", None)
     plan = load_acquisition_plan(root=root, require_destination_absence=False)
+    exact_count = int(plan["limits"]["exact_request_count"])
     if (
         terminal_id != sha256_json(terminal_core)
         or terminal.get("state") != "SUCCESS_INACTIVE_IMMUTABLE_CUSTODY"
         or terminal.get("plan_id") != plan["plan_id"]
         or terminal.get("plan_sha256") != sha256_file(root / PLAN_PATH)
-        or terminal.get("provider_call_counts") != {"get_cost": 20, "get_range": 20}
-        or terminal.get("accepted_dbn_count") != 20
-        or terminal.get("accepted_sidecar_count") != 20
+        or terminal.get("provider_call_counts")
+        != {"get_cost": exact_count, "get_range": exact_count}
+        or terminal.get("accepted_dbn_count") != exact_count
+        or terminal.get("accepted_sidecar_count") != exact_count
         or terminal.get("external_cost_incurred_usd") != "0"
         or terminal.get("automatic_retries") != 0
         or terminal.get("credential_content_recorded") is not False
@@ -448,7 +528,7 @@ def verify_completed_acquisition(*, root: Path, terminal_path: Path) -> dict[str
     ):
         raise IntegrityError("Apex micro acquisition terminal is not an accepted success")
     accepted = terminal.get("accepted_files")
-    if not isinstance(accepted, list) or len(accepted) != 20:
+    if not isinstance(accepted, list) or len(accepted) != exact_count:
         raise IntegrityError("Apex micro acquisition terminal file ledger is incomplete")
     planned = {str(item["request_id"]): item for item in plan["requests"]}
     observed: set[str] = set()
@@ -505,8 +585,8 @@ def verify_completed_acquisition(*, root: Path, terminal_path: Path) -> dict[str
     return {
         "status": "PASS_INACTIVE_CUSTODY_NO_ROW_DECODE",
         "terminal_id": terminal_id,
-        "dbn_count": 20,
-        "sidecar_count": 20,
+        "dbn_count": exact_count,
+        "sidecar_count": exact_count,
         "total_bytes": total_bytes,
     }
 
@@ -605,10 +685,11 @@ def execute_authorized_acquisition(
     terminal_path = attempt / "terminal.json"
     started = clock()
     staged: list[dict[str, object]] = []
+    exact_count = int(plan["limits"]["exact_request_count"])
     provider_calls = {"get_cost": 0, "get_range": 0}
     failure_stage = "PROVIDER_FACTORY"
     base: dict[str, object] = {
-        "schema_version": "apex_micro_phase1a_acquisition_terminal/1.0.0",
+        "schema_version": "apex_micro_phase1a_acquisition_terminal/2.0.0",
         "plan_id": plan["plan_id"],
         "plan_sha256": sha256_file(root / PLAN_PATH),
         "authorization_receipt_id": authorization.receipt_id,
@@ -658,7 +739,7 @@ def execute_authorized_acquisition(
             digest = sha256_file(partial)
             sidecar_staging = downloads / f"{request_id[:16]}.manifest.json.partial"
             sidecar_core = {
-                "schema_version": "apex_micro_inactive_dbn_manifest/1.0.0",
+                "schema_version": "apex_micro_inactive_dbn_manifest/2.0.0",
                 "state": "INACTIVE_CUSTODY_NOT_A_RESEARCH_SOURCE",
                 "plan_id": plan["plan_id"],
                 "request_id": request_id,
@@ -684,7 +765,10 @@ def execute_authorized_acquisition(
                 "byte_count": size,
                 "sha256": digest,
             })
-        if provider_calls != {"get_cost": 20, "get_range": 20} or len(staged) != 20:
+        if (
+            provider_calls != {"get_cost": exact_count, "get_range": exact_count}
+            or len(staged) != exact_count
+        ):
             raise IntegrityError("successful acquisition call or file count drifted")
         failure_stage = "FINAL_DESTINATION_RECHECK"
         if any(path.exists() for path in destinations):
@@ -708,8 +792,8 @@ def execute_authorized_acquisition(
             **base,
             "state": "SUCCESS_INACTIVE_IMMUTABLE_CUSTODY",
             "provider_call_counts": provider_calls,
-            "accepted_dbn_count": 20,
-            "accepted_sidecar_count": 20,
+            "accepted_dbn_count": exact_count,
+            "accepted_sidecar_count": exact_count,
             "total_bytes": sum(int(item["byte_count"]) for item in staged),
             "accepted_files": staged,
             "prelaunch_coverage": plan["prelaunch_coverage"],

@@ -25,12 +25,16 @@ from futures_rebuild.micro_alpha_acquisition import (
     verify_completed_acquisition,
     write_acquisition_plan_create_only,
 )
-from futures_rebuild.micro_alpha_databento_preflight import (
-    OBSOLETE_PLAN_PATH,
+from futures_rebuild.micro_alpha_databento_preflight_v5 import (
     PLAN_PATH as PREFLIGHT_PLAN_PATH,
     REFERENCE_PATH,
     REPORT_PATH,
     SUPERSESSION_PATH,
+    PREDECESSOR_AUTHORIZATION_PATH,
+    PREDECESSOR_PLAN_PATH,
+    PREDECESSOR_REPORT_PATH,
+    LOCAL_SUPERSESSION_PATH,
+    SUPERSEDED_LOCAL_PLAN_PATH,
     MetadataProviderApis,
     build_plan as build_preflight_plan,
     execute_preflight,
@@ -43,7 +47,7 @@ ROOT = Path(__file__).resolve().parents[1]
 HEAD = "a" * 40
 IMPLEMENTATION_PATHS = (
     "src/futures_rebuild/micro_alpha_pipeline.py",
-    "src/futures_rebuild/micro_alpha_databento_preflight.py",
+    "src/futures_rebuild/micro_alpha_databento_preflight_v5.py",
     "src/futures_rebuild/micro_alpha_acquisition.py",
     "src/futures_rebuild/alpha_research_architecture.py",
 )
@@ -57,7 +61,19 @@ class _Metadata:
         return ["definition", "status", "statistics", "ohlcv-1m", "ohlcv-1s"]
 
     def get_dataset_range(self, **_kwargs: object) -> object:
-        return {"start": "2010-01-01T00:00:00+00:00", "end": "2026-08-08T00:00:00+00:00"}
+        return {
+            "start": "2010-01-01T00:00:00+00:00",
+            "end": "2026-08-08T00:00:00+00:00",
+            "schema": {
+                schema: {
+                    "start": "2010-01-01T00:00:00+00:00",
+                    "end": "2026-08-08T00:00:00+00:00",
+                }
+                for schema in (
+                    "definition", "status", "statistics", "ohlcv-1m", "ohlcv-1s"
+                )
+            },
+        }
 
     def resolve(self, **kwargs: object) -> object:
         symbol = kwargs["symbols"][0]
@@ -108,9 +124,13 @@ def _prepared_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     root = tmp_path / "active"
     for relative in (
         *IMPLEMENTATION_PATHS,
-        OBSOLETE_PLAN_PATH.as_posix(),
         REFERENCE_PATH.as_posix(),
         SUPERSESSION_PATH.as_posix(),
+        PREDECESSOR_PLAN_PATH.as_posix(),
+        PREDECESSOR_REPORT_PATH.as_posix(),
+        PREDECESSOR_AUTHORIZATION_PATH.as_posix(),
+        SUPERSEDED_LOCAL_PLAN_PATH.as_posix(),
+        LOCAL_SUPERSESSION_PATH.as_posix(),
     ):
         source = ROOT / relative
         destination = root / relative
@@ -189,10 +209,13 @@ def test_plan_freezes_exact_scope_paths_prelaunch_and_inactive_controls(
     plan = json.loads((root / PLAN_PATH).read_text(encoding="utf-8"))
     assert plan["markets"] == ["MES", "MCL", "MGC", "M6E"]
     assert plan["schemas"] == ["definition", "status", "statistics", "ohlcv-1m", "ohlcv-1s"]
-    assert len(plan["requests"]) == 20
-    assert plan["limits"]["maximum_dbn_files"] == 20
-    assert plan["limits"]["maximum_sidecars"] == 20
-    assert plan["limits"]["maximum_provider_calls"] == 40
+    assert len(plan["requests"]) == 160
+    assert plan["limits"]["maximum_dbn_files"] == 180
+    assert plan["limits"]["maximum_sidecars"] == 180
+    assert plan["limits"]["maximum_provider_calls"] == 320
+    assert plan["file_partition"] == (
+        "ONE_DBN_AND_ADJACENT_SIDECAR_PER_MARKET_SCHEMA_CALENDAR_YEAR"
+    )
     assert plan["limits"]["maximum_external_cost_usd"] == "0"
     assert plan["limits"]["maximum_retries"] == 0
     assert plan["custody"]["inactive_staging_first"] is True
@@ -201,6 +224,15 @@ def test_plan_freezes_exact_scope_paths_prelaunch_and_inactive_controls(
     for item in plan["requests"]:
         assert item["dbn_destination"].startswith("data/dbn/")
         assert item["sidecar_destination"] == item["dbn_destination"] + ".manifest.json"
+        parts = item["dbn_destination"].split("/")
+        assert len(parts) == 6
+        assert parts[:2] == ["data", "dbn"]
+        assert parts[2] in {"definition", "status", "statistics", "ohlcv_1m", "ohlcv_1s"}
+        assert parts[3] in {"MES", "MCL", "MGC", "M6E"}
+        assert parts[4] == str(item["year"])
+        assert "/micro/" not in item["dbn_destination"]
+        assert item["query"]["start"][:4] == parts[4]
+        assert item["query"]["end"] <= f"{int(parts[4]) + 1:04d}-01-01"
         if item["query"]["schema"].startswith("ohlcv-"):
             assert "/ohlcv_" in item["dbn_destination"]
         assert item["query"]["schema"] not in {"trades", "bbo-1s", "mbp-1", "mbp-10"}
@@ -215,12 +247,12 @@ def test_successful_mechanics_create_exact_verified_pairs_without_decoding(
     assert terminal["state"] == "SUCCESS_INACTIVE_IMMUTABLE_CUSTODY", (
         terminal.get("failure_stage"), terminal.get("exception_type"),
     )
-    assert terminal["provider_call_counts"] == {"get_cost": 20, "get_range": 20}
-    assert terminal["accepted_dbn_count"] == 20
-    assert terminal["accepted_sidecar_count"] == 20
+    assert terminal["provider_call_counts"] == {"get_cost": 160, "get_range": 160}
+    assert terminal["accepted_dbn_count"] == 160
+    assert terminal["accepted_sidecar_count"] == 160
     assert terminal["dbn_rows_decoded"] == 0
-    assert provider.cost_calls == 20
-    assert provider.download_calls == 20
+    assert provider.cost_calls == 160
+    assert provider.download_calls == 160
     for item in terminal["accepted_files"]:
         dbn = root / item["dbn_destination"]
         sidecar = root / item["sidecar_destination"]
@@ -239,7 +271,7 @@ def test_successful_mechanics_create_exact_verified_pairs_without_decoding(
     )
     verification = verify_completed_acquisition(root=root, terminal_path=terminal_path)
     assert verification["status"] == "PASS_INACTIVE_CUSTODY_NO_ROW_DECODE"
-    assert verification["dbn_count"] == verification["sidecar_count"] == 20
+    assert verification["dbn_count"] == verification["sidecar_count"] == 160
 
 
 @pytest.mark.parametrize("mode", ["nonzero", "empty", "single_failure"])
@@ -261,7 +293,7 @@ def test_cost_partial_and_provider_failures_are_preserved_without_retry(
         assert provider.cost_calls == 1
         assert provider.download_calls == 0
     if mode == "empty":
-        assert provider.cost_calls == 20
+        assert provider.cost_calls == 160
         assert provider.download_calls == 1
         partials = list((root / "state/provider_acquisition_staging/apex_micro_tier01").rglob("*.partial"))
         assert partials

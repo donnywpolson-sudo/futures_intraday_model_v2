@@ -33,8 +33,12 @@ live cockpit. Automatic order execution is outside this project's scope.
   unexecuted local preparation superseded before staging when its executor
   self-hash drifted; it cannot execute and contacted no provider.
 - `configs/apex_micro_tier01_databento_metadata_preflight_v4.json`: immutable
-  timeout-only successor with the same exact 20 requests, $0 ceiling, and no
-  download capability; it is prepared but unexecuted and authorizes nothing.
+  timeout successor executed once under its separate approval. It failed closed
+  after three metadata calls because the valid provider dataset range contained
+  nested schema ranges; its $0 report and consumed authorization are preserved.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v5.json`: immutable
+  annual market-year successor with the same 20 market/schema definitions,
+  bounded annual cost/byte estimates, a $0 ceiling, and no download capability.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -91,7 +95,8 @@ configs/                         durable contracts and operational profiles
 data/vault/                      immutable v2-owned source snapshots/releases
 data/dbn/                        accepted DBN source-family view
 data/raw/                        Phase 1B immutable raw releases
-data/causally_gated_normalized/  Phase 2 causal/session-normalized releases
+data/causally_gated_normalized/  Phase 2 content-addressed immutable release history
+data/active/causally_gated_normalized/ catalog-selected standard research view
 data/outcome_sources/            outcome-capability inputs kept from features
 data/outcomes/                   Phase 3 outcome releases
 data/features/                   Phase 4 feature releases
@@ -107,6 +112,29 @@ Staging, repair, cache, report, and recovery roots are evidence or working
 state, never active inputs unless a content-addressed release and its governing
 contract explicitly admit them. Other repositories and absolute external paths
 are not active roots.
+
+The two causally-gated folders have deliberately different roles; they are not
+competing active sources. `data/causally_gated_normalized/` retains immutable
+content-addressed Phase 2 generations and their receipts. Only
+`data/active/causally_gated_normalized/` is the flattened standard-lane view,
+and it is usable only through `data/active/catalog.json`; direct archive globs
+are forbidden. The source-safe audit at
+`state/unpublished_evidence/standard_data_topology_source_safe_audit/report.json`
+checks the catalog, sidecars, validation receipts, and Phase 1A/1B/2 release
+bindings without opening DBN or parquet payloads. It confirms provenance
+metadata, not a new row-level recertification.
+
+Cleanup is a separate governed boundary. The current prepare-only plan at
+`state/unpublished_evidence/safe_cleanup_preparation_v4/plan.json` classifies
+active/catalog paths and immutable release history as preserve-only, keeps
+nonempty vault staging and snapshot evidence under manual review, and limits
+potential cleanup to regenerable project caches. It performs no move or delete.
+Immediately before any future cleanup, rebuild the exact candidate census,
+prove that no catalog, manifest, receipt, plan, or worktree item binds a target,
+obtain a separate exact cleanup approval, and rerun catalog/provenance/tests and
+micro disk/destination gates afterward. Cleanup that could affect acquisition
+paths or free-disk state must finish before the final micro acquisition plan is
+frozen.
 
 ## Alpha research lanes
 
@@ -207,11 +235,13 @@ This route reuses the standard folder grammar without mixing catalogs:
 ```text
 v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; no rows)
   -> v3 local preparation superseded before staging/execution
-  -> separately approved immutable v4 successor (same 20 definitions; 51-call ceiling)
-  -> data/dbn/<schema-folder>/<micro-root>/<year>/<interval>.dbn.zst [Phase 1A]
-  -> data/raw/<micro-root>/<year>/<interval>/<release>/             [Phase 1B definition + 1m]
-  -> data/market_state/{status|statistics}/<micro-root>/...         [Phase 1B diagnostics]
-  -> data/outcome_sources/<micro-root>/...                          [Phase 1B execution]
+  -> v4 preflight -> FAIL_CLOSED_METADATA_ONLY (3 calls; valid nested range rejected)
+  -> immutable v5 annual market-year successor (20 definitions; at most 180 annual requests)
+  -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
+  -> adjacent <same-name>.manifest.json                              [Phase 1A]
+  -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
+  -> data/market_state/{status|statistics}/<market>/...              [Phase 1B diagnostics]
+  -> data/outcome_sources/<market>/...                               [Phase 1B execution]
   -> data/causally_gated_normalized/...                             [Phase 2 1m features]
   -> separately certified micro catalog                            [not yet active]
 ```
@@ -227,8 +257,17 @@ source. Status and statistics are diagnostics, not alpha features. Decoding
 2025 is blocked; 2026 decoding requires row timestamps at or after a prior
 immutable mechanism freeze.
 
+Phase 1A uses the existing standard/full-contract DBN tree, not a parallel
+micro data root. Every market x schema x calendar year receives one distinct
+DBN and one adjacent immutable sidecar. A product launch year starts on its
+provider-confirmed effective date, the latest year ends on the frozen complete
+end-exclusive date, and full intervening years use January 1 boundaries.
+Prelaunch intervals produce disposition records and no fabricated empty DBN.
+Multi-year DBNs, wrong-year folders, hyphenated schema folders, duplicate
+destinations, and alternate micro-root layouts fail closed.
+
 The Phase 1A downloader is implemented and synthetic/adversarially tested but
-has not executed. It uses one exact bounded interval per market/schema, writes
+has not executed. It uses one exact bounded interval per market/schema/year, writes
 first to inactive staging, requotes every request at exactly $0 before the
 first download, streams compressed DBN bytes without iterating rows, verifies
 size and SHA-256, creates an exact-query adjacent sidecar, refuses collisions,
@@ -243,11 +282,14 @@ reached. It incurred $0, performed zero retries and zero timeseries downloads,
 read no rows, and created no DBNs. Its create-only report and consumed
 authorization remain unpublished evidence. An unexecuted v3 local preparation
 was preserved and superseded when its executor self-hash drifted before
-staging. The prepared v4 successor changes only the provider-call timeout to 30
-seconds under a 300-second total ceiling; it retains the
-same markets, schemas, symbology, call ceiling, zero-cost requirement, zero
-retries, and forbidden operations. A new separate approval is required before
-v4 may contact Databento. Only a passing report may freeze a deterministic
+staging. The separately approved v4 attempt also incurred $0, used zero retries,
+performed no download or row read, and failed closed after three metadata calls
+because its flat-range parser rejected the provider's nested schema ranges.
+The v5 successor validates those nested ranges and expands the same 20
+market/schema definitions into at most 180 annual market/schema estimates under
+one fixed 371-call ceiling, 300-second runtime, 30-second per-call bound, $0
+cost, and zero retries. A new separate approval is required before v5 may
+contact Databento. Only a passing report may freeze a deterministic
 acquisition plan bound to the then-committed implementation HEAD. Metadata
 approval never grants download authority.
 

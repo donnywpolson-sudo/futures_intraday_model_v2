@@ -20,7 +20,8 @@ from futures_rebuild.micro_alpha_databento_preflight import (
     MetadataProviderApis,
     OPERATION,
 )
-from futures_rebuild.micro_alpha_databento_preflight_v4 import (
+from futures_rebuild.micro_alpha_databento_preflight_v5 import (
+    MAXIMUM_ANNUAL_REQUESTS,
     MAXIMUM_PROVIDER_CALLS,
     MAXIMUM_RUNTIME_SECONDS,
     PER_CALL_TIMEOUT_SECONDS,
@@ -37,6 +38,7 @@ from futures_rebuild.micro_alpha_databento_preflight_v4 import (
     build_file_metadata_provider_apis,
     build_plan,
     execute_preflight,
+    _latest_complete_end,
     load_predecessor_failure,
     required_scope,
     validate_plan,
@@ -47,7 +49,7 @@ pytestmark = [pytest.mark.current, pytest.mark.high_risk]
 ROOT = Path(__file__).resolve().parents[1]
 BINDING_PATHS = (
     "src/futures_rebuild/micro_alpha_pipeline.py",
-    "src/futures_rebuild/micro_alpha_databento_preflight_v4.py",
+    "src/futures_rebuild/micro_alpha_databento_preflight_v5.py",
     "src/futures_rebuild/micro_alpha_acquisition.py",
     "src/futures_rebuild/alpha_research_architecture.py",
     REFERENCE_PATH.as_posix(),
@@ -116,6 +118,15 @@ class FakeMetadataProvider:
         return {
             "start": "2010-01-01T00:00:00+00:00",
             "end": "2026-08-08T12:00:00+00:00",
+            "schema": {
+                schema: {
+                    "start": "2010-01-01T00:00:00+00:00",
+                    "end": "2026-08-08T12:00:00+00:00",
+                }
+                for schema in (
+                    "definition", "status", "statistics", "ohlcv-1m", "ohlcv-1s"
+                )
+            },
         }
 
     def resolve(self, **kwargs: object) -> object:
@@ -175,7 +186,7 @@ def _run(root: Path, provider: FakeMetadataProvider) -> dict[str, object]:
     )
 
 
-def test_successor_preserves_and_binds_exact_v2_timeout_evidence(tmp_path: Path) -> None:
+def test_successor_preserves_v4_failure_and_binds_annual_layout(tmp_path: Path) -> None:
     root = _copy_root(tmp_path)
     failure = load_predecessor_failure(root=root)
     plan = build_plan(root=root)
@@ -183,17 +194,19 @@ def test_successor_preserves_and_binds_exact_v2_timeout_evidence(tmp_path: Path)
     assert failure["report_id"] == PREDECESSOR_REPORT_ID
     assert plan["predecessor_execution"]["report_id"] == PREDECESSOR_REPORT_ID
     assert plan["correction"] == {
-        "reason": "OBSERVED_LIST_SCHEMAS_READ_TIMEOUT_AT_TEN_SECONDS",
-        "provider_sdk_default_timeout_seconds": 100,
-        "predecessor_per_call_timeout_seconds": 10,
+        "reason": "VALID_NESTED_DATASET_RANGE_AND_ANNUAL_MARKET_YEAR_RECONCILIATION",
+        "predecessor_range_shape": "START_END_SCHEMA_NESTED_RANGES",
+        "predecessor_file_partition": "ONE_MULTI_YEAR_FILE_PER_MARKET_SCHEMA",
+        "successor_file_partition": "ONE_FILE_PER_MARKET_SCHEMA_CALENDAR_YEAR",
         "successor_per_call_timeout_seconds": 30,
-        "scope_change": "TIMEOUT_ONLY_NO_MARKET_SCHEMA_OR_ENDPOINT_CHANGE",
+        "scope_change": "NO_MARKET_SCHEMA_DATA_ENDPOINT_OR_COST_CHANGE",
     }
     assert len(plan["requests"]) == 20
     assert {item["market"] for item in plan["requests"]} == {
         "MES", "MCL", "MGC", "M6E"
     }
-    assert plan["limits"]["exact_provider_call_ceiling"] == 51
+    assert plan["limits"]["exact_provider_call_ceiling"] == 371
+    assert plan["limits"]["maximum_annual_market_schema_requests"] == 180
     assert plan["limits"]["maximum_runtime_seconds"] == 300
     assert plan["limits"]["per_call_timeout_seconds"] == 30
     assert plan["limits"]["maximum_external_cost_usd"] == "0"
@@ -230,7 +243,7 @@ def test_successor_metadata_capability_has_no_download_and_sets_timeout(
     symbology = Api()
     client = SimpleNamespace(metadata=metadata, symbology=symbology)
     monkeypatch.setattr(
-        "futures_rebuild.micro_alpha_databento_preflight_v4.resolve_databento_api_key",
+        "futures_rebuild.micro_alpha_databento_preflight_v5.resolve_databento_api_key",
         lambda **_kwargs: "synthetic-secret",
     )
     capability = build_file_metadata_provider_apis(
@@ -245,18 +258,33 @@ def test_successor_metadata_capability_has_no_download_and_sets_timeout(
     assert symbology.TIMEOUT == PER_CALL_TIMEOUT_SECONDS
 
 
-def test_v4_multi_year_success_path_is_disabled_by_annual_contract(tmp_path: Path) -> None:
+def test_successor_synthetic_success_is_annual_and_bounded(tmp_path: Path) -> None:
     root = _copy_root(tmp_path)
     provider = FakeMetadataProvider()
     report = _run(root, provider)
-    assert report["state"] == "FAIL_CLOSED_METADATA_ONLY"
-    assert report["exception_type"] == "ContractError"
+    assert report["state"] == "PASS_METADATA_ONLY"
+    assert report["provider_call_total"] == 331
+    assert report["provider_call_counts"] == {
+        "get_billable_size": 160,
+        "get_cost": 160,
+        "get_dataset_range": 1,
+        "list_datasets": 1,
+        "list_schemas": 1,
+        "resolve": 8,
+    }
     assert report["external_cost_incurred_usd"] == "0"
     assert report["timeseries_download_calls"] == 0
     assert report["historical_rows_read"] is False
     assert report["dbn_files_created"] == 0
     assert report["predecessor_report_id"] == PREDECESSOR_REPORT_ID
-    assert len(provider.calls) < MAXIMUM_PROVIDER_CALLS
+    assert len(provider.calls) == 331
+    assert report["annual_market_schema_request_count"] == 160
+    assert report["maximum_annual_market_schema_requests"] == MAXIMUM_ANNUAL_REQUESTS
+    assert len(report["request_estimates"]) == 160
+    destinations = [item["dbn_destination"] for item in report["request_estimates"]]
+    assert len(set(destinations)) == 160
+    assert all("data/dbn/" in path for path in destinations)
+    assert all("_2027-" not in path for path in destinations)
 
 
 def test_successor_timeout_fails_closed_once_and_cannot_overwrite(tmp_path: Path) -> None:
@@ -300,3 +328,29 @@ def test_successor_requires_exact_authorization_and_runtime_scope(tmp_path: Path
             disk_usage=lambda _path: SimpleNamespace(free=10**12),
             environment_check=lambda _root: "synthetic-lock",
         )
+
+
+def test_nested_range_uses_common_required_schema_end_and_rejects_drift() -> None:
+    value = {
+        "start": "2010-01-01T00:00:00+00:00",
+        "end": "2026-08-09T00:00:00+00:00",
+        "schema": {
+            schema: {
+                "start": "2010-01-01T00:00:00+00:00",
+                "end": (
+                    "2026-08-08T00:00:00+00:00"
+                    if schema == "statistics"
+                    else "2026-08-09T00:00:00+00:00"
+                ),
+            }
+            for schema in ("definition", "status", "statistics", "ohlcv-1m", "ohlcv-1s")
+        },
+    }
+    assert _latest_complete_end(value) == "2026-08-08"
+    missing = json.loads(json.dumps(value))
+    del missing["schema"]["status"]
+    with pytest.raises(IntegrityError, match="required schema"):
+        _latest_complete_end(missing)
+    unexpected = {**value, "unexpected": True}
+    with pytest.raises(IntegrityError, match="unexpected fields"):
+        _latest_complete_end(unexpected)

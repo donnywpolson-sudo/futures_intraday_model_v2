@@ -8,6 +8,7 @@ rows, publish a catalog, or grant research authority.
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
+from datetime import date
 from pathlib import Path
 from decimal import Decimal, InvalidOperation
 from typing import Final
@@ -30,6 +31,8 @@ SCHEMAS: Final = ("definition", "status", "statistics", "ohlcv-1m", "ohlcv-1s")
 FORBIDDEN_SCHEMAS: Final = frozenset({"trades", "bbo-1s", "mbp-1", "mbp-10"})
 RESEARCH_END_YEAR: Final = 2024
 SEALED_HOLDOUT_YEAR: Final = 2025
+ACQUISITION_START_DATE: Final = date(2018, 1, 1)
+LATEST_PREPARED_YEAR: Final = 2026
 STANDARD_LANE_TERM: Final = "standard/full-contract lane"
 MICRO_LANE_TERM: Final = "Apex integer-micro lane"
 SOURCE_SCHEMA_TERM: Final = "required Databento Standard historical schemas"
@@ -86,13 +89,66 @@ def _schema(value: str) -> str:
     return value
 
 
+def annual_market_year_intervals(
+    *, start: str, end_exclusive: str,
+) -> tuple[dict[str, object], ...]:
+    """Split one bounded product range into explicit calendar-year intervals."""
+
+    try:
+        first = date.fromisoformat(start)
+        end = date.fromisoformat(end_exclusive)
+    except (TypeError, ValueError) as exc:
+        raise ContractError("micro Phase 1A date bound is invalid") from exc
+    if first < ACQUISITION_START_DATE or first >= end:
+        raise ContractError("micro Phase 1A date range is outside the prepared scope")
+    if end.year > LATEST_PREPARED_YEAR + 1:
+        raise ContractError("micro Phase 1A end exceeds the prepared year scope")
+    intervals: list[dict[str, object]] = []
+    cursor = first
+    while cursor < end:
+        next_year = date(cursor.year + 1, 1, 1)
+        interval_end = min(next_year, end)
+        intervals.append(
+            {
+                "year": cursor.year,
+                "start": cursor.isoformat(),
+                "end_exclusive": interval_end.isoformat(),
+                "interval": f"{cursor.isoformat()}_{interval_end.isoformat()}",
+                "partial_launch_year": cursor.month != 1 or cursor.day != 1,
+                "partial_latest_year": interval_end != next_year,
+            }
+        )
+        cursor = interval_end
+    return tuple(intervals)
+
+
+def validate_annual_market_year_interval(
+    *, year: int, interval: str,
+) -> tuple[str, str]:
+    """Require an interval to be positive and contained in its calendar year."""
+
+    if type(year) is not int or year < ACQUISITION_START_DATE.year or year > LATEST_PREPARED_YEAR:
+        raise ContractError("micro Phase 1A year is invalid")
+    parts = interval.split("_") if type(interval) is str else []
+    if len(parts) != 2:
+        raise ContractError("micro Phase 1A interval must contain exact date bounds")
+    try:
+        start = date.fromisoformat(parts[0])
+        end = date.fromisoformat(parts[1])
+    except ValueError as exc:
+        raise ContractError("micro Phase 1A interval date is invalid") from exc
+    maximum_end = date(year + 1, 1, 1)
+    if start.year != year or start >= end or end > maximum_end:
+        raise ContractError("micro Phase 1A interval must stay within one market-year")
+    return start.isoformat(), end.isoformat()
+
+
 def phase1a_paths(*, market: str, schema: str, year: int, interval: str) -> dict[str, str]:
     """Return exact inactive DBN and sidecar destinations."""
 
     _market(market)
     _schema(schema)
-    if year < 2018 or year > 2026 or not interval:
-        raise ContractError("micro Phase 1A interval is invalid")
+    validate_annual_market_year_interval(year=year, interval=interval)
     schema_folder = schema.replace("-", "_")
     base = Path("data/dbn") / schema_folder / market / str(year)
     return {
@@ -188,7 +244,8 @@ def phase1b_destination(
 
     _market(market)
     role = phase1b_role(schema)
-    if year < 2018 or year > 2026 or not interval or len(release_id) < 12:
+    validate_annual_market_year_interval(year=year, interval=interval)
+    if len(release_id) < 12:
         raise ContractError("micro Phase 1B release identity is invalid")
     if schema in {"definition", "ohlcv-1m"}:
         root = Path("data/raw") / market / str(year) / interval / release_id

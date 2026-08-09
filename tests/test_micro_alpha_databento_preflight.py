@@ -182,20 +182,12 @@ def test_definition_uses_parent_and_every_other_schema_uses_continuous() -> None
         assert request["stype_out"] == "instrument_id"
 
 
-def test_successful_bounded_metadata_run_writes_one_price_free_report(tmp_path: Path) -> None:
+def test_superseded_multi_year_preflight_now_fails_closed_price_free(tmp_path: Path) -> None:
     root = _copy_preflight_root(tmp_path)
     provider = FakeMetadataProvider()
     report = _run(root, provider)
-    assert report["state"] == "PASS_METADATA_ONLY"
-    assert report["provider_call_total"] == 51
-    assert report["provider_call_counts"] == {
-        "get_billable_size": 20, "get_cost": 20, "get_dataset_range": 1,
-        "list_datasets": 1, "list_schemas": 1, "resolve": 8,
-    }
-    assert report["product_effective_dates"] == {
-        "MES": "2019-05-06", "MCL": "2021-07-12",
-        "MGC": "2010-10-03", "M6E": "2009-03-23",
-    }
+    assert report["state"] == "FAIL_CLOSED_METADATA_ONLY"
+    assert report["exception_type"] == "ContractError"
     assert report["timeseries_download_calls"] == 0
     assert report["historical_rows_read"] is False
     assert report["dbn_files_created"] == 0
@@ -263,7 +255,7 @@ def test_existing_destination_and_insufficient_disk_fail_closed(tmp_path: Path) 
     conflict.write_bytes(b"synthetic-conflict")
     report = _run(root, provider)
     assert report["state"] == "FAIL_CLOSED_METADATA_ONLY"
-    assert report["failure_code"] == "DESTINATION_CONFLICT"
+    assert report["exception_type"] == "ContractError"
 
     low_root = _copy_preflight_root(tmp_path / "disk")
     low_report = execute_preflight(
@@ -274,4 +266,4 @@ def test_existing_destination_and_insufficient_disk_fail_closed(tmp_path: Path) 
         environment_check=lambda _root: "synthetic-lock",
     )
     assert low_report["state"] == "FAIL_CLOSED_METADATA_ONLY"
-    assert low_report["failure_code"] == "INSUFFICIENT_DISK"
+    assert low_report["exception_type"] == "ContractError"

@@ -8,14 +8,20 @@ work and every real-data or publishing action remains separately controlled.
 | Classification | Surface | Reality | Authority |
 | --- | --- | --- | --- |
 | `CURRENT_REACHABLE` | Standard Alpha: `configs/active_alpha_research_ladder.json`; `data/active/catalog.json` | Active standard/full-contract ladder and catalog | Exact gateway authority required for real research |
+| `CURRENT_REACHABLE` | `data/active/causally_gated_normalized/` | Only catalog-selected flattened standard-lane research view; 562 admitted market-years with adjacent certification sidecars | Resolve through `data/active/catalog.json`; direct globs forbidden |
+| `CURRENT_REACHABLE` | `data/causally_gated_normalized/` | Content-addressed immutable Phase 2 release history with multiple preserved generations; not a second active view | Release inputs only through pinned manifests and catalog bindings |
+| `CURRENT_REACHABLE` | `scripts/audit_standard_data_topology_source_safe.py`; `state/unpublished_evidence/standard_data_topology_source_safe_audit/report.json` | Source-safe PASS verifies catalog self-hash, foundation/DBN release bindings, 562 active sidecars, and referenced Phase 1B/2 paths without opening payloads | Does not recertify rows or grant research authority |
+| `PREPARED_NOT_EXECUTED` | `scripts/prepare_safe_cleanup_inventory_v4.py`; `state/unpublished_evidence/safe_cleanup_preparation_v4/plan.json` | Deterministic no-delete cleanup classification; active and immutable data preserved, vault staging/manual-review evidence retained, only regenerable project caches are candidates | Separate exact cleanup approval required; census and all gates must be rerun immediately before/after mutation |
+| `RETIRED` | `safe_cleanup_preparation` v1-v3 plans and supersession records | Preserved prepare-only drafts; v1/v2 had self-referential inventory drift and v3 used an unsuitable dynamic worktree binding | Execution forbidden; no cleanup occurred |
 | `SYNTHETIC_ONLY` | `futures-pipeline`; `src/futures_rebuild/pipeline.py` | Generated mechanics fixtures only | No historical or alpha authority |
 | `RETIRED` | `configs/apex_micro_tier01_databento_preflight_plan.json`; obsolete `febccafd...` preparation | Preserved MES/MGC/M6E/M6A bytes, classified `SUPERSEDED_PREPARATION — MICRO_TIER1_SCOPE_RECONCILIATION`; cannot execute as current | No provider or publication authority |
 | `PREPARED_NOT_EXECUTED` | Corrected contract/profile/pointer under `state/unpublished_evidence/apex_micro_ladder_preparation_v2/`; architecture under `alpha_research_architecture_v2/` | Inactive MES/MCL/MGC/M6E successor; no active micro pointer or catalog | None |
 | `PREPARED_NOT_EXECUTED` | `scripts/prepare_apex_micro_infrastructure.py`; `configs/apex_micro_product_reference_requirements.json`; `state/unpublished_evidence/apex_micro_preparation_supersessions/micro_tier1_scope_reconciliation.json` | Deterministic create-only successor preparation and byte-bound supersession classification | No provider or activation authority |
 | `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v2.json`; `src/futures_rebuild/micro_alpha_databento_preflight.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v2/report.json` | One approved metadata-only attempt executed and failed closed on `list_schemas` `ReadTimeout` after two calls; $0, zero retries/downloads/rows/DBNs; report and authorization use preserved | Consumed authorization cannot execute again; report grants no acquisition authority |
 | `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v3.json`; `state/unpublished_evidence/apex_micro_metadata_preflight_v3_supersession.json` | Unexecuted local preparation preserved after executor self-hash drift before staging; no provider access, authorization, or report | Execution forbidden; grants no authority |
-| `PREPARED_NOT_EXECUTED` | `configs/apex_micro_tier01_databento_metadata_preflight_v4.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v4.py` | Immutable timeout-only successor: same exact 20 definitions and 51-call/$0/zero-retry scope, separate create-only report, 30-second call bound under 300 seconds; synthetic tests only | New exact staging, commit, and single-use metadata/provider approvals required |
-| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition.py` | Phase 1A create-only inactive-custody downloader implemented and adversarially tested; no provider run and no DBN output | Separate download approval absent; passing preflight and committed HEAD required first |
+| `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v4.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v4.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v4/report.json` | One approved metadata-only attempt failed closed after three calls when a valid nested schema-range response reached the flat-range parser; $0, zero retries/downloads/rows/DBNs | Consumed authorization cannot execute again; report grants no acquisition authority |
+| `PREPARED_NOT_EXECUTED` | `configs/apex_micro_tier01_databento_metadata_preflight_v5.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v5.py` | Annual market-year successor: exact 20 definitions expand to at most 180 annual estimates under a 371-call/$0/zero-retry ceiling; nested range validated; synthetic tests only | Exact staging, commit, and new single-use metadata/provider approval required |
+| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition.py` | Phase 1A annual market-year create-only inactive-custody downloader implemented and adversarially tested; canonical `data/dbn/<schema>/<market>/<year>/` tree only; no provider run and no DBN output | Separate download approval absent; passing v5 preflight and committed HEAD required first |
 | `SYNTHETIC_ONLY` | `tests/test_micro_alpha_*.py` | Corrected ladder, authorization, metadata, disk, collision, partial, cost, retry, custody, and no-decode mechanics | No provider, row, or download authority |
 | `HISTORICAL_ROW_APPROVAL_REQUIRED` | Phase 1B/2 contracts in `src/futures_rebuild/micro_alpha_pipeline.py` | Decoder/causal routing contracts are prepared; Phase 1B/2 row processing has not executed | Separate row-read approval only after acquisition |
 | `NOT_IMPLEMENTED` | `configs/active_micro_alpha_research_ladder.json`; `data/active/catalogs/apex_micro.json` | Intentionally absent until publication and Phase 2 certification | Cannot register micro research |
@@ -52,7 +58,8 @@ PROJECT_OUTLINE design
   -> corrected inactive MES/MCL/MGC/M6E ladder                     PREPARED_NOT_EXECUTED
   -> v2 metadata-only Databento preflight                          RETIRED / fail-closed timeout evidence
   -> v3 local preparation                                          RETIRED / pre-execution self-hash drift
-  -> immutable v4 timeout-only successor                           PREPARED_NOT_EXECUTED / approval absent
+  -> v4 metadata-only successor                                    RETIRED / fail-closed nested-range evidence
+  -> immutable v5 annual market-year successor                     PREPARED_NOT_EXECUTED / approval absent
   -> exact audited acquisition plan                                NOT_IMPLEMENTED until preflight PASS
   -> Phase 1A DBN + sidecar inactive custody                       PREPARED_NOT_EXECUTED / download authority absent
   -> Phase 1B definition/status/statistics/1m/1s decoding          row-read approval required
@@ -63,25 +70,29 @@ PROJECT_OUTLINE design
 ```
 
 Exact intended Phase 1A destination:
-`data/dbn/<schema-folder>/<micro-root>/<year>/<interval>.dbn.zst` with an
-adjacent `.manifest.json` sidecar. The prepared source scope is MES, MCL, MGC,
+`data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst` with an
+adjacent `.manifest.json` sidecar. This is the existing standard/full-contract
+DBN hierarchy, not a parallel micro tree. Exactly one pair is prepared for each
+market x schema x calendar-year interval; partial launch and latest years are
+explicit and multi-year DBNs are forbidden. The prepared source scope is MES, MCL, MGC,
 and M6E across the required Databento Standard historical schemas: definition,
 status, statistics, ohlcv-1m, and ohlcv-1s. No target micro DBN currently exists.
 
 No micro phase is labeled complete. The v2 metadata-only attempt executed once
-and produced only fail-closed metadata evidence; the v4 successor and Phase 1A
-downloader are implemented but
+and produced only fail-closed metadata evidence; v4 also produced preserved
+fail-closed metadata evidence. The v5 successor and Phase 1A downloader are implemented but
 unexecuted. Phase 1B/2 row processing is also unexecuted. The micro catalog is
 inactive, registration is blocked, and download authority is absent. Apart
-from the preserved price-free v2 failure report, the code proves mechanics with
-synthetic records only.
+from the preserved price-free v2 and v4 failure reports, the code proves mechanics
+with synthetic records only.
 
 ## Active and protected folders
 
 | Folder | Meaning |
 | --- | --- |
 | `data/active/` | Active hash-bound local research sources; resolve through the catalog only |
-| `data/dbn/`, `data/raw/`, `data/causally_gated_normalized/` | Immutable source families and inactive releases |
+| `data/dbn/`, `data/raw/`, `data/causally_gated_normalized/` | Immutable source/release families; multiple content-addressed generations are expected and are not active by directory presence |
+| `data/active/causally_gated_normalized/` | Only flattened standard-lane catalog-selected research view; resolve through `data/active/catalog.json` |
 | `configs/` | Operational pointers plus immutable or predecessor contracts/plans |
 | `state/trial_registry/`, `state/trial_events/` | Immutable trial genealogy and terminal evidence |
 | `state/unpublished_evidence/` | Prepared or sealed evidence that is not publication authority |
