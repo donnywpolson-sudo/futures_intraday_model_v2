@@ -162,14 +162,20 @@ live cockpit. Automatic order execution is outside this project's scope.
   read-only as failed-attempt evidence; none was accepted or finalized, and no
   destination under `data/dbn` exists. V21 cannot retry or supply successor
   bytes.
-- `src/futures_rebuild/micro_alpha_acquisition_v22.py` and
-  `scripts/prepare_apex_micro_phase1a_acquisition_v22.py`: local prepare-only
-  non-resuming successor. It retains the exact 160 annual requests and existing
-  cost, byte, disk, file, and two-download concurrency ceilings, extends only
-  the global runtime to 43,200 seconds, captures provider warning categories
-  and counts without message text, and rolls back partial finalization links.
-  Its create-only plan/audit outputs are deliberately absent until the
-  implementation is committed; it has no provider or download authority.
+- `src/futures_rebuild/micro_alpha_acquisition_v22.py`, its exact unexecuted
+  plan/audit, v7 cleanup census, and supersession report: preserved preparation
+  that exposed a self-referential cleanup snapshot. The census was created
+  before its own three output paths appeared, so post-generation deterministic
+  reconstruction failed closed. No authorization, provider call, download, or
+  cleanup mutation occurred; v22 is superseded and cannot execute as current.
+- `src/futures_rebuild/micro_alpha_acquisition_v23.py` and
+  `scripts/prepare_apex_micro_phase1a_acquisition_v23.py`: local prepare-only
+  reconstruction-stable successor. It retains the exact 160 annual requests,
+  43,200-second runtime, warning redaction, finalization rollback, and all cost,
+  byte, disk, file, and concurrency ceilings. V8 excludes only the three
+  declared create-only v23 outputs from its worktree snapshot and binds the
+  superseded v22 preparation explicitly. V23 plan/audit outputs remain absent
+  until a new committed implementation HEAD; no provider authority exists.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -281,8 +287,9 @@ fresh revalidation.
 The v21 failed-attempt staging tree is excluded from cleanup candidates and is
 preserved read-only. A v7 census successor is prepared locally to bind the
 sealed failure report while retaining the same no-mutation boundary; its
-create-only output is deferred until the v22 implementation has a committed
-HEAD.
+v7 output is preserved with the unexecuted v22 preparation. V8 provides the
+reconstruction-stable successor and its create-only output is deferred until
+the v23 implementation has a committed HEAD.
 
 ## Alpha research lanes
 
@@ -405,7 +412,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> v20 cumulative successor -> FAIL_CLOSED_METADATA_ONLY (68 calls; annual size timeout)
   -> v21 timeout-safe successor -> PASS_METADATA_ONLY (20 cost ranges + 160 annual size estimates; 180 calls; $0)
   -> exact v21-bound annual acquisition plan -> FAIL_CLOSED (runtime ceiling; 36 staged pairs; 0 accepted)
-  -> non-resuming v22 successor (same 160 annual requests; 43,200-second ceiling; plan deferred until commit)
+  -> non-resuming v22 successor -> SUPERSEDED_PREPARATION (self-referential cleanup census; no execution)
+  -> reconstruction-stable v23 successor (same 160 annual requests; 43,200-second ceiling; plan deferred until commit)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -449,15 +457,16 @@ pairs were accepted or finalized and all intended final paths remain absent.
 No DBN row or 2025/2026 payload was opened. The consumed authorization cannot
 be retried, and its staging bytes cannot be resumed or promoted.
 
-V22 is a non-resuming local successor: after its own committed plan, audit, and
-separate approval, it must re-download all 160 annual requests into a distinct
-staging root. It preserves the 900-second per-download bound, $0 cost, 320-call
-ceiling, one attempt, zero retries, 11,350,292,377-byte ceiling, and at most two
-isolated download clients. The sole scheduling change is a 43,200-second global
-ceiling sized from observed v21 throughput. Its thread-aware warning router
-stores only categories and counts, never warning messages; warnings cannot
-certify or activate a source. Any mid-pair final-link failure is rolled back
-while staging bytes remain preserved.
+V22 preserved those non-resuming protections, but its unexecuted post-commit
+plan preparation exposed a local determinism defect: v7 recorded the worktree
+before the plan, audit, and census outputs themselves appeared. The create-only
+v22 artifacts are preserved and superseded without provider access. V23 keeps
+the 900-second per-download bound, $0 cost, 320-call ceiling, one attempt, zero
+retries, 11,350,292,377-byte ceiling, at most two isolated download clients, and
+the 43,200-second global ceiling. V8 excludes only the three exact declared
+create-only successor outputs from worktree comparison and binds them through
+their hashes instead. Warning messages remain discarded, warnings cannot
+certify or activate source data, and partial final links remain rollback-safe.
 
 The executed v2 preflight fixed no 2026 end date: it failed closed at the
 second metadata call when the deliberately narrowed 10-second SDK timeout was
@@ -616,9 +625,10 @@ HEAD `a89fa8f3f31423a5422f008846cdac35a34b3355`; its separately approved
 authorization is consumed. The run made 160 cost calls and 36 download calls at
 $0 before the global runtime ceiling stopped the next request. It made zero
 retries, accepted and finalized zero pairs, decoded zero rows, and changed no
-catalog or active pointer. V22 must receive its own committed plan/audit and
-separate raw-download approval. Metadata approval and the consumed v21 download
-approval grant no v22 authority.
+catalog or active pointer. The unexecuted v22 plan is superseded. V23 must first
+receive a new committed implementation HEAD and reconstructing plan/audit, then
+a separate raw-download approval. Metadata approval and the consumed v21
+download approval grant no v23 authority.
 
 The one-second source proves reported-trade-bar evidence only. It cannot prove
 BBO availability, queue priority, guaranteed market-order execution, or precise

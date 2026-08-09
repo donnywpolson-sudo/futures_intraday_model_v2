@@ -44,7 +44,8 @@ work and every real-data or publishing action remains separately controlled.
 | `CURRENT_REACHABLE` | `configs/apex_micro_tier01_databento_metadata_preflight_v21.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v21.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v21/report.json` | One approved timeout-safe metadata-only run completed 20 full-range zero-cost proofs and 160 annual byte estimates in exactly 180 calls; `PASS_METADATA_ONLY`, end-exclusive 2026-08-09, $0, zero retries/downloads/rows/DBNs, and zero destination conflicts | Authorization consumed; report is price-free evidence for plan preparation only and grants no download authority |
 | `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition.py` | Preserved unexecuted predecessor downloader is bound to the older v7 report shape and cannot consume the sealed v21 PASS evidence as current | No acquisition authority; retained because v21 evidence hashes it |
 | `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v21.py`; exact plan/audit; consumed authorization; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v21_failure/report.json` | One separately approved run completed 160 $0 cost calls and 36 downloads, then failed closed on the 7,200-second global ceiling; 36 hash-verified pairs are read-only failed-attempt staging evidence, with zero accepted/finalized pairs and zero final destinations | Authorization consumed; no retry, resume, promotion, decoding, or research-source authority |
-| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition_v22.py`; `scripts/prepare_apex_micro_phase1a_acquisition_v22.py`; `scripts/prepare_safe_cleanup_candidate_census_v7.py` | Non-resuming exact-request successor keeps all v21 cost/byte/disk/file/concurrency controls, extends only global runtime to 43,200 seconds, sanitizes concurrent provider warnings, and rolls back partial final links | Local implementation only; create-only plan/audit deferred until committed HEAD; no provider or download authority |
+| `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v22.py`; exact plan/audit; v7 cleanup census; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v22_supersession/report.json` | Unexecuted plan preparation exposed a self-referential worktree snapshot: reconstructing after its three create-only outputs appeared changed the v7 census; all artifacts are preserved and sealed as `SUPERSEDED_PREPARATION_SELF_REFERENTIAL_CENSUS` | No authorization, provider calls, downloads, or cleanup mutation; v22 cannot execute as current |
+| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition_v23.py`; `scripts/prepare_apex_micro_phase1a_acquisition_v23.py`; `scripts/prepare_safe_cleanup_candidate_census_v8.py` | Reconstruction-stable non-resuming successor excludes only its three declared create-only outputs from the worktree snapshot while binding them separately; preserves v22 runtime, warning, rollback, cost, byte, disk, file, and concurrency protections | Local implementation only; plan/audit deferred until a new committed HEAD; no provider or download authority |
 | `SYNTHETIC_ONLY` | `tests/test_micro_alpha_*.py` | Corrected ladder, authorization, metadata, disk, collision, partial, cost, retry, custody, and no-decode mechanics | No provider, row, or download authority |
 | `HISTORICAL_ROW_APPROVAL_REQUIRED` | Phase 1B/2 contracts in `src/futures_rebuild/micro_alpha_pipeline.py` | Decoder/causal routing contracts are prepared; Phase 1B/2 row processing has not executed | Separate row-read approval only after acquisition |
 | `NOT_IMPLEMENTED` | `configs/active_micro_alpha_research_ladder.json`; `data/active/catalogs/apex_micro.json` | Intentionally absent until publication and Phase 2 certification | Cannot register micro research |
@@ -101,7 +102,8 @@ PROJECT_OUTLINE design
   -> v20 launch-date-separated cumulative metadata successor       RETIRED / 68 calls / provider timeout
   -> v21 timeout-safe cumulative metadata successor                CURRENT_REACHABLE / PASS_METADATA_ONLY / 180 calls / $0
   -> v21-bound annual acquisition successor                       RETIRED / runtime fail-closed / 36 staged / 0 accepted
-  -> v22 non-resuming annual acquisition successor                PREPARED_NOT_EXECUTED / plan deferred until commit
+  -> v22 non-resuming annual acquisition successor                RETIRED / unexecuted self-referential census preparation
+  -> v23 reconstruction-stable acquisition successor             PREPARED_NOT_EXECUTED / plan deferred until commit
   -> Phase 1A DBN + sidecar inactive custody                       PREPARED_NOT_EXECUTED / no final micro DBN exists
   -> Phase 1B definition/status/statistics/1m/1s decoding          row-read approval required
   -> Phase 2 1m feature + separate 1s execution foundations        row-read approval required
@@ -129,8 +131,13 @@ failed closed at its 7,200-second global runtime ceiling after 36 downloads.
 Those complete staging pairs and terminal are preserved read-only, but zero
 pairs were accepted or finalized and no target under `data/dbn` exists. Its
 authorization is consumed and cannot authorize a retry. The v22 non-resuming
-successor exists only as local prepare-only code; its exact plan/audit are
-deferred until a committed implementation HEAD and it has no provider authority.
+implementation was committed, but its first unexecuted plan/audit preparation
+revealed that v7 recorded the worktree before its own three create-only outputs
+appeared. The exact v22 artifacts are preserved and superseded; no authorization
+was consumed and no provider call occurred. V23 corrects only that local
+determinism defect by excluding those three exact output status paths while
+binding their artifacts separately. Its plan/audit remain deferred until a new
+committed implementation HEAD and it has no provider authority.
 Phase 1B/2 row processing is
 also unexecuted. The micro catalog is
 inactive, registration is blocked, and current download authority is absent. Apart
