@@ -344,7 +344,7 @@ def test_v16_documentation_matches_execution_reality() -> None:
     folder_map = (ROOT / "PIPELINE_FOLDER_MAP.md").read_text(encoding="utf-8")
     assert "v15 preflight -> FAIL_CLOSED_METADATA_ONLY (6 calls" in outline
     assert "immutable v19 opaque-partial-semantic-safe successor" in outline
-    assert "prepared v20 cumulative successor" in " ".join(outline.split())
+    assert "prepared v21 timeout-safe successor" in " ".join(outline.split())
     assert "RETIRED / fail-closed continuous-interval evidence" in folder_map
-    assert "v20 launch-date-separated cumulative metadata successor" in folder_map
+    assert "v21 timeout-safe cumulative metadata successor" in folder_map
     assert "committed HEAD and separate single-use metadata approval required" in folder_map

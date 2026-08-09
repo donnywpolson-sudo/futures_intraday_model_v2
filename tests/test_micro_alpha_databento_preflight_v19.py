@@ -483,5 +483,6 @@ def test_v19_documentation_matches_execution_reality() -> None:
     assert "apex_micro_remaining_product_effective_dates_source_v1/report.json" \
         in folder_map
     assert "Complete official four-market date scope" in folder_map
+    assert "v21 timeout-safe cumulative metadata successor" in folder_map
     assert "committed HEAD and separate single-use metadata approval required" \
         in folder_map

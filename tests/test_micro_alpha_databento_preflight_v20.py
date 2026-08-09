@@ -287,14 +287,15 @@ def test_executor_has_no_repeated_metadata_download_or_decode_surface() -> None:
     assert "read_dbn" not in source.lower()
 
 
-def test_v20_documentation_matches_preexecution_reality() -> None:
+def test_v20_documentation_matches_execution_reality() -> None:
     outline = " ".join((ROOT / "PROJECT_OUTLINE.md").read_text(encoding="utf-8").split())
     folder_map = " ".join(
         (ROOT / "PIPELINE_FOLDER_MAP.md").read_text(encoding="utf-8").split()
     )
     assert "v20" in outline
-    assert "160 annual" in outline
-    assert "320" in outline
-    assert "PREPARED_NOT_EXECUTED" in folder_map
+    assert "68 metadata calls" in outline
+    assert "PROVIDER_TIMEOUT" in outline
+    assert "RETIRED" in folder_map
     assert "apex_micro_metadata_preflight_v20" in folder_map
+    assert "v21 timeout-safe cumulative metadata successor" in folder_map
     assert "download authority remains absent" in folder_map

@@ -138,13 +138,20 @@ live cockpit. Automatic order execution is outside this project's scope.
   MES 2019-05-05/06, and MCL 2021-07-11/12. The fail-closed loader separates
   exchange launch evidence from Databento availability/continuity mappings.
 - `configs/apex_micro_tier01_databento_metadata_preflight_v20.json` and
-  `src/futures_rebuild/micro_alpha_databento_preflight_v20.py`: prepared,
-  unpublished cumulative successor. It reuses the sealed v19 PASS evidence for
-  entitlement, required schemas, range, parent-family availability, and
-  continuous-roll coverage, then permits only the 160 missing annual `get_cost`
-  and 160 `get_billable_size` calls. Its exact ceiling is 320 provider calls,
-  300 seconds total, 30 seconds per call, $0, and zero retries. It has not
-  contacted Databento and has no report.
+  `src/futures_rebuild/micro_alpha_databento_preflight_v20.py`: immutable
+  executed cumulative predecessor. Its one authorized run reused the sealed
+  v19 entitlement/range/symbology evidence and made 68 metadata calls before
+  the `MES` `ohlcv-1s` 2020 annual billable-size request reached the 30-second
+  per-call timeout. The create-only report records `PROVIDER_TIMEOUT`, $0,
+  zero retries, downloads, rows, or DBNs. V20 cannot execute again.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v21.json` and
+  `src/futures_rebuild/micro_alpha_databento_preflight_v21.py`: prepared,
+  unpublished timeout-safe successor. It retains 160 exact annual byte
+  estimates, proves zero cost over each of the 20 complete market/schema
+  acquisition ranges, and requires exact annual cost requotes immediately
+  before download. At most six isolated metadata clients execute 180 calls
+  under a 300-second total and 90-second per-call ceiling, stop scheduling on
+  the first failure, and never retry. It has not contacted Databento.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -363,7 +370,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> v18 preflight -> FAIL_CLOSED_METADATA_ONLY (13 calls; opaque discovery partial presence interpreted)
   -> immutable v19 opaque-partial-semantic-safe successor -> FAIL_CLOSED_METADATA_ONLY (15 calls; exchange launch date unresolved)
   -> sealed official CME launch dates for MES/MCL/MGC/M6E
-  -> prepared v20 cumulative successor (20 definitions; exactly 160 annual requests; 320 calls)
+  -> v20 cumulative successor -> FAIL_CLOSED_METADATA_ONLY (68 calls; annual size timeout)
+  -> prepared v21 timeout-safe successor (20 cost ranges + 160 annual size estimates; 180 calls; six isolated clients)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -544,13 +552,18 @@ official CME lookup subsequently established M6E's listing/effective date as
 the remaining dates: MGC 2010-10-03/04, MES 2019-05-05/06, and MCL
 2021-07-11/12. Those comparisons prove first provider
 mapping intervals are availability/continuity evidence, not exchange launch-date
-evidence. Prepared v20 binds both source reports and the complete v19 evidence,
-does not repeat the 15 passed metadata/symbology calls, and exposes only 160
-annual zero-cost queries plus 160 annual billable-size queries. The 160 annual
-market-schema intervals comprise MES 8 years x 5 schemas, MCL 6 x 5, MGC 9 x
-5, and M6E 9 x 5. Prelaunch intervals are explicit no-DBN dispositions. V20 is
-PREPARED_NOT_EXECUTED and requires a committed implementation plus a separate
-single-use metadata approval. Any malformed source,
+evidence. V20 bound both source reports and the complete v19 evidence, did not
+repeat the 15 passed metadata/symbology calls, and exposed only annual zero-cost
+and billable-size queries. Its authorized run failed closed after 68 metadata
+calls when the MES `ohlcv-1s` 2020 billable-size request exceeded the 30-second
+per-call bound. The prepared v21 timeout-safe successor preserves that immutable failure and retains 160
+annual market-schema intervals: MES 8 years x 5 schemas, MCL 6 x 5, MGC 9 x
+5, and M6E 9 x 5. It replaces duplicate annual cost checks with 20 zero-cost
+full-range proofs whose annual subsets are still requoted exactly immediately
+before download. Six isolated clients make at most 180 calls under the same
+300-second total ceiling and a 90-second per-call bound. Prelaunch intervals
+are explicit no-DBN dispositions. V21 is PREPARED_NOT_EXECUTED and requires a
+committed implementation plus a separate single-use metadata approval. Any malformed source,
 unapproved host, identity drift, mapping-date substitution, malformed provider
 response, nonzero cost, disk shortfall, destination collision, or other existing
 gate failure remains fail closed. Only a passing successor report may freeze a
