@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import shutil
+import threading
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -32,7 +33,7 @@ from futures_rebuild.micro_alpha_databento_preflight_v5 import (
     PREDECESSOR_REPORT_PATH as V4_REPORT_PATH,
     SUPERSEDED_LOCAL_PLAN_PATH,
 )
-from futures_rebuild.micro_alpha_databento_preflight_v6 import (
+from futures_rebuild.micro_alpha_databento_preflight_v7 import (
     PLAN_PATH as PREFLIGHT_PLAN_PATH,
     REFERENCE_PATH,
     REPORT_PATH,
@@ -60,6 +61,7 @@ IMPLEMENTATION_PATHS = (
     "src/futures_rebuild/micro_alpha_pipeline.py",
     "src/futures_rebuild/micro_alpha_databento_preflight_v5.py",
     "src/futures_rebuild/micro_alpha_databento_preflight_v6.py",
+    "src/futures_rebuild/micro_alpha_databento_preflight_v7.py",
     "src/futures_rebuild/micro_alpha_acquisition.py",
     "src/futures_rebuild/alpha_research_architecture.py",
     "src/futures_rebuild/runtime_environment.py",
@@ -96,7 +98,7 @@ class _Metadata:
             "result": {symbol: [{"d0": effective, "d1": kwargs["end_date"], "s": 1}]},
             "symbols": [symbol], "stype_in": kwargs["stype_in"],
             "stype_out": "instrument_id", "start_date": kwargs["start_date"],
-            "end_date": kwargs["end_date"], "partial": False,
+            "end_date": kwargs["end_date"], "partial": [],
             "not_found": [], "message": "", "status": 0,
         }
 
@@ -201,6 +203,53 @@ class FakeDownloadProvider:
         return DownloadProviderApis(self.get_cost, self.get_range)
 
 
+class BoundedParallelDownloadProvider(FakeDownloadProvider):
+    def __init__(self) -> None:
+        super().__init__()
+        self._lock = threading.Lock()
+        self._first_pair = threading.Barrier(2)
+        self.active_downloads = 0
+        self.peak_downloads = 0
+
+    def get_range(self, **kwargs: object) -> object:
+        with self._lock:
+            self.download_calls += 1
+            call_number = self.download_calls
+            self.active_downloads += 1
+            self.peak_downloads = max(self.peak_downloads, self.active_downloads)
+        try:
+            if call_number <= 2:
+                self._first_pair.wait(timeout=5)
+            path = Path(str(kwargs.pop("path")))
+            with self._lock:
+                self.queries.append(dict(kwargs))
+            path.write_bytes(canonical_bytes(kwargs))
+            return object()
+        finally:
+            with self._lock:
+                self.active_downloads -= 1
+
+
+class FailingParallelDownloadProvider(FakeDownloadProvider):
+    def __init__(self, secret: str) -> None:
+        super().__init__()
+        self.secret = secret
+        self._lock = threading.Lock()
+        self._first_pair = threading.Barrier(2)
+
+    def get_range(self, **kwargs: object) -> object:
+        with self._lock:
+            self.download_calls += 1
+            call_number = self.download_calls
+        path = Path(str(kwargs.pop("path")))
+        if call_number <= 2:
+            self._first_pair.wait(timeout=5)
+        path.write_bytes(canonical_bytes(kwargs))
+        if call_number == 1:
+            raise RuntimeError(self.secret)
+        return object()
+
+
 def _acquisition_receipt(root: Path) -> OperationReceipt:
     return _external_receipt(
         root=root, operation=OPERATION, plan_path=PLAN_PATH,
@@ -229,6 +278,8 @@ def test_plan_freezes_exact_scope_paths_prelaunch_and_inactive_controls(
     assert plan["limits"]["maximum_dbn_files"] == 180
     assert plan["limits"]["maximum_sidecars"] == 180
     assert plan["limits"]["maximum_provider_calls"] == 320
+    assert plan["limits"]["maximum_parallel_downloads"] == 2
+    assert plan["limits"]["maximum_provider_clients"] == 3
     assert plan["file_partition"] == (
         "ONE_DBN_AND_ADJACENT_SIDECAR_PER_MARKET_SCHEMA_CALENDAR_YEAR"
     )
@@ -264,6 +315,8 @@ def test_successful_mechanics_create_exact_verified_pairs_without_decoding(
         terminal.get("failure_stage"), terminal.get("exception_type"),
     )
     assert terminal["provider_call_counts"] == {"get_cost": 160, "get_range": 160}
+    assert terminal["provider_client_count"] == 3
+    assert terminal["download_worker_count"] == 2
     assert terminal["accepted_dbn_count"] == 160
     assert terminal["accepted_sidecar_count"] == 160
     assert terminal["dbn_rows_decoded"] == 0
@@ -290,6 +343,37 @@ def test_successful_mechanics_create_exact_verified_pairs_without_decoding(
     assert verification["dbn_count"] == verification["sidecar_count"] == 160
 
 
+def test_download_parallelism_is_bounded_to_two_isolated_workers(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = _prepared_root(tmp_path, monkeypatch)
+    provider = BoundedParallelDownloadProvider()
+    terminal = _run(root, provider)
+    assert terminal["state"] == "SUCCESS_INACTIVE_IMMUTABLE_CUSTODY"
+    assert terminal["download_worker_count"] == 2
+    assert terminal["provider_client_count"] == 3
+    assert provider.peak_downloads == 2
+    assert terminal["automatic_retries"] == 0
+
+
+def test_parallel_failure_stops_new_work_and_preserves_sanitized_evidence(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = _prepared_root(tmp_path, monkeypatch)
+    secret = "credential-shaped-provider-message"
+    provider = FailingParallelDownloadProvider(secret)
+    terminal = _run(root, provider)
+    assert terminal["state"] == "FAILURE_INACTIVE_EVIDENCE_PRESERVED"
+    assert terminal["automatic_retries"] == 0
+    assert terminal["provider_call_counts"]["get_range"] == 2
+    assert provider.download_calls == 2
+    assert terminal["download_worker_failures"][0]["exception_type"] == "RuntimeError"
+    assert terminal["staging_file_census"]
+    assert secret not in json.dumps(terminal)
+    assert terminal["accepted_dbn_count"] == terminal["accepted_sidecar_count"] == 0
+    assert not list((root / "data/dbn").rglob("*.dbn.zst")) if (root / "data/dbn").exists() else True
+
+
 @pytest.mark.parametrize("mode", ["nonzero", "empty", "single_failure"])
 def test_cost_partial_and_provider_failures_are_preserved_without_retry(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str,
@@ -310,7 +394,7 @@ def test_cost_partial_and_provider_failures_are_preserved_without_retry(
         assert provider.download_calls == 0
     if mode == "empty":
         assert provider.cost_calls == 160
-        assert provider.download_calls == 1
+        assert 1 <= provider.download_calls <= 2
         partials = list((root / "state/provider_acquisition_staging/apex_micro_tier01").rglob("*.partial"))
         assert partials
     assert not list((root / "data/dbn").rglob("*.dbn.zst")) if (root / "data/dbn").exists() else True

@@ -11,8 +11,10 @@ import os
 import shutil
 import stat
 import subprocess
+import threading
 import time
 from collections.abc import Callable, Mapping
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -22,7 +24,7 @@ from .boundary import OperationClassification, OperationReceipt, RepoBoundary
 from .canonical import canonical_bytes, sha256_file, sha256_json
 from .errors import IntegrityError, UnauthorizedOperation
 from .live_cockpit.databento_auth import resolve_databento_api_key
-from .micro_alpha_databento_preflight_v6 import (
+from .micro_alpha_databento_preflight_v7 import (
     CREDENTIAL_SOURCE,
     MAXIMUM_ANNUAL_REQUESTS,
     MAXIMUM_TOTAL_ACQUISITION_BYTES,
@@ -51,6 +53,8 @@ MAXIMUM_RETRIES: Final = 0
 MAXIMUM_DBN_FILES: Final = MAXIMUM_ANNUAL_REQUESTS
 MAXIMUM_SIDECARS: Final = MAXIMUM_ANNUAL_REQUESTS
 DISK_SAFETY_BYTES: Final = 1024**3
+MAXIMUM_PARALLEL_DOWNLOADS: Final = 2
+MAXIMUM_PROVIDER_CLIENTS: Final = 1 + MAXIMUM_PARALLEL_DOWNLOADS
 
 
 @dataclass(frozen=True)
@@ -176,6 +180,8 @@ def _validate_preflight_report(*, root: Path) -> dict[str, object]:
                     "first_effective_date",
                     "mapping_interval_count",
                     "mapping_sha256",
+                    "not_found_count",
+                    "partial_count",
                     "query_start_date",
                 }
                 or summary.get("first_effective_date") != effective
@@ -187,6 +193,8 @@ def _validate_preflight_report(*, root: Path) -> dict[str, object]:
                 or summary.get("mapping_interval_count", 0) <= 0
                 or type(summary.get("mapping_sha256")) is not str
                 or len(str(summary.get("mapping_sha256"))) != 64
+                or summary.get("partial_count") != 0
+                or summary.get("not_found_count") != 0
             ):
                 raise IntegrityError("metadata symbology summary drifted")
     request_by_id = {
@@ -373,12 +381,12 @@ def build_acquisition_plan(
         raise IntegrityError("metadata report byte ceiling is invalid")
     implementation_paths = (
         "src/futures_rebuild/micro_alpha_pipeline.py",
-        "src/futures_rebuild/micro_alpha_databento_preflight_v6.py",
+        "src/futures_rebuild/micro_alpha_databento_preflight_v7.py",
         "src/futures_rebuild/micro_alpha_acquisition.py",
         "src/futures_rebuild/alpha_research_architecture.py",
     )
     core: dict[str, object] = {
-        "schema_version": "apex_micro_phase1a_acquisition_plan/3.0.0",
+        "schema_version": "apex_micro_phase1a_acquisition_plan/4.0.0",
         "state": "PREPARED_REQUIRES_SEPARATE_DOWNLOAD_APPROVAL",
         "operation": OPERATION,
         "committed_implementation_head": committed_head,
@@ -413,6 +421,8 @@ def build_acquisition_plan(
             "maximum_runtime_seconds": MAXIMUM_RUNTIME_SECONDS,
             "maximum_attempts": 1,
             "maximum_retries": MAXIMUM_RETRIES,
+            "maximum_parallel_downloads": MAXIMUM_PARALLEL_DOWNLOADS,
+            "maximum_provider_clients": MAXIMUM_PROVIDER_CLIENTS,
         },
         "credential_source": {"path": "api.env", "binding": "PATH_ONLY_CONTENT_NEVER_REPORTED"},
         "custody": {
@@ -422,6 +432,8 @@ def build_acquisition_plan(
             "terminal_record_written_last": True,
             "failed_or_partial_attempt_preserved_inactive": True,
             "resume_or_overwrite": False,
+            "parallelism": "TWO_ISOLATED_DOWNLOAD_CLIENTS_MAXIMUM",
+            "stop_scheduling_after_first_failure": True,
         },
         "forbidden": {
             "dbn_row_decode": True,
@@ -530,6 +542,10 @@ def verify_completed_acquisition(*, root: Path, terminal_path: Path) -> dict[str
         or terminal.get("plan_sha256") != sha256_file(root / PLAN_PATH)
         or terminal.get("provider_call_counts")
         != {"get_cost": exact_count, "get_range": exact_count}
+        or terminal.get("provider_client_count") != MAXIMUM_PROVIDER_CLIENTS
+        or terminal.get("download_worker_count") != MAXIMUM_PARALLEL_DOWNLOADS
+        or terminal.get("maximum_parallel_downloads") != MAXIMUM_PARALLEL_DOWNLOADS
+        or terminal.get("maximum_provider_clients") != MAXIMUM_PROVIDER_CLIENTS
         or terminal.get("accepted_dbn_count") != exact_count
         or terminal.get("accepted_sidecar_count") != exact_count
         or terminal.get("external_cost_incurred_usd") != "0"
@@ -621,6 +637,8 @@ def required_scope(*, root: Path, plan: Mapping[str, object]) -> dict[str, str]:
         "maximum_sidecars": str(limits["maximum_sidecars"]),
         "maximum_total_bytes": str(limits["maximum_total_bytes"]),
         "maximum_runtime_seconds": str(limits["maximum_runtime_seconds"]),
+        "maximum_parallel_downloads": str(limits["maximum_parallel_downloads"]),
+        "maximum_provider_clients": str(limits["maximum_provider_clients"]),
         "maximum_external_cost_usd": "0",
         "maximum_attempts": "1",
         "maximum_retries": "0",
@@ -661,6 +679,109 @@ def _write_terminal(path: Path, core: Mapping[str, object]) -> dict[str, object]
 
 def _mark_read_only(path: Path) -> None:
     path.chmod(stat.S_IREAD)
+
+
+@dataclass(frozen=True)
+class _DownloadWorkerResult:
+    records: tuple[dict[str, object], ...]
+    get_range_calls: int
+    provider_client_created: bool
+    failure_type: str | None
+    failed_request_id: str | None
+
+
+def _download_worker(
+    *,
+    root: Path,
+    downloads: Path,
+    plan_id: str,
+    items: tuple[Mapping[str, object], ...],
+    provider_factory: Callable[[], DownloadProviderApis],
+    stop_event: threading.Event,
+    total_state: dict[str, int],
+    total_lock: threading.Lock,
+    maximum_total_bytes: int,
+    started: float,
+    clock: Callable[[], float],
+) -> _DownloadWorkerResult:
+    """Download one deterministic queue with one isolated provider client."""
+
+    records: list[dict[str, object]] = []
+    calls = 0
+    failed_request_id: str | None = None
+    try:
+        apis = provider_factory()
+    except Exception as exc:
+        stop_event.set()
+        return _DownloadWorkerResult((), 0, False, type(exc).__name__, None)
+    try:
+        for item in items:
+            if stop_event.is_set():
+                break
+            if clock() - started >= MAXIMUM_RUNTIME_SECONDS:
+                raise UnauthorizedOperation("acquisition runtime ceiling reached")
+            request_id = str(item["request_id"])
+            failed_request_id = request_id
+            partial = downloads / f"{request_id[:16]}.dbn.zst.partial"
+            if partial.exists():
+                raise IntegrityError("partial staging destination already exists")
+            calls += 1
+            apis.get_range(**item["query"], path=str(partial))
+            if not partial.is_file():
+                raise IntegrityError("provider did not create the bound staging file")
+            size = partial.stat().st_size
+            if size <= 0 or size > item["request_byte_ceiling"]:
+                raise UnauthorizedOperation(
+                    "downloaded file exceeds its byte ceiling or is empty"
+                )
+            digest = sha256_file(partial)
+            with total_lock:
+                proposed = total_state["bytes"] + size
+                if proposed > maximum_total_bytes:
+                    raise UnauthorizedOperation(
+                        "downloaded files exceed the total byte ceiling"
+                    )
+                total_state["bytes"] = proposed
+            sidecar_staging = downloads / f"{request_id[:16]}.manifest.json.partial"
+            sidecar_core = {
+                "schema_version": "apex_micro_inactive_dbn_manifest/3.0.0",
+                "state": "INACTIVE_CUSTODY_NOT_A_RESEARCH_SOURCE",
+                "plan_id": plan_id,
+                "request_id": request_id,
+                "exact_authorized_query": item["query"],
+                "estimated_cost_usd": "0",
+                "external_cost_incurred_usd": "0",
+                "byte_count": size,
+                "sha256": digest,
+                "dbn_rows_decoded": 0,
+                "payload_opened_for_row_access": False,
+                "catalog_activation": False,
+            }
+            with sidecar_staging.open("xb") as stream:
+                stream.write(
+                    canonical_bytes(
+                        {**sidecar_core, "manifest_id": sha256_json(sidecar_core)}
+                    )
+                    + b"\n"
+                )
+            records.append(
+                {
+                    "request_id": request_id,
+                    "staging_dbn": partial.relative_to(root).as_posix(),
+                    "staging_sidecar": sidecar_staging.relative_to(root).as_posix(),
+                    "dbn_destination": item["dbn_destination"],
+                    "sidecar_destination": item["sidecar_destination"],
+                    "byte_count": size,
+                    "sha256": digest,
+                }
+            )
+            failed_request_id = None
+    except Exception as exc:
+        stop_event.set()
+        return _DownloadWorkerResult(
+            tuple(records), calls, True, type(exc).__name__, failed_request_id
+        )
+    return _DownloadWorkerResult(tuple(records), calls, True, None, None)
 
 
 def execute_authorized_acquisition(
@@ -705,9 +826,12 @@ def execute_authorized_acquisition(
     staged: list[dict[str, object]] = []
     exact_count = int(plan["limits"]["exact_request_count"])
     provider_calls = {"get_cost": 0, "get_range": 0}
+    provider_client_count = 0
+    worker_failures: list[dict[str, object]] = []
+    downloads: Path | None = None
     failure_stage = "PROVIDER_FACTORY"
     base: dict[str, object] = {
-        "schema_version": "apex_micro_phase1a_acquisition_terminal/2.0.0",
+        "schema_version": "apex_micro_phase1a_acquisition_terminal/3.0.0",
         "plan_id": plan["plan_id"],
         "plan_sha256": sha256_file(root / PLAN_PATH),
         "authorization_receipt_id": authorization.receipt_id,
@@ -717,6 +841,8 @@ def execute_authorized_acquisition(
         "maximum_external_cost_usd": "0",
         "external_cost_incurred_usd": "0",
         "automatic_retries": 0,
+        "maximum_parallel_downloads": MAXIMUM_PARALLEL_DOWNLOADS,
+        "maximum_provider_clients": MAXIMUM_PROVIDER_CLIENTS,
         "dbn_rows_decoded": 0,
         "raw_values_reported": False,
         "catalog_or_pointer_activated": False,
@@ -727,6 +853,7 @@ def execute_authorized_acquisition(
     }
     try:
         apis = provider_factory()
+        provider_client_count = 1
         failure_stage = "FRESH_ZERO_COST_CENSUS"
         for item in plan["requests"]:
             if clock() - started >= MAXIMUM_RUNTIME_SECONDS:
@@ -735,57 +862,62 @@ def execute_authorized_acquisition(
             _zero_cost(apis.get_cost(**_metadata_query(item["query"])))
         downloads = attempt / "downloads"
         downloads.mkdir()
-        total_bytes = 0
         failure_stage = "DOWNLOAD_TO_INACTIVE_STAGING"
-        for item in plan["requests"]:
-            if clock() - started >= MAXIMUM_RUNTIME_SECONDS:
-                raise UnauthorizedOperation("acquisition runtime ceiling reached")
-            request_id = str(item["request_id"])
-            partial = downloads / f"{request_id[:16]}.dbn.zst.partial"
-            if partial.exists():
-                raise IntegrityError("partial staging destination already exists")
-            provider_calls["get_range"] += 1
-            apis.get_range(**item["query"], path=str(partial))
-            if not partial.is_file():
-                raise IntegrityError("provider did not create the bound staging file")
-            size = partial.stat().st_size
-            if size <= 0 or size > item["request_byte_ceiling"]:
-                raise UnauthorizedOperation("downloaded file exceeds its byte ceiling or is empty")
-            total_bytes += size
-            if total_bytes > plan["limits"]["maximum_total_bytes"]:
-                raise UnauthorizedOperation("downloaded files exceed the total byte ceiling")
-            digest = sha256_file(partial)
-            sidecar_staging = downloads / f"{request_id[:16]}.manifest.json.partial"
-            sidecar_core = {
-                "schema_version": "apex_micro_inactive_dbn_manifest/2.0.0",
-                "state": "INACTIVE_CUSTODY_NOT_A_RESEARCH_SOURCE",
-                "plan_id": plan["plan_id"],
-                "request_id": request_id,
-                "exact_authorized_query": item["query"],
-                "estimated_cost_usd": "0",
-                "external_cost_incurred_usd": "0",
-                "byte_count": size,
-                "sha256": digest,
-                "dbn_rows_decoded": 0,
-                "payload_opened_for_row_access": False,
-                "catalog_activation": False,
+        worker_count = min(MAXIMUM_PARALLEL_DOWNLOADS, exact_count)
+        queues = tuple(
+            tuple(plan["requests"][worker_index::worker_count])
+            for worker_index in range(worker_count)
+        )
+        stop_event = threading.Event()
+        total_state = {"bytes": 0}
+        total_lock = threading.Lock()
+        with ThreadPoolExecutor(
+            max_workers=worker_count,
+            thread_name_prefix="apex-micro-dbn",
+        ) as executor:
+            futures = [
+                executor.submit(
+                    _download_worker,
+                    root=root,
+                    downloads=downloads,
+                    plan_id=str(plan["plan_id"]),
+                    items=queue,
+                    provider_factory=provider_factory,
+                    stop_event=stop_event,
+                    total_state=total_state,
+                    total_lock=total_lock,
+                    maximum_total_bytes=int(plan["limits"]["maximum_total_bytes"]),
+                    started=started,
+                    clock=clock,
+                )
+                for queue in queues
+            ]
+            results = [future.result() for future in futures]
+        provider_calls["get_range"] = sum(result.get_range_calls for result in results)
+        provider_client_count += sum(
+            int(result.provider_client_created) for result in results
+        )
+        staged = [record for result in results for record in result.records]
+        request_order = {
+            str(item["request_id"]): index
+            for index, item in enumerate(plan["requests"])
+        }
+        staged.sort(key=lambda item: request_order[str(item["request_id"])])
+        worker_failures = [
+            {
+                "worker_index": index,
+                "exception_type": result.failure_type,
+                "failed_request_id": result.failed_request_id,
             }
-            with sidecar_staging.open("xb") as stream:
-                stream.write(canonical_bytes({
-                    **sidecar_core, "manifest_id": sha256_json(sidecar_core),
-                }) + b"\n")
-            staged.append({
-                "request_id": request_id,
-                "staging_dbn": partial.relative_to(root).as_posix(),
-                "staging_sidecar": sidecar_staging.relative_to(root).as_posix(),
-                "dbn_destination": item["dbn_destination"],
-                "sidecar_destination": item["sidecar_destination"],
-                "byte_count": size,
-                "sha256": digest,
-            })
+            for index, result in enumerate(results)
+            if result.failure_type is not None
+        ]
+        if worker_failures:
+            raise IntegrityError("bounded parallel download worker failed")
         if (
             provider_calls != {"get_cost": exact_count, "get_range": exact_count}
             or len(staged) != exact_count
+            or provider_client_count > MAXIMUM_PROVIDER_CLIENTS
         ):
             raise IntegrityError("successful acquisition call or file count drifted")
         failure_stage = "FINAL_DESTINATION_RECHECK"
@@ -810,6 +942,8 @@ def execute_authorized_acquisition(
             **base,
             "state": "SUCCESS_INACTIVE_IMMUTABLE_CUSTODY",
             "provider_call_counts": provider_calls,
+            "provider_client_count": provider_client_count,
+            "download_worker_count": worker_count,
             "accepted_dbn_count": exact_count,
             "accepted_sidecar_count": exact_count,
             "total_bytes": sum(int(item["byte_count"]) for item in staged),
@@ -825,9 +959,20 @@ def execute_authorized_acquisition(
             "failure_stage": failure_stage,
             "exception_type": type(exc).__name__,
             "provider_call_counts": provider_calls,
+            "provider_client_count": provider_client_count,
+            "download_worker_failures": worker_failures,
             "accepted_dbn_count": 0,
             "accepted_sidecar_count": 0,
             "staged_or_partially_finalized_evidence": staged,
+            "staging_file_census": (
+                sorted(
+                    path.relative_to(root).as_posix()
+                    for path in downloads.iterdir()
+                    if path.is_file()
+                )
+                if downloads is not None and downloads.exists()
+                else []
+            ),
             "terminal_written_last": True,
         }
     return _write_terminal(terminal_path, core)

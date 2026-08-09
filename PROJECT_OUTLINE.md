@@ -42,9 +42,14 @@ live cockpit. Automatic order execution is outside this project's scope.
   request used `2000-01-01` and received a provider client error; its $0 report
   and consumed authorization are preserved.
 - `configs/apex_micro_tier01_databento_metadata_preflight_v6.json`: immutable
-  provider-range-safe successor. It retains the exact 20 definitions and annual
-  layout, derives the symbology start from the provider-confirmed dataset range,
-  and refuses to invent an exact product date when coverage begins after launch.
+  executed provider-range-safe successor. Its one approved attempt failed
+  closed at call four after the first successful resolve returned list-shaped
+  `partial` and the local validator incorrectly used set membership. Its $0
+  report and consumed authorization are preserved; it cannot run again.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v7.json`: immutable
+  list-shape-safe successor. It retains the exact 20 definitions and annual
+  layout, requires exact empty JSON lists for `partial` and `not_found`, derives
+  symbology start from the provider range, and has no download surface.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -246,7 +251,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> v3 local preparation superseded before staging/execution
   -> v4 preflight -> FAIL_CLOSED_METADATA_ONLY (3 calls; valid nested range rejected)
   -> v5 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; first broad-range symbology request rejected)
-  -> immutable v6 provider-range-safe annual successor (20 definitions; at most 180 annual requests)
+  -> v6 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; local list-shape validator defect)
+  -> immutable v7 list-shape-safe annual successor (20 definitions; at most 180 annual requests)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -279,7 +285,12 @@ destinations, and alternate micro-root layouts fail closed.
 The Phase 1A downloader is implemented and synthetic/adversarially tested but
 has not executed. It uses one exact bounded interval per market/schema/year, writes
 first to inactive staging, requotes every request at exactly $0 before the
-first download, streams compressed DBN bytes without iterating rows, verifies
+first download, and then uses at most two isolated Databento download clients.
+The worker queues stop scheduling after the first failure; an already-running
+second request may finish into inactive staging and is preserved as evidence.
+This bounded concurrency improves network utilization without sharing an SDK
+client, retrying, overwriting, or weakening byte ceilings. It streams compressed
+DBN bytes without iterating rows, verifies
 size and SHA-256, creates an exact-query adjacent sidecar, refuses collisions,
 and writes one terminal attempt record last. Empty, partial, failed, oversized,
 or interrupted files remain inactive failure evidence. There is one attempt,
@@ -305,8 +316,14 @@ symbology requests, records only a price-free HTTP status and bounded call
 context on failure, and fails explicitly if that provider start truncates an
 exact product effective date. It retains the same 20 definitions, at most 180
 annual estimates, fixed 371-call ceiling, 300-second runtime, 30-second
-per-call bound, $0 cost, and zero retries. A new separate approval is required
-before v6 may contact Databento. Only a passing report may freeze a deterministic
+per-call bound, $0 cost, and zero retries. The one approved v6 attempt reached
+the first resolve at call four and then failed locally because Databento's
+list-shaped `partial` field was tested against a set, raising `TypeError`. It
+made no download, read no rows, created no DBN, and its sealed report and
+authorization are preserved. V7 corrects only that local response contract:
+`partial` and `not_found` must each be exact empty string lists; malformed or
+nonempty values fail closed without recording their contents. A new separate
+approval is required before v7 may contact Databento. Only a passing report may freeze a deterministic
 acquisition plan bound to the then-committed implementation HEAD. Metadata
 approval never grants download authority.
 
