@@ -26,6 +26,13 @@ from futures_rebuild.micro_alpha_acquisition import (
     write_acquisition_plan_create_only,
 )
 from futures_rebuild.micro_alpha_databento_preflight_v5 import (
+    LOCAL_SUPERSESSION_PATH,
+    PREDECESSOR_AUTHORIZATION_PATH as V4_AUTHORIZATION_PATH,
+    PREDECESSOR_PLAN_PATH as V4_PLAN_PATH,
+    PREDECESSOR_REPORT_PATH as V4_REPORT_PATH,
+    SUPERSEDED_LOCAL_PLAN_PATH,
+)
+from futures_rebuild.micro_alpha_databento_preflight_v6 import (
     PLAN_PATH as PREFLIGHT_PLAN_PATH,
     REFERENCE_PATH,
     REPORT_PATH,
@@ -33,8 +40,6 @@ from futures_rebuild.micro_alpha_databento_preflight_v5 import (
     PREDECESSOR_AUTHORIZATION_PATH,
     PREDECESSOR_PLAN_PATH,
     PREDECESSOR_REPORT_PATH,
-    LOCAL_SUPERSESSION_PATH,
-    SUPERSEDED_LOCAL_PLAN_PATH,
     MetadataProviderApis,
     build_plan as build_preflight_plan,
     execute_preflight,
@@ -46,10 +51,18 @@ pytestmark = [pytest.mark.current, pytest.mark.high_risk]
 ROOT = Path(__file__).resolve().parents[1]
 HEAD = "a" * 40
 IMPLEMENTATION_PATHS = (
+    "configs/dependency_lock_receipt.json",
+    "src/futures_rebuild/boundary.py",
+    "src/futures_rebuild/canonical.py",
+    "src/futures_rebuild/errors.py",
+    "src/futures_rebuild/live_cockpit/databento_auth.py",
+    "src/futures_rebuild/micro_alpha_databento_preflight.py",
     "src/futures_rebuild/micro_alpha_pipeline.py",
     "src/futures_rebuild/micro_alpha_databento_preflight_v5.py",
+    "src/futures_rebuild/micro_alpha_databento_preflight_v6.py",
     "src/futures_rebuild/micro_alpha_acquisition.py",
     "src/futures_rebuild/alpha_research_architecture.py",
+    "src/futures_rebuild/runtime_environment.py",
 )
 
 
@@ -78,7 +91,7 @@ class _Metadata:
     def resolve(self, **kwargs: object) -> object:
         symbol = kwargs["symbols"][0]
         market = str(symbol).split(".")[0]
-        effective = {"MES": "2019-05-06", "MCL": "2021-07-12", "MGC": "2010-10-03", "M6E": "2009-03-23"}[market]
+        effective = {"MES": "2019-05-06", "MCL": "2021-07-12", "MGC": "2010-10-03", "M6E": "2010-03-23"}[market]
         return {
             "result": {symbol: [{"d0": effective, "d1": kwargs["end_date"], "s": 1}]},
             "symbols": [symbol], "stype_in": kwargs["stype_in"],
@@ -129,6 +142,9 @@ def _prepared_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
         PREDECESSOR_PLAN_PATH.as_posix(),
         PREDECESSOR_REPORT_PATH.as_posix(),
         PREDECESSOR_AUTHORIZATION_PATH.as_posix(),
+        V4_PLAN_PATH.as_posix(),
+        V4_REPORT_PATH.as_posix(),
+        V4_AUTHORIZATION_PATH.as_posix(),
         SUPERSEDED_LOCAL_PLAN_PATH.as_posix(),
         LOCAL_SUPERSESSION_PATH.as_posix(),
     ):

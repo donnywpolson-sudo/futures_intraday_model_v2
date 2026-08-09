@@ -37,8 +37,14 @@ live cockpit. Automatic order execution is outside this project's scope.
   after three metadata calls because the valid provider dataset range contained
   nested schema ranges; its $0 report and consumed authorization are preserved.
 - `configs/apex_micro_tier01_databento_metadata_preflight_v5.json`: immutable
-  annual market-year successor with the same 20 market/schema definitions,
-  bounded annual cost/byte estimates, a $0 ceiling, and no download capability.
+  annual market-year successor executed once under its separate approval. It
+  failed closed after four calls when the first `MES.FUT` parent symbology
+  request used `2000-01-01` and received a provider client error; its $0 report
+  and consumed authorization are preserved.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v6.json`: immutable
+  provider-range-safe successor. It retains the exact 20 definitions and annual
+  layout, derives the symbology start from the provider-confirmed dataset range,
+  and refuses to invent an exact product date when coverage begins after launch.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -124,12 +130,15 @@ checks the catalog, sidecars, validation receipts, and Phase 1A/1B/2 release
 bindings without opening DBN or parquet payloads. It confirms provenance
 metadata, not a new row-level recertification.
 
-Cleanup is a separate governed boundary. The current prepare-only plan at
-`state/unpublished_evidence/safe_cleanup_preparation_v4/plan.json` classifies
+Cleanup is a separate governed boundary. Cleanup preparation v4 remains
+preserved but retired because its dynamic prepared-HEAD record became stale
+after the approved implementation commit. The current prepare-only policy at
+`state/unpublished_evidence/safe_cleanup_preparation_v5/plan.json` classifies
 active/catalog paths and immutable release history as preserve-only, keeps
-nonempty vault staging and snapshot evidence under manual review, and limits
-potential cleanup to regenerable project caches. It performs no move or delete.
-Immediately before any future cleanup, rebuild the exact candidate census,
+vault staging and snapshot evidence under manual review, and freezes no cleanup
+candidate or execution HEAD. It performs no move or delete. Immediately before
+any future cleanup, after all prior writes finish, build the exact literal
+candidate and execution-HEAD census,
 prove that no catalog, manifest, receipt, plan, or worktree item binds a target,
 obtain a separate exact cleanup approval, and rerun catalog/provenance/tests and
 micro disk/destination gates afterward. Cleanup that could affect acquisition
@@ -236,7 +245,8 @@ This route reuses the standard folder grammar without mixing catalogs:
 v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; no rows)
   -> v3 local preparation superseded before staging/execution
   -> v4 preflight -> FAIL_CLOSED_METADATA_ONLY (3 calls; valid nested range rejected)
-  -> immutable v5 annual market-year successor (20 definitions; at most 180 annual requests)
+  -> v5 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; first broad-range symbology request rejected)
+  -> immutable v6 provider-range-safe annual successor (20 definitions; at most 180 annual requests)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -285,11 +295,18 @@ was preserved and superseded when its executor self-hash drifted before
 staging. The separately approved v4 attempt also incurred $0, used zero retries,
 performed no download or row read, and failed closed after three metadata calls
 because its flat-range parser rejected the provider's nested schema ranges.
-The v5 successor validates those nested ranges and expands the same 20
-market/schema definitions into at most 180 annual market/schema estimates under
-one fixed 371-call ceiling, 300-second runtime, 30-second per-call bound, $0
-cost, and zero retries. A new separate approval is required before v5 may
-contact Databento. Only a passing report may freeze a deterministic
+The separately approved v5 attempt validated the nested range, then failed
+closed at deterministic call four: the first `MES.FUT` parent symbology request
+used `2000-01-01` and the provider returned `BentoClientError`. The sealed
+price-free report intentionally records no provider message. It incurred $0,
+used zero retries, performed no download or row read, and created no DBN. V6
+uses the provider-confirmed dataset start for all parent and continuous
+symbology requests, records only a price-free HTTP status and bounded call
+context on failure, and fails explicitly if that provider start truncates an
+exact product effective date. It retains the same 20 definitions, at most 180
+annual estimates, fixed 371-call ceiling, 300-second runtime, 30-second
+per-call bound, $0 cost, and zero retries. A new separate approval is required
+before v6 may contact Databento. Only a passing report may freeze a deterministic
 acquisition plan bound to the then-committed implementation HEAD. Metadata
 approval never grants download authority.
 

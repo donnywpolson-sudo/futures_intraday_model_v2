@@ -22,7 +22,7 @@ from .boundary import OperationClassification, OperationReceipt, RepoBoundary
 from .canonical import canonical_bytes, sha256_file, sha256_json
 from .errors import IntegrityError, UnauthorizedOperation
 from .live_cockpit.databento_auth import resolve_databento_api_key
-from .micro_alpha_databento_preflight_v5 import (
+from .micro_alpha_databento_preflight_v6 import (
     CREDENTIAL_SOURCE,
     MAXIMUM_ANNUAL_REQUESTS,
     MAXIMUM_TOTAL_ACQUISITION_BYTES,
@@ -145,11 +145,18 @@ def _validate_preflight_report(*, root: Path) -> dict[str, object]:
     product_dates = report.get("product_effective_dates")
     end = report.get("latest_complete_end_exclusive")
     symbology = report.get("symbology_summaries")
+    provider_start = report.get("provider_dataset_start_date")
+    schema_starts = report.get("provider_schema_start_dates")
     if (
         not isinstance(requests, list) or len(requests) != 20
         or not isinstance(product_dates, Mapping)
         or set(product_dates) != set(CURRENT_ACQUISITION_MARKETS)
         or type(end) is not str or len(end) != 10
+        or type(provider_start) is not str
+        or len(provider_start) != 10
+        or not isinstance(schema_starts, Mapping)
+        or set(schema_starts) != set(SCHEMAS)
+        or any(type(value) is not str or len(value) != 10 for value in schema_starts.values())
         or not isinstance(symbology, Mapping)
         or set(symbology) != set(CURRENT_ACQUISITION_MARKETS)
     ):
@@ -163,8 +170,19 @@ def _validate_preflight_report(*, root: Path) -> dict[str, object]:
             summary = market_summary.get(stype)
             if (
                 not isinstance(summary, Mapping)
-                or set(summary) != {"first_effective_date", "mapping_interval_count", "mapping_sha256"}
+                or set(summary)
+                != {
+                    "effective_date_disposition",
+                    "first_effective_date",
+                    "mapping_interval_count",
+                    "mapping_sha256",
+                    "query_start_date",
+                }
                 or summary.get("first_effective_date") != effective
+                or str(summary.get("first_effective_date")) <= provider_start
+                or summary.get("effective_date_disposition")
+                != "PROVIDER_MAPPING_FIRST_EFFECTIVE_DATE"
+                or summary.get("query_start_date") != provider_start
                 or type(summary.get("mapping_interval_count")) is not int
                 or summary.get("mapping_interval_count", 0) <= 0
                 or type(summary.get("mapping_sha256")) is not str
@@ -355,12 +373,12 @@ def build_acquisition_plan(
         raise IntegrityError("metadata report byte ceiling is invalid")
     implementation_paths = (
         "src/futures_rebuild/micro_alpha_pipeline.py",
-        "src/futures_rebuild/micro_alpha_databento_preflight_v5.py",
+        "src/futures_rebuild/micro_alpha_databento_preflight_v6.py",
         "src/futures_rebuild/micro_alpha_acquisition.py",
         "src/futures_rebuild/alpha_research_architecture.py",
     )
     core: dict[str, object] = {
-        "schema_version": "apex_micro_phase1a_acquisition_plan/2.0.0",
+        "schema_version": "apex_micro_phase1a_acquisition_plan/3.0.0",
         "state": "PREPARED_REQUIRES_SEPARATE_DOWNLOAD_APPROVAL",
         "operation": OPERATION,
         "committed_implementation_head": committed_head,
