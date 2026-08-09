@@ -91,14 +91,18 @@ live cockpit. Automatic order execution is outside this project's scope.
   exactly the requested symbol as its sole group key. Its sealed $0 report
   records only the field name; the consumed authorization cannot run again.
 - `configs/apex_micro_tier01_databento_metadata_preflight_v14.json`: immutable
-  v14 provider-result-group-safe successor. The installed Databento SDK
-  iterates every returned result group and does not require group keys to equal
-  the single request echo. V14 retains exact request echoes and validates every
-  bounded root-consistent group, every instrument ID and every mapping date
-  without recording group keys or identity values. Parent plus continuous
-  verification from the discovered date still requires empty post-effective
-  `partial` and `not_found` lists. It retains 20 definitions, a 375-call
-  ceiling, and no download surface.
+  executed provider-result-group-safe successor. Its approved attempt made five
+  calls, passed MES discovery and result-group validation, then failed closed
+  because the post-effective parent response retained a nonempty bounded
+  `partial` status. Its sealed $0 report records only the field name; the
+  consumed authorization cannot run again.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v15.json`: immutable
+  v15 gap-proof bounded-partial-safe successor. It never interprets or records
+  `partial` contents. Post-effective parent and continuous responses may retain
+  bounded opaque partial status only when their validated instrument-ID
+  interval union proves gap-free coverage from the exact product-effective
+  start through the end-exclusive bound. `not_found` remains empty-only. It
+  retains 20 definitions, a 375-call ceiling, and no download surface.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -308,7 +312,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> v11 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; guessed exact-zero status semantic rejected)
   -> v12 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; guessed message allowlist rejected)
   -> v13 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; exact-single-result-key assumption rejected)
-  -> immutable v14 provider-result-group-safe successor (20 definitions; at most 180 annual requests)
+  -> v14 preflight -> FAIL_CLOSED_METADATA_ONLY (5 calls; post-effective parent partial rejected)
+  -> immutable v15 gap-proof bounded-partial-safe successor (20 definitions; at most 180 annual requests)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -447,15 +452,24 @@ metadata-only surface. Its approved attempt made four calls and failed closed
 at the first MES discovery response because the local validator required the
 `result` map to contain exactly `MES.FUT` as its sole key. The sealed report
 records only the `result` field name, incurred $0, made no download, read no
-rows, and created no DBN. V14 corrects only that local assumption: it retains
+rows, and created no DBN. V14 corrected only that local assumption: it retained
 the exact request echo as the request binding, permits only bounded
 market-root-consistent result groups, validates every positive instrument ID
 and bounded mapping interval, and records neither result-group keys nor
 identity values. Unrelated roots, malformed or duplicate intervals, invalid
-identities, excessive groups, and excessive intervals fail closed. V14 retains
-the exact v13 markets, schemas, 375-call ceiling, 300-second runtime, 30-second
-call timeout, $0 cost, zero retries, and metadata-only surface. A new separate
-approval is required before v14 may contact Databento. Only a passing report may freeze a deterministic
+identities, excessive groups, and excessive intervals fail closed. Its approved
+attempt made five calls, passed the discovery result-group gate, and failed
+closed at post-effective MES parent verification because the response retained
+a bounded opaque `partial` status. The sealed report records only the field
+name, incurred $0, made no download, read no rows, and created no DBN. V15
+corrects the empty-only assumption without treating `partial` as success: its
+contents and exact count remain unrecorded, while the fully validated mapping
+interval union must cover the exact post-effective query continuously through
+the end-exclusive bound. Any gap, invalid identity, unrelated result group,
+nonempty `not_found`, or other existing gate failure remains fail closed. V15
+retains the exact v14 markets, schemas, 375-call ceiling, 300-second runtime,
+30-second call timeout, $0 cost, zero retries, and metadata-only surface. A new
+separate approval is required before v15 may contact Databento. Only a passing report may freeze a deterministic
 acquisition plan bound to the then-committed implementation HEAD. Metadata
 approval never grants download authority.
 

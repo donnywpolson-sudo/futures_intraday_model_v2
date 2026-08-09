@@ -20,7 +20,7 @@ from futures_rebuild.micro_alpha_databento_preflight import (
     MetadataProviderApis,
     OPERATION,
 )
-from futures_rebuild.micro_alpha_databento_preflight_v14 import (
+from futures_rebuild.micro_alpha_databento_preflight_v15 import (
     MAXIMUM_MESSAGE_STRING_LENGTH,
     MAXIMUM_RESULT_GROUPS,
     MAXIMUM_STATUS_INTEGER_MAGNITUDE,
@@ -87,12 +87,14 @@ class FakeMetadataProvider:
         partial: object = _AUTO_PARTIAL,
         cost: object = 0,
         expanded_result_groups: bool = True,
+        post_effective_partial: bool = True,
     ) -> None:
         self.status = status
         self.message = message
         self.partial = partial
         self.cost = cost
         self.expanded_result_groups = expanded_result_groups
+        self.post_effective_partial = post_effective_partial
         self.calls: list[str] = []
         self.effective_dates = {
             "MES": "2019-05-06",
@@ -142,6 +144,8 @@ class FakeMetadataProvider:
             if self.partial is _AUTO_PARTIAL
             else self.partial
         )
+        if self.post_effective_partial and query_start == self.effective_dates[market]:
+            partial = ["OPAQUE_POST_EFFECTIVE_STATUS"]
         response = _response(
             symbol=symbol,
             stype_in=str(kwargs["stype_in"]),
@@ -214,7 +218,7 @@ def _run(root: Path, provider: FakeMetadataProvider) -> dict[str, object]:
     )
 
 
-def test_v14_plan_preserves_exact_scope_and_forbids_download() -> None:
+def test_v15_plan_preserves_exact_scope_and_forbids_download() -> None:
     plan = validate_plan(
         json.loads((ROOT / PLAN_PATH).read_text(encoding="utf-8")), root=ROOT
     )
@@ -232,14 +236,16 @@ def test_v14_plan_preserves_exact_scope_and_forbids_download() -> None:
     assert plan["checks"]["symbology_success_message_bounded_opaque_string_shape"] is True
     assert plan["checks"]["bounded_root_consistent_result_groups"] is True
     assert plan["limits"]["maximum_result_groups"] == MAXIMUM_RESULT_GROUPS
+    assert plan["checks"]["post_effective_gap_free_interval_union"] is True
 
 
-def test_v14_preserves_v13_failure_byte_for_byte() -> None:
+def test_v15_preserves_v14_failure_byte_for_byte() -> None:
     report = load_predecessor_failure(root=ROOT)
     assert report["report_id"] == (
-        "000f5e3878fe694b0e0c75db7712f454395e50677233b5147f2ad2ae726e6c84"
+        "8eab6f16704b5db1b9533a111591f0bef409ce7105bd331a0ea58d000a617746"
     )
-    assert report["failed_validation_field"] == "result"
+    assert report["failed_validation_field"] == "partial"
+    assert report["provider_call_total"] == 5
     assert report["timeseries_download_calls"] == 0
 
 
@@ -377,6 +383,43 @@ def test_v14_rejects_result_group_ceiling() -> None:
         )
 
 
+def test_v15_accepts_opaque_post_effective_partial_only_with_gap_free_coverage() -> None:
+    response = _response(
+        start="2019-05-06",
+        effective="2019-05-06",
+        partial=["OPAQUE_STATUS"],
+    )
+    summary = _symbology_summary(
+        response,
+        symbol="MES.FUT",
+        stype_in="parent",
+        query_start="2019-05-06",
+        end="2026-08-09",
+        allow_bounded_partial=True,
+    )
+    assert summary["partial_present"] is True
+    assert summary["partial_content_or_exact_count_recorded"] is False
+    assert summary["post_effective_gap_free_coverage"] is True
+    assert "OPAQUE_STATUS" not in summary.values()
+
+
+def test_v15_rejects_post_effective_interval_gap_even_with_bounded_partial() -> None:
+    response = _response(
+        start="2019-05-06",
+        effective="2019-05-07",
+        partial=["OPAQUE_STATUS"],
+    )
+    with pytest.raises(IntegrityError, match="coverage start"):
+        _symbology_summary(
+            response,
+            symbol="MES.FUT",
+            stype_in="parent",
+            query_start="2019-05-06",
+            end="2026-08-09",
+            allow_bounded_partial=True,
+        )
+
+
 def test_v13_status_correction_does_not_weaken_exact_echo_gate() -> None:
     response = _response(status=200)
     response["symbols"] = ["MCL.FUT"]
@@ -391,7 +434,7 @@ def test_v13_status_correction_does_not_weaken_exact_echo_gate() -> None:
         )
 
 
-def test_v14_full_synthetic_metadata_mechanics_pass_without_download(
+def test_v15_full_synthetic_metadata_mechanics_pass_without_download(
     tmp_path: Path,
 ) -> None:
     root = _copy_root(tmp_path)
@@ -452,7 +495,7 @@ def test_v13_report_is_create_only(tmp_path: Path) -> None:
         _run(root, FakeMetadataProvider(status=200))
 
 
-def test_v14_documentation_preserves_implementation_reality() -> None:
+def test_v15_documentation_preserves_implementation_reality() -> None:
     outline = (ROOT / "PROJECT_OUTLINE.md").read_text(encoding="utf-8")
     folder_map = (ROOT / "PIPELINE_FOLDER_MAP.md").read_text(encoding="utf-8")
     normalized_outline = " ".join(outline.split())
