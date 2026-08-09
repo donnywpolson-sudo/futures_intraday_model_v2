@@ -331,12 +331,12 @@ def test_v12_documentation_preserves_implementation_reality() -> None:
     assert "v12 preflight -> FAIL_CLOSED_METADATA_ONLY" in outline
     assert "v14 preflight -> FAIL_CLOSED_METADATA_ONLY" in outline
     assert "immutable v19 opaque-partial-semantic-safe successor" in outline
-    assert "v19 may contact Databento" in normalized_outline
+    assert "prepared v20 cumulative successor" in normalized_outline
     assert "v11 bounded opaque-partial-flag successor" in folder_map
     assert "RETIRED / fail-closed status-semantic evidence" in folder_map
     assert "v12 SDK-contract-safe status successor" in folder_map
     assert "RETIRED / fail-closed message-semantic evidence" in folder_map
     assert "v14 provider-result-group-safe predecessor" in folder_map
     assert "RETIRED / fail-closed post-effective partial evidence" in folder_map
-    assert "immutable v19 opaque-partial-semantic-safe successor" in folder_map
-    assert "passing v19 preflight and committed HEAD required first" in folder_map
+    assert "v20 launch-date-separated cumulative metadata successor" in folder_map
+    assert "committed HEAD and separate single-use metadata approval required" in folder_map

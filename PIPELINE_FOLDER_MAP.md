@@ -35,8 +35,12 @@ work and every real-data or publishing action remains separately controlled.
 | `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v16.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v16.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v16/report.json` | One approved v16 interval-overlap-safe attempt made seven metadata calls, passed all three MES symbology gates, then failed closed because MCL parent expansion produced a bounded result-group key outside the locally assumed market-root prefix; the sealed report records only the field and price-free call context; $0, zero retries/downloads/rows/DBNs | RETIRED / fail-closed opaque-group-key evidence; consumed authorization cannot execute again |
 | `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v17.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v17.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v17/report.json` | One approved v17 bounded opaque-group-key attempt made eight metadata calls, passed MCL parent discovery, then failed closed because parent-family intervals were incorrectly required to form one calendar-gap-free roll chain; $0, zero retries/downloads/rows/DBNs | RETIRED / fail-closed parent-family continuity evidence; consumed authorization cannot execute again |
 | `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v18.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v18.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v18/report.json` | One approved v18 parent-family-aware attempt made 13 metadata calls, passed MES, MCL, and MGC symbology gates, then failed closed because M6E discovery still interpreted opaque `partial` presence as a prelaunch signal; $0, zero retries/downloads/rows/DBNs | RETIRED / fail-closed discovery-partial-semantic evidence; consumed authorization cannot execute again |
-| `PREPARED_NOT_EXECUTED` | `configs/apex_micro_tier01_databento_metadata_preflight_v19.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v19.py` | Exact-scope immutable v19 opaque-partial-semantic-safe successor derives the product date only from the first validated parent mapping interval; `partial` remains bounded and shape-checked but is neither interpreted nor recorded; parent-family boundaries, continuous-roll gap proof, exact echo, cost, disk, collision, no-download, and no-decode gates remain | Exact staging, commit, and new single-use metadata/provider approval required |
-| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition.py` | Phase 1A annual market-year create-only inactive-custody downloader implemented and adversarially tested; canonical `data/dbn/<schema>/<market>/<year>/` tree only; at most two isolated download clients, stop-after-first-failure scheduling, and no DBN output | Separate download approval absent; passing v19 preflight and committed HEAD required first |
+| `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v19.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v19.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v19/report.json` | One approved v19 attempt made 15 metadata calls, verified all four parent/continuous mapping surfaces, and failed closed because M6E was active at the 2010-06-06 provider dataset boundary and its earlier exact launch date remained unresolved; $0, zero retries/downloads/rows/DBNs | RETIRED / consumed authorization cannot execute again; mapping intervals are availability evidence, not launch-date evidence |
+| `CURRENT_REACHABLE` | `state/unpublished_evidence/apex_micro_m6e_product_effective_date_source_v1/report.json` | Two official CME primary sources establish M6E listing/effective date 2009-03-22 and trade date 2009-03-23; one bounded $0 lookup, no Databento or data access | Unpublished source evidence only; grants no provider or download authority |
+| `CURRENT_REACHABLE` | `state/unpublished_evidence/apex_micro_remaining_product_effective_dates_source_v1/report.json` | Official CME primary sources establish MES 2019-05-05/06, MCL 2021-07-11/12, and MGC 2010-10-03/04 effective/first-trade dates; bounded 9-request $0 lookup, no Databento or data access | Unpublished source evidence only; grants no provider or download authority |
+| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_product_effective_dates.py`; `tests/test_micro_alpha_product_effective_dates.py` | Fail-closed loader accepts only self-hashed official CME reports and explicitly forbids promoting Databento mapping dates to product-effective dates | Complete official four-market date scope is available to the prepared v20 successor |
+| `PREPARED_NOT_EXECUTED` | `configs/apex_micro_tier01_databento_metadata_preflight_v20.json`; `src/futures_rebuild/micro_alpha_databento_preflight_v20.py`; `scripts/prepare_apex_micro_metadata_preflight_v20.py` | Cumulative v20 binds v19 entitlement/range/symbology evidence plus both CME reports and exposes only 160 annual cost and 160 annual byte-estimate calls; exact ceiling 320, 300 seconds, $0, zero retries, create-only price-free output | Databento has not been contacted by v20; committed HEAD and separate single-use metadata approval required; download authority remains absent |
+| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition.py` | Phase 1A annual market-year create-only inactive-custody downloader implemented and adversarially tested; canonical `data/dbn/<schema>/<market>/<year>/` tree only; at most two isolated download clients, stop-after-first-failure scheduling, and no DBN output | Separate download approval absent; passing corrected successor preflight and committed HEAD required first |
 | `SYNTHETIC_ONLY` | `tests/test_micro_alpha_*.py` | Corrected ladder, authorization, metadata, disk, collision, partial, cost, retry, custody, and no-decode mechanics | No provider, row, or download authority |
 | `HISTORICAL_ROW_APPROVAL_REQUIRED` | Phase 1B/2 contracts in `src/futures_rebuild/micro_alpha_pipeline.py` | Decoder/causal routing contracts are prepared; Phase 1B/2 row processing has not executed | Separate row-read approval only after acquisition |
 | `NOT_IMPLEMENTED` | `configs/active_micro_alpha_research_ladder.json`; `data/active/catalogs/apex_micro.json` | Intentionally absent until publication and Phase 2 certification | Cannot register micro research |
@@ -88,7 +92,9 @@ PROJECT_OUTLINE design
   -> v16 bounded interval-overlap-safe predecessor                 RETIRED / fail-closed opaque-group-key evidence
   -> v17 bounded opaque-group-key predecessor                      RETIRED / fail-closed parent-family continuity evidence
   -> v18 parent-family-aware predecessor                           RETIRED / fail-closed discovery-partial-semantic evidence
-  -> immutable v19 opaque-partial-semantic-safe successor          PREPARED_NOT_EXECUTED / approval absent
+  -> immutable v19 opaque-partial-semantic-safe predecessor        RETIRED / fail-closed pre-dataset product-date evidence
+  -> official CME product-effective-date evidence                  CURRENT_REACHABLE / all four markets sealed
+  -> v20 launch-date-separated cumulative metadata successor       PREPARED_NOT_EXECUTED / 160 annual requests / 320 calls
   -> exact audited acquisition plan                                NOT_IMPLEMENTED until preflight PASS
   -> Phase 1A DBN + sidecar inactive custody                       PREPARED_NOT_EXECUTED / download authority absent
   -> Phase 1B definition/status/statistics/1m/1s decoding          row-read approval required
@@ -107,12 +113,15 @@ explicit and multi-year DBNs are forbidden. The prepared source scope is MES, MC
 and M6E across the required Databento Standard historical schemas: definition,
 status, statistics, ohlcv-1m, and ohlcv-1s. No target micro DBN currently exists.
 
-No micro phase is labeled complete. The v2, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, and v18 metadata-only attempts
+No micro phase is labeled complete. The v2, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, and v19 metadata-only attempts
 executed once each and produced only preserved fail-closed metadata evidence.
-The v19 successor and Phase 1A downloader are implemented but unexecuted. Phase
-1B/2 row processing is also unexecuted. The micro catalog is
+The two official CME product-date reports are sealed for MES, MCL, MGC, and
+M6E. The launch-date-separated cumulative v20 successor is prepared but has not
+executed; download authority remains absent. The
+Phase 1A downloader is implemented but unexecuted. Phase 1B/2 row processing is
+also unexecuted. The micro catalog is
 inactive, registration is blocked, and download authority is absent. Apart
-from the preserved price-free v2, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, and v18 failure reports, the code proves mechanics
+from the preserved price-free v2, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, and v19 failure reports, the code proves mechanics
 with synthetic records only.
 
 ## Active and protected folders

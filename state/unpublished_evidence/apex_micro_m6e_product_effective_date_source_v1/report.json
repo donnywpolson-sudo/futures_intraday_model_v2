@@ -1,0 +1,79 @@
+{
+  "schema_version": "apex_micro_m6e_product_effective_date_source_verification/1.0.0",
+  "classification": "UNPUBLISHED_PRICE_FREE_OFFICIAL_PRIMARY_SOURCE_VERIFICATION",
+  "state": "PASS_OFFICIAL_PRIMARY_SOURCE_METADATA_ONLY",
+  "market": "M6E",
+  "product_name": "E-Micro EUR/USD Future",
+  "parent_product": "6E",
+  "source_authority": "CME Group",
+  "source_domain": "www.cmegroup.com",
+  "source_lookup": {
+    "approved_maximum_network_requests": 12,
+    "observed_network_requests": 4,
+    "approved_maximum_runtime_seconds": 120,
+    "runtime_ceiling_respected": true,
+    "maximum_external_cost_usd": "0",
+    "external_cost_incurred_usd": "0",
+    "automatic_retries": 0,
+    "databento_calls": 0
+  },
+  "official_sources": [
+    {
+      "document_id": "CME_GLOBEX_NOTICE_20090223",
+      "document_date": "2009-02-23",
+      "document_type": "CME_GLOBEX_ELECTRONIC_TRADING_ADVISORY",
+      "url": "https://www.cmegroup.com/tools-information/lookups/advisories/electronic-trading/20090223.html",
+      "evidence_locator": "Product Launches > Forex E-micro Futures",
+      "verified_claims": [
+        "FOREX_E_MICRO_FUTURES_LISTED_EFFECTIVE_2009_03_22_TRADE_DATE_2009_03_23",
+        "EUR_USD_PRODUCT_CODE_IS_M6E_AND_PARENT_SECURITY_GROUP_IS_6E"
+      ]
+    },
+    {
+      "document_id": "CME_CLEARING_NEW_PRODUCT_SUMMARY_NP_09_04_UPDATE_3",
+      "document_date": "2009-03-19",
+      "document_type": "CME_CLEARING_NEW_PRODUCT_SUMMARY",
+      "url": "https://www.cmegroup.com/tools-information/lookups/advisories/clearing/files/NPadv09-04.pdf",
+      "evidence_locator": "Page 1 listing date and ticker symbols/product codes",
+      "verified_claims": [
+        "LISTING_DATE_2009_03_22_TRADE_DATE_2009_03_23",
+        "E_MICRO_EUR_USD_TICKER_AND_CLEARING_CODE_ARE_M6E"
+      ]
+    }
+  ],
+  "date_disposition": {
+    "product_listing_effective_date": "2009-03-22",
+    "first_trade_date": "2009-03-23",
+    "semantic_basis": "CME_EFFECTIVE_AND_LISTING_DATE_WITH_SEPARATE_TRADE_DATE",
+    "databento_dataset_start_date": "2010-06-06",
+    "phase1a_acquisition_start_date": "2018-01-01",
+    "effective_before_databento_dataset_start": true,
+    "effective_before_phase1a_acquisition_start": true,
+    "phase1a_prelaunch_intervals": 0
+  },
+  "bindings": {
+    "observed_committed_head": "c2296686031b67af1445554ff016a9a4d5102596",
+    "v19_plan_id": "b8da9346200f457c47cff75330b01c64615e9b1f62c0272ab3a00409098788c8",
+    "v19_plan_sha256": "f024d33293b864350d002df5281a5c13da9ce4e1e7557e02e7c1d0b32604c75f",
+    "v19_report_id": "2c08f95147d2b0f75cb0d357c182ab11ab597f326e3de7d8f087a587570cee98",
+    "v19_report_sha256": "49adb236d5b61e6a259f8f1191d74c153fffe87880eeacc7ea97ea1a4f60fbfe"
+  },
+  "effects": {
+    "price_values_recorded": false,
+    "source_payload_captured": false,
+    "market_data_downloaded": false,
+    "dbn_accessed": false,
+    "historical_rows_read": false,
+    "year_2025_or_2026_payload_opened": false,
+    "catalog_activated": false,
+    "published": false,
+    "registered": false,
+    "evaluated": false,
+    "trading": false,
+    "staged": false,
+    "committed": false,
+    "pushed": false
+  },
+  "result": "M6E_EXACT_PRE_DATASET_PRODUCT_EFFECTIVE_DATE_VERIFIED_FROM_TWO_CME_PRIMARY_SOURCES",
+  "report_id": "c061f4ff78fd6bc408ae237b69ab0e6898c0d3b5a2419955ab4f27278b32b54c"
+}

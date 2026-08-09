@@ -473,8 +473,15 @@ def test_v19_documentation_matches_execution_reality() -> None:
     outline = (ROOT / "PROJECT_OUTLINE.md").read_text(encoding="utf-8")
     folder_map = (ROOT / "PIPELINE_FOLDER_MAP.md").read_text(encoding="utf-8")
     assert "v18 preflight -> FAIL_CLOSED_METADATA_ONLY (13 calls" in outline
-    assert "immutable v19 opaque-partial-semantic-safe successor" in outline
-    assert "before v19 may contact Databento" in " ".join(outline.split())
+    assert "executed v19 opaque-partial-semantic-safe predecessor" in outline
+    normalized_outline = " ".join(outline.split())
+    assert "failed closed after 15 calls" in normalized_outline
+    assert "M6E's listing/effective date as 2009-03-22" in normalized_outline
     assert "RETIRED / fail-closed discovery-partial-semantic evidence" in folder_map
-    assert "immutable v19 opaque-partial-semantic-safe successor" in folder_map
-    assert "passing v19 preflight and committed HEAD required first" in folder_map
+    assert "RETIRED / consumed authorization cannot execute again" in folder_map
+    assert "apex_micro_m6e_product_effective_date_source_v1/report.json" in folder_map
+    assert "apex_micro_remaining_product_effective_dates_source_v1/report.json" \
+        in folder_map
+    assert "Complete official four-market date scope" in folder_map
+    assert "committed HEAD and separate single-use metadata approval required" \
+        in folder_map

@@ -124,12 +124,27 @@ live cockpit. Automatic order execution is outside this project's scope.
   failure classification and call context; it incurred $0 with zero retries,
   downloads, row reads, or DBNs.
 - `configs/apex_micro_tier01_databento_metadata_preflight_v19.json`: immutable
-  v19 opaque-partial-semantic-safe successor. Product-effective dates derive
-  only from the first validated parent mapping interval. `partial` remains
-  bounded and shape-checked, but its presence and contents have no date or
-  success semantics and are not recorded. Parent-family boundary coverage and
-  continuous-roll gap proof remain unchanged, with 20 definitions, a 375-call
-  ceiling, and no download surface.
+  executed v19 opaque-partial-semantic-safe predecessor. Its one authorized
+  attempt made 15 metadata calls and verified all four parent/continuous
+  mapping surfaces, then failed closed because M6E was already active at the
+  provider dataset boundary and its earlier product-effective date could not be
+  derived. The sealed report incurred $0 with zero retries, downloads, rows, or
+  DBNs and cannot execute again.
+- `state/unpublished_evidence/apex_micro_m6e_product_effective_date_source_v1/`,
+  `state/unpublished_evidence/apex_micro_remaining_product_effective_dates_source_v1/`,
+  and `src/futures_rebuild/micro_alpha_product_effective_dates.py`: sealed
+  official CME primary-source evidence establishes listing/effective and first
+  trade dates for all four markets: M6E 2009-03-22/23, MGC 2010-10-03/04,
+  MES 2019-05-05/06, and MCL 2021-07-11/12. The fail-closed loader separates
+  exchange launch evidence from Databento availability/continuity mappings.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v20.json` and
+  `src/futures_rebuild/micro_alpha_databento_preflight_v20.py`: prepared,
+  unpublished cumulative successor. It reuses the sealed v19 PASS evidence for
+  entitlement, required schemas, range, parent-family availability, and
+  continuous-roll coverage, then permits only the 160 missing annual `get_cost`
+  and 160 `get_billable_size` calls. Its exact ceiling is 320 provider calls,
+  300 seconds total, 30 seconds per call, $0, and zero retries. It has not
+  contacted Databento and has no report.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -288,13 +303,15 @@ future active path `configs/active_micro_alpha_research_ladder.json` is absent.
   rows before the exact immutable mechanism-freeze timestamp; calendar year
   alone never establishes forward evidence.
 
-Micro products use integer contracts only. Product-effective dates are
-provider-confirmed during the metadata preflight; prelaunch coverage remains
-explicit `PRODUCT_NOT_YET_EFFECTIVE_NO_EMPTY_DBN` evidence. No market inherits
-its parent contract's calendar or economics implicitly. The current acquisition
-scope is Tier 0/1 only: MES, MCL, MGC, and M6E. No micro equivalent of ZN is
-invented; any future micro rates candidate requires official Apex eligibility,
-provider availability, and economics verification before outcomes.
+Micro products use integer contracts only. Product-effective dates require
+official CME listing/effective-date evidence; Databento symbology separately
+proves availability and roll continuity and cannot substitute its first mapping
+date for an exchange launch date. Prelaunch coverage remains explicit
+`PRODUCT_NOT_YET_EFFECTIVE_NO_EMPTY_DBN` evidence. No market inherits its parent
+contract's calendar or economics implicitly. The current acquisition scope is
+Tier 0/1 only: MES, MCL, MGC, and M6E. No micro equivalent of ZN is invented;
+any future micro rates candidate requires official Apex eligibility, provider
+availability, and economics verification before outcomes.
 
 Profiles can narrow but cannot silently expand the universe, change admission
 or selection eligibility, or unlock holdout/forward data.
@@ -344,7 +361,9 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> v16 preflight -> FAIL_CLOSED_METADATA_ONLY (7 calls; MCL expanded group-root assumption rejected)
   -> v17 preflight -> FAIL_CLOSED_METADATA_ONLY (8 calls; parent family misclassified as one roll chain)
   -> v18 preflight -> FAIL_CLOSED_METADATA_ONLY (13 calls; opaque discovery partial presence interpreted)
-  -> immutable v19 opaque-partial-semantic-safe successor (20 definitions; at most 180 annual requests)
+  -> immutable v19 opaque-partial-semantic-safe successor -> FAIL_CLOSED_METADATA_ONLY (15 calls; exchange launch date unresolved)
+  -> sealed official CME launch dates for MES/MCL/MGC/M6E
+  -> prepared v20 cumulative successor (20 definitions; exactly 160 annual requests; 320 calls)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -368,7 +387,7 @@ immutable mechanism freeze.
 Phase 1A uses the existing standard/full-contract DBN tree, not a parallel
 micro data root. Every market x schema x calendar year receives one distinct
 DBN and one adjacent immutable sidecar. A product launch year starts on its
-provider-confirmed effective date, the latest year ends on the frozen complete
+official CME-confirmed effective date, the latest year ends on the frozen provider-complete
 end-exclusive date, and full intervening years use January 1 boundaries.
 Prelaunch intervals produce disposition records and no fabricated empty DBN.
 Multi-year DBNs, wrong-year folders, hyphenated schema folders, duplicate
@@ -516,18 +535,27 @@ continuous `<root>.v.0` mapping must prove a gap-free clipped interval union.
 Neither group keys nor raw interval values are recorded. V18’s approved attempt
 made 13 calls, passed MES, MCL, and MGC symbology gates, then failed closed at
 M6E discovery because opaque `partial` presence was still interpreted as a
-prelaunch signal. V19 removes that last semantic assumption: the earliest
-validated parent mapping interval alone determines a candidate product-effective
-date, while `partial` remains bounded and shape-checked without interpreting or
-recording its presence or contents. Any malformed or unbounded key, echo drift,
-invalid identity, wholly outside or duplicate interval, missing parent boundary,
-continuous-roll gap, malformed `partial`, nonempty `not_found`, or other
-existing gate failure remains fail closed. V19 retains the exact v18 markets,
-schemas, 375-call ceiling, 300-second runtime, 30-second call timeout, $0 cost,
-zero retries, and metadata-only surface. A new separate approval is required
-before v19 may contact Databento. Only a passing report may freeze a deterministic
-acquisition plan bound to the then-committed implementation HEAD. Metadata
-approval never grants download authority.
+prelaunch signal. V19 removed that semantic assumption and verified all four
+parent-family and continuous-roll mappings, but its approved attempt then failed
+closed after 15 calls because M6E was active at Databento's 2010-06-06 dataset
+boundary and the earlier exact launch date remained unresolved. A bounded
+official CME lookup subsequently established M6E's listing/effective date as
+2009-03-22 with trade date 2009-03-23. A second bounded CME-only lookup sealed
+the remaining dates: MGC 2010-10-03/04, MES 2019-05-05/06, and MCL
+2021-07-11/12. Those comparisons prove first provider
+mapping intervals are availability/continuity evidence, not exchange launch-date
+evidence. Prepared v20 binds both source reports and the complete v19 evidence,
+does not repeat the 15 passed metadata/symbology calls, and exposes only 160
+annual zero-cost queries plus 160 annual billable-size queries. The 160 annual
+market-schema intervals comprise MES 8 years x 5 schemas, MCL 6 x 5, MGC 9 x
+5, and M6E 9 x 5. Prelaunch intervals are explicit no-DBN dispositions. V20 is
+PREPARED_NOT_EXECUTED and requires a committed implementation plus a separate
+single-use metadata approval. Any malformed source,
+unapproved host, identity drift, mapping-date substitution, malformed provider
+response, nonzero cost, disk shortfall, destination collision, or other existing
+gate failure remains fail closed. Only a passing successor report may freeze a
+deterministic acquisition plan bound to the then-committed implementation HEAD.
+Metadata approval never grants download authority.
 
 The one-second source proves reported-trade-bar evidence only. It cannot prove
 BBO availability, queue priority, guaranteed market-order execution, or precise
