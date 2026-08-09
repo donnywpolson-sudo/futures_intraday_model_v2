@@ -110,12 +110,19 @@ live cockpit. Automatic order execution is outside this project's scope.
   the field and price-free call context; it incurred $0 with zero retries,
   downloads, row reads, or DBNs.
 - `configs/apex_micro_tier01_databento_metadata_preflight_v17.json`: immutable
-  v17 bounded opaque-group-key successor. Expanded provider group identifiers
-  are bound by exact request echoes and must be nonempty bounded printable ASCII,
-  but their values and market-root prefixes are neither interpreted nor
-  recorded. Exact `d0`/`d1`/`s` fields, positive identities, interval
-  overlap/clipping, gap proof, status, cost, disk, and collision gates remain.
-  It retains 20 definitions, a 375-call ceiling, and no download surface.
+  executed v17 bounded opaque-group-key predecessor. Its approved attempt made
+  eight metadata calls, passed MCL parent discovery, and then failed closed
+  because parent-family mapping intervals were incorrectly required to form one
+  calendar-gap-free roll chain. Its sealed price-free report records only the
+  bounded failure classification and call context; it incurred $0 with zero
+  retries, downloads, row reads, or DBNs.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v18.json`: immutable
+  v18 parent-family-aware successor. Parent expansion must retain exact echoes,
+  bounded groups, exact interval fields, positive identities, and both query
+  boundaries, but cannot claim one roll chain. The continuous `<root>.v.0`
+  mapping alone must prove gap-free clipped coverage and provider roll
+  continuity. It retains 20 definitions, a 375-call ceiling, and no download
+  surface.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -328,7 +335,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> v14 preflight -> FAIL_CLOSED_METADATA_ONLY (5 calls; post-effective parent partial rejected)
   -> v15 preflight -> FAIL_CLOSED_METADATA_ONLY (6 calls; strict continuous interval bound rejected)
   -> v16 preflight -> FAIL_CLOSED_METADATA_ONLY (7 calls; MCL expanded group-root assumption rejected)
-  -> immutable v17 bounded opaque-group-key successor (20 definitions; at most 180 annual requests)
+  -> v17 preflight -> FAIL_CLOSED_METADATA_ONLY (8 calls; parent family misclassified as one roll chain)
+  -> immutable v18 parent-family-aware successor (20 definitions; at most 180 annual requests)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -489,15 +497,21 @@ required exact request echoes, exact `d0`/`d1`/`s` entry fields, positive
 identities, positive ISO ranges, query overlap, and a gap-free clipped union.
 Its approved attempt made seven calls and passed all three MES symbology gates,
 then failed closed because MCL parent expansion returned a bounded group key
-outside the locally assumed market-root prefix. V17 removes only that unsupported
-semantic assumption: result-group identifiers remain bounded, printable ASCII,
-and unrecorded, while the exact request echoes bind the provider response. Any
-malformed or unbounded group key, echo drift, invalid identity, wholly outside,
-duplicate, or gapped interval, nonempty `not_found`, or other existing gate
-failure remains fail closed. V17 retains the exact v16 markets, schemas,
-375-call ceiling, 300-second runtime, 30-second call timeout, $0 cost, zero
-retries, and metadata-only surface. A new separate approval is required before
-v17 may contact Databento. Only a passing report may freeze a deterministic
+outside the locally assumed market-root prefix. V17 removed that unsupported
+group-key assumption while retaining exact echoes, fields, identities, bounds,
+and continuous coverage. Its approved attempt made eight calls, passed MCL
+parent discovery, and failed closed because the expanded parent family was
+incorrectly treated as a single calendar-gap-free roll chain. V18 separates the
+two semantics without weakening roll continuity: parent expansion must prove
+valid identities and coverage at both query boundaries, while only the
+continuous `<root>.v.0` mapping must prove a gap-free clipped interval union.
+Neither group keys nor raw interval values are recorded. Any malformed or
+unbounded key, echo drift, invalid identity, wholly outside or duplicate
+interval, missing parent boundary, continuous-roll gap, nonempty `not_found`,
+or other existing gate failure remains fail closed. V18 retains the exact v17
+markets, schemas, 375-call ceiling, 300-second runtime, 30-second call timeout,
+$0 cost, zero retries, and metadata-only surface. A new separate approval is
+required before v18 may contact Databento. Only a passing report may freeze a deterministic
 acquisition plan bound to the then-committed implementation HEAD. Metadata
 approval never grants download authority.
 

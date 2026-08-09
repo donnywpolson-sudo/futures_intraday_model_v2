@@ -20,11 +20,12 @@ from futures_rebuild.micro_alpha_databento_preflight import (
     MetadataProviderApis,
     OPERATION,
 )
-from futures_rebuild.micro_alpha_databento_preflight_v16 import (
+from futures_rebuild.micro_alpha_databento_preflight_v18 import (
     PLAN_PATH,
     PREDECESSOR_REPORT_ID,
     REPORT_PATH,
     _symbology_summary,
+    _valid_opaque_group_key,
     build_plan,
     execute_preflight,
     load_predecessor_failure,
@@ -39,18 +40,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _response(
     *,
-    symbol: str = "MES.v.0",
-    stype_in: str = "continuous",
-    start: str = "2019-05-06",
+    symbol: str = "MCL.FUT",
+    stype_in: str = "parent",
+    start: str = "2010-01-01",
     end: str = "2026-08-09",
+    group_key: object = "PROVIDER_CONSTITUENT_1",
     entries: list[dict[str, object]] | None = None,
     partial: object = None,
 ) -> dict[str, object]:
     return {
         "result": {
-            symbol: entries
+            group_key: entries
             if entries is not None
-            else [{"d0": start, "d1": end, "s": 123}]
+            else [{"d0": "2021-07-12", "d1": end, "s": 123}]
         },
         "symbols": [symbol],
         "stype_in": stype_in,
@@ -100,13 +102,8 @@ def _receipt(root: Path) -> OperationReceipt:
 
 
 class FakeMetadataProvider:
-    def __init__(
-        self,
-        *,
-        continuous_mode: str = "span_boundaries",
-        cost: object = 0,
-    ) -> None:
-        self.continuous_mode = continuous_mode
+    def __init__(self, *, bad_group_key: object | None = None, cost: object = 0) -> None:
+        self.bad_group_key = bad_group_key
         self.cost = cost
         self.calls: list[str] = []
         self.effective_dates = {
@@ -155,18 +152,28 @@ class FakeMetadataProvider:
         if start == self.effective_dates[market]:
             partial = ["OPAQUE_POST_EFFECTIVE_STATUS"]
         entries = [{"d0": effective, "d1": end, "s": 123}]
+        if (
+            market == "MCL"
+            and str(kwargs["stype_in"]) == "parent"
+            and start == self.effective_dates[market]
+        ):
+            entries = [
+                {"d0": effective, "d1": "2024-01-01", "s": 123},
+                {"d0": "2024-01-02", "d1": end, "s": 456},
+            ]
         if str(kwargs["stype_in"]) == "continuous" and start == effective:
-            if self.continuous_mode == "span_boundaries":
-                entries = [
-                    {"d0": "2009-12-31", "d1": "2099-01-01", "s": 123},
-                ]
-            elif self.continuous_mode == "outside":
-                entries = [{"d0": "2000-01-01", "d1": "2001-01-01", "s": 123}]
+            entries = [{"d0": "2009-12-31", "d1": "2099-01-01", "s": 123}]
+        group_key: object = f"{market}_PROVIDER_GROUP"
+        if market == "MCL" and start == "2010-01-01":
+            group_key = "OPAQUE_NOT_MCL_PREFIX"
+            if self.bad_group_key is not None:
+                group_key = self.bad_group_key
         return _response(
             symbol=symbol,
             stype_in=str(kwargs["stype_in"]),
             start=start,
             end=end,
+            group_key=group_key,
             entries=entries,
             partial=partial,
         )
@@ -201,7 +208,7 @@ def _run(root: Path, provider: FakeMetadataProvider) -> dict[str, object]:
     )
 
 
-def test_v16_plan_preserves_exact_scope_and_v15_failure() -> None:
+def test_v18_plan_preserves_exact_scope_and_v17_failure() -> None:
     plan = validate_plan(
         json.loads((ROOT / PLAN_PATH).read_text(encoding="utf-8")), root=ROOT
     )
@@ -223,84 +230,144 @@ def test_v16_plan_preserves_exact_scope_and_v15_failure() -> None:
     assert plan["predecessor_execution"]["report_id"] == PREDECESSOR_REPORT_ID
     assert plan["limits"]["exact_provider_call_ceiling"] == 375
     assert plan["limits"]["maximum_external_cost_usd"] == "0"
-    assert plan["limits"]["maximum_retries"] == 0
     assert plan["forbidden"]["timeseries_download"] is True
-    assert load_predecessor_failure(root=ROOT)["failed_validation_field"] == "interval"
-
-
-def test_boundary_spanning_intervals_are_clipped_only_for_gap_proof() -> None:
-    response = _response(
-        entries=[
-            {"d0": "2019-01-01", "d1": "2020-01-01", "s": 1},
-            {"d0": "2020-01-01", "d1": "2027-01-01", "s": 2},
-        ]
+    assert (
+        load_predecessor_failure(root=ROOT)["failure_code"]
+        == "POST_EFFECTIVE_COVERAGE_DRIFT"
     )
+    assert (
+        plan["correction"]["parent_result_intervals_claim_roll_continuity"]
+        is False
+    )
+    assert (
+        plan["correction"]["continuous_result_intervals_claim_roll_continuity"]
+        is True
+    )
+
+
+def test_foreign_root_group_key_is_bounded_by_exact_echo_without_recording() -> None:
+    response = _response()
     summary = _symbology_summary(
         response,
-        symbol="MES.v.0",
-        stype_in="continuous",
-        query_start="2019-05-06",
+        symbol="MCL.FUT",
+        stype_in="parent",
+        query_start="2010-01-01",
         end="2026-08-09",
-        allow_bounded_partial=True,
+        allow_discovery_partial=True,
+        coverage_role="PARENT_FAMILY",
     )
-    assert summary["post_effective_gap_free_coverage"] is True
-    assert summary["left_boundary_clipped_interval_count"] == 1
-    assert summary["right_boundary_clipped_interval_count"] == 1
-    assert summary["raw_interval_values_recorded"] is False
+    assert summary["result_group_key_semantics"].startswith("BOUNDED_OPAQUE")
+    assert summary["result_group_keys_bound_by_exact_response_echoes"] is True
+    assert summary["market_root_prefix_assumed"] is False
+    assert summary["result_group_keys_recorded"] is False
 
 
 @pytest.mark.parametrize(
-    ("entries", "match"),
-    [
-        ([{"d0": "2010-01-01", "d1": "2011-01-01", "s": 1}], "wholly outside"),
-        ([{"d0": "2030-01-01", "d1": "2031-01-01", "s": 1}], "wholly outside"),
-        ([{"d0": "2020-01-01", "d1": "2020-01-01", "s": 1}], "nonpositive"),
-        ([{"d0": "invalid", "d1": "2020-01-01", "s": 1}], "date shape"),
-        ([{"d0": "2019-05-06", "d1": "2020-01-01", "s": 1, "x": 2}], "field shape"),
-    ],
+    "key",
+    ["", " leading", "trailing ", "line\nbreak", "é", "X" * 129, 123],
 )
-def test_invalid_interval_dispositions_fail_closed(
-    entries: list[dict[str, object]], match: str
-) -> None:
-    with pytest.raises(IntegrityError, match=match):
+def test_malformed_or_unbounded_group_keys_fail_closed(key: object) -> None:
+    assert _valid_opaque_group_key(key) is False
+    with pytest.raises(IntegrityError, match="group key shape"):
         _symbology_summary(
-            _response(entries=entries),
-            symbol="MES.v.0",
-            stype_in="continuous",
-            query_start="2019-05-06",
+            _response(group_key=key),
+            symbol="MCL.FUT",
+            stype_in="parent",
+            query_start="2010-01-01",
             end="2026-08-09",
-            allow_bounded_partial=True,
+            allow_discovery_partial=True,
+            coverage_role="PARENT_FAMILY",
         )
 
 
-def test_duplicate_and_gap_still_fail_closed() -> None:
-    duplicate = {"d0": "2019-05-06", "d1": "2026-08-09", "s": 1}
-    with pytest.raises(IntegrityError, match="duplicated"):
+def test_exact_echo_and_interval_gates_remain_fail_closed() -> None:
+    echo = _response()
+    echo["symbols"] = ["OTHER.FUT"]
+    with pytest.raises(IntegrityError, match="symbols echo drifted"):
         _symbology_summary(
-            _response(entries=[duplicate, dict(duplicate)]),
-            symbol="MES.v.0",
-            stype_in="continuous",
-            query_start="2019-05-06",
+            echo,
+            symbol="MCL.FUT",
+            stype_in="parent",
+            query_start="2010-01-01",
             end="2026-08-09",
-            allow_bounded_partial=True,
+            allow_discovery_partial=True,
+            coverage_role="PARENT_FAMILY",
         )
-    with pytest.raises(IntegrityError, match="coverage gap"):
+    with pytest.raises(IntegrityError, match="wholly outside"):
         _symbology_summary(
-            _response(
-                entries=[
-                    {"d0": "2019-05-06", "d1": "2020-01-01", "s": 1},
-                    {"d0": "2020-01-02", "d1": "2026-08-09", "s": 2},
-                ]
-            ),
-            symbol="MES.v.0",
-            stype_in="continuous",
-            query_start="2019-05-06",
+            _response(entries=[{"d0": "2000-01-01", "d1": "2001-01-01", "s": 1}]),
+            symbol="MCL.FUT",
+            stype_in="parent",
+            query_start="2010-01-01",
             end="2026-08-09",
-            allow_bounded_partial=True,
+            allow_discovery_partial=True,
+            coverage_role="PARENT_FAMILY",
         )
 
 
-def test_v16_successful_bounded_metadata_mechanics(tmp_path: Path) -> None:
+def test_parent_family_gap_is_not_misclassified_as_roll_discontinuity() -> None:
+    response = _response(
+        start="2021-07-12",
+        entries=[
+            {"d0": "2021-07-12", "d1": "2024-01-01", "s": 123},
+            {"d0": "2024-01-02", "d1": "2026-08-09", "s": 456},
+        ],
+        partial=["OPAQUE"],
+    )
+    summary = _symbology_summary(
+        response,
+        symbol="MCL.FUT",
+        stype_in="parent",
+        query_start="2021-07-12",
+        end="2026-08-09",
+        allow_bounded_partial=True,
+        coverage_role="PARENT_FAMILY",
+    )
+    assert summary["post_effective_boundary_coverage"] is True
+    assert summary["post_effective_gap_free_coverage"] is False
+    assert summary["roll_continuity_claimed"] is False
+    assert summary["parent_family_single_roll_chain_assumed"] is False
+
+
+def test_continuous_roll_gap_and_parent_boundary_drift_fail_closed() -> None:
+    gapped = _response(
+        symbol="MCL.v.0",
+        stype_in="continuous",
+        start="2021-07-12",
+        entries=[
+            {"d0": "2021-07-12", "d1": "2024-01-01", "s": 123},
+            {"d0": "2024-01-02", "d1": "2026-08-09", "s": 456},
+        ],
+        partial=["OPAQUE"],
+    )
+    with pytest.raises(IntegrityError, match="continuous roll coverage gap"):
+        _symbology_summary(
+            gapped,
+            symbol="MCL.v.0",
+            stype_in="continuous",
+            query_start="2021-07-12",
+            end="2026-08-09",
+            allow_bounded_partial=True,
+            coverage_role="CONTINUOUS_ROLL",
+        )
+    missing_end = _response(
+        start="2021-07-12",
+        entries=[{"d0": "2021-07-12", "d1": "2026-08-08", "s": 123}],
+        partial=["OPAQUE"],
+    )
+    with pytest.raises(IntegrityError, match="coverage end drifted"):
+        _symbology_summary(
+            missing_end,
+            symbol="MCL.FUT",
+            stype_in="parent",
+            query_start="2021-07-12",
+            end="2026-08-09",
+            allow_bounded_partial=True,
+            coverage_role="PARENT_FAMILY",
+        )
+
+
+def test_v18_full_bounded_metadata_mechanics_pass(tmp_path: Path) -> None:
     root = _copy_root(tmp_path)
     report = _run(root, FakeMetadataProvider())
     assert report["state"] == "PASS_METADATA_ONLY"
@@ -312,19 +379,24 @@ def test_v16_successful_bounded_metadata_mechanics(tmp_path: Path) -> None:
     assert report["dbn_files_created"] == 0
     assert report["request_definition_count"] == 20
     assert (root / REPORT_PATH).is_file()
-    continuous = report["symbology_summaries"]["MES"]["continuous"]
-    assert continuous["left_boundary_clipped_interval_count"] == 1
-    assert continuous["right_boundary_clipped_interval_count"] == 1
+    discovery = report["symbology_summaries"]["MCL"]["discovery_parent"]
+    assert discovery["market_root_prefix_assumed"] is False
+    assert discovery["result_group_keys_recorded"] is False
+    parent = report["symbology_summaries"]["MCL"]["parent"]
+    continuous = report["symbology_summaries"]["MCL"]["continuous"]
+    assert parent["post_effective_boundary_coverage"] is True
+    assert parent["post_effective_gap_free_coverage"] is False
+    assert parent["roll_continuity_claimed"] is False
+    assert continuous["post_effective_gap_free_coverage"] is True
+    assert continuous["roll_continuity_claimed"] is True
 
 
-def test_wholly_outside_provider_interval_is_classified_without_values(
-    tmp_path: Path,
-) -> None:
+def test_bad_provider_group_key_is_classified_without_value(tmp_path: Path) -> None:
     root = _copy_root(tmp_path)
-    report = _run(root, FakeMetadataProvider(continuous_mode="outside"))
+    report = _run(root, FakeMetadataProvider(bad_group_key="bad\nkey"))
     assert report["state"] == "FAIL_CLOSED_METADATA_ONLY"
-    assert report["failure_code"] == "INTERVAL_OUTSIDE_QUERY"
-    assert report["failed_validation_field"] == "interval"
+    assert report["failure_code"] == "RESULT_GROUP_KEY_SHAPE_DRIFT"
+    assert report["failed_validation_field"] == "result"
     assert report["provider_error_message_recorded"] is False
     assert "symbology_summaries" not in report
 
@@ -339,12 +411,12 @@ def test_nonzero_cost_still_fails_without_retry_or_download(tmp_path: Path) -> N
     assert report["dbn_files_created"] == 0
 
 
-def test_v16_documentation_matches_execution_reality() -> None:
+def test_v18_documentation_matches_execution_reality() -> None:
     outline = (ROOT / "PROJECT_OUTLINE.md").read_text(encoding="utf-8")
     folder_map = (ROOT / "PIPELINE_FOLDER_MAP.md").read_text(encoding="utf-8")
-    assert "v15 preflight -> FAIL_CLOSED_METADATA_ONLY (6 calls" in outline
+    assert "v17 preflight -> FAIL_CLOSED_METADATA_ONLY (8 calls" in outline
     assert "immutable v18 parent-family-aware successor" in outline
     assert "before v18 may contact Databento" in " ".join(outline.split())
-    assert "RETIRED / fail-closed continuous-interval evidence" in folder_map
+    assert "RETIRED / fail-closed parent-family continuity evidence" in folder_map
     assert "immutable v18 parent-family-aware successor" in folder_map
     assert "passing v18 preflight and committed HEAD required first" in folder_map
