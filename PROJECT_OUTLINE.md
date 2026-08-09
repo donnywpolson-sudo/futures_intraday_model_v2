@@ -47,9 +47,19 @@ live cockpit. Automatic order execution is outside this project's scope.
   `partial` and the local validator incorrectly used set membership. Its $0
   report and consumed authorization are preserved; it cannot run again.
 - `configs/apex_micro_tier01_databento_metadata_preflight_v7.json`: immutable
-  list-shape-safe successor. It retains the exact 20 definitions and annual
-  layout, requires exact empty JSON lists for `partial` and `not_found`, derives
-  symbology start from the provider range, and has no download surface.
+  executed list-shape-safe successor. Its approved attempt passed the three
+  initial metadata calls, then failed closed locally at the first resolve in a
+  combined exact response-echo check that ran before the corrected empty-list
+  checks. The sealed report contains no provider value; local SDK-contract
+  evidence identifies the empty-message expectation as the bounded v8
+  remediation candidate. Its $0 report and consumed authorization are
+  preserved; it cannot run again.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v8.json`: immutable
+  success-echo-safe successor. It preserves exact empty JSON lists for
+  `partial` and `not_found`, requires integer status zero, accepts only the
+  bounded success-message allowlist, and reports only sanitized field names on
+  structural failure. The exact 20 definitions and no-download surface remain
+  unchanged.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -252,7 +262,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> v4 preflight -> FAIL_CLOSED_METADATA_ONLY (3 calls; valid nested range rejected)
   -> v5 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; first broad-range symbology request rejected)
   -> v6 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; local list-shape validator defect)
-  -> immutable v7 list-shape-safe annual successor (20 definitions; at most 180 annual requests)
+  -> v7 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; over-strict success echo)
+  -> immutable v8 success-echo-safe annual successor (20 definitions; at most 180 annual requests)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -322,8 +333,17 @@ list-shaped `partial` field was tested against a set, raising `TypeError`. It
 made no download, read no rows, created no DBN, and its sealed report and
 authorization are preserved. V7 corrects only that local response contract:
 `partial` and `not_found` must each be exact empty string lists; malformed or
-nonempty values fail closed without recording their contents. A new separate
-approval is required before v7 may contact Databento. Only a passing report may freeze a deterministic
+nonempty values fail closed without recording their contents. Its one approved
+run made four calls and failed locally after the first resolve in the combined
+pre-list exact response-echo tuple. The report intentionally does not contain
+the provider value; the installed SDK contract and deterministic synthetic
+reproduction isolate the empty-message expectation as the bounded correction,
+not as a recorded provider fact. It incurred $0, made no download, read no
+rows, and created no DBN. V8 preserves v7's list
+checks, requires integer status zero, permits only the exact empty-or-`OK`
+success-message allowlist, and emits sanitized field-specific failures without
+recording provider values. A new separate approval is required before v8 may
+contact Databento. Only a passing report may freeze a deterministic
 acquisition plan bound to the then-committed implementation HEAD. Metadata
 approval never grants download authority.
 
