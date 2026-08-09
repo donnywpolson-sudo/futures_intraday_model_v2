@@ -73,11 +73,18 @@ live cockpit. Automatic order execution is outside this project's scope.
   cardinality; its $0 evidence and consumed authorization are preserved and it
   cannot run again.
 - `configs/apex_micro_tier01_databento_metadata_preflight_v11.json`: immutable
-  bounded opaque-partial-flag-safe successor. Discovery treats a bounded
-  nonempty exact-string list only as a boolean prelaunch status under exact
-  single-symbol request, echo, result-key, and mapping-date proof. It records
-  neither contents nor exact cardinality. `not_found` remains empty, and parent
-  plus continuous verification from the discovered date requires both status
+  executed bounded opaque-partial-flag-safe successor. Its approved attempt
+  made four calls and reached the first MES response's `status` field, then
+  failed closed because the local validator incorrectly required exact integer
+  zero. Its sealed $0 report records only the field name; the consumed
+  authorization cannot run again.
+- `configs/apex_micro_tier01_databento_metadata_preflight_v12.json`: immutable
+  SDK-contract-safe successor. The installed Databento SDK requires the
+  symbology `status` key but does not interpret its value when constructing the
+  instrument map. V12 accepts only a bounded integer or nonempty-string shape,
+  never records the value, and still requires exact single-symbol request,
+  echo, result-key, mapping-date, message, `partial`, and `not_found` proof.
+  Parent plus continuous verification from the discovered date requires both status
   lists empty. It retains 20 definitions, a 375-call ceiling, and no download
   surface.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
@@ -286,7 +293,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> v8 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; broad prelaunch status rejected)
   -> v9 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; opaque partial content compared locally)
   -> v10 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; exact-one partial ceiling rejected)
-  -> immutable v11 bounded opaque-partial-flag successor (20 definitions; at most 180 annual requests)
+  -> v11 preflight -> FAIL_CLOSED_METADATA_ONLY (4 calls; guessed exact-zero status semantic rejected)
+  -> immutable v12 SDK-contract-safe successor (20 definitions; at most 180 annual requests)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -397,10 +405,21 @@ than the discovery start, empty `not_found`, and then empty parent and
 continuous status lists from the derived date. Malformed lists, more than
 10,000 opaque entries, echo or result drift, inconsistent dates, or any
 post-effective gap still fail closed. Neither contents nor exact cardinality
-are reported. V11 retains the exact v10 markets, schemas, 375-call ceiling,
+are reported. V11 retained the exact v10 markets, schemas, 375-call ceiling,
 300-second runtime, 30-second call timeout, $0 cost, zero retries, and
-metadata-only surface. A new separate approval is required before v11 may
-contact Databento. Only a passing report may freeze a deterministic
+metadata-only surface. Its approved attempt made four calls and failed closed
+at the first MES discovery response because the local validator incorrectly
+treated the SDK-opaque application `status` field as an exact-zero success
+echo. The sealed report records only the field name, incurred $0, made no
+download, read no rows, and created no DBN. V12 corrects only that local
+assumption: it requires an exact bounded integer or nonempty-string scalar
+shape, records only the shape class, and relies on the installed SDK's HTTP
+error rejection plus the existing exact echo, result, interval, message,
+prelaunch, and post-effective gates for success. Malformed, boolean, floating,
+empty, or unbounded status values fail closed. V12 retains the exact v11
+markets, schemas, 375-call ceiling, 300-second runtime, 30-second call timeout,
+$0 cost, zero retries, and metadata-only surface. A new separate approval is
+required before v12 may contact Databento. Only a passing report may freeze a deterministic
 acquisition plan bound to the then-committed implementation HEAD. Metadata
 approval never grants download authority.
 
