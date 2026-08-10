@@ -710,10 +710,23 @@ operation was missing from the preparatory-operation allowlist. The receipt
 was not consumed; no output root, source hash, DBN row, or authorization-use
 record was created. That plan and audit are preserved as superseded evidence.
 The bounded correction adds only this exact operation to the central allowlist;
-an alias remains rejected. A v2 immutable plan and audit must bind the later
-committed remediation HEAD before a fresh confirmation can authorize rows.
+an alias remains rejected. The v2 immutable plan and audit then bound committed
+HEAD `a3dcd8671fc3a69e5b38515ddc176588e36f1a53`. Its separately approved
+single attempt consumed authorization and verified all 120 eligible source
+hashes, but failed before completing any decode because the first staged
+`.partial` path was 299 characters. It created zero Parquet files and bytes,
+opened no 2025/2026 payload, and wrote terminal failure evidence last. V2 is
+preserved and cannot be retried.
 
-The successor retains all sources and destinations, two isolated workers,
+The prepared v3 remediation retains each full 256-bit scope and release identity
+in the plan, receipts, certificates, and catalog candidate while using its
+collision-checked first 24 hexadecimal characters only as the filesystem path
+alias. All 120 Phase 1B aliases and 24 Phase 2 aliases must be unique, and the
+longest staged `.partial` path must be at most 240 characters. A new committed
+implementation HEAD, create-only v3 plan/audit, and fresh confirmation are
+required before another row-read attempt.
+
+The v3 successor retains all sources and logical destinations, two isolated workers,
 100,000-row batches, one attempt, zero retries, a 12-hour deadline, at least 80
 GiB free disk, and a write-time 64 GiB shared Parquet ceiling. A later exact
 row-read confirmation may consume that plan once. Successful execution can create only inactive
@@ -738,8 +751,8 @@ claims. The existing Apex risk policy explicitly covers full contracts only,
 so it cannot be silently reused for micros. MES, MCL, MGC, and M6E commission
 verification remains fail-closed and must be resolved from an official Apex
 source before mechanism freeze, not from observed outcomes. The executor and
-tests do not imply row-processing or research authority; the committed exact
-v2 execution plan and a separate fresh confirmation remain mandatory.
+tests do not imply row-processing or research authority; a committed exact v3
+execution plan and a separate fresh confirmation remain mandatory.
 
 ## Non-negotiable data rules
 

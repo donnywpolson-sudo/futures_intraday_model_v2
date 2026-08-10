@@ -70,7 +70,10 @@ def test_live_plan_preview_is_exact_and_source_safe() -> None:
     assert plan["interval_count"] == 24
     assert {item["year"] for item in plan["sources"]} == set(range(2018, 2025))
     assert all("/2025/" not in item["dbn_path"] and "/2026/" not in item["dbn_path"] for item in plan["sources"])
-    assert plan["limits"] == {
+    limits = dict(plan["limits"])
+    observed_path_chars = limits.pop("observed_max_staged_partial_path_chars")
+    assert 0 < observed_path_chars <= execution.MAXIMUM_STAGED_PARTIAL_PATH_CHARS
+    assert limits == {
         "maximum_attempts": 1,
         "maximum_retries": 0,
         "maximum_workers": 2,
@@ -81,6 +84,10 @@ def test_live_plan_preview_is_exact_and_source_safe() -> None:
         "maximum_parquet_outputs": 144,
         "provider_calls": 0,
         "external_cost_usd": "0",
+        "path_identity_hex_chars": execution.PATH_ID_HEX_CHARS,
+        "maximum_staged_partial_path_chars": (
+            execution.MAXIMUM_STAGED_PARTIAL_PATH_CHARS
+        ),
     }
 
 
@@ -265,6 +272,46 @@ def test_output_families_are_inactive_and_do_not_collide() -> None:
     assert not any(path.startswith("data/active/") for path in outputs)
     assert not (ROOT / plan["staging_root"]).exists()
     assert not (ROOT / plan["evidence_root"]).exists()
+
+
+def test_successor_paths_preserve_full_ids_with_collision_checked_bounded_aliases() -> None:
+    plan = execution.build_execution_plan(
+        root=ROOT, implementation_head=execution._git_head(ROOT)
+    )
+    assert len(plan["scope_id"]) == 64
+    assert len(plan["scope_path_id"]) == execution.PATH_ID_HEX_CHARS == 24
+    assert plan["scope_path_id"] == plan["scope_id"][:24]
+    phase1b_aliases = [item["phase1b_release_path_id"] for item in plan["sources"]]
+    phase2_aliases = [item["phase2_release_path_id"] for item in plan["phase2"]]
+    assert len(set(phase1b_aliases)) == len(phase1b_aliases) == 120
+    assert len(set(phase2_aliases)) == len(phase2_aliases) == 24
+    assert all(
+        item["phase1b_release_path_id"] == item["phase1b_release_id"][:24]
+        and len(item["phase1b_release_id"]) == 64
+        for item in plan["sources"]
+    )
+    assert all(
+        item["phase2_release_path_id"] == item["phase2_release_id"][:24]
+        and len(item["phase2_release_id"]) == 64
+        for item in plan["phase2"]
+    )
+
+
+def test_successor_rejects_path_alias_collisions_and_overlong_partial_paths() -> None:
+    with pytest.raises(IntegrityError, match="path alias collision"):
+        execution._assert_unique_path_ids(
+            ["a" * 64, "a" * 24 + "b" * 40], description="synthetic release"
+        )
+    plan = execution.build_execution_plan(
+        root=ROOT, implementation_head=execution._git_head(ROOT)
+    )
+    limits = plan["limits"]
+    assert limits["path_identity_hex_chars"] == 24
+    assert limits["maximum_staged_partial_path_chars"] == 240
+    assert limits["observed_max_staged_partial_path_chars"] > 0
+    assert limits["observed_max_staged_partial_path_chars"] <= limits[
+        "maximum_staged_partial_path_chars"
+    ]
 
 
 def test_worker_stops_scheduling_after_first_failure(tmp_path: Path) -> None:

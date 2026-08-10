@@ -59,9 +59,9 @@ from .micro_alpha_pipeline import (
 
 
 OPERATION: Final = "BUILD_APEX_MICRO_PHASE1B2_INACTIVE_FOUNDATION_V1_ONCE"
-PLAN_PATH: Final = Path("configs/apex_micro_phase1b2_historical_execution_plan_v2.json")
+PLAN_PATH: Final = Path("configs/apex_micro_phase1b2_historical_execution_plan_v3.json")
 AUDIT_PATH: Final = Path(
-    "state/unpublished_evidence/apex_micro_phase1b2_execution_plan_v2/audit.json"
+    "state/unpublished_evidence/apex_micro_phase1b2_execution_plan_v3/audit.json"
 )
 ACQUISITION_PLAN_PATH: Final = Path(
     "configs/apex_micro_tier01_phase1a_acquisition_plan_v24.json"
@@ -73,9 +73,9 @@ ACQUISITION_TERMINAL_PATH: Final = Path(
     "state/provider_acquisition_staging/apex_micro_tier01_v24/eaee71b9128cf8e6/terminal.json"
 )
 STAGING_ROOT: Final = Path("state/data_publication_staging/apex_integer_micro_11")
-EVIDENCE_ROOT: Final = Path("state/unpublished_evidence/apex_micro_phase1b2_execution_v2")
-PLAN_SCHEMA: Final = "apex_micro_phase1b2_historical_execution_plan/2.0.0"
-AUDIT_SCHEMA: Final = "apex_micro_phase1b2_execution_audit/2.0.0"
+EVIDENCE_ROOT: Final = Path("state/unpublished_evidence/apex_micro_phase1b2_execution_v3")
+PLAN_SCHEMA: Final = "apex_micro_phase1b2_historical_execution_plan/3.0.0"
+AUDIT_SCHEMA: Final = "apex_micro_phase1b2_execution_audit/3.0.0"
 TERMINAL_SCHEMA: Final = "apex_micro_phase1b2_execution_terminal/1.0.0"
 REPORT_SCHEMA: Final = "apex_micro_phase1b2_source_certification/1.0.0"
 CATALOG_SCHEMA: Final = "apex_micro_inactive_catalog_candidate/1.0.0"
@@ -95,6 +95,8 @@ MAXIMUM_RUNTIME_SECONDS: Final = 43_200
 MAXIMUM_WORKERS: Final = 2
 MAXIMUM_ATTEMPTS: Final = 1
 MAXIMUM_RETRIES: Final = 0
+PATH_ID_HEX_CHARS: Final = 24
+MAXIMUM_STAGED_PARTIAL_PATH_CHARS: Final = 240
 
 OUTPUT_FILENAME: Final = {
     "definition": "definitions.parquet",
@@ -121,6 +123,29 @@ IMPLEMENTATION_PATHS: Final = (
     Path("src/futures_rebuild/canonical.py"),
     Path("configs/dependency_lock_receipt.json"),
 )
+
+
+def _path_id(value: str, *, description: str) -> str:
+    """Return a bounded 96-bit path alias while retaining the full ID in records."""
+
+    if (
+        type(value) is not str
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise IntegrityError(f"{description} is not an exact SHA-256 identity")
+    return value[:PATH_ID_HEX_CHARS]
+
+
+def _assert_unique_path_ids(values: list[str], *, description: str) -> None:
+    aliases = [_path_id(value, description=description) for value in values]
+    if len(aliases) != len(set(aliases)):
+        raise IntegrityError(f"{description} path alias collision")
+
+
+def _staged_partial_path_length(*, root: Path, staging_root: str, relative: str) -> int:
+    target = contained_path(contained_path(root, staging_root), relative)
+    return len(str(target)) + len(".partial")
 
 
 def _object(path: Path, description: str) -> dict[str, object]:
@@ -367,12 +392,15 @@ def build_execution_plan(*, root: Path, implementation_head: str) -> dict[str, o
         source = _validate_sidecar(root=root, item=raw, acquisition_plan_id=str(acquisition["plan_id"]))
         interval = _interval(raw)
         release_id = _release_id(item=raw, source=source, implementation_hashes=implementation_hashes)
+        release_path_id = _path_id(
+            release_id, description="micro Phase 1B release identity"
+        )
         output_root = phase1b_destination(
             market=market,
             schema=schema,
             year=year,
             interval=interval,
-            release_id=release_id,
+            release_id=release_path_id,
         )
         sources.append(
             {
@@ -383,6 +411,7 @@ def build_execution_plan(*, root: Path, implementation_head: str) -> dict[str, o
                 "interval": interval,
                 **source,
                 "phase1b_release_id": release_id,
+                "phase1b_release_path_id": release_path_id,
                 "phase1b_output_path": f"{output_root}/{OUTPUT_FILENAME[schema]}",
             }
         )
@@ -394,6 +423,10 @@ def build_execution_plan(*, root: Path, implementation_head: str) -> dict[str, o
         or sum(int(item["source_bytes"]) for item in sources) != EXPECTED_SOURCE_BYTES
     ):
         raise IntegrityError("micro eligible source census drifted")
+    _assert_unique_path_ids(
+        [str(item["phase1b_release_id"]) for item in sources],
+        description="micro Phase 1B release identity",
+    )
 
     source_by_key = {
         (str(item["market"]), int(item["year"]), str(item["schema"])): item
@@ -440,6 +473,9 @@ def build_execution_plan(*, root: Path, implementation_head: str) -> dict[str, o
         if {str(item["schema"]) for item in group} != set(SCHEMAS):
             raise IntegrityError("micro market-year interval lacks all five schemas")
         release_id = _phase2_release_id(group)
+        release_path_id = _path_id(
+            release_id, description="micro Phase 2 release identity"
+        )
         phase2.append(
             {
                 "market": market,
@@ -447,14 +483,19 @@ def build_execution_plan(*, root: Path, implementation_head: str) -> dict[str, o
                 "interval": interval,
                 "source_phase1b_release_ids": sorted(str(item["phase1b_release_id"]) for item in group),
                 "phase2_release_id": release_id,
+                "phase2_release_path_id": release_path_id,
                 "phase2_output_path": (
                     f"data/causally_gated_normalized/{market}/{year}/{interval}/"
-                    f"{release_id}/bars.parquet"
+                    f"{release_path_id}/bars.parquet"
                 ),
             }
         )
     if len(phase2) != EXPECTED_INTERVAL_COUNT:
         raise IntegrityError("micro Phase 2 interval count drifted")
+    _assert_unique_path_ids(
+        [str(item["phase2_release_id"]) for item in phase2],
+        description="micro Phase 2 release identity",
+    )
 
     scope_id = sha256_json(
         {
@@ -464,8 +505,20 @@ def build_execution_plan(*, root: Path, implementation_head: str) -> dict[str, o
             "phase2_release_ids": [item["phase2_release_id"] for item in phase2],
         }
     )
-    staging_root = (STAGING_ROOT / scope_id).as_posix()
-    evidence_root = (EVIDENCE_ROOT / scope_id).as_posix()
+    scope_path_id = _path_id(scope_id, description="micro execution scope identity")
+    staging_root = (STAGING_ROOT / scope_path_id).as_posix()
+    evidence_root = (EVIDENCE_ROOT / scope_path_id).as_posix()
+    staged_relative_paths = [
+        str(item["phase1b_output_path"]) for item in sources
+    ] + [str(item["phase2_output_path"]) for item in phase2]
+    observed_max_staged_partial_path_chars = max(
+        _staged_partial_path_length(
+            root=root, staging_root=staging_root, relative=relative
+        )
+        for relative in staged_relative_paths
+    )
+    if observed_max_staged_partial_path_chars > MAXIMUM_STAGED_PARTIAL_PATH_CHARS:
+        raise IntegrityError("micro staged output exceeds the frozen path-length ceiling")
     core: dict[str, object] = {
         "schema_version": PLAN_SCHEMA,
         "state": "PREPARED_REQUIRES_SEPARATE_HISTORICAL_ROW_CONFIRMATION",
@@ -493,6 +546,7 @@ def build_execution_plan(*, root: Path, implementation_head: str) -> dict[str, o
             },
         },
         "scope_id": scope_id,
+        "scope_path_id": scope_path_id,
         "markets": list(TIER_1_MARKETS),
         "schemas": list(SCHEMAS),
         "eligible_years": list(ELIGIBLE_YEARS),
@@ -540,6 +594,9 @@ def build_execution_plan(*, root: Path, implementation_head: str) -> dict[str, o
             "maximum_parquet_outputs": MAXIMUM_PARQUET_OUTPUTS,
             "provider_calls": 0,
             "external_cost_usd": "0",
+            "path_identity_hex_chars": PATH_ID_HEX_CHARS,
+            "maximum_staged_partial_path_chars": MAXIMUM_STAGED_PARTIAL_PATH_CHARS,
+            "observed_max_staged_partial_path_chars": observed_max_staged_partial_path_chars,
         },
         "forbidden": {
             "year_2025_or_2026_payload_open": True,
@@ -612,6 +669,13 @@ def build_plan_audit(*, root: Path) -> dict[str, object]:
             int(item["year"]) in SEALED_YEARS for item in plan["sources"]
         ),
         "destination_conflict_count": 0,
+        "path_identity_hex_chars": plan["limits"]["path_identity_hex_chars"],
+        "maximum_staged_partial_path_chars": plan["limits"][
+            "maximum_staged_partial_path_chars"
+        ],
+        "observed_max_staged_partial_path_chars": plan["limits"][
+            "observed_max_staged_partial_path_chars"
+        ],
         "dbn_payloads_opened": 0,
         "historical_rows_read": 0,
         "provider_calls": 0,
@@ -630,6 +694,9 @@ def write_plan_audit_create_only(*, root: Path) -> dict[str, object]:
 
 
 def required_scope(*, root: Path, plan: Mapping[str, object]) -> dict[str, str]:
+    limits = plan.get("limits")
+    if not isinstance(limits, Mapping):
+        raise IntegrityError("micro execution limits are absent")
     return {
         "lane_id": LANE_ID,
         "markets": ",".join(TIER_1_MARKETS),
@@ -645,6 +712,11 @@ def required_scope(*, root: Path, plan: Mapping[str, object]) -> dict[str, str]:
         "required_free_disk_bytes": str(REQUIRED_FREE_DISK_BYTES),
         "maximum_attempts": str(MAXIMUM_ATTEMPTS),
         "maximum_retries": str(MAXIMUM_RETRIES),
+        "path_identity_hex_chars": str(PATH_ID_HEX_CHARS),
+        "maximum_staged_partial_path_chars": str(MAXIMUM_STAGED_PARTIAL_PATH_CHARS),
+        "observed_max_staged_partial_path_chars": str(
+            limits["observed_max_staged_partial_path_chars"]
+        ),
         "provider_calls": "0",
         "external_cost_usd": "0",
         "publication_or_activation": "false",
@@ -1181,9 +1253,11 @@ __all__ = [
     "EXPECTED_SOURCE_COUNT",
     "MAXIMUM_OUTPUT_BYTES",
     "MAXIMUM_RUNTIME_SECONDS",
+    "MAXIMUM_STAGED_PARTIAL_PATH_CHARS",
     "MAXIMUM_WORKERS",
     "OPERATION",
     "PLAN_PATH",
+    "PATH_ID_HEX_CHARS",
     "REQUIRED_FREE_DISK_BYTES",
     "STAGING_ROOT",
     "build_execution_plan",
