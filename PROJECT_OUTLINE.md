@@ -370,7 +370,10 @@ The micro successor has complete inactive Phase 1A raw custody and one preserved
 failed-closed Phase 1B/2 attempt. That attempt created all 120 expected inactive
 Phase 1B Parquets for 2018-2024, but it completed no certified Phase 2 release.
 A later one-source diagnostic created one separate inactive M6E 2018 causal
-Parquet and proved only the bounded materializer. None of these bytes are
+Parquet and proved only the bounded materializer. A later five-schema diagnostic
+opened the five M6E 2018 Phase 1B Parquets and passed its transition mechanics,
+but correctly refused certification because the legacy definition key counted
+308 consecutive repeats. None of these bytes are
 published, active, registered, research-admitted, or backed by an active micro
 catalog.
 Its prepared pointer remains beside the unpublished contract and profile; the
@@ -460,7 +463,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> exact no-network staging-alias custody repair -> SUCCESS (320 aliases removed; finals single-link)
   -> Phase 1B/2 v3 -> FAIL_CLOSED (120 inactive Phase 1B Parquets; 0 Phase 2)
   -> first-interval causal diagnostic -> PASS (one separate inactive M6E 2018 Parquet)
-  -> first five-schema group diagnostic -> PREPARED_NOT_EXECUTED
+  -> first five-schema group diagnostic -> PASS_MECHANICS / DUPLICATE_DISPOSITION
+  -> definition repeat-semantics diagnostic -> PREPARED_NOT_EXECUTED
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -700,7 +704,8 @@ $0 before the global runtime ceiling stopped the next request. It made zero
  staging/final hard links. A later separately approved, exactly bound v2 repair
  removed only those 320 aliases at $0 with zero network calls, retries, or row
  decoding. Its terminal verifies single-link inactive custody, so Phase 1A is
-complete while Phase 1B/2 rows remain unread.
+complete while its raw DBNs remain outside research use and the later Phase 2
+foundation remains uncertified.
 
 The lane-scoped Phase 1B/2 executor is now implemented as an offline-only,
 inactive-staging route for exactly the 120 annual 2018-2024 DBNs and adjacent
@@ -746,15 +751,23 @@ and reported no source values. That result proves the causal materializer and
 bounded path only; it does not certify the five-schema identity, economics,
 roll, receipt, catalog, or research gates.
 
-The prepare-only v2 group diagnostic is the next narrow boundary. It binds only
-the five preserved M6E 2018 Phase 1B Parquets (definition, status, statistics,
-one-minute bars, and one-second bars), totaling 86,344,286 bytes. After its
-implementation is committed, its immutable plan may request one separate
-approval to reconstruct the original price-free identity/roll summaries and
-exercise the first group-disposition and interval-receipt transition. It uses
-one worker, 100,000-row batches, 900 seconds, one attempt, zero retries, and at
-most 16 MiB of unpublished JSON evidence. It creates no Phase 2 Parquet and
-cannot open a DBN, a sixth Parquet, or any 2025/2026 payload.
+The separately approved v2 group diagnostic opened only the five preserved M6E
+2018 Phase 1B Parquets (definition, status, statistics, one-minute bars, and
+one-second bars), totaling 86,344,286 bytes. It passed the bounded transition
+mechanics, serialized all five interval receipts, verified all five hashes
+before and after, and created no Phase 2 Parquet. Certification remained closed:
+the legacy definition duplicate key `(ts_recv_ns, instrument_id, raw_symbol)`
+counted 308 consecutive repeats while every other schema counted zero.
+
+The prepare-only v3 definition diagnostic is the next narrow boundary. Its
+stat-only planner binds only the 68,274-byte M6E 2018 definition Parquet and the
+sealed group result. After implementation commit and immutable plan/audit
+creation, a separate one-file derived-row approval may classify the 308 repeats
+as identical retained semantics, distinct same-key definition updates, or a
+mixture. It reports counts and a classification only—never raw values or keys—
+uses one worker and 100,000-row batches, and creates no Parquet. It cannot open a
+DBN, second Parquet, or 2025/2026 payload. The current certification rule is not
+changed before that evidence exists.
 
 Any later full successor retains all sources and logical destinations, two isolated workers,
 100,000-row batches, one attempt, zero retries, a 12-hour deadline, at least 80
