@@ -373,7 +373,10 @@ A later one-source diagnostic created one separate inactive M6E 2018 causal
 Parquet and proved only the bounded materializer. A later five-schema diagnostic
 opened the five M6E 2018 Phase 1B Parquets and passed its transition mechanics,
 but correctly refused certification because the legacy definition key counted
-308 consecutive repeats. None of these bytes are
+308 consecutive repeats. The separately approved definition-only diagnostic
+then proved that all 308 repeats have identical retained semantics and that
+zero are distinct same-key updates; it preserved every row and reported counts
+only. None of these bytes are
 published, active, registered, research-admitted, or backed by an active micro
 catalog.
 Its prepared pointer remains beside the unpublished contract and profile; the
@@ -464,7 +467,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> Phase 1B/2 v3 -> FAIL_CLOSED (120 inactive Phase 1B Parquets; 0 Phase 2)
   -> first-interval causal diagnostic -> PASS (one separate inactive M6E 2018 Parquet)
   -> first five-schema group diagnostic -> PASS_MECHANICS / DUPLICATE_DISPOSITION
-  -> definition repeat-semantics diagnostic -> PREPARED_NOT_EXECUTED
+  -> definition repeat-semantics diagnostic -> PASS (308 exact; 0 distinct; no deduplication)
+  -> exact-duplicate-safe full Phase 2 successor -> PREPARED_NOT_EXECUTED
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -759,15 +763,30 @@ before and after, and created no Phase 2 Parquet. Certification remained closed:
 the legacy definition duplicate key `(ts_recv_ns, instrument_id, raw_symbol)`
 counted 308 consecutive repeats while every other schema counted zero.
 
-The prepare-only v3 definition diagnostic is the next narrow boundary. Its
-stat-only planner binds only the 68,274-byte M6E 2018 definition Parquet and the
-sealed group result. After implementation commit and immutable plan/audit
-creation, a separate one-file derived-row approval may classify the 308 repeats
-as identical retained semantics, distinct same-key definition updates, or a
-mixture. It reports counts and a classification only—never raw values or keys—
-uses one worker and 100,000-row batches, and creates no Parquet. It cannot open a
-DBN, second Parquet, or 2025/2026 payload. The current certification rule is not
-changed before that evidence exists.
+The separately approved v3 definition diagnostic bound only the 68,274-byte M6E
+2018 definition Parquet and the sealed group result. It classified all 308
+legacy-key repeats as exact retained-semantics duplicates, found zero distinct
+same-key updates, preserved all 1,481 Phase 1B rows without deduplication, and
+reported no raw values or keys. It opened no DBN, second Parquet, or 2025/2026
+payload and created no Parquet.
+
+The prepare-only v4 full Phase 2 successor is the next bounded implementation.
+Its stat-only planner binds all 120 preserved Phase 1B Parquets / 6,627,486,838
+bytes, 140 coverage cells, 24 five-schema intervals, and 24 causal one-minute
+outputs. A separately approved execution may perform at most 144 Parquet opens:
+one certification scan for each source plus one materialization pass for each
+bound one-minute source. It classifies every definition interval independently;
+only no repeats or exact retained-semantics repeats may pass, while distinct or
+mixed same-key updates fail closed. Exact repeats remain in Phase 1B and receive
+price-free certificates rather than silent removal. Per-interval and cross-year
+rank-zero continuity must both pass before any inactive catalog candidate is
+written.
+
+The successor retains two workers, 100,000-row batches, one attempt, zero
+retries, a 12-hour deadline, at least 80 GiB free disk, and a write-time 64 GiB
+shared Parquet ceiling. It cannot open DBNs or 2025/2026, use status/statistics
+as features, make BBO/queue/fill/within-second claims, mutate either active lane,
+or publish, register, evaluate, or trade.
 
 Any later full successor retains all sources and logical destinations, two isolated workers,
 100,000-row batches, one attempt, zero retries, a 12-hour deadline, at least 80
