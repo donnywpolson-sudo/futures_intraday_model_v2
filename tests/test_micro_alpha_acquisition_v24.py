@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import os
 import runpy
 import shutil
 import sys
@@ -340,6 +341,26 @@ def test_success_is_bounded_and_warning_messages_are_redacted(
         ),
     )
     assert verified["status"] == "PASS_INACTIVE_CUSTODY_NO_ROW_DECODE"
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows read-only hard-link semantics")
+def test_windows_read_only_staging_cleanup_fails_closed_and_rolls_back_finals(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _copy_root(tmp_path, monkeypatch)
+    terminal = _run(root, FakeFleet(), mark_immutable=acquisition._mark_read_only)
+    assert terminal["state"] == "FAILURE_INACTIVE_EVIDENCE_PRESERVED"
+    assert terminal["failure_stage"] == "CREATE_ONLY_FINALIZATION"
+    assert terminal["exception_type"] == "IntegrityError"
+    assert len(terminal["staging_cleanup_failures"]) == 320
+    assert terminal["accepted_dbn_count"] == 0
+    assert terminal["accepted_sidecar_count"] == 0
+    plan = acquisition.load_acquisition_plan(root=root)
+    assert not any(
+        (root / item[key]).exists()
+        for item in plan["requests"]
+        for key in ("dbn_destination", "sidecar_destination")
+    )
 
 
 def _receipt_id_from_terminal(terminal: dict[str, object]) -> str:

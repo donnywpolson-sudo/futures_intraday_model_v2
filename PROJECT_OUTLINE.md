@@ -175,17 +175,21 @@ live cockpit. Automatic order execution is outside this project's scope.
   filesystem writes. No authorization, provider call, download, or cleanup
   mutation occurred; v23 is superseded and removed from the current operation
   allowlist.
-- `src/futures_rebuild/micro_alpha_acquisition_v24.py` and
-  `scripts/prepare_apex_micro_phase1a_acquisition_v24.py`: local prepare-only
-  volatile-capacity-safe successor. It retains the exact 160 annual requests,
-  43,200-second runtime, warning redaction, finalization rollback, and all cost,
-  byte, disk, file, and concurrency ceilings. V9 excludes only the three
-  declared create-only v24 outputs from its worktree snapshot and binds the
-  superseded v23 preparation explicitly. The self-hashed audit records the
-  durable disk requirement and pass decision, not a volatile exact free-space
-  reading; live free space is checked at creation and again immediately before
-  execution. V24 plan/audit outputs remain absent until a new committed
-  implementation HEAD; no provider authority exists.
+- `src/futures_rebuild/micro_alpha_acquisition_v24.py`, its exact plan/audit,
+  consumed authorization, terminal, and verification-failure report: immutable
+  executed acquisition attempt. All 160 annual requests completed at $0 with
+  zero retries, yielding 160 DBNs, 160 adjacent sidecars, and 1,849,575,228 DBN
+  bytes. The post-run verifier failed closed because v24 marked each hard-linked
+  final read-only before removing its Windows staging alias; all 320 removals
+  failed and each final remains a two-link file. No row was decoded and no
+  catalog or pointer changed. V24 cannot execute again.
+- `src/futures_rebuild/micro_alpha_custody_repair_v1.py` and
+  `scripts/prepare_apex_micro_v24_custody_repair_v1.py`: source-safe no-network
+  successor that can remove only the 320 exact staging aliases, verify the
+  resulting single-link final DBNs and sidecars without decoding, and restore
+  read-only inactive custody. Its exact plan is deferred until the remediation
+  implementation has a committed HEAD; execution requires a separate cleanup-
+  mutation approval.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -425,7 +429,8 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> exact v21-bound annual acquisition plan -> FAIL_CLOSED (runtime ceiling; 36 staged pairs; 0 accepted)
   -> non-resuming v22 successor -> SUPERSEDED_PREPARATION (self-referential cleanup census; no execution)
   -> reconstruction-stable v23 successor -> SUPERSEDED_PREPARATION (volatile free-disk audit snapshot; no execution)
-  -> volatile-capacity-safe v24 successor (same 160 annual requests; 43,200-second ceiling; plan deferred until commit)
+  -> volatile-capacity-safe v24 successor (160 downloads complete; verifier rejected hard-linked finals)
+  -> exact no-network staging-alias custody repair (prepared; separate mutation approval required)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -468,6 +473,19 @@ completed its 160 zero-cost checks and 36 downloads before the global
 pairs were accepted or finalized and all intended final paths remain absent.
 No DBN row or 2025/2026 payload was opened. The consumed authorization cannot
 be retried, and its staging bytes cannot be resumed or promoted.
+
+The separately approved v24 successor then redownloaded all 160 exact annual
+requests under the longer bounded runtime. It completed 160 fresh $0 cost calls
+and 160 downloads using three provider clients and at most two workers, with
+zero retries. Its terminal reports 160 DBNs, 160 sidecars, and 1,849,575,228 DBN
+bytes, and confirms zero decoding, payload row access, activation, publication,
+registration, evaluation, or trading. Final verification nevertheless failed
+closed: the create-only finalization used hard links and marked the final names
+read-only before deleting their staging aliases. Windows rejected all 320 alias
+deletions, leaving exact two-link final/staging pairs. Those bytes remain
+inactive and preserved, but Phase 1A is not verified complete. A separately
+approved no-network custody repair must remove only the staging aliases and
+prove the final files have link count one before Phase 1B/2 preparation resumes.
 
 V22 preserved those non-resuming protections, but its unexecuted post-commit
 plan preparation exposed a local determinism defect: v7 recorded the worktree
@@ -643,11 +661,14 @@ gate failure remains fail closed. The deterministic v21 plan was bound to exact
 HEAD `a89fa8f3f31423a5422f008846cdac35a34b3355`; its separately approved
 authorization is consumed. The run made 160 cost calls and 36 download calls at
 $0 before the global runtime ceiling stopped the next request. It made zero
-retries, accepted and finalized zero pairs, decoded zero rows, and changed no
-catalog or active pointer. The unexecuted v22 and v23 plans are superseded. V24
-must first receive a new committed implementation HEAD and an exactly
-reconstructing plan/audit, then a separate raw-download approval. Metadata
-approval and the consumed v21 download approval grant no v24 authority.
+ retries, accepted and finalized zero pairs, decoded zero rows, and changed no
+ catalog or active pointer. The unexecuted v22 and v23 plans are superseded. V24
+ then executed once under its own exact approval and its authority is consumed.
+ All downloads completed, but the canonical verifier rejected the remaining
+ staging/final hard links. The download approval grants no authority to remove
+ those aliases. A committed, exactly reconstructed no-network repair plan and
+ separate cleanup-mutation approval are required before Phase 1A can be labeled
+ complete.
 
 The one-second source proves reported-trade-bar evidence only. It cannot prove
 BBO availability, queue priority, guaranteed market-order execution, or precise

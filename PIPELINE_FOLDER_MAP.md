@@ -46,7 +46,8 @@ work and every real-data or publishing action remains separately controlled.
 | `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v21.py`; exact plan/audit; consumed authorization; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v21_failure/report.json` | One separately approved run completed 160 $0 cost calls and 36 downloads, then failed closed on the 7,200-second global ceiling; 36 hash-verified pairs are read-only failed-attempt staging evidence, with zero accepted/finalized pairs and zero final destinations | Authorization consumed; no retry, resume, promotion, decoding, or research-source authority |
 | `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v22.py`; exact plan/audit; v7 cleanup census; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v22_supersession/report.json` | Unexecuted plan preparation exposed a self-referential worktree snapshot: reconstructing after its three create-only outputs appeared changed the v7 census; all artifacts are preserved and sealed as `SUPERSEDED_PREPARATION_SELF_REFERENTIAL_CENSUS` | No authorization, provider calls, downloads, or cleanup mutation; v22 cannot execute as current |
 | `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v23.py`; exact plan/audit; v8 cleanup census; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v23_supersession/report.json` | Its plan and cleanup census reconstruct exactly, but the unexecuted audit self-hashed a volatile exact free-disk byte reading and therefore changed after unrelated filesystem writes; preserved as `SUPERSEDED_PREPARATION_VOLATILE_CAPACITY_SNAPSHOT` | No authorization, provider calls, downloads, or cleanup mutation; v23 is removed from the current preparatory-operation allowlist |
-| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_acquisition_v24.py`; `scripts/prepare_apex_micro_phase1a_acquisition_v24.py`; `scripts/prepare_safe_cleanup_candidate_census_v9.py` | Volatile-capacity-safe successor retains the exact 160-request acquisition mechanics, records only the durable disk requirement/pass decision in the self-hashed audit, and requires fresh live free-space checks at plan creation and immediately before execution | Local implementation only; plan/audit deferred until a new committed HEAD; no provider or download authority |
+| `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v24.py`; exact plan/audit; consumed authorization; v24 terminal; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v24_verification_failure/report.json` | One separately approved run completed 160 cost calls and 160 downloads at $0 with zero retries, then final verification failed closed because all 320 read-only Windows staging-alias removals failed; each final remains an exact two-link alias and no rows were decoded | Authorization consumed; bytes are inactive and preserved, but Phase 1A is not verified complete until a separately approved repair proves single-link final custody |
+| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_custody_repair_v1.py`; `scripts/prepare_apex_micro_v24_custody_repair_v1.py`; synthetic tests | No-network successor can remove only the 320 exact staging aliases, verify all finals without decoding, and restore read-only single-link custody | Implementation must be secured in a committed HEAD; exact repair plan and separate cleanup-mutation approval remain required |
 | `SYNTHETIC_ONLY` | `tests/test_micro_alpha_*.py` | Corrected ladder, authorization, metadata, disk, collision, partial, cost, retry, custody, and no-decode mechanics | No provider, row, or download authority |
 | `HISTORICAL_ROW_APPROVAL_REQUIRED` | Phase 1B/2 contracts in `src/futures_rebuild/micro_alpha_pipeline.py` | Decoder/causal routing contracts are prepared; Phase 1B/2 row processing has not executed | Separate row-read approval only after acquisition |
 | `NOT_IMPLEMENTED` | `configs/active_micro_alpha_research_ladder.json`; `data/active/catalogs/apex_micro.json` | Intentionally absent until publication and Phase 2 certification | Cannot register micro research |
@@ -105,8 +106,9 @@ PROJECT_OUTLINE design
   -> v21-bound annual acquisition successor                       RETIRED / runtime fail-closed / 36 staged / 0 accepted
   -> v22 non-resuming annual acquisition successor                RETIRED / unexecuted self-referential census preparation
   -> v23 reconstruction-stable acquisition successor             RETIRED / unexecuted volatile-capacity audit preparation
-  -> v24 volatile-capacity-safe acquisition successor            PREPARED_NOT_EXECUTED / plan deferred until commit
-  -> Phase 1A DBN + sidecar inactive custody                       PREPARED_NOT_EXECUTED / no final micro DBN exists
+  -> v24 volatile-capacity-safe acquisition successor            RETIRED / 160 downloads / verifier found 320 hard-link cleanup failures
+  -> exact no-network custody repair successor                    PREPARED_NOT_EXECUTED / separate mutation approval required
+  -> Phase 1A DBN + sidecar inactive custody                       FAIL_CLOSED / bytes present but single-link verification pending
   -> Phase 1B definition/status/statistics/1m/1s decoding          row-read approval required
   -> Phase 2 1m feature + separate 1s execution foundations        row-read approval required
   -> source certification
@@ -121,7 +123,9 @@ DBN hierarchy, not a parallel micro tree. Exactly one pair is prepared for each
 market x schema x calendar-year interval; partial launch and latest years are
 explicit and multi-year DBNs are forbidden. The prepared source scope is MES, MCL, MGC,
 and M6E across the required Databento Standard historical schemas: definition,
-status, statistics, ohlcv-1m, and ohlcv-1s. No target micro DBN currently exists.
+status, statistics, ohlcv-1m, and ohlcv-1s. All 160 target DBNs and adjacent
+sidecars now exist, but each remains a two-link alias of its preserved staging
+file and therefore is not yet accepted as verified immutable custody.
 
 No micro row-processing phase is labeled complete. The v2, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, and v20 metadata-only attempts
 executed once each and produced only preserved fail-closed metadata evidence.
@@ -139,14 +143,19 @@ appeared. The exact v22 artifacts are preserved and superseded; no authorization
 was consumed and no provider call occurred. V23 corrected that worktree defect,
 but its unexecuted audit self-hashed an exact live free-disk byte count and did
 not reconstruct after unrelated filesystem writes. Its exact outputs are
-preserved and superseded without provider access. V24 omits the volatile byte
-count from its self-hashed audit while retaining the durable required-free-space
-value, the pass/fail gate, and mandatory fresh live checks before execution.
-Its plan/audit remain deferred until a new committed implementation HEAD and it
-has no provider authority.
+preserved and superseded without provider access. V24 then executed once under
+its own exact approval. All 160 cost checks and downloads completed at $0 with
+zero retries, producing 160 DBNs, 160 sidecars, and 1,849,575,228 DBN bytes.
+Its terminal also records 320 staging-cleanup failures: marking the hard-linked
+final names read-only caused Windows to reject every staging-alias removal. The
+canonical verifier therefore rejected the remaining two-link files. The exact
+source-safe failure report is preserved and the consumed v24 authority cannot
+retry. A no-network repair successor is prepared, but its implementation must
+be committed and its exact alias-removal plan separately approved before Phase
+1A can be labeled complete.
 Phase 1B/2 row processing is
 also unexecuted. The micro catalog is
-inactive, registration is blocked, and current download authority is absent. Apart
+inactive, registration is blocked, and current download authority is consumed. Apart
 from the preserved price-free v2, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, and v20 failure reports and the v21 PASS report, the code proves downloader mechanics
 with synthetic records only.
 

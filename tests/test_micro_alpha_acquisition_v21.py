@@ -209,6 +209,7 @@ def test_live_v21_plan_is_preserved_after_successor_implementation_drift() -> No
     reconstructed_under_successor_code = acquisition.build_acquisition_plan(
         root=ROOT,
         committed_head=acquisition._git_head(ROOT),
+        require_destination_absence=False,
     )
     assert len(stored["requests"]) == 160
     assert stored["limits"]["maximum_total_bytes"] == 11_350_292_377

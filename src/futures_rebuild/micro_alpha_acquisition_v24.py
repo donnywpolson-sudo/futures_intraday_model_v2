@@ -955,6 +955,8 @@ def execute_authorized_acquisition(
             record["staging_sources_removed"] = not (
                 source_dbn.exists() or source_sidecar.exists()
             )
+        if staging_cleanup_failures:
+            raise IntegrityError("v24 staging hard-link cleanup failed")
         core = {
             **base,
             "state": "SUCCESS_INACTIVE_IMMUTABLE_CUSTODY",
@@ -1013,6 +1015,7 @@ def execute_authorized_acquisition(
             "completed_finalized_pairs": finalized,
             "finalization_attempts": finalization_attempts,
             "finalization_rollback_failures": finalization_rollback_failures,
+            "staging_cleanup_failures": staging_cleanup_failures,
             "partial_final_destinations_preserved": bool(
                 finalization_rollback_failures
             ),
