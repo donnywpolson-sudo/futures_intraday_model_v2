@@ -11,6 +11,7 @@ work and every real-data or publishing action remains separately controlled.
 | `CURRENT_REACHABLE` | `data/active/causally_gated_normalized/` | Only catalog-selected flattened standard-lane research view; 562 admitted market-years with adjacent certification sidecars | Resolve through `data/active/catalog.json`; direct globs forbidden |
 | `CURRENT_REACHABLE` | `data/causally_gated_normalized/` | Content-addressed immutable Phase 2 release history with multiple preserved generations; not a second active view | Release inputs only through pinned manifests and catalog bindings |
 | `CURRENT_REACHABLE` | `scripts/audit_standard_data_topology_source_safe.py`; `state/unpublished_evidence/standard_data_topology_source_safe_audit/report.json` | Source-safe PASS verifies catalog self-hash, foundation/DBN release bindings, 562 active sidecars, and referenced Phase 1B/2 paths without opening payloads | Does not recertify rows or grant research authority |
+| `CURRENT_REACHABLE` | `scripts/audit_data_topology_source_safe_v2.py`; `state/unpublished_evidence/data_topology_source_safe_audit_v2/report.json` | Successor metadata-only PASS inventories every top-level data root, binds repaired micro custody, and confirms release history versus catalog-selected active-view roles | Zero data-root cleanup candidates; no payload opened or cleanup authority granted |
 | `RETIRED` | `scripts/prepare_safe_cleanup_inventory_v4.py`; `state/unpublished_evidence/safe_cleanup_preparation_v4/plan.json` | Preserved no-delete preparation bound to pre-commit HEAD `558ee094...`; it became stale after the approved implementation commit and cannot authorize cleanup | Execution forbidden; no cleanup occurred |
 | `PREPARED_NOT_EXECUTED` | `scripts/prepare_safe_cleanup_inventory_v5.py`; `state/unpublished_evidence/safe_cleanup_preparation_v5/plan.json` | Stable preserve-first cleanup policy with no frozen candidates or prepared-HEAD claim; exact literal cache census and execution HEAD are deliberately deferred until all prior writes finish | Separate exact cleanup approval required after a fresh census; all gates rerun immediately before/after mutation |
 | `PREPARED_NOT_EXECUTED` | `scripts/prepare_safe_cleanup_candidate_census_v6.py`; `state/unpublished_evidence/safe_cleanup_candidate_census_v6/census.json` | Post-commit metadata-only census froze 13 exact untracked, Git-ignored cache directories outside data/state/config roots; records filesystem counts but never opens DBN or Parquet payloads | Grants no delete/move authority; separate exact cleanup approval and immediate revalidation remain required |
@@ -46,11 +47,11 @@ work and every real-data or publishing action remains separately controlled.
 | `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v21.py`; exact plan/audit; consumed authorization; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v21_failure/report.json` | One separately approved run completed 160 $0 cost calls and 36 downloads, then failed closed on the 7,200-second global ceiling; 36 hash-verified pairs are read-only failed-attempt staging evidence, with zero accepted/finalized pairs and zero final destinations | Authorization consumed; no retry, resume, promotion, decoding, or research-source authority |
 | `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v22.py`; exact plan/audit; v7 cleanup census; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v22_supersession/report.json` | Unexecuted plan preparation exposed a self-referential worktree snapshot: reconstructing after its three create-only outputs appeared changed the v7 census; all artifacts are preserved and sealed as `SUPERSEDED_PREPARATION_SELF_REFERENTIAL_CENSUS` | No authorization, provider calls, downloads, or cleanup mutation; v22 cannot execute as current |
 | `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v23.py`; exact plan/audit; v8 cleanup census; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v23_supersession/report.json` | Its plan and cleanup census reconstruct exactly, but the unexecuted audit self-hashed a volatile exact free-disk byte reading and therefore changed after unrelated filesystem writes; preserved as `SUPERSEDED_PREPARATION_VOLATILE_CAPACITY_SNAPSHOT` | No authorization, provider calls, downloads, or cleanup mutation; v23 is removed from the current preparatory-operation allowlist |
-| `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v24.py`; exact plan/audit; consumed authorization; v24 terminal; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v24_verification_failure/report.json` | One separately approved run completed 160 cost calls and 160 downloads at $0 with zero retries, then final verification failed closed because all 320 read-only Windows staging-alias removals failed; each final remains an exact two-link alias and no rows were decoded | Authorization consumed; bytes are inactive and preserved, but Phase 1A is not verified complete until a separately approved repair proves single-link final custody |
+| `RETIRED` | `src/futures_rebuild/micro_alpha_acquisition_v24.py`; exact plan/audit; consumed authorization; v24 terminal; `state/unpublished_evidence/apex_micro_phase1a_acquisition_v24_verification_failure/report.json` | One separately approved run completed 160 cost calls and 160 downloads at $0 with zero retries, then its own final verification failed closed because all 320 read-only Windows staging-alias removals failed | Authorization consumed; immutable failure evidence preserved; custody was later corrected only by the separately approved v2 repair |
 | `RETIRED` | `src/futures_rebuild/micro_alpha_custody_repair_v1.py`; immutable v1 plan; `state/unpublished_evidence/apex_micro_v24_custody_repair_v1_supersession/report.json` | Unexecuted preparation omitted mandatory execution-time implementation/evidence rechecks, per-sidecar identity bindings, pre-mutation DBN hash verification, and failure-path read-only proof; preserved as `SUPERSEDED_PREPARATION_INCOMPLETE_EXECUTION_BINDINGS` | No authorization, alias removal, provider call, DBN read, or terminal; v1 is removed from the current operation allowlist |
-| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_custody_repair_v2.py`; `scripts/prepare_apex_micro_v24_custody_repair_v2.py`; adversarial synthetic tests | Binding-complete no-network successor freezes all 320 aliases plus DBN hashes and sidecar identities, rechecks every sealed binding before authority use, verifies before/after mutation without decoding, restores read-only state, and stops on first failure | V2 implementation must be secured in a committed HEAD; exact create-only v2 plan/audit and separate cleanup-mutation approval remain required |
+| `CURRENT_REACHABLE` | `src/futures_rebuild/micro_alpha_custody_repair_v2.py`; exact plan/audit; consumed authorization; terminal `ebb82d34...` | One approved no-network run removed all 320 exact staging aliases and verified 160 DBNs, 160 sidecars, and 1,849,575,228 DBN bytes before/after without decoding | `SUCCESS_INACTIVE_IMMUTABLE_CUSTODY_REPAIRED`; all finals single-link/read-only; no rerun authority |
 | `SYNTHETIC_ONLY` | `tests/test_micro_alpha_*.py` | Corrected ladder, authorization, metadata, disk, collision, partial, cost, retry, custody, and no-decode mechanics | No provider, row, or download authority |
-| `HISTORICAL_ROW_APPROVAL_REQUIRED` | Phase 1B/2 contracts in `src/futures_rebuild/micro_alpha_pipeline.py` | Decoder/causal routing contracts are prepared; Phase 1B/2 row processing has not executed | Separate row-read approval only after acquisition |
+| `HISTORICAL_ROW_APPROVAL_REQUIRED` | `src/futures_rebuild/micro_alpha_pipeline.py`; `src/futures_rebuild/micro_alpha_phase1b2_preparation.py`; `configs/apex_micro_phase1b2_prepare_only_contract_v1.json` | Five schema-specific decoder roles, identity/roll, causal availability, explicit dispositions, honest one-second semantics, inactive catalog certification, lane-aware gateway, and fail-closed micro risk gates are prepared | Phase 1B/2 row processing has not executed; separate historical-row approval required |
 | `NOT_IMPLEMENTED` | `configs/active_micro_alpha_research_ladder.json`; `data/active/catalogs/apex_micro.json` | Intentionally absent until publication and Phase 2 certification | Cannot register micro research |
 | `CURRENT_REACHABLE` | `src/futures_rebuild/certified_research_gateway.py` | Standard registration and one-use historical execution | Exact certified authority required |
 | `CURRENT_REACHABLE` | `src/futures_rebuild/live_cockpit/`; `python -m futures_rebuild.live_cockpit` | Observation only | No order or position-changing authority |
@@ -108,8 +109,8 @@ PROJECT_OUTLINE design
   -> v22 non-resuming annual acquisition successor                RETIRED / unexecuted self-referential census preparation
   -> v23 reconstruction-stable acquisition successor             RETIRED / unexecuted volatile-capacity audit preparation
   -> v24 volatile-capacity-safe acquisition successor            RETIRED / 160 downloads / verifier found 320 hard-link cleanup failures
-  -> exact no-network custody repair successor                    PREPARED_NOT_EXECUTED / separate mutation approval required
-  -> Phase 1A DBN + sidecar inactive custody                       FAIL_CLOSED / bytes present but single-link verification pending
+  -> exact no-network custody repair successor                    CURRENT_REACHABLE / SUCCESS / authority consumed
+  -> Phase 1A DBN + sidecar inactive custody                       CURRENT_REACHABLE / 160 + 160 / single-link / no decode
   -> Phase 1B definition/status/statistics/1m/1s decoding          row-read approval required
   -> Phase 2 1m feature + separate 1s execution foundations        row-read approval required
   -> source certification
@@ -125,8 +126,8 @@ market x schema x calendar-year interval; partial launch and latest years are
 explicit and multi-year DBNs are forbidden. The prepared source scope is MES, MCL, MGC,
 and M6E across the required Databento Standard historical schemas: definition,
 status, statistics, ohlcv-1m, and ohlcv-1s. All 160 target DBNs and adjacent
-sidecars now exist, but each remains a two-link alias of its preserved staging
-file and therefore is not yet accepted as verified immutable custody.
+sidecars now exist only at their final read-only single-link paths. The v2
+repair terminal verifies all 1,849,575,228 DBN bytes without decoding rows.
 
 No micro row-processing phase is labeled complete. The v2, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, and v20 metadata-only attempts
 executed once each and produced only preserved fail-closed metadata evidence.
@@ -151,12 +152,12 @@ Its terminal also records 320 staging-cleanup failures: marking the hard-linked
 final names read-only caused Windows to reject every staging-alias removal. The
 canonical verifier therefore rejected the remaining two-link files. The exact
 source-safe failure report is preserved and the consumed v24 authority cannot
-retry. A no-network repair successor is prepared, but its implementation must
-be committed and its exact alias-removal plan separately approved before Phase
-1A can be labeled complete.
-Phase 1B/2 row processing is
-also unexecuted. The micro catalog is
-inactive, registration is blocked, and current download authority is consumed. Apart
+retry. The separately approved v2 no-network repair then removed only those 320
+aliases, verified every DBN hash and sidecar identity before/after, restored
+read-only final state, and wrote terminal evidence last. Phase 1A inactive
+custody is now complete. Phase 1B/2 contracts are prepared, but row processing
+is unexecuted. The micro catalog is inactive, registration is blocked, and all
+download/repair authority is consumed. Apart
 from the preserved price-free v2, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, and v20 failure reports and the v21 PASS report, the code proves downloader mechanics
 with synthetic records only.
 

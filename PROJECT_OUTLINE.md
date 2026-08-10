@@ -190,15 +190,20 @@ live cockpit. Automatic order execution is outside this project's scope.
   hashes only after alias removal. It is classified
   `SUPERSEDED_PREPARATION_INCOMPLETE_EXECUTION_BINDINGS`, has no authorization
   or terminal, and is removed from the current operation allowlist.
-- `src/futures_rebuild/micro_alpha_custody_repair_v2.py` and
-  `scripts/prepare_apex_micro_v24_custody_repair_v2.py`: binding-complete,
-  source-safe no-network successor. It freezes all 320 exact alias records,
-  sealed evidence hashes, each DBN SHA-256, and each sidecar manifest identity;
-  revalidates implementation, evidence, audit, and same-file topology before
-  authority use; verifies bytes before and after mutation without decoding;
-  restores read-only state on success or failure; and stops after the first
-  failure. Its exact plan and audit are deferred until the v2 implementation
-  has a committed HEAD. Execution remains a separate cleanup-mutation approval.
+- `src/futures_rebuild/micro_alpha_custody_repair_v2.py`, exact plan/audit,
+  consumed authorization, and terminal: the binding-complete no-network
+  successor executed once on committed HEAD `e8598075...`. It removed only the
+  exact 320 staging aliases, verified all 1,849,575,228 DBN bytes before and
+  after without decoding, verified all sidecar identities, and left 160 DBNs
+  plus 160 sidecars at single-link read-only final paths. Terminal state is
+  `SUCCESS_INACTIVE_IMMUTABLE_CUSTODY_REPAIRED`; Phase 1A inactive custody is
+  complete and the repair cannot execute again.
+- `src/futures_rebuild/micro_alpha_phase1b2_preparation.py` and
+  `configs/apex_micro_phase1b2_prepare_only_contract_v1.json`: exact source-safe
+  Phase 1B/2 decoder, identity, roll, causal-availability, disposition,
+  inactive-catalog, gateway, and Apex micro risk-gate contracts. They bind the
+  completed custody terminal but grant no row-read, decoding, catalog,
+  registration, evaluation, publication, or trading authority.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.
@@ -283,6 +288,11 @@ are forbidden. The source-safe audit at
 checks the catalog, sidecars, validation receipts, and Phase 1A/1B/2 release
 bindings without opening DBN or parquet payloads. It confirms provenance
 metadata, not a new row-level recertification.
+The successor audit at
+`state/unpublished_evidence/data_topology_source_safe_audit_v2/report.json`
+also inventories every top-level `data/` root from filesystem metadata only,
+binds the completed micro custody terminal, confirms that the micro pointer and
+catalog remain absent, and classifies zero data roots as cleanup candidates.
 
 Cleanup is a separate governed boundary. Cleanup preparation v4 remains
 preserved but retired because its dynamic prepared-HEAD record became stale
@@ -312,8 +322,11 @@ preserved read-only. A v7 census successor is prepared locally to bind the
 sealed failure report while retaining the same no-mutation boundary; its
 v7 output is preserved with the unexecuted v22 preparation. V8 and the exact
 v23 outputs are preserved with the volatile-capacity supersession evidence. V9
-provides the current reconstruction-stable cleanup successor and its create-only
-output is deferred until the v24 implementation has a committed HEAD.
+provides the last exact cache-candidate snapshot. It is preserved as historical
+prepare-only evidence, not current cleanup authority. After Phase 1A repair,
+the v2 topology audit confirms that no `data/` root should be merged, moved,
+deleted, or relabeled. Any cache cleanup remains last, requires a fresh exact
+candidate manifest after all project writes finish, and needs separate approval.
 
 ## Alpha research lanes
 
@@ -439,7 +452,7 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> non-resuming v22 successor -> SUPERSEDED_PREPARATION (self-referential cleanup census; no execution)
   -> reconstruction-stable v23 successor -> SUPERSEDED_PREPARATION (volatile free-disk audit snapshot; no execution)
   -> volatile-capacity-safe v24 successor (160 downloads complete; verifier rejected hard-linked finals)
-  -> exact no-network staging-alias custody repair (prepared; separate mutation approval required)
+  -> exact no-network staging-alias custody repair -> SUCCESS (320 aliases removed; finals single-link)
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -492,9 +505,11 @@ registration, evaluation, or trading. Final verification nevertheless failed
 closed: the create-only finalization used hard links and marked the final names
 read-only before deleting their staging aliases. Windows rejected all 320 alias
 deletions, leaving exact two-link final/staging pairs. Those bytes remain
-inactive and preserved, but Phase 1A is not verified complete. A separately
-approved no-network custody repair must remove only the staging aliases and
-prove the final files have link count one before Phase 1B/2 preparation resumes.
+inactive and preserved, so v24 itself remained fail-closed. The separately
+approved v2 no-network custody repair subsequently removed all 320 exact
+staging aliases, verified DBN hashes and sidecar identities before and after,
+and proved every final is read-only with link count one. Phase 1A inactive
+custody is therefore verified complete without any row decoding.
 
 V22 preserved those non-resuming protections, but its unexecuted post-commit
 plan preparation exposed a local determinism defect: v7 recorded the worktree
@@ -674,10 +689,10 @@ $0 before the global runtime ceiling stopped the next request. It made zero
  catalog or active pointer. The unexecuted v22 and v23 plans are superseded. V24
  then executed once under its own exact approval and its authority is consumed.
  All downloads completed, but the canonical verifier rejected the remaining
- staging/final hard links. The download approval grants no authority to remove
- those aliases. A committed, exactly reconstructed no-network repair plan and
- separate cleanup-mutation approval are required before Phase 1A can be labeled
- complete.
+ staging/final hard links. A later separately approved, exactly bound v2 repair
+ removed only those 320 aliases at $0 with zero network calls, retries, or row
+ decoding. Its terminal verifies single-link inactive custody, so Phase 1A is
+ complete while Phase 1B/2 rows remain unread.
 
 The one-second source proves reported-trade-bar evidence only. It cannot prove
 BBO availability, queue priority, guaranteed market-order execution, or precise
@@ -685,6 +700,16 @@ within-second tick ordering. Later Phase 2 contracts require entry after causal
 availability, conservative same-bar ambiguity, explicit unfilled/no-trigger
 states, independently scheduled baselines, locked stress costs, and explicit
 missing or sparse checkpoints.
+
+The prepare-only Phase 1B/2 contract now freezes the five schema-specific
+decoder roles, actual-instrument and continuous-roll requirements, causal
+availability, explicit missing/sparse/duplicate/prelaunch/ambiguous
+dispositions, inactive micro-catalog certification, and lane-aware gateway
+bindings. The existing Apex risk policy explicitly covers full contracts only,
+so it cannot be silently reused for micros. MES, MCL, MGC, and M6E commission
+verification remains fail-closed and must be resolved from an official Apex
+source before mechanism freeze, not from observed outcomes. No row processing
+or research authority is implied.
 
 ## Non-negotiable data rules
 
