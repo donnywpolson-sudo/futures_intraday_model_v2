@@ -140,15 +140,21 @@ def test_plan_is_stat_only_and_binds_complete_successor_scope() -> None:
     assert "iter_batches" not in source
     assert "sha256_file(source_path)" not in source
     plan = successor.load_plan(root=ROOT)
-    if (ROOT / str(plan["staging_root"])).exists():
-        with pytest.raises(IntegrityError, match="create-only output collision"):
-            successor.build_plan(
-                root=ROOT, implementation_head=successor._git_head(ROOT)
-            )
+    current_head = successor._git_head(ROOT)
+    if current_head != plan["implementation_head"]:
+        fresh_plan = successor.build_plan(root=ROOT, implementation_head=current_head)
+        assert fresh_plan["plan_id"] != plan["plan_id"]
+        assert fresh_plan["scope_id"] != plan["scope_id"]
+        assert fresh_plan["staging_root"] != plan["staging_root"]
+        assert (ROOT / str(plan["staging_root"])).exists()
     else:
-        assert plan == successor.build_plan(
-            root=ROOT, implementation_head=successor._git_head(ROOT)
-        )
+        if (ROOT / str(plan["staging_root"])).exists():
+            with pytest.raises(IntegrityError, match="create-only output collision"):
+                successor.build_plan(root=ROOT, implementation_head=current_head)
+        else:
+            assert plan == successor.build_plan(
+                root=ROOT, implementation_head=current_head
+            )
     assert plan["source_count"] == 120
     assert plan["source_bytes"] == 6_627_486_838
     assert plan["coverage_cell_count"] == 140

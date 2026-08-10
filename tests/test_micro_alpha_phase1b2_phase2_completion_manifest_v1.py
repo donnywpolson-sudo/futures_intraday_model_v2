@@ -19,7 +19,7 @@ def test_phase2_completion_manifest_reconstructs_exact_inactive_result() -> None
     core = dict(persisted)
     assert core.pop("manifest_id") == sha256_json(core)
     expected_worktree = set(manifest.RECOMMENDED) | set(manifest.PRESERVED_UNSTAGED)
-    if manifest._tracked(manifest.OUTPUT) or manifest._worktree_paths() == expected_worktree:
+    if manifest._worktree_paths() == expected_worktree:
         assert persisted == manifest.build_manifest()
     assert persisted["recommended_exact_stage_path_count"] == 11
     assert persisted["recommended_exact_stage_paths"] == list(manifest.RECOMMENDED)

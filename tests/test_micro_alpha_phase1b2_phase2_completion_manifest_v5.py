@@ -7,35 +7,43 @@ from pathlib import Path
 import pytest
 
 from futures_rebuild.canonical import sha256_json
-from scripts import prepare_apex_micro_phase1b2_phase2_completion_manifest_v3 as manifest
+from scripts import prepare_apex_micro_phase1b2_phase2_completion_manifest_v5 as manifest
 
 
 ROOT = Path(__file__).resolve().parents[1]
 pytestmark = [pytest.mark.current, pytest.mark.high_risk]
 
 
-def test_phase2_completion_v3_reconstructs_successor_aware_scope() -> None:
+def test_phase2_completion_v5_reconstructs_postcommit_test_remediation() -> None:
     persisted = json.loads((ROOT / manifest.OUTPUT).read_text(encoding="utf-8"))
     core = dict(persisted)
     assert core.pop("manifest_id") == sha256_json(core)
     expected_worktree = set(manifest.RECOMMENDED) | set(manifest.PRESERVED_UNSTAGED)
-    if manifest._worktree_paths() == expected_worktree:
+    if manifest._tracked(manifest.OUTPUT) or manifest._worktree_paths() == expected_worktree:
         assert persisted == manifest.build_manifest()
-    assert persisted["recommended_exact_stage_path_count"] == 18
+    assert persisted["recommended_exact_stage_path_count"] == 7
     assert persisted["recommended_exact_stage_paths"] == list(manifest.RECOMMENDED)
     assert persisted["preserved_unstaged_paths"] == [
         "CODEX_HANDOFF.md", "CURRENT_WORKFLOW.md",
     ]
-    assert [item["manifest_id"] for item in persisted["predecessor_manifests"]] == [
-        "97cc8af5d2535c896b85d199bbb273899b798596841d8ec96a3faf6fcff55f62",
-        "f2353539c9032ba2078af58c84d749309d632c9eea17048bffa8db5c39a9a327",
-    ]
-    transition = persisted["successor_aware_test_transition"]
-    assert transition["remediated_test_count"] == 2
-    assert transition["uncommitted_predecessor_manifest_identity_verified"] is True
-    assert transition["committed_manifest_reconstruction_retained"] is True
-    assert transition["historical_row_or_executor_rerun_authority"] is False
-    assert transition["parquet_rows_decoded_by_remediation"] == 0
+    assert persisted["predecessor_manifest_id"] == (
+        "c9293063c8210fad57a68b3d7aae5fb14817911e926d777fda47fb27a5a5840a"
+    )
+    assert persisted["predecessor_manifest_sha256"] == (
+        "e82db00ef1e4a4c6643aaf1de583bf49b9443cadce72b375f712dd55b9c1f11e"
+    )
+    assert persisted["predecessor_commit"] == (
+        "caa928439622df6a531f67ba75f446b7432168f7"
+    )
+    remediation = persisted["postcommit_test_remediation"]
+    assert remediation["remediated_test_count"] == 4
+    assert remediation["executed_plan_implementation_head"] == (
+        "21069d7210afa967557480dcc1035cb61b869fa2"
+    )
+    assert remediation["executed_plan_authorization_consumed"] is True
+    assert remediation["fresh_preview_scope_is_distinct"] is True
+    assert remediation["fresh_plan_written_or_authorized"] is False
+    assert remediation["historical_rows_decoded_by_remediation"] == 0
     result = persisted["certified_inactive_result"]
     assert result["state"] == "SUCCESS_CERTIFIED_INACTIVE_PHASE2"
     assert result["phase2_output_count"] == 24
@@ -45,7 +53,7 @@ def test_phase2_completion_v3_reconstructs_successor_aware_scope() -> None:
     assert not any(path.endswith(".parquet") for path in manifest.RECOMMENDED)
 
 
-def test_completion_v3_has_no_decode_execution_cleanup_or_git_surface() -> None:
+def test_completion_v5_has_no_decode_execution_cleanup_or_git_surface() -> None:
     source = inspect.getsource(manifest)
     assert "ParquetFile" not in source
     assert "DBNStore" not in source
