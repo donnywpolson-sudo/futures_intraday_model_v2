@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from hashlib import sha256
 import subprocess
 from pathlib import Path
 
@@ -62,14 +63,49 @@ def _worktree_paths(root: Path) -> list[str]:
     return sorted(set(paths))
 
 
+def _tracked(root: Path, path: str) -> bool:
+    return subprocess.run(
+        ["git", "-C", str(root), "ls-files", "--error-unmatch", "--", path],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    ).returncode == 0
+
+
+def _committed_bytes(root: Path, *, commit: str, path: str) -> bytes:
+    return subprocess.check_output(
+        ["git", "-C", str(root), "show", f"{commit}:{path}"]
+    )
+
+
 def build_manifest(*, root: Path = ROOT) -> dict[str, object]:
     root = root.resolve(strict=True)
-    expected = set(RECOMMENDED) | set(PRESERVED_UNSTAGED)
-    if not (root / OUTPUT).exists():
-        expected.remove(OUTPUT.as_posix())
-    observed = set(_worktree_paths(root))
-    if observed != expected:
-        raise IntegrityError("consolidation worktree does not match the exact scope")
+    historical_commit: str | None = None
+    if _tracked(root, OUTPUT.as_posix()):
+        historical_commit = _git(
+            root, "log", "-1", "--format=%H", "--", OUTPUT.as_posix()
+        )
+        committed_paths = set(
+            _git(
+                root, "diff-tree", "--no-commit-id", "--name-only", "-r",
+                historical_commit,
+            ).splitlines()
+        )
+        if committed_paths != set(RECOMMENDED):
+            raise IntegrityError(
+                "committed consolidation does not contain the exact scope"
+            )
+        binding_head = _git(root, "rev-parse", f"{historical_commit}^")
+    else:
+        observed = set(_worktree_paths(root))
+        precommit_expected = set(RECOMMENDED) | set(PRESERVED_UNSTAGED)
+        if not (root / OUTPUT).exists():
+            precommit_expected.remove(OUTPUT.as_posix())
+        if observed != precommit_expected:
+            raise IntegrityError(
+                "consolidation worktree does not match the exact scope"
+            )
+        binding_head = _git(root, "rev-parse", "HEAD")
     if _git(root, "diff", "--cached", "--name-only"):
         raise IntegrityError("consolidation manifest requires an empty index")
     records = []
@@ -80,7 +116,15 @@ def build_manifest(*, root: Path = ROOT) -> dict[str, object]:
                 "sha256": (
                     "SELF_HASHED_AT_WRITE"
                     if path == OUTPUT.as_posix()
-                    else sha256_file(root / path)
+                    else (
+                        sha256(
+                            _committed_bytes(
+                                root, commit=historical_commit, path=path
+                            )
+                        ).hexdigest()
+                        if historical_commit is not None
+                        else sha256_file(root / path)
+                    )
                 ),
                 "recommended_for_exact_stage": True,
             }
@@ -100,7 +144,7 @@ def build_manifest(*, root: Path = ROOT) -> dict[str, object]:
         "state": "PREPARED_REQUIRES_EXACT_PATH_STAGING_APPROVAL",
         "repository_root": root.as_posix(),
         "branch": _git(root, "branch", "--show-current"),
-        "observed_head": _git(root, "rev-parse", "HEAD"),
+        "observed_head": binding_head,
         "upstream": _git(root, "rev-parse", "--abbrev-ref", "@{upstream}"),
         "upstream_head": _git(root, "rev-parse", "@{upstream}"),
         "recommended_exact_stage_path_count": len(RECOMMENDED),
