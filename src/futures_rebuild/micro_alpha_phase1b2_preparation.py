@@ -180,6 +180,10 @@ def require_row_certified_catalog_candidate(candidate: Mapping[str, object]) -> 
         "state",
         "source_certification_id",
         "source_certification_sha256",
+        "coverage_census_id",
+        "coverage_cell_count",
+        "phase1b_release_id",
+        "phase1b_release_sha256",
         "phase2_release_id",
         "phase2_release_sha256",
         "markets",
@@ -198,6 +202,7 @@ def require_row_certified_catalog_candidate(candidate: Mapping[str, object]) -> 
         or candidate.get("markets") != list(TIER_1_MARKETS)
         or candidate.get("years") != list(range(2018, 2025))
         or candidate.get("disposition_census_complete") is not True
+        or candidate.get("coverage_cell_count") != 140
         or candidate.get("actual_identity_and_roll_continuity_certified") is not True
         or candidate.get("holdout_2025_materialized") is not False
         or candidate.get("forward_2026_materialized") is not False
@@ -206,6 +211,9 @@ def require_row_certified_catalog_candidate(candidate: Mapping[str, object]) -> 
     for key in (
         "source_certification_id",
         "source_certification_sha256",
+        "coverage_census_id",
+        "phase1b_release_id",
+        "phase1b_release_sha256",
         "phase2_release_id",
         "phase2_release_sha256",
     ):

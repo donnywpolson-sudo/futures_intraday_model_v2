@@ -366,8 +366,9 @@ alone cannot make a period forward evidence.
 
 ### Apex integer-micro lane
 
-The micro successor is currently prepared and synthetic-only. It is not
-published, active, registered, or backed by an active source catalog.
+The micro successor has complete inactive Phase 1A raw custody, but no source
+rows have entered Phase 1B/2. It is not published, active, registered, or
+backed by an active source catalog.
 Its prepared pointer remains beside the unpublished contract and profile; the
 future active path `configs/active_micro_alpha_research_ladder.json` is absent.
 
@@ -458,7 +459,7 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
   -> data/market_state/{status|statistics}/<market>/...              [Phase 1B diagnostics]
   -> data/outcome_sources/<market>/...                               [Phase 1B execution]
-  -> data/causally_gated_normalized/...                             [Phase 2 1m features]
+  -> data/causally_gated_normalized/...                             [Phase 2 causal 1m foundation]
   -> separately certified micro catalog                            [not yet active]
 ```
 
@@ -692,7 +693,25 @@ $0 before the global runtime ceiling stopped the next request. It made zero
  staging/final hard links. A later separately approved, exactly bound v2 repair
  removed only those 320 aliases at $0 with zero network calls, retries, or row
  decoding. Its terminal verifies single-link inactive custody, so Phase 1A is
- complete while Phase 1B/2 rows remain unread.
+complete while Phase 1B/2 rows remain unread.
+
+The lane-scoped Phase 1B/2 executor is now implemented as an offline-only,
+inactive-staging route for exactly the 120 annual 2018-2024 DBNs and adjacent
+sidecars (1,232,883,585 compressed source bytes). Its source-safe planner
+reconciles 140 market-schema-year cells: 120 row sources plus 20 explicit
+prelaunch dispositions. Before the first DBN decode it revalidates every
+sidecar, annual query and path, custody identity, byte count, product date, and
+all 120 source hashes. It rejects 2025/2026 by year before payload access.
+
+Execution is not yet authorized. After this implementation is committed, one
+immutable create-only plan and source-safe audit must bind the committed HEAD,
+all sources and destinations, two isolated workers, 100,000-row batches, one
+attempt, zero retries, a 12-hour deadline, at least 80 GiB free disk, and a
+write-time 64 GiB shared Parquet ceiling. A later exact row-read confirmation
+may consume that plan once. Successful execution can create only inactive
+Phase 1B releases, a causal one-minute Phase 2 foundation, an unpublished
+source certificate, and an inactive catalog candidate. It cannot write an
+active catalog or pointer.
 
 The one-second source proves reported-trade-bar evidence only. It cannot prove
 BBO availability, queue priority, guaranteed market-order execution, or precise
@@ -701,15 +720,18 @@ availability, conservative same-bar ambiguity, explicit unfilled/no-trigger
 states, independently scheduled baselines, locked stress costs, and explicit
 missing or sparse checkpoints.
 
-The prepare-only Phase 1B/2 contract now freezes the five schema-specific
+The prepare-only Phase 1B/2 contract and executor freeze the five schema-specific
 decoder roles, actual-instrument and continuous-roll requirements, causal
 availability, explicit missing/sparse/duplicate/prelaunch/ambiguous
 dispositions, inactive micro-catalog certification, and lane-aware gateway
-bindings. The existing Apex risk policy explicitly covers full contracts only,
+bindings. Status/statistics stay diagnostic-only, and one-second bars stay
+reported-trade evidence without BBO, queue, fill, or within-second ordering
+claims. The existing Apex risk policy explicitly covers full contracts only,
 so it cannot be silently reused for micros. MES, MCL, MGC, and M6E commission
 verification remains fail-closed and must be resolved from an official Apex
-source before mechanism freeze, not from observed outcomes. No row processing
-or research authority is implied.
+source before mechanism freeze, not from observed outcomes. The executor and
+tests do not imply row-processing or research authority; the committed exact
+execution plan and a separate final confirmation remain mandatory.
 
 ## Non-negotiable data rules
 
