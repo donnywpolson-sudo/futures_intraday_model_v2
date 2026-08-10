@@ -722,11 +722,25 @@ The prepared v3 remediation retains each full 256-bit scope and release identity
 in the plan, receipts, certificates, and catalog candidate while using its
 collision-checked first 24 hexadecimal characters only as the filesystem path
 alias. All 120 Phase 1B aliases and 24 Phase 2 aliases must be unique, and the
-longest staged `.partial` path must be at most 240 characters. A new committed
-implementation HEAD, create-only v3 plan/audit, and fresh confirmation are
-required before another row-read attempt.
+longest staged `.partial` path must be at most 240 characters. The committed v3
+plan passed that gate at 239 characters. Its separately approved attempt then
+verified all source hashes and completed all 120 Phase 1B Parquet outputs
+(6,627,486,838 created bytes), proving the path remediation. It failed closed
+after Phase 1B and before the first completed Phase 2 output. Zero retries,
+Phase 2 files, certification reports, catalog candidates, sealed-year reads,
+provider calls, publication, or activation occurred. The exact Phase 1B files,
+authorization use, terminal, plan, and audit are preserved; v3 cannot rerun.
 
-The v3 successor retains all sources and logical destinations, two isolated workers,
+A prepare-only diagnostic now binds one exact inactive M6E 2018 one-minute
+Phase 1B Parquet and its footer metadata. After its implementation is committed,
+an immutable diagnostic plan may request a separate approval to materialize only
+that one Phase 2 interval under a 1 GiB output, five-minute, one-attempt,
+zero-retry ceiling. It cannot open a DBN or a second Parquet source and reports
+only price-free success/failure metadata. This boundary distinguishes a causal
+materialization defect from later serialization/certification logic before any
+full successor execution is considered.
+
+Any later full successor retains all sources and logical destinations, two isolated workers,
 100,000-row batches, one attempt, zero retries, a 12-hour deadline, at least 80
 GiB free disk, and a write-time 64 GiB shared Parquet ceiling. A later exact
 row-read confirmation may consume that plan once. Successful execution can create only inactive
@@ -751,8 +765,8 @@ claims. The existing Apex risk policy explicitly covers full contracts only,
 so it cannot be silently reused for micros. MES, MCL, MGC, and M6E commission
 verification remains fail-closed and must be resolved from an official Apex
 source before mechanism freeze, not from observed outcomes. The executor and
-tests do not imply row-processing or research authority; a committed exact v3
-execution plan and a separate fresh confirmation remain mandatory.
+tests do not imply diagnostic or successor row authority; the committed bounded
+diagnostic plan and its separate confirmation are now mandatory.
 
 ## Non-negotiable data rules
 

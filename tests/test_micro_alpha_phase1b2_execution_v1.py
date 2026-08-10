@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import inspect
+import json
 from pathlib import Path
 
 import pytest
@@ -270,8 +271,17 @@ def test_output_families_are_inactive_and_do_not_collide() -> None:
     outputs += [item["phase2_output_path"] for item in plan["phase2"]]
     assert len(outputs) == len(set(outputs)) == 144
     assert not any(path.startswith("data/active/") for path in outputs)
-    assert not (ROOT / plan["staging_root"]).exists()
-    assert not (ROOT / plan["evidence_root"]).exists()
+    staging = ROOT / plan["staging_root"]
+    evidence = ROOT / plan["evidence_root"]
+    if staging.exists():
+        terminal = json.loads((evidence / "terminal.json").read_text(encoding="utf-8"))
+        assert terminal["state"] == "FAILURE_INACTIVE_PARTIAL_EVIDENCE_PRESERVED"
+        assert terminal["completed_decode_count"] == 120
+        assert terminal["completed_phase2_count"] == 0
+        assert terminal["published"] is False
+        assert terminal["catalog_or_pointer_activated"] is False
+    else:
+        assert not evidence.exists()
 
 
 def test_successor_paths_preserve_full_ids_with_collision_checked_bounded_aliases() -> None:
