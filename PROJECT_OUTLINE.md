@@ -183,13 +183,22 @@ live cockpit. Automatic order execution is outside this project's scope.
   final read-only before removing its Windows staging alias; all 320 removals
   failed and each final remains a two-link file. No row was decoded and no
   catalog or pointer changed. V24 cannot execute again.
-- `src/futures_rebuild/micro_alpha_custody_repair_v1.py` and
-  `scripts/prepare_apex_micro_v24_custody_repair_v1.py`: source-safe no-network
-  successor that can remove only the 320 exact staging aliases, verify the
-  resulting single-link final DBNs and sidecars without decoding, and restore
-  read-only inactive custody. Its exact plan is deferred until the remediation
-  implementation has a committed HEAD; execution requires a separate cleanup-
-  mutation approval.
+- `src/futures_rebuild/micro_alpha_custody_repair_v1.py`, its immutable plan,
+  and the v1 supersession report: preserved unexecuted preparation. Audit found
+  that v1 did not recheck every sealed implementation/evidence hash at
+  execution, froze no sidecar manifest identity per alias, and verified DBN
+  hashes only after alias removal. It is classified
+  `SUPERSEDED_PREPARATION_INCOMPLETE_EXECUTION_BINDINGS`, has no authorization
+  or terminal, and is removed from the current operation allowlist.
+- `src/futures_rebuild/micro_alpha_custody_repair_v2.py` and
+  `scripts/prepare_apex_micro_v24_custody_repair_v2.py`: binding-complete,
+  source-safe no-network successor. It freezes all 320 exact alias records,
+  sealed evidence hashes, each DBN SHA-256, and each sidecar manifest identity;
+  revalidates implementation, evidence, audit, and same-file topology before
+  authority use; verifies bytes before and after mutation without decoding;
+  restores read-only state on success or failure; and stops after the first
+  failure. Its exact plan and audit are deferred until the v2 implementation
+  has a committed HEAD. Execution remains a separate cleanup-mutation approval.
 - `configs/apex_micro_product_reference_requirements.json`: explicit parent,
   schedule-family, identity, continuity, economics, prelaunch, and unavailable-
   source requirements for the current acquisition scope.

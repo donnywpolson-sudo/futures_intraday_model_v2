@@ -153,8 +153,8 @@ def _receipt(root: Path) -> OperationReceipt:
     )
 
 
-def test_repair_is_allowlisted_and_has_no_provider_or_decode_surface() -> None:
-    assert repair.OPERATION in PREPARATORY_REAL_HISTORY_OPERATIONS
+def test_repair_is_retired_and_has_no_provider_or_decode_surface() -> None:
+    assert repair.OPERATION not in PREPARATORY_REAL_HISTORY_OPERATIONS
     source = Path(repair.__file__).read_text(encoding="utf-8")
     assert "databento" not in source.casefold()
     assert "get_range" not in source
@@ -162,23 +162,16 @@ def test_repair_is_allowlisted_and_has_no_provider_or_decode_surface() -> None:
     assert "to_df" not in source
 
 
-def test_exact_repair_removes_only_aliases_and_verifies_single_link_custody(
+def test_retired_repair_cannot_consume_authority_or_remove_aliases(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _fixture_root(tmp_path, monkeypatch)
-    terminal = repair.execute_authorized_repair(
-        root=root,
-        authorization=_receipt(root),
-    )
-    assert terminal["state"] == "SUCCESS_INACTIVE_IMMUTABLE_CUSTODY_REPAIRED"
-    assert terminal["completed_alias_removal_count"] == 2
-    assert terminal["provider_calls"] == 0
-    assert terminal["dbn_rows_decoded"] == 0
-    verified = repair.verify_completed_repair(root=root)
-    assert verified["status"] == "PASS_SINGLE_LINK_INACTIVE_CUSTODY_NO_ROW_DECODE"
+    with pytest.raises(UnauthorizedOperation, match="retired"):
+        repair.execute_authorized_repair(root=root, authorization=_receipt(root))
+    assert not (root / "state/authorization_uses").exists()
     for item in repair.load_repair_plan(root=root)["repairs"]:
-        assert not (root / item["staging_path"]).exists()
-        assert (root / item["final_path"]).stat().st_nlink == 1
+        assert (root / item["staging_path"]).exists()
+        assert (root / item["final_path"]).stat().st_nlink == 2
 
 
 def test_repair_refuses_topology_drift_before_consuming_authority(
@@ -194,7 +187,7 @@ def test_repair_refuses_topology_drift_before_consuming_authority(
     assert not (root / "state/authorization_uses").exists()
 
 
-def test_repair_failure_preserves_final_and_writes_terminal_last(
+def test_retired_repair_does_not_reach_injected_unlink_surface(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _fixture_root(tmp_path, monkeypatch)
@@ -207,17 +200,13 @@ def test_repair_failure_preserves_final_and_writes_terminal_last(
             raise OSError("synthetic-unlink-failure")
         path.unlink()
 
-    terminal = repair.execute_authorized_repair(
-        root=root,
-        authorization=_receipt(root),
-        unlink_file=fail_second,
-    )
-    assert terminal["state"] == "FAILURE_INACTIVE_CUSTODY_REPAIR_EVIDENCE_PRESERVED"
-    assert terminal["completed_alias_removal_count"] == 1
-    assert terminal["automatic_retries"] == 0
-    plan = repair.load_repair_plan(root=root)
-    assert (root / plan["repairs"][0]["final_path"]).exists()
-    assert (root / plan["repairs"][1]["final_path"]).exists()
+    with pytest.raises(UnauthorizedOperation, match="retired"):
+        repair.execute_authorized_repair(
+            root=root,
+            authorization=_receipt(root),
+            unlink_file=fail_second,
+        )
+    assert calls == 0
 
 
 def test_plan_requires_live_committed_head(
