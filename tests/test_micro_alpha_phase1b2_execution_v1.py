@@ -7,9 +7,14 @@ import pytest
 
 from futures_rebuild import micro_alpha_phase1b2_execution as execution
 from futures_rebuild.errors import IntegrityError
+from futures_rebuild.errors import UnauthorizedOperation
 from futures_rebuild.micro_alpha_phase1b2_decoder import DecodeResult
 from futures_rebuild.micro_alpha_phase1b2_decoder import CreatedByteBudget
 from scripts import prepare_apex_micro_phase1b2_execution_v1 as prepare_script
+from futures_rebuild.research_gateway_policy import (
+    PREPARATORY_REAL_HISTORY_OPERATIONS,
+    require_current_real_history_operation,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -198,9 +203,22 @@ def test_executor_source_has_no_provider_network_credential_or_activation_surfac
     assert "execute_authorized_phase1b2" not in prepare_source
 
 
+def test_exact_operation_crosses_central_preparatory_gate_only() -> None:
+    assert execution.OPERATION in PREPARATORY_REAL_HISTORY_OPERATIONS
+    require_current_real_history_operation(execution.OPERATION, {})
+    with pytest.raises(UnauthorizedOperation, match="certified gateway"):
+        require_current_real_history_operation(f"{execution.OPERATION}_ALIAS", {})
+
+
 def test_plan_freeze_refuses_uncommitted_executor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    plan_existed_before = (ROOT / execution.PLAN_PATH).exists()
+    plan_sha_before = (
+        execution.sha256_file(ROOT / execution.PLAN_PATH)
+        if plan_existed_before
+        else None
+    )
     monkeypatch.setattr(
         prepare_script.subprocess,
         "run",
@@ -208,7 +226,9 @@ def test_plan_freeze_refuses_uncommitted_executor(
     )
     with pytest.raises(SystemExit, match="committed HEAD"):
         prepare_script._require_committed_implementation()
-    assert not (ROOT / execution.PLAN_PATH).exists()
+    assert (ROOT / execution.PLAN_PATH).exists() is plan_existed_before
+    if plan_existed_before:
+        assert execution.sha256_file(ROOT / execution.PLAN_PATH) == plan_sha_before
 
 
 def test_plan_scope_freezes_execution_and_excludes_holdout(

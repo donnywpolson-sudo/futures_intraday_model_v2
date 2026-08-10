@@ -59,9 +59,9 @@ from .micro_alpha_pipeline import (
 
 
 OPERATION: Final = "BUILD_APEX_MICRO_PHASE1B2_INACTIVE_FOUNDATION_V1_ONCE"
-PLAN_PATH: Final = Path("configs/apex_micro_phase1b2_historical_execution_plan_v1.json")
+PLAN_PATH: Final = Path("configs/apex_micro_phase1b2_historical_execution_plan_v2.json")
 AUDIT_PATH: Final = Path(
-    "state/unpublished_evidence/apex_micro_phase1b2_execution_plan_v1/audit.json"
+    "state/unpublished_evidence/apex_micro_phase1b2_execution_plan_v2/audit.json"
 )
 ACQUISITION_PLAN_PATH: Final = Path(
     "configs/apex_micro_tier01_phase1a_acquisition_plan_v24.json"
@@ -73,9 +73,9 @@ ACQUISITION_TERMINAL_PATH: Final = Path(
     "state/provider_acquisition_staging/apex_micro_tier01_v24/eaee71b9128cf8e6/terminal.json"
 )
 STAGING_ROOT: Final = Path("state/data_publication_staging/apex_integer_micro_11")
-EVIDENCE_ROOT: Final = Path("state/unpublished_evidence/apex_micro_phase1b2_execution_v1")
-PLAN_SCHEMA: Final = "apex_micro_phase1b2_historical_execution_plan/1.0.0"
-AUDIT_SCHEMA: Final = "apex_micro_phase1b2_execution_audit/1.0.0"
+EVIDENCE_ROOT: Final = Path("state/unpublished_evidence/apex_micro_phase1b2_execution_v2")
+PLAN_SCHEMA: Final = "apex_micro_phase1b2_historical_execution_plan/2.0.0"
+AUDIT_SCHEMA: Final = "apex_micro_phase1b2_execution_audit/2.0.0"
 TERMINAL_SCHEMA: Final = "apex_micro_phase1b2_execution_terminal/1.0.0"
 REPORT_SCHEMA: Final = "apex_micro_phase1b2_source_certification/1.0.0"
 CATALOG_SCHEMA: Final = "apex_micro_inactive_catalog_candidate/1.0.0"
@@ -117,6 +117,7 @@ IMPLEMENTATION_PATHS: Final = (
     Path("src/futures_rebuild/micro_alpha_phase1b2_preparation.py"),
     Path("src/futures_rebuild/micro_alpha_pipeline.py"),
     Path("src/futures_rebuild/boundary.py"),
+    Path("src/futures_rebuild/research_gateway_policy.py"),
     Path("src/futures_rebuild/canonical.py"),
     Path("configs/dependency_lock_receipt.json"),
 )

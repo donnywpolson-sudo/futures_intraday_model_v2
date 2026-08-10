@@ -74,6 +74,53 @@ def _worktree_paths() -> set[str]:
     return paths
 
 
+def _tracked(path: Path) -> bool:
+    return subprocess.run(
+        [
+            "git", "-C", str(ROOT), "ls-files", "--error-unmatch", "--",
+            path.as_posix(),
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    ).returncode == 0
+
+
+def _committed_bytes(commit: str, path: str) -> bytes:
+    return subprocess.check_output(
+        ["git", "-C", str(ROOT), "show", f"{commit}:{path}"]
+    )
+
+
+def _postcommit_manifest() -> dict[str, object]:
+    commit = _git("log", "-1", "--format=%H", "--", OUTPUT.as_posix())
+    committed_paths = set(
+        _git(
+            "diff-tree", "--no-commit-id", "--name-only", "-r", commit
+        ).splitlines()
+    )
+    if committed_paths != set(RECOMMENDED):
+        raise IntegrityError("executor consolidation commit differs from exact scope")
+    value = json.loads(_committed_bytes(commit, OUTPUT.as_posix()))
+    core = dict(value)
+    observed_id = core.pop("manifest_id", None)
+    if observed_id != sha256_json(core):
+        raise IntegrityError("committed executor manifest identity drifted")
+    if (
+        value.get("recommended_exact_stage_paths") != list(RECOMMENDED)
+        or value.get("observed_head") != _git("rev-parse", f"{commit}^")
+    ):
+        raise IntegrityError("committed executor manifest bindings drifted")
+    records = {item["path"]: item["sha256"] for item in value["records"]}
+    for path in RECOMMENDED:
+        if path == OUTPUT.as_posix():
+            if records[path] != "SELF_HASHED_AT_WRITE":
+                raise IntegrityError("executor manifest self-hash marker drifted")
+        elif hashlib.sha256(_committed_bytes(commit, path)).hexdigest() != records[path]:
+            raise IntegrityError("committed executor manifest file hash drifted")
+    return value
+
+
 def build_supersession() -> dict[str, object]:
     predecessor = json.loads((ROOT / PREDECESSOR).read_text(encoding="utf-8"))
     if predecessor.get("manifest_id") != (
@@ -101,6 +148,8 @@ def _canonical_sha256(value: dict[str, object]) -> str:
 
 
 def build_manifest() -> dict[str, object]:
+    if _tracked(OUTPUT):
+        return _postcommit_manifest()
     if _git("diff", "--cached", "--name-only"):
         raise IntegrityError("executor successor consolidation requires an empty index")
     expected = set(RECOMMENDED) | set(PRESERVED_UNSTAGED)

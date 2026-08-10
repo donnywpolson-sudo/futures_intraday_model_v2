@@ -703,12 +703,20 @@ prelaunch dispositions. Before the first DBN decode it revalidates every
 sidecar, annual query and path, custody identity, byte count, product date, and
 all 120 source hashes. It rejects 2025/2026 by year before payload access.
 
-Execution is not yet authorized. After this implementation is committed, one
-immutable create-only plan and source-safe audit must bind the committed HEAD,
-all sources and destinations, two isolated workers, 100,000-row batches, one
-attempt, zero retries, a 12-hour deadline, at least 80 GiB free disk, and a
-write-time 64 GiB shared Parquet ceiling. A later exact row-read confirmation
-may consume that plan once. Successful execution can create only inactive
+The first immutable create-only plan and source-safe audit bound committed HEAD
+`3a2bfb60414491be2d6fb39ffab0af28a09b7828`. Its separately approved execution
+failed closed during central receipt verification because the exact foundation
+operation was missing from the preparatory-operation allowlist. The receipt
+was not consumed; no output root, source hash, DBN row, or authorization-use
+record was created. That plan and audit are preserved as superseded evidence.
+The bounded correction adds only this exact operation to the central allowlist;
+an alias remains rejected. A v2 immutable plan and audit must bind the later
+committed remediation HEAD before a fresh confirmation can authorize rows.
+
+The successor retains all sources and destinations, two isolated workers,
+100,000-row batches, one attempt, zero retries, a 12-hour deadline, at least 80
+GiB free disk, and a write-time 64 GiB shared Parquet ceiling. A later exact
+row-read confirmation may consume that plan once. Successful execution can create only inactive
 Phase 1B releases, a causal one-minute Phase 2 foundation, an unpublished
 source certificate, and an inactive catalog candidate. It cannot write an
 active catalog or pointer.
@@ -731,7 +739,7 @@ so it cannot be silently reused for micros. MES, MCL, MGC, and M6E commission
 verification remains fail-closed and must be resolved from an official Apex
 source before mechanism freeze, not from observed outcomes. The executor and
 tests do not imply row-processing or research authority; the committed exact
-execution plan and a separate final confirmation remain mandatory.
+v2 execution plan and a separate fresh confirmation remain mandatory.
 
 ## Non-negotiable data rules
 
