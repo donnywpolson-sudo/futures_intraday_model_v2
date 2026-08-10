@@ -11,7 +11,7 @@ import pytest
 
 from futures_rebuild import micro_alpha_phase1b2_decoder as decoder
 from futures_rebuild import micro_alpha_phase1b2_phase2_successor as successor
-from futures_rebuild.errors import UnauthorizedOperation
+from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 from futures_rebuild.micro_alpha_phase1b2_decoder import DecodeResult
 from futures_rebuild.micro_alpha_phase1b2_execution import _expected_economics
 from futures_rebuild.research_gateway_policy import (
@@ -139,9 +139,16 @@ def test_plan_is_stat_only_and_binds_complete_successor_scope() -> None:
     assert "pq.ParquetFile" not in source
     assert "iter_batches" not in source
     assert "sha256_file(source_path)" not in source
-    plan = successor.build_plan(
-        root=ROOT, implementation_head=successor._git_head(ROOT)
-    )
+    plan = successor.load_plan(root=ROOT)
+    if (ROOT / str(plan["staging_root"])).exists():
+        with pytest.raises(IntegrityError, match="create-only output collision"):
+            successor.build_plan(
+                root=ROOT, implementation_head=successor._git_head(ROOT)
+            )
+    else:
+        assert plan == successor.build_plan(
+            root=ROOT, implementation_head=successor._git_head(ROOT)
+        )
     assert plan["source_count"] == 120
     assert plan["source_bytes"] == 6_627_486_838
     assert plan["coverage_cell_count"] == 140

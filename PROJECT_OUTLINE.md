@@ -368,7 +368,10 @@ alone cannot make a period forward evidence.
 
 The micro successor has complete inactive Phase 1A raw custody and one preserved
 failed-closed Phase 1B/2 attempt. That attempt created all 120 expected inactive
-Phase 1B Parquets for 2018-2024, but it completed no certified Phase 2 release.
+Phase 1B Parquets for 2018-2024. A later separately approved full successor
+certified all 24 five-schema intervals and created 24 hash-bound causal
+one-minute Phase 2 Parquets, an unpublished source certificate, and an inactive
+catalog candidate under create-only inactive custody.
 A later one-source diagnostic created one separate inactive M6E 2018 causal
 Parquet and proved only the bounded materializer. A later five-schema diagnostic
 opened the five M6E 2018 Phase 1B Parquets and passed its transition mechanics,
@@ -376,7 +379,9 @@ but correctly refused certification because the legacy definition key counted
 308 consecutive repeats. The separately approved definition-only diagnostic
 then proved that all 308 repeats have identical retained semantics and that
 zero are distinct same-key updates; it preserved every row and reported counts
-only. None of these bytes are
+only. The full successor reconstructed that classification for every interval,
+preserved all retained-semantics repeats, and deduplicated zero Phase 1B rows.
+None of these bytes are
 published, active, registered, research-admitted, or backed by an active micro
 catalog.
 Its prepared pointer remains beside the unpublished contract and profile; the
@@ -468,7 +473,7 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> first-interval causal diagnostic -> PASS (one separate inactive M6E 2018 Parquet)
   -> first five-schema group diagnostic -> PASS_MECHANICS / DUPLICATE_DISPOSITION
   -> definition repeat-semantics diagnostic -> PASS (308 exact; 0 distinct; no deduplication)
-  -> exact-duplicate-safe full Phase 2 successor -> PREPARED_NOT_EXECUTED
+  -> exact-duplicate-safe full Phase 2 successor -> SUCCESS_CERTIFIED_INACTIVE_PHASE2
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -709,7 +714,7 @@ $0 before the global runtime ceiling stopped the next request. It made zero
  removed only those 320 aliases at $0 with zero network calls, retries, or row
  decoding. Its terminal verifies single-link inactive custody, so Phase 1A is
 complete while its raw DBNs remain outside research use and the later Phase 2
-foundation remains uncertified.
+foundation remains outside active research use.
 
 The lane-scoped Phase 1B/2 executor is now implemented as an offline-only,
 inactive-staging route for exactly the 120 annual 2018-2024 DBNs and adjacent
@@ -770,31 +775,32 @@ same-key updates, preserved all 1,481 Phase 1B rows without deduplication, and
 reported no raw values or keys. It opened no DBN, second Parquet, or 2025/2026
 payload and created no Parquet.
 
-The prepare-only v4 full Phase 2 successor is the next bounded implementation.
-Its stat-only planner binds all 120 preserved Phase 1B Parquets / 6,627,486,838
-bytes, 140 coverage cells, 24 five-schema intervals, and 24 causal one-minute
-outputs. A separately approved execution may perform at most 144 Parquet opens:
-one certification scan for each source plus one materialization pass for each
-bound one-minute source. It classifies every definition interval independently;
-only no repeats or exact retained-semantics repeats may pass, while distinct or
-mixed same-key updates fail closed. Exact repeats remain in Phase 1B and receive
-price-free certificates rather than silent removal. Per-interval and cross-year
-rank-zero continuity must both pass before any inactive catalog candidate is
-written.
+The v4 full Phase 2 successor bound all 120 preserved Phase 1B Parquets /
+6,627,486,838 bytes, 140 coverage cells, 24 five-schema intervals, and 24 causal
+one-minute outputs. Its separately approved single attempt completed all 120
+certification scans and all 24 materialization passes. Every interval classified
+its definition repeats as exact retained-semantics duplicates, all 24 groups
+passed identity/economics certification, and per-interval plus cross-year
+rank-zero roll continuity passed. The executor preserved the repeats, performed
+zero Phase 1B deduplication, and wrote 24 read-only inactive Phase 2 Parquets /
+454,578,644 bytes. All output sizes and SHA-256 identities reconcile to the
+unpublished source certificate and terminal evidence.
 
-The successor retains two workers, 100,000-row batches, one attempt, zero
-retries, a 12-hour deadline, at least 80 GiB free disk, and a write-time 64 GiB
-shared Parquet ceiling. It cannot open DBNs or 2025/2026, use status/statistics
-as features, make BBO/queue/fill/within-second claims, mutate either active lane,
-or publish, register, evaluate, or trade.
+The successful run used at most two workers, 100,000-row batches, one attempt,
+zero retries, zero provider calls, and $0 external cost. It opened zero DBNs and
+zero 2025/2026 payloads, used status/statistics only as diagnostics, retained
+one-second semantics as reported-trade bars only, and created no features,
+outcomes, predictions, returns, or evaluation. Terminal evidence was written
+last. The source certificate and catalog candidate are certified but unpublished
+and inactive; neither `data/active/catalogs/apex_micro.json` nor
+`configs/active_micro_alpha_research_ladder.json` exists.
 
-Any later full successor retains all sources and logical destinations, two isolated workers,
-100,000-row batches, one attempt, zero retries, a 12-hour deadline, at least 80
-GiB free disk, and a write-time 64 GiB shared Parquet ceiling. A later exact
-row-read confirmation may consume that plan once. Successful execution can create only inactive
-Phase 1B releases, a causal one-minute Phase 2 foundation, an unpublished
-source certificate, and an inactive catalog candidate. It cannot write an
-active catalog or pointer.
+The next research boundary is not another Phase 1B/2 decode. Publication or
+activation of the inactive micro catalog, mechanism Tier 0, registration, and
+economic evaluation each remain separately controlled. Official micro
+commission verification remains a mechanism-freeze blocker. The shared 2025
+holdout and pre-freeze 2026 rows remain sealed, and any filesystem cleanup still
+requires a fresh exact candidate manifest and separate approval.
 
 The one-second source proves reported-trade-bar evidence only. It cannot prove
 BBO availability, queue priority, guaranteed market-order execution, or precise
