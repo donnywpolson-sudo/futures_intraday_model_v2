@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import inspect
+import json
 from pathlib import Path
 
 import pytest
 
 from futures_rebuild import micro_alpha_phase1b2_phase2_diagnostic as diagnostic
+from futures_rebuild.canonical import sha256_json
 from futures_rebuild.errors import UnauthorizedOperation
 from futures_rebuild.research_gateway_policy import (
     PREPARATORY_REAL_HISTORY_OPERATIONS,
@@ -18,10 +20,10 @@ ROOT = Path(__file__).resolve().parents[1]
 pytestmark = [pytest.mark.current, pytest.mark.high_risk]
 
 
-def test_live_diagnostic_preview_is_one_exact_price_free_source() -> None:
-    plan = diagnostic.build_plan(
-        root=ROOT, implementation_head=diagnostic._git_head(ROOT)
-    )
+def test_sealed_diagnostic_plan_and_pass_are_one_exact_price_free_source() -> None:
+    plan = json.loads((ROOT / diagnostic.PLAN_PATH).read_text(encoding="utf-8"))
+    core = dict(plan)
+    assert core.pop("plan_id") == sha256_json(core)
     assert plan["state"] == (
         "PREPARED_REQUIRES_SEPARATE_DERIVED_ROW_DIAGNOSTIC_APPROVAL"
     )
@@ -44,8 +46,18 @@ def test_live_diagnostic_preview_is_one_exact_price_free_source() -> None:
         "provider_calls": 0,
         "external_cost_usd": "0",
     }
-    assert not (ROOT / plan["staging_root"]).exists()
-    assert not (ROOT / plan["evidence_root"]).exists()
+    staging = ROOT / plan["staging_root"]
+    evidence = ROOT / plan["evidence_root"]
+    assert staging.exists() is evidence.exists()
+    if staging.exists():
+        report = json.loads((ROOT / plan["report_path"]).read_text(encoding="utf-8"))
+        terminal = json.loads((ROOT / plan["terminal_path"]).read_text(encoding="utf-8"))
+        assert report["state"] == "PASS_FIRST_INTERVAL_PHASE2_MATERIALIZATION"
+        assert terminal["state"] == "PASS_FIRST_INTERVAL_PHASE2_MATERIALIZATION"
+        assert report["plan_id"] == plan["plan_id"]
+        assert terminal["report_id"] == report["report_id"]
+        assert (ROOT / plan["diagnostic_output"]).is_file()
+        assert not (ROOT / f"{plan['diagnostic_output']}.partial").exists()
 
 
 def test_diagnostic_operation_is_exactly_allowlisted() -> None:
@@ -55,14 +67,13 @@ def test_diagnostic_operation_is_exactly_allowlisted() -> None:
         require_current_real_history_operation(f"{diagnostic.OPERATION}_ALIAS", {})
 
 
-def test_prepare_cli_has_no_execution_surface_and_requires_commit() -> None:
+def test_prepare_cli_has_no_execution_surface_and_enforces_committed_implementation() -> None:
     source = inspect.getsource(prepare)
     assert "execute_once" not in source
-    plan_existed = (ROOT / diagnostic.PLAN_PATH).exists()
-    assert plan_existed is False
-    with pytest.raises(SystemExit, match="committed"):
-        prepare._require_committed_implementation()
-    assert not (ROOT / diagnostic.PLAN_PATH).exists()
+    guard = inspect.getsource(prepare._require_committed_implementation)
+    assert "ls-files" in guard
+    assert '"diff", "--quiet", "HEAD"' in guard
+    assert "must be committed" in guard
 
 
 def test_execution_verifies_authorization_before_row_materialization() -> None:

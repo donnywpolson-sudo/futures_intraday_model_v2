@@ -366,9 +366,13 @@ alone cannot make a period forward evidence.
 
 ### Apex integer-micro lane
 
-The micro successor has complete inactive Phase 1A raw custody, but no source
-rows have entered Phase 1B/2. It is not published, active, registered, or
-backed by an active source catalog.
+The micro successor has complete inactive Phase 1A raw custody and one preserved
+failed-closed Phase 1B/2 attempt. That attempt created all 120 expected inactive
+Phase 1B Parquets for 2018-2024, but it completed no certified Phase 2 release.
+A later one-source diagnostic created one separate inactive M6E 2018 causal
+Parquet and proved only the bounded materializer. None of these bytes are
+published, active, registered, research-admitted, or backed by an active micro
+catalog.
 Its prepared pointer remains beside the unpublished contract and profile; the
 future active path `configs/active_micro_alpha_research_ladder.json` is absent.
 
@@ -454,6 +458,9 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> reconstruction-stable v23 successor -> SUPERSEDED_PREPARATION (volatile free-disk audit snapshot; no execution)
   -> volatile-capacity-safe v24 successor (160 downloads complete; verifier rejected hard-linked finals)
   -> exact no-network staging-alias custody repair -> SUCCESS (320 aliases removed; finals single-link)
+  -> Phase 1B/2 v3 -> FAIL_CLOSED (120 inactive Phase 1B Parquets; 0 Phase 2)
+  -> first-interval causal diagnostic -> PASS (one separate inactive M6E 2018 Parquet)
+  -> first five-schema group diagnostic -> PREPARED_NOT_EXECUTED
   -> data/dbn/<schema-folder>/<market>/<year>/<start>_<end>.dbn.zst [Phase 1A]
   -> adjacent <same-name>.manifest.json                              [Phase 1A]
   -> data/raw/<market>/<year>/<interval>/<release>/                  [Phase 1B definition + 1m]
@@ -731,14 +738,23 @@ Phase 2 files, certification reports, catalog candidates, sealed-year reads,
 provider calls, publication, or activation occurred. The exact Phase 1B files,
 authorization use, terminal, plan, and audit are preserved; v3 cannot rerun.
 
-A prepare-only diagnostic now binds one exact inactive M6E 2018 one-minute
-Phase 1B Parquet and its footer metadata. After its implementation is committed,
-an immutable diagnostic plan may request a separate approval to materialize only
-that one Phase 2 interval under a 1 GiB output, five-minute, one-attempt,
-zero-retry ceiling. It cannot open a DBN or a second Parquet source and reports
-only price-free success/failure metadata. This boundary distinguishes a causal
-materialization defect from later serialization/certification logic before any
-full successor execution is considered.
+A separately approved one-source diagnostic bound the exact inactive M6E 2018
+one-minute Phase 1B Parquet and materialized one separate inactive causal
+Parquet under a 1 GiB output, five-minute, one-attempt, zero-retry ceiling. It
+passed with 284,373 rows and no source nulls, opened no DBN or second Parquet,
+and reported no source values. That result proves the causal materializer and
+bounded path only; it does not certify the five-schema identity, economics,
+roll, receipt, catalog, or research gates.
+
+The prepare-only v2 group diagnostic is the next narrow boundary. It binds only
+the five preserved M6E 2018 Phase 1B Parquets (definition, status, statistics,
+one-minute bars, and one-second bars), totaling 86,344,286 bytes. After its
+implementation is committed, its immutable plan may request one separate
+approval to reconstruct the original price-free identity/roll summaries and
+exercise the first group-disposition and interval-receipt transition. It uses
+one worker, 100,000-row batches, 900 seconds, one attempt, zero retries, and at
+most 16 MiB of unpublished JSON evidence. It creates no Phase 2 Parquet and
+cannot open a DBN, a sixth Parquet, or any 2025/2026 payload.
 
 Any later full successor retains all sources and logical destinations, two isolated workers,
 100,000-row batches, one attempt, zero retries, a 12-hour deadline, at least 80
@@ -765,8 +781,9 @@ claims. The existing Apex risk policy explicitly covers full contracts only,
 so it cannot be silently reused for micros. MES, MCL, MGC, and M6E commission
 verification remains fail-closed and must be resolved from an official Apex
 source before mechanism freeze, not from observed outcomes. The executor and
-tests do not imply diagnostic or successor row authority; the committed bounded
-diagnostic plan and its separate confirmation are now mandatory.
+tests do not imply group-diagnostic or successor row authority; the group
+diagnostic implementation must first be committed, then an immutable plan/audit
+and separate exact confirmation are mandatory.
 
 ## Non-negotiable data rules
 
