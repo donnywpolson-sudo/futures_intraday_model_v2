@@ -11,7 +11,8 @@ the durable safety and research rules that apply to every task.
 - Keep working in the same task until it is complete or reaches a real high-risk boundary. Do not ask the user to copy a plan ID, hash, command, approval line, token, or continuation prompt.
 - Preserve unrelated work, check repository identity and status before writing,
   and never use broad staging. Stage only explicitly authorized paths. A local
-  commit never authorizes a push.
+  commit never authorizes a push. Report unrelated problems instead of fixing
+  or cleaning them up.
 
 ## Pause only for high risk
 
@@ -40,15 +41,34 @@ task.
   trade.
 - Never copy, log, stage, package, or report credentials.
 
-## Historic material and policy value
+## Keep changes proportional
+
+- For a localized task, inspect nearby code and make the smallest coherent
+  change that satisfies the request and current contracts. Follow the existing
+  architecture.
+- Add an abstraction (including a one-implementation interface, forwarding
+  wrapper, or speculative extension point), dependency, fallback/retry/cache/
+  queue/telemetry/compatibility path, public API or schema change, migration,
+  cross-cutting layer, or broad refactor only for a current requirement or
+  invariant. If it materially expands the request, state the risk it prevents,
+  the decision it improves, and why a simpler rule or existing-pattern change
+  is insufficient; ask before proceeding. Necessary complexity for correctness,
+  security, compatibility, or data integrity remains allowed.
+- Use the narrowest verification that covers changed behavior and risk; run
+  broader checks only when an affected contract or commit/release workflow
+  requires them. Update only documentation or comments whose behavior,
+  interface, procedure, or non-obvious invariant changed. Do not add unrelated
+  test infrastructure or repeat unchanged checks without new evidence.
+- Stop when the requested outcome and acceptance criteria are met, relevant
+  checks pass, and one final diff review finds no accidental scope growth or
+  known material correctness, security, or compatibility issue. Report optional
+  improvements instead of implementing them.
+
+## Historic material
 
 `docs/LEGACY_WORKFLOWS.md` classifies retired modules, tests, and evidence.
 They remain readable but are never instructions or command surfaces for new
 work.
-
-Before adding a policy control, state: (1) the concrete risk it prevents,
-(2) the decision it improves, and (3) why an existing simpler rule is not
-enough. Do not add the control if that case cannot be made.
 
 ## Reporting
 

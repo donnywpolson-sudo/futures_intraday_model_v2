@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import re
 
 import pytest
 
@@ -9,6 +10,16 @@ from futures_rebuild.closure_workflow.policy import WorkflowError, load_policy
 
 
 REPO = Path(__file__).resolve().parents[1]
+
+
+def _markdown_section(document: str, heading: str) -> str:
+    marker = f"## {heading}"
+    assert marker in document
+    return document.split(marker, 1)[1].split("\n## ", 1)[0]
+
+
+def _normalized(document: str) -> str:
+    return " ".join(document.replace("`", "").lower().split())
 
 
 def test_two_tier_policy_allows_normal_local_work_without_approval_artifacts() -> None:
@@ -61,8 +72,20 @@ def test_legacy_closure_engine_rejects_new_plan_execution() -> None:
 
 def test_governing_documents_do_not_require_copied_approval_lines() -> None:
     agents = (REPO / "AGENTS.md").read_text(encoding="utf-8")
+    current = (REPO / "CURRENT_WORKFLOW.md").read_text(encoding="utf-8")
     outline = (REPO / "PROJECT_OUTLINE.md").read_text(encoding="utf-8")
     handoff = (REPO / "CODEX_HANDOFF.md").read_text(encoding="utf-8")
     assert "Do not ask the user to copy a plan ID, hash, command, approval line" in agents
     assert "two-tier workflow" in outline
-    assert "no copied hash or approval line is required" in handoff
+
+    normal_work = _normalized(_markdown_section(current, "Normal local work"))
+    assert re.search(r"\bdo(?:es)? not (?:need|require) to copy\b", normal_work)
+    assert {"commands", "hashes", "plan", "ids", "approval", "lines"} <= set(
+        re.findall(r"[a-z0-9]+", normal_work)
+    )
+    assert not re.search(r"\b(?:must|shall) copy\b|\brequired to copy\b", normal_work)
+
+    handoff_intro = _normalized(handoff.split("\n## ", 1)[0])
+    assert "current_workflow.md" in handoff_intro
+    assert re.search(r"\bcontrols? normal work\b", handoff_intro)
+    assert re.search(r"\bgrants? no authority\b", handoff_intro)
