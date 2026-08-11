@@ -2,22 +2,36 @@ from __future__ import annotations
 
 import copy
 import json
+import os
 from pathlib import Path
+import re
+import subprocess
+import sys
+import tomllib
 
 import pytest
 
 from futures_rebuild.repository_surface import (
     RepositorySurfaceError,
+    SOURCE_OF_TRUTH_MAX_BYTES,
+    SOURCE_OF_TRUTH_MAX_WORDS,
+    SOURCE_OF_TRUTH_SECTIONS,
+    compare_source_of_truth_file,
+    expected_source_of_truth_bytes,
     load_repository_surface,
+    render_source_of_truth,
     resolve_surface_entry,
     validate_public_command_surfaces,
+    validate_repository_checkout,
     validate_repository_surface,
+    validate_source_of_truth,
     validate_tracked_root_coverage,
 )
 
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = ROOT / "configs" / "repository_surface.json"
+SOURCE_OF_TRUTH_PATH = ROOT / "SOURCE_OF_TRUTH.md"
 pytestmark = pytest.mark.current
 
 
@@ -45,7 +59,12 @@ def _minimal_pointer(schema: str) -> dict[str, object]:
     }
 
 
-def _write_export_controls(root: Path) -> None:
+def _public_commands(root: Path = ROOT) -> dict[str, str]:
+    payload = tomllib.loads((root / "pyproject.toml").read_text(encoding="utf-8"))
+    return dict(sorted(payload["project"]["scripts"].items()))
+
+
+def _write_export_controls(root: Path, *, include_document: bool = True) -> None:
     (root / "configs").mkdir(parents=True)
     (root / "src" / "futures_rebuild").mkdir(parents=True)
     (root / "configs" / "active_alpha_research_ladder.json").write_text(
@@ -60,6 +79,10 @@ def _write_export_controls(root: Path) -> None:
         '[project.scripts]\nfutures-pipeline = "futures_rebuild.pipeline:main"\n',
         encoding="utf-8",
     )
+    if include_document:
+        (root / "SOURCE_OF_TRUTH.md").write_bytes(
+            expected_source_of_truth_bytes(_surface(), root)
+        )
 
 
 def test_valid_registry_loads_and_validates_current_checkout() -> None:
@@ -68,7 +91,7 @@ def test_valid_registry_loads_and_validates_current_checkout() -> None:
     validate_repository_surface(surface, repository_root=ROOT)
 
     assert surface["schema_version"] == "repository_surface/1.0.0"
-    assert len(surface["entries"]) == 177
+    assert len(surface["entries"]) == 178
 
 
 def test_unknown_classification_is_rejected() -> None:
@@ -389,3 +412,282 @@ def test_control_rationale_records_why_simple_rules_fail() -> None:
     assert "active catalogs" in rationale["risk_prevented"]  # type: ignore[index]
     assert "without guessing" in rationale["decision_improved"]  # type: ignore[index]
     assert "ignored" in rationale["why_simpler_rules_are_insufficient"]  # type: ignore[index]
+
+
+def test_source_of_truth_registry_entry_is_unique_and_supporting() -> None:
+    surface = _surface()
+    entry = _entry(surface, "SOURCE_OF_TRUTH.md")
+
+    assert entry == {
+        "path_or_pattern": "SOURCE_OF_TRUTH.md",
+        "match_type": "EXACT",
+        "classification": "CURRENT_SUPPORTING",
+        "authority_role": "HUMAN_SOURCE_OF_TRUTH_VIEW",
+        "current_replacement": None,
+        "hash_bound": False,
+        "tracked_expected": "TRACKED",
+        "local_only": False,
+        "deletion_policy": "PRESERVE",
+        "owner": "repository_governance",
+        "notes": entry["notes"],
+    }
+    assert sum(
+        item["authority_role"] == "HUMAN_SOURCE_OF_TRUTH_VIEW"
+        for item in surface["entries"]  # type: ignore[index]
+    ) == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("match_type", "PREFIX"),
+        ("classification", "CURRENT_OPERATIONAL"),
+        ("authority_role", "NORMAL_WORKFLOW_AUTHORITY"),
+        ("tracked_expected", "OPTIONAL"),
+        ("local_only", True),
+        ("hash_bound", None),
+        ("deletion_policy", "NO_AUTOMATIC_DELETE"),
+    ],
+)
+def test_source_of_truth_registry_contract_fails_closed(
+    field: str, value: object
+) -> None:
+    surface = _surface()
+    _entry(surface, "SOURCE_OF_TRUTH.md")[field] = value
+
+    with pytest.raises(RepositorySurfaceError):
+        validate_repository_surface(surface)
+
+
+def test_generated_view_role_cannot_be_duplicated() -> None:
+    surface = _surface()
+    _entry(surface, "README.md")["authority_role"] = "HUMAN_SOURCE_OF_TRUTH_VIEW"
+
+    with pytest.raises(RepositorySurfaceError, match="source-of-truth view role"):
+        validate_repository_surface(surface)
+
+
+def test_source_of_truth_rendering_is_deterministic_and_matches_tracked_file() -> None:
+    surface = _surface()
+    first = expected_source_of_truth_bytes(surface, ROOT)
+    second = expected_source_of_truth_bytes(copy.deepcopy(surface), ROOT)
+
+    assert first == second == SOURCE_OF_TRUTH_PATH.read_bytes()
+    assert compare_source_of_truth_file(surface, ROOT)["valid"] is True
+
+
+def test_source_of_truth_section_order_is_stable() -> None:
+    text = SOURCE_OF_TRUTH_PATH.read_text(encoding="utf-8")
+    headings = [line[3:] for line in text.splitlines() if line.startswith("## ")]
+
+    assert headings == list(SOURCE_OF_TRUTH_SECTIONS)
+
+
+def test_source_of_truth_public_commands_are_sorted_and_complete() -> None:
+    text = SOURCE_OF_TRUTH_PATH.read_text(encoding="utf-8")
+    commands = _public_commands()
+    expected_rows = [f"| `{name}` | `{target}` |" for name, target in commands.items()]
+    rendered_rows = [line for line in text.splitlines() if line in expected_rows]
+
+    assert list(commands) == sorted(commands)
+    assert rendered_rows == expected_rows
+    assert len(rendered_rows) == len(commands) == 7
+
+
+def test_source_of_truth_active_pointer_paths_are_exact_and_complete() -> None:
+    surface = _surface()
+    text = SOURCE_OF_TRUTH_PATH.read_text(encoding="utf-8")
+    expected = {
+        "configs/active_alpha_research_ladder.json",
+        "data/active/catalog.json",
+        "configs/active_micro_alpha_research_ladder.json",
+        "data/active/catalogs/apex_micro.json",
+    }
+
+    for path in expected:
+        entry = resolve_surface_entry(surface, path)
+        assert entry is not None
+        assert entry["match_type"] == "EXACT"
+        assert f"`{path}`" in text
+    assert text.count("| Standard Alpha pointer |") == 1
+    assert text.count("| Micro source-selection pointer |") == 1
+
+
+def test_source_of_truth_is_lf_utf8_with_one_final_newline() -> None:
+    document = SOURCE_OF_TRUTH_PATH.read_bytes()
+
+    assert document.decode("utf-8")
+    assert b"\r" not in document
+    assert document.endswith(b"\n")
+    assert not document.endswith(b"\n\n")
+
+
+def test_source_of_truth_stays_within_word_and_byte_limits() -> None:
+    document = SOURCE_OF_TRUTH_PATH.read_bytes()
+
+    assert len(document) <= SOURCE_OF_TRUTH_MAX_BYTES
+    assert len(document.decode("utf-8").split()) <= SOURCE_OF_TRUTH_MAX_WORDS
+
+
+def test_source_of_truth_contains_no_transient_machine_identity() -> None:
+    text = SOURCE_OF_TRUTH_PATH.read_text(encoding="utf-8")
+
+    assert not re.search(r"[A-Za-z]:[\\/]", text)
+    assert not re.search(r"\\\\[^\\\s]+\\", text)
+    assert "AppData" not in text
+    assert "futures-v2-repository-audit-" not in text
+    assert not re.search(r"\b(?:19|20)\d{2}-\d{2}-\d{2}\b", text)
+    assert not re.search(r"\b[0-9a-f]{40}\b", text)
+    for variable in ("USERNAME", "USER"):
+        username = os.environ.get(variable, "").strip()
+        if len(username) >= 3:
+            assert not re.search(rf"(?i)\b{re.escape(username)}\b", text)
+
+
+def test_source_of_truth_contains_cleanup_and_non_authority_rules() -> None:
+    text = SOURCE_OF_TRUTH_PATH.read_text(encoding="utf-8")
+
+    assert "The registry grants no deletion authority" in text
+    assert "`SOURCE_OF_TRUTH.md` grants no deletion authority" in text
+    assert "git clean -fdx" in text
+    assert "git clean -fdX" in text
+    assert "provider access" in text
+    assert "trading" in text
+    assert "order placement" in text
+    assert "staging, commit, or push" in text
+
+
+def test_source_of_truth_does_not_promote_untracked_execution_code() -> None:
+    text = SOURCE_OF_TRUTH_PATH.read_text(encoding="utf-8")
+
+    assert "live_cockpit/execution" not in text
+    assert "tradovate" not in text.lower()
+    assert "untracked execution-looking modules are not public commands" in text
+
+
+def test_source_of_truth_does_not_reproduce_historical_chronology() -> None:
+    text = SOURCE_OF_TRUTH_PATH.read_text(encoding="utf-8")
+
+    for fragment in ("Phase 1A", "Phase 11", "V4-V12", "2010 through", "commit history"):
+        assert fragment not in text
+
+
+def test_manual_source_of_truth_edit_is_rejected() -> None:
+    surface = _surface()
+    edited = SOURCE_OF_TRUTH_PATH.read_bytes().replace(
+        b"generated navigation view", b"manually maintained navigation view", 1
+    )
+
+    with pytest.raises(RepositorySurfaceError, match="stale|manually edited"):
+        validate_source_of_truth(
+            edited,
+            surface=surface,
+            public_commands=_public_commands(),
+        )
+
+
+def test_missing_source_of_truth_file_is_rejected(tmp_path: Path) -> None:
+    _write_export_controls(tmp_path, include_document=False)
+
+    with pytest.raises(RepositorySurfaceError, match="missing"):
+        compare_source_of_truth_file(_surface(), tmp_path)
+
+
+def test_changed_public_command_makes_document_stale(tmp_path: Path) -> None:
+    _write_export_controls(tmp_path)
+    (tmp_path / "src" / "futures_rebuild" / "readiness.py").write_text(
+        "def main(): return 0\n", encoding="utf-8"
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "surface-export"\nversion = "1"\n'
+        '[project.scripts]\nfutures-readiness = "futures_rebuild.readiness:main"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(RepositorySurfaceError, match="stale|inconsistent"):
+        compare_source_of_truth_file(_surface(), tmp_path)
+
+
+def test_changed_pointer_role_path_changes_rendering() -> None:
+    surface = _surface()
+    baseline = render_source_of_truth(surface, _public_commands())
+    pointer = _entry(surface, "configs/active_alpha_research_ladder.json")
+    pointer["path_or_pattern"] = "configs/active_alpha_successor.json"
+
+    changed = render_source_of_truth(surface, _public_commands())
+
+    assert changed != baseline
+    assert "`configs/active_alpha_successor.json`" in changed
+
+
+def test_clean_export_rendering_needs_no_local_pointer_or_payload(
+    tmp_path: Path,
+) -> None:
+    _write_export_controls(tmp_path)
+
+    report = compare_source_of_truth_file(_surface(), tmp_path)
+
+    assert report["valid"] is True
+    assert not (tmp_path / "configs" / "active_micro_alpha_research_ladder.json").exists()
+    assert not (tmp_path / "data").exists()
+
+
+def test_default_cli_reports_registry_and_source_of_truth_validity() -> None:
+    env = os.environ.copy()
+    result = subprocess.run(
+        [sys.executable, "-B", "-m", "futures_rebuild.repository_surface"],
+        cwd=ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+    report = json.loads(result.stdout)
+
+    assert result.stderr == b""
+    assert report["registry_valid"] is True
+    assert report["source_of_truth_valid"] is True
+    assert report["entry_count"] == 178
+    assert report["public_command_count"] == 7
+    assert report["tracked_root_mode"] == "GIT_LS_FILES"
+    assert report["mutations_performed"] is False
+
+
+def test_print_source_of_truth_cli_is_stdout_only_and_read_only() -> None:
+    observed = [
+        SOURCE_OF_TRUTH_PATH,
+        REGISTRY_PATH,
+        ROOT / "src" / "futures_rebuild" / "repository_surface.py",
+        ROOT / "tests" / "test_repository_surface.py",
+    ]
+    before = {path: path.read_bytes() for path in observed}
+    env = os.environ.copy()
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-m",
+            "futures_rebuild.repository_surface",
+            "--print-source-of-truth",
+        ],
+        cwd=ROOT,
+        env=env,
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+
+    assert result.stdout == SOURCE_OF_TRUTH_PATH.read_bytes()
+    assert result.stderr == b""
+    assert {path: path.read_bytes() for path in observed} == before
+
+
+def test_validate_repository_checkout_reports_source_of_truth_metrics() -> None:
+    report = validate_repository_checkout(ROOT)
+
+    assert report["source_of_truth_valid"] is True
+    assert report["source_of_truth_word_count"] == len(
+        SOURCE_OF_TRUTH_PATH.read_text(encoding="utf-8").split()
+    )
+    assert report["source_of_truth_byte_count"] == SOURCE_OF_TRUTH_PATH.stat().st_size

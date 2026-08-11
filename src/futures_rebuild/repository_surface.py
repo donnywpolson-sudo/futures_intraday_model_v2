@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -23,6 +24,46 @@ from .errors import ContractError
 
 SCHEMA_VERSION = "repository_surface/1.0.0"
 REGISTRY_PATH = Path("configs/repository_surface.json")
+SOURCE_OF_TRUTH_PATH = Path("SOURCE_OF_TRUTH.md")
+SOURCE_OF_TRUTH_ROLE = "HUMAN_SOURCE_OF_TRUTH_VIEW"
+SOURCE_OF_TRUTH_MAX_WORDS = 1_600
+SOURCE_OF_TRUTH_MAX_BYTES = 16 * 1024
+
+SOURCE_OF_TRUTH_SECTIONS = (
+    "Purpose and authority",
+    "Start here",
+    "Active machine-readable pointers",
+    "Public commands",
+    "Major folder roles",
+    "Historical and retired material",
+    "Generated, local-only, and unresolved material",
+    "Cleanup and deletion rules",
+    "Supersession rules",
+    "What this document does not authorize",
+)
+ACTIVE_POINTER_ROLES = (
+    ("Standard Alpha pointer", "ACTIVE_STANDARD_ALPHA_IDENTITY"),
+    ("Standard active data catalog", "ACTIVE_STANDARD_DATA_SELECTION"),
+    ("Micro source-selection pointer", "ACTIVE_MICRO_SOURCE_SELECTION"),
+    ("Micro source catalog", "ACTIVE_MICRO_DATA_SELECTION"),
+)
+MAJOR_FOLDER_PATHS = (
+    "src",
+    "configs",
+    "data",
+    "manifests",
+    "reports",
+    "state",
+    "scripts",
+    "tests",
+    "docs",
+    "FuturesLiveCockpit",
+    "build",
+    "dist",
+    "tmp",
+    "artifacts",
+    "bundles",
+)
 
 MATCH_TYPES = frozenset({"EXACT", "PREFIX", "GLOB"})
 TRACKED_EXPECTATIONS = frozenset(
@@ -107,6 +148,15 @@ _AFFIRMATIVE_AUTHORITY = re.compile(
     r"installation|activation|trading|orders?|staging|commit|push)\b"
 )
 _HEX_256 = re.compile(r"^[0-9a-f]{64}$")
+_ABSOLUTE_POSIX_PATH = re.compile(r"(?m)(?:^|[\s(])/(?!/)")
+_UNC_PATH = re.compile(r"\\\\[^\\\s]+\\")
+_DATE_OR_TIMESTAMP = re.compile(
+    r"\b(?:19|20)\d{2}-\d{2}-\d{2}(?:[T ][0-2]\d:[0-5]\d(?::[0-5]\d)?)?\b"
+)
+_COMMIT_SHA = re.compile(r"\b[0-9a-f]{40}\b")
+_CREDENTIAL_VALUE = re.compile(
+    r"(?i)\b(?:api[_-]?key|password|secret|token)\s*[:=]\s*[^\s`]+"
+)
 
 
 class RepositorySurfaceError(ContractError):
@@ -334,6 +384,7 @@ def validate_repository_surface(
         raise RepositorySurfaceError("registry text grants a controlled authority")
 
     _validate_authority_roles(entries, authority_precedence)
+    _validate_source_of_truth_registry_entry(entries)
     _validate_generated_root_policies(entries)
     _validate_standard_and_micro_roles(entries)
 
@@ -342,6 +393,7 @@ def validate_repository_surface(
         validate_tracked_root_coverage(surface, root)
         validate_public_command_surfaces(surface, root)
         _validate_pointer_metadata(surface, root)
+        compare_source_of_truth_file(surface, root)
 
 
 def _validate_authority_roles(
@@ -379,6 +431,54 @@ def _validate_standard_and_micro_roles(entries: Sequence[Mapping[str, object]]) 
         raise RepositorySurfaceError("standard and micro pointers must remain separate")
     if role_paths["ACTIVE_STANDARD_DATA_SELECTION"] == role_paths["ACTIVE_MICRO_DATA_SELECTION"]:
         raise RepositorySurfaceError("standard and micro catalogs must remain separate")
+
+
+def _validate_source_of_truth_registry_entry(
+    entries: Sequence[Mapping[str, object]],
+) -> Mapping[str, object]:
+    matches = [
+        entry
+        for entry in entries
+        if entry.get("path_or_pattern") == SOURCE_OF_TRUTH_PATH.as_posix()
+    ]
+    if len(matches) != 1:
+        raise RepositorySurfaceError(
+            "SOURCE_OF_TRUTH.md must have exactly one registry entry"
+        )
+    entry = matches[0]
+    expected = {
+        "match_type": "EXACT",
+        "classification": "CURRENT_SUPPORTING",
+        "authority_role": SOURCE_OF_TRUTH_ROLE,
+        "tracked_expected": "TRACKED",
+        "local_only": False,
+        "hash_bound": False,
+        "deletion_policy": "PRESERVE",
+    }
+    for field, value in expected.items():
+        if entry.get(field) != value:
+            raise RepositorySurfaceError(
+                f"SOURCE_OF_TRUTH.md {field} must be {value!r}"
+            )
+    role_matches = [
+        item for item in entries if item.get("authority_role") == SOURCE_OF_TRUTH_ROLE
+    ]
+    if role_matches != matches:
+        raise RepositorySurfaceError(
+            "human source-of-truth view role must be unique to SOURCE_OF_TRUTH.md"
+        )
+    notes = str(entry.get("notes", "")).lower()
+    required = (
+        "deterministic human navigation view",
+        "configs/repository_surface.json",
+        "pyproject.toml",
+        "grants no",
+    )
+    if any(fragment not in notes for fragment in required):
+        raise RepositorySurfaceError(
+            "SOURCE_OF_TRUTH.md registry notes must preserve derivation and non-authority"
+        )
+    return entry
 
 
 def _validate_generated_root_policies(entries: Sequence[Mapping[str, object]]) -> None:
@@ -547,11 +647,7 @@ def _module_target_path(root: Path, module: str) -> str:
     return existing[0]
 
 
-def validate_public_command_surfaces(
-    surface: Mapping[str, object], repository_root: Path | str
-) -> dict[str, str]:
-    """Ensure every pyproject command points at an explicitly current module."""
-
+def _load_public_command_targets(repository_root: Path | str) -> dict[str, str]:
     root = Path(repository_root).resolve(strict=True)
     pyproject = _safe_control_path(root, "pyproject.toml")
     if not pyproject.is_file():
@@ -563,10 +659,22 @@ def validate_public_command_surfaces(
     scripts = payload.get("project", {}).get("scripts")
     if type(scripts) is not dict or not scripts:
         raise RepositorySurfaceError("pyproject public scripts are missing")
-    resolved: dict[str, str] = {}
+    targets: dict[str, str] = {}
     for name, target in sorted(scripts.items()):
-        if type(name) is not str or type(target) is not str or ":" not in target:
+        if type(name) is not str or not name or type(target) is not str or ":" not in target:
             raise RepositorySurfaceError("pyproject public script is malformed")
+        targets[name] = target
+    return targets
+
+
+def validate_public_command_surfaces(
+    surface: Mapping[str, object], repository_root: Path | str
+) -> dict[str, str]:
+    """Ensure every pyproject command points at an explicitly current module."""
+
+    root = Path(repository_root).resolve(strict=True)
+    resolved: dict[str, str] = {}
+    for name, target in _load_public_command_targets(root).items():
         module, _callable = target.split(":", 1)
         relative = _module_target_path(root, module)
         entry = resolve_surface_entry(surface, relative)
@@ -583,6 +691,300 @@ def validate_public_command_surfaces(
             )
         resolved[name] = relative
     return resolved
+
+
+def _entry_for_role(
+    surface: Mapping[str, object], authority_role: str
+) -> Mapping[str, object]:
+    raw_entries = surface.get("entries")
+    if not isinstance(raw_entries, Sequence):
+        raise RepositorySurfaceError("entries are unavailable")
+    matches = [
+        entry
+        for entry in raw_entries
+        if isinstance(entry, Mapping)
+        and entry.get("authority_role") == authority_role
+    ]
+    if len(matches) != 1:
+        raise RepositorySurfaceError(
+            f"authority role must resolve exactly once: {authority_role}"
+        )
+    return matches[0]
+
+
+def _exact_entry(
+    surface: Mapping[str, object], repository_path: str
+) -> Mapping[str, object]:
+    entry = resolve_surface_entry(surface, repository_path)
+    if (
+        entry is None
+        or entry.get("match_type") != "EXACT"
+        or entry.get("path_or_pattern") != repository_path
+    ):
+        raise RepositorySurfaceError(
+            f"human-view path requires an exact registry entry: {repository_path}"
+        )
+    return entry
+
+
+def _markdown_cell(value: object) -> str:
+    return str(value).replace("|", "\\|").replace("\r", " ").replace("\n", " ")
+
+
+def render_source_of_truth(
+    surface: Mapping[str, object], public_commands: Mapping[str, str]
+) -> str:
+    """Render the deterministic human navigation view from canonical controls."""
+
+    workflow = _entry_for_role(surface, "NORMAL_WORKFLOW_AUTHORITY")
+    policy = _entry_for_role(surface, "DURABLE_SAFETY_POLICY_AUTHORITY")
+    package = _entry_for_role(surface, "PUBLIC_PACKAGE_AND_COMMAND_AUTHORITY")
+    _validate_source_of_truth_registry_entry(
+        [
+            entry
+            for entry in surface.get("entries", [])  # type: ignore[union-attr]
+            if isinstance(entry, Mapping)
+        ]
+    )
+    pointer_entries = [
+        (label, _entry_for_role(surface, role))
+        for label, role in ACTIVE_POINTER_ROLES
+    ]
+    folder_entries = [
+        (path, _exact_entry(surface, path)) for path in MAJOR_FOLDER_PATHS
+    ]
+    unresolved_count = sum(
+        1
+        for entry in surface.get("entries", [])  # type: ignore[union-attr]
+        if isinstance(entry, Mapping)
+        and entry.get("classification") == "UNRESOLVED_MANUAL_REVIEW"
+    )
+
+    lines = [
+        "# Repository source of truth",
+        "",
+        "> **Generated navigation view.** This file is deterministically rendered from",
+        "> `configs/repository_surface.json` and `pyproject.toml`. Do not maintain",
+        "> repository roles independently in this file.",
+        "",
+        "## Purpose and authority",
+        "",
+        f"- `{workflow['path_or_pattern']}` controls normal day-to-day work.",
+        f"- `{policy['path_or_pattern']}` contains durable safety and research-integrity policy.",
+        "- `configs/repository_surface.json` is the canonical machine-readable path-role registry.",
+        "- `SOURCE_OF_TRUTH.md` is this generated navigation view only; it is not a workflow or safety authority.",
+        f"- `{package['path_or_pattern']}` defines the public package and command surface.",
+        "- `README.md` provides setup and operator orientation.",
+        "- `PROJECT_OUTLINE.md` is the detailed research runbook.",
+        "- `PIPELINE_FOLDER_MAP.md` is a topology and reference guide, not authority.",
+        "- `docs/LEGACY_WORKFLOWS.md` classifies retired workflow material.",
+        "- `MASTER_AUDIT.md` and `META_MASTER_AUDIT.md` are audit specifications, not current-state dashboards.",
+        "- `CODEX_HANDOFF.md` is continuation context only and grants no authority.",
+        "- `PUBLIC_SNAPSHOT.md` is not an operational workflow authority.",
+        "",
+        "## Start here",
+        "",
+        f"1. Read `{workflow['path_or_pattern']}` for normal work.",
+        f"2. Read `{policy['path_or_pattern']}` for durable safety policy.",
+        "3. Use `SOURCE_OF_TRUTH.md` to navigate repository roles.",
+        "4. Use `README.md` for setup.",
+        "5. Use `PROJECT_OUTLINE.md` for the detailed research process.",
+        "",
+        "## Active machine-readable pointers",
+        "",
+        "| Role | Registry path |",
+        "| --- | --- |",
+    ]
+    for label, entry in pointer_entries:
+        lines.append(
+            f"| {_markdown_cell(label)} | `{_markdown_cell(entry['path_or_pattern'])}` |"
+        )
+    lines.extend(
+        [
+            "",
+            "Local-only pointers or catalogs may be absent from a clean provider-free source export.",
+            "The micro pointer and catalog establish source selection only. They do not by themselves establish a frozen mechanism, trial registration, historical-row authority, research passage, holdout authority, production readiness, live-execution readiness, provider authorization, or trading authority. Rendering and validation do not open referenced market-data payloads.",
+            "",
+            "## Public commands",
+            "",
+            "The exact public command mapping comes from `[project.scripts]` in `pyproject.toml`.",
+            "",
+            "| Command | Python target |",
+            "| --- | --- |",
+        ]
+    )
+    for name, target in sorted(public_commands.items()):
+        lines.append(f"| `{_markdown_cell(name)}` | `{_markdown_cell(target)}` |")
+    lines.extend(
+        [
+            "",
+            "Private helpers, documentation-only commands, ignored installation candidates, historical commands, and untracked execution-looking modules are not public commands.",
+            "",
+            "## Major folder roles",
+            "",
+            "These concise roles come from each exact registry classification and note. More-specific entries override the family role.",
+            "",
+            "| Family | Classification | Registry-derived role |",
+            "| --- | --- | --- |",
+        ]
+    )
+    for path, entry in folder_entries:
+        lines.append(
+            f"| `{path}/` | `{_markdown_cell(entry['classification'])}` | {_markdown_cell(entry['notes'])} |"
+        )
+    lines.extend(
+        [
+            "",
+            "`FuturesLiveCockpit/` is a mixed packaging source/output surface and is not automatically disposable. Build, distribution, temporary, artifact, log, package, backup, and generated-report material still requires exact classification and review.",
+            "",
+            "## Historical and retired material",
+            "",
+            "Tracked does not imply current, and ignored does not imply disposable. Exact historical paths may remain at their original locations because plans, manifests, tests, receipts, reports, or other evidence bind their names or bytes. Historical material is not current workflow or command authority. A replacement must be explicitly declared with `current_replacement`; physical relocation requires separate reference and hash closure.",
+            "",
+            "## Generated, local-only, and unresolved material",
+            "",
+            "- `GENERATED_OUTPUT`: produced material whose existence does not provide deletion authority.",
+            "- `REGENERABLE_CACHE`: a narrowly identified cache with understood regeneration; cleanup still needs a fresh census and separate approval.",
+            "- `LOCAL_RUNTIME_STATE`: machine-local operating state that must be preserved unless separately governed.",
+            "- `LOCAL_SECRET`: credential or secret material whose contents must never be inspected or reported by this view.",
+            "- `MIXED_PACKAGING_SOURCE_OUTPUT`: tracked packaging inputs and generated output coexist under one family.",
+            f"- `UNRESOLVED_MANUAL_REVIEW`: evidence is insufficient for an automatic decision. The registry currently contains {unresolved_count} such entries.",
+            "- `PREPARED_NOT_EXECUTED`: a plan or preparation exists, but execution, activation, or publication is not established.",
+            "",
+            "Use `configs/repository_surface.json` for exact classifications. A present, ignored, or untracked file that looks like execution, publication, activation, installation, or cleanup code does not become current merely because it exists.",
+            "",
+            "## Cleanup and deletion rules",
+            "",
+            "The registry grants no deletion authority, and `SOURCE_OF_TRUTH.md` grants no deletion authority. Only exact regenerable cache paths may become cleanup candidates, after a fresh machine-local census and separate exact approval. Modified, staged, and non-ignored untracked work is preserved by default.",
+            "",
+            "Active catalogs, data, manifests, reports, state, receipts, authorization uses, credentials, and unpublished evidence are protected. Build output, distributions, `.venv`, temporary material, artifacts, packages, backups, logs, and reports are not automatically disposable. Git ignore status does not establish deletion safety, and broad cleanup commands must not be used.",
+            "",
+            "Prohibited broad cleanup commands:",
+            "",
+            "```text",
+            "git clean -fdx",
+            "git clean -fdX",
+            "```",
+            "",
+            "## Supersession rules",
+            "",
+            "Currentness is not determined by the highest version number, newest modification timestamp, newest-looking filename, tracked status, ignored status, directory presence, or words such as final, authoritative, successor, current, active, live, old, retired, or legacy.",
+            "",
+            "Resolve currentness through `CURRENT_WORKFLOW.md`, `AGENTS.md`, `configs/repository_surface.json`, exact active pointers, explicit `current_replacement` relationships, `pyproject.toml` public command definitions, and current fail-closed policy boundaries.",
+            "",
+            "## What this document does not authorize",
+            "",
+            "Neither `SOURCE_OF_TRUTH.md` nor the registry authorizes deletion, movement or renaming, provider access, credential access, market-data reads, real-history research, holdout or forward access, prediction publication, candidate sealing, active-data mutation, publication, installation, activation, live smoke, trading, order placement, staging, commit, or push.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def validate_source_of_truth(
+    document: bytes,
+    *,
+    surface: Mapping[str, object],
+    public_commands: Mapping[str, str],
+) -> dict[str, object]:
+    """Validate deterministic bytes and the non-authorizing human-view contract."""
+
+    expected = render_source_of_truth(surface, public_commands).encode("utf-8")
+    if document != expected:
+        raise RepositorySurfaceError(
+            "SOURCE_OF_TRUTH.md is absent, stale, manually edited, or inconsistent"
+        )
+    if len(document) > SOURCE_OF_TRUTH_MAX_BYTES:
+        raise RepositorySurfaceError("SOURCE_OF_TRUTH.md exceeds the byte limit")
+    if b"\r" in document or not document.endswith(b"\n") or document.endswith(b"\n\n"):
+        raise RepositorySurfaceError(
+            "SOURCE_OF_TRUTH.md must use LF and exactly one final newline"
+        )
+    try:
+        text = document.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RepositorySurfaceError("SOURCE_OF_TRUTH.md is not UTF-8") from exc
+    word_count = len(text.split())
+    if word_count > SOURCE_OF_TRUTH_MAX_WORDS:
+        raise RepositorySurfaceError("SOURCE_OF_TRUTH.md exceeds the word limit")
+    headings = [line[3:] for line in text.splitlines() if line.startswith("## ")]
+    if headings != list(SOURCE_OF_TRUTH_SECTIONS):
+        raise RepositorySurfaceError("SOURCE_OF_TRUTH.md section order is invalid")
+    if (
+        _MACHINE_PATH.search(text)
+        or _ABSOLUTE_POSIX_PATH.search(text)
+        or _UNC_PATH.search(text)
+        or "futures-v2-repository-audit-" in text
+    ):
+        raise RepositorySurfaceError("SOURCE_OF_TRUTH.md contains a machine path")
+    if _DATE_OR_TIMESTAMP.search(text) or _COMMIT_SHA.search(text):
+        raise RepositorySurfaceError("SOURCE_OF_TRUTH.md contains transient identity")
+    if _CREDENTIAL_VALUE.search(text):
+        raise RepositorySurfaceError("SOURCE_OF_TRUTH.md contains a credential value")
+    for variable in ("USERNAME", "USER"):
+        username = os.environ.get(variable, "").strip()
+        if len(username) >= 3 and re.search(rf"(?i)\b{re.escape(username)}\b", text):
+            raise RepositorySurfaceError("SOURCE_OF_TRUTH.md contains a user name")
+    required_fragments = (
+        "The registry grants no deletion authority",
+        "`SOURCE_OF_TRUTH.md` grants no deletion authority",
+        "git clean -fdx",
+        "git clean -fdX",
+        "Neither `SOURCE_OF_TRUTH.md` nor the registry authorizes",
+    )
+    for fragment in required_fragments:
+        if fragment not in text:
+            raise RepositorySurfaceError(
+                f"SOURCE_OF_TRUTH.md omits required safety text: {fragment}"
+            )
+    if "live_cockpit/execution" in text or "Tradovate" in text:
+        raise RepositorySurfaceError(
+            "SOURCE_OF_TRUTH.md promotes an untracked execution surface"
+        )
+    return {
+        "valid": True,
+        "word_count": word_count,
+        "byte_count": len(document),
+        "public_command_count": len(public_commands),
+    }
+
+
+def expected_source_of_truth_bytes(
+    surface: Mapping[str, object], repository_root: Path | str
+) -> bytes:
+    """Return validated deterministic UTF-8 bytes without writing a file."""
+
+    root = Path(repository_root).resolve(strict=True)
+    validate_public_command_surfaces(surface, root)
+    commands = _load_public_command_targets(root)
+    rendered = render_source_of_truth(surface, commands).encode("utf-8")
+    validate_source_of_truth(
+        rendered,
+        surface=surface,
+        public_commands=commands,
+    )
+    return rendered
+
+
+def compare_source_of_truth_file(
+    surface: Mapping[str, object], repository_root: Path | str
+) -> dict[str, object]:
+    """Fail closed unless the in-repository Markdown equals the renderer bytes."""
+
+    root = Path(repository_root).resolve(strict=True)
+    path = _safe_control_path(root, SOURCE_OF_TRUTH_PATH.as_posix())
+    if path.is_symlink() or not path.is_file():
+        raise RepositorySurfaceError("SOURCE_OF_TRUTH.md is missing")
+    try:
+        actual = path.read_bytes()
+    except OSError as exc:
+        raise RepositorySurfaceError("SOURCE_OF_TRUTH.md is unreadable") from exc
+    validate_public_command_surfaces(surface, root)
+    commands = _load_public_command_targets(root)
+    return validate_source_of_truth(
+        actual,
+        surface=surface,
+        public_commands=commands,
+    )
 
 
 def _validate_pointer_document(path: Path, *, schema: str) -> None:
@@ -647,12 +1049,18 @@ def validate_repository_checkout(repository_root: Path | str) -> dict[str, objec
     validate_repository_surface(surface, repository_root=root)
     coverage = validate_tracked_root_coverage(surface, root)
     commands = validate_public_command_surfaces(surface, root)
+    source_of_truth = compare_source_of_truth_file(surface, root)
     return {
         "schema_version": SCHEMA_VERSION,
         "valid": True,
+        "registry_valid": True,
+        "source_of_truth_valid": source_of_truth["valid"],
         "entry_count": len(surface["entries"]),
         "tracked_root_mode": coverage["mode"],
         "public_commands": commands,
+        "public_command_count": len(commands),
+        "source_of_truth_word_count": source_of_truth["word_count"],
+        "source_of_truth_byte_count": source_of_truth["byte_count"],
         "mutations_performed": False,
     }
 
@@ -660,12 +1068,23 @@ def validate_repository_checkout(repository_root: Path | str) -> dict[str, objec
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Validate repository surface registry")
     parser.add_argument("--root", type=Path, default=Path.cwd())
+    parser.add_argument(
+        "--print-source-of-truth",
+        action="store_true",
+        help="print the deterministic Markdown view without writing files",
+    )
     return parser
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
     try:
+        if args.print_source_of_truth:
+            root = args.root.resolve(strict=True)
+            surface = load_repository_surface(root)
+            validate_repository_surface(surface, repository_root=None)
+            sys.stdout.buffer.write(expected_source_of_truth_bytes(surface, root))
+            return 0
         report = validate_repository_checkout(args.root)
     except RepositorySurfaceError as exc:
         print(json.dumps({"valid": False, "error": str(exc)}, sort_keys=True))
