@@ -53,6 +53,7 @@ CURRENT_TEST_FILES = {
     "test_data_layout.py",
     "test_dependency_lock.py",
     "test_generic_naming_policy.py",
+    "test_live_cockpit_execution.py",
     "test_operational_documents.py",
     "test_micro_futures_catalog_migration.py",
     "test_profiles_and_pipeline.py",

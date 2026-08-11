@@ -12,6 +12,12 @@ a = Analysis(
     binaries=[],
     datas=[
         (str(repo_root / 'configs' / 'alpha_tiered.yaml'), 'configs'),
+        (str(repo_root / 'configs' / 'prop_firm_execution_connections.json'), 'configs'),
+        (str(repo_root / 'configs' / 'prop_firm_profiles.json'), 'configs'),
+        (str(repo_root / 'configs' / 'prop_firm_execution_costs.json'), 'configs'),
+        (str(repo_root / 'configs' / 'prop_firm_execution_instruments.json'), 'configs'),
+        (str(repo_root / 'configs' / 'prop_firm_strategy_risk_policies.json'), 'configs'),
+        (str(repo_root / 'configs' / 'prop_firm_payout_policies.json'), 'configs'),
         (
             str(repo_root / 'configs' / 'live_cockpit_smoke_plan.json'),
             'configs',
@@ -30,6 +36,7 @@ a = Analysis(
         'yaml',
         'webview',
         'webview.platforms.edgechromium',
+        'futures_rebuild.live_cockpit.execution.tradovate_adapter',
     ],
     hookspath=[],
     hooksconfig={},

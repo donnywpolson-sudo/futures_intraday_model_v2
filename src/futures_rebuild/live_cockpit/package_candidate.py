@@ -75,6 +75,22 @@ RUNTIME_OVERLAYS = (
     "src/futures_rebuild/live_cockpit/cutover_guard.py",
     "src/futures_rebuild/live_cockpit/databento_auth.py",
     "src/futures_rebuild/live_cockpit/engine.py",
+    "src/futures_rebuild/live_cockpit/execution/__init__.py",
+    "src/futures_rebuild/live_cockpit/execution/adapter.py",
+    "src/futures_rebuild/live_cockpit/execution/arm_state.py",
+    "src/futures_rebuild/live_cockpit/execution/config.py",
+    "src/futures_rebuild/live_cockpit/execution/credential_store.py",
+    "src/futures_rebuild/live_cockpit/execution/domain.py",
+    "src/futures_rebuild/live_cockpit/execution/errors.py",
+    "src/futures_rebuild/live_cockpit/execution/fake.py",
+    "src/futures_rebuild/live_cockpit/execution/gate.py",
+    "src/futures_rebuild/live_cockpit/execution/order_ledger.py",
+    "src/futures_rebuild/live_cockpit/execution/reconciliation.py",
+    "src/futures_rebuild/live_cockpit/execution/runtime.py",
+    "src/futures_rebuild/live_cockpit/execution/tradovate_adapter.py",
+    "src/futures_rebuild/live_cockpit/execution/tradovate_auth.py",
+    "src/futures_rebuild/live_cockpit/execution/tradovate_rest.py",
+    "src/futures_rebuild/live_cockpit/execution/tradovate_websocket.py",
     "src/futures_rebuild/live_cockpit/feed.py",
     "src/futures_rebuild/live_cockpit/history.py",
     "src/futures_rebuild/live_cockpit/market_groups.py",
@@ -82,6 +98,7 @@ RUNTIME_OVERLAYS = (
     "src/futures_rebuild/live_cockpit/predictions.py",
     "src/futures_rebuild/live_cockpit/protocol.py",
     "src/futures_rebuild/live_cockpit/smoke.py",
+    "src/futures_rebuild/live_cockpit/single_instance.py",
 )
 PACKAGE_INPUTS = (
     "src/futures_rebuild/live_cockpit/package_candidate.py",
@@ -91,6 +108,12 @@ PACKAGE_INPUTS = (
     "FuturesLiveCockpit/_internal/FuturesLiveCockpit.spec",
     "FuturesLiveCockpit/_internal/futures_live_cockpit.py",
     "configs/alpha_tiered.yaml",
+    "configs/prop_firm_execution_connections.json",
+    "configs/prop_firm_profiles.json",
+    "configs/prop_firm_execution_costs.json",
+    "configs/prop_firm_execution_instruments.json",
+    "configs/prop_firm_strategy_risk_policies.json",
+    "configs/prop_firm_payout_policies.json",
     "configs/live_cockpit_smoke_plan.json",
     "configs/source_contract.json",
     "configs/dependency_lock_receipt.json",
@@ -122,6 +145,19 @@ FORBIDDEN_PACKAGE_NAMES = frozenset(
         "credential-source.json",
         ".env",
     }
+)
+FORBIDDEN_PACKAGE_PATH_PARTS = frozenset(
+    {
+        "authorization_uses",
+        "unpublished_evidence",
+        "execution_binding.json",
+    }
+)
+PRIVATE_KEY_HEADERS = (
+    b"-----BEGIN PRIVATE KEY-----",
+    b"-----BEGIN RSA PRIVATE KEY-----",
+    b"-----BEGIN EC PRIVATE KEY-----",
+    b"-----BEGIN OPENSSH PRIVATE KEY-----",
 )
 
 
@@ -374,6 +410,18 @@ def _inventory(candidate: Path) -> tuple[list[dict[str, Any]], int]:
     return files, total_bytes
 
 
+def _contains_private_key(path: Path) -> bool:
+    overlap = max(len(value) for value in PRIVATE_KEY_HEADERS) - 1
+    previous = b""
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            value = previous + chunk
+            if any(header in value for header in PRIVATE_KEY_HEADERS):
+                return True
+            previous = value[-overlap:]
+    return False
+
+
 def _scoped_path(root: Path, template: str, plan_id: str) -> Path:
     rendered = template.replace("<PLAN_ID>", plan_id).replace(
         "<PLAN_PREFIX>", plan_id[:PLAN_PREFIX_LENGTH]
@@ -407,6 +455,10 @@ def _validate_path_budget(
 
 
 def _validate_candidate(candidate: Path) -> tuple[list[dict[str, Any]], int]:
+    if candidate.is_symlink() or bool(
+        getattr(candidate.stat(), "st_file_attributes", 0) & 0x400
+    ):
+        raise PackageCandidateError("candidate root is link-like")
     top_level = sorted(path.name for path in candidate.iterdir())
     if top_level != ["FuturesLiveCockpit.exe", "_internal"]:
         raise PackageCandidateError("candidate top-level topology is invalid")
@@ -418,13 +470,26 @@ def _validate_candidate(candidate: Path) -> tuple[list[dict[str, Any]], int]:
     )
     if not all(path.exists() for path in required):
         raise PackageCandidateError("candidate is missing required package entries")
-    forbidden = [
-        path.name
-        for path in candidate.rglob("*")
-        if path.name.lower() in FORBIDDEN_PACKAGE_NAMES
-    ]
+    descendants = list(candidate.rglob("*"))
+    if any(
+        path.is_symlink()
+        or bool(getattr(path.stat(), "st_file_attributes", 0) & 0x400)
+        for path in descendants
+    ):
+        raise PackageCandidateError("candidate contains a link-like entry")
+    forbidden = []
+    for path in descendants:
+        relative_parts = tuple(part.lower() for part in path.relative_to(candidate).parts)
+        if (
+            path.name.lower() in FORBIDDEN_PACKAGE_NAMES
+            or any(part in FORBIDDEN_PACKAGE_PATH_PARTS for part in relative_parts)
+            or relative_parts[:3] == ("_internal", "state", "live_cockpit")
+        ):
+            forbidden.append(path.relative_to(candidate).as_posix())
     if forbidden:
-        raise PackageCandidateError("candidate contains a forbidden secret locator")
+        raise PackageCandidateError("candidate contains a forbidden secret, binding, or evidence path")
+    if any(_contains_private_key(path) for path in descendants if path.is_file()):
+        raise PackageCandidateError("candidate contains plaintext private-key material")
     files, total_bytes = _inventory(candidate)
     if not files or len(files) > MAX_CANDIDATE_FILES:
         raise PackageCandidateError("candidate file limit was violated")

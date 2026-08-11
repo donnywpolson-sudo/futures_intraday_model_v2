@@ -133,7 +133,7 @@ def test_visual_update_state_validates_modes_and_applies_adaptive_floor() -> Non
 def test_protocol_is_versioned_and_serializes_bars() -> None:
     message = event("bar_update", {"bar": serialize_bar(_bar(datetime(2026, 7, 13, tzinfo=timezone.utc)))})
     validate_event(message)
-    assert message["v"] == 1
+    assert message["v"] == 2
     assert message["payload"]["bar"]["time"] == 1_783_900_800
 
 
@@ -509,12 +509,7 @@ def test_demo_engine_exposes_41_markets_states_and_cached_timeframes() -> None:
         market_names = {
             market["symbol"]: market["name"] for market in payload["markets"]
         }
-        assert market_names["ES"] == "E-mini S&P 500"
-        assert market_names["NG"] == "Henry Hub Natural Gas"
-        assert market_names["ZN"] == "10-Year U.S. Treasury Note"
-        assert market_names["ZC"] == "Corn"
-        assert market_names["BTC"] == "Bitcoin"
-        assert all(market_names.values())
+        assert set(market_names) == set(market_names.values())
         assert payload["market_grouping_capability"] == {
             "alpha_tiers_available": True,
             "alpha_tier_groups": [
@@ -2555,16 +2550,17 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert 'id="session-boundaries"' in html
     assert 'id="prediction-rail"' in html
     assert 'id="data-health-pill"' in html
-    assert 'id="quote-open"' not in html
-    assert 'id="quote-high"' not in html
-    assert 'id="quote-low"' not in html
-    assert 'id="quote-close"' not in html
-    assert 'id="quote-volume"' not in html
-    assert "updateQuote" not in javascript
-    assert ".quote-strip" not in stylesheet
-    assert "renderInstrumentMeta" in javascript
-    assert "market?.name || state.selectedMarket" in javascript
-    assert 'String(market.name || "").toLowerCase().includes(query)' in javascript
+    assert 'id="quote-open"' in html
+    assert 'id="quote-high"' in html
+    assert 'id="quote-low"' in html
+    assert 'id="quote-close"' in html
+    assert 'id="quote-volume"' in html
+    assert "updateQuote" in javascript
+    assert ".quote-strip" in stylesheet
+    assert "elements.instrumentSymbol.textContent = state.selectedMarket" in javascript
+    assert 'elements.instrumentMeta.textContent = "Continuous front contract' in javascript
+    assert "const exactSymbolQuery" in javascript
+    assert "if (exactSymbolQuery) return symbol === query" in javascript
     assert 'id="layers-menu"' in html
     assert 'id="group-by-sector"' in html
     assert 'id="group-by-alpha"' in html
@@ -2596,6 +2592,11 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "scheduleChartReset" in javascript
     assert "followLatestBar" in javascript
     assert "renderSessionBoundaries" in javascript
+    assert "autoSize: false" in javascript
+    assert "new ResizeObserver(queueChartResize)" in javascript
+    assert "state.chart.resize(width, height, true)" in javascript
+    assert "window.setTimeout(settleFullscreenChartLayout, 160)" in javascript
+    assert "state.chart.timeScale().fitContent()" in javascript
     assert 'label.textContent = kind === "rth" ? "RTH open" : "Globex open"' in javascript
     assert "createSeriesMarkers(state.candleSeries, [])" in javascript
     assert "renderPredictionMarker" in javascript
@@ -2654,3 +2655,25 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     ).read_text(encoding="utf-8")
     assert "'configs' / 'alpha_tiered.yaml'" in spec
     assert MAX_RENDER_HZ == 15.0
+
+
+def test_candidate_installer_retains_rollback_until_external_validation() -> None:
+    installer = Path("scripts/install_live_cockpit_candidate.ps1").read_text(
+        encoding="utf-8"
+    )
+
+    assert "INSTALLED_AND_OFFLINE_VALIDATED_ROLLBACK_RETAINED" in installer
+    assert "rollback_path = $backupRoot" in installer
+    assert "rollback_retained = (Test-Path -LiteralPath $backupRoot)" in installer
+    assert "Remove-Item -LiteralPath $backupRoot -Recurse -Force" not in installer
+    assert "Get-TreeFingerprint -Root $candidateRoot" in installer
+    assert "Get-TreeFingerprint -Root $publishRoot" in installer
+    assert "Get-TreeFingerprint -Root $backupRoot" in installer
+    assert "Rollback tree verification failed before candidate installation" in installer
+    assert "Installed tree differs from the validated candidate tree" in installer
+    assert "Tree fingerprint root is link-like" in installer
+    assert "Tree fingerprint contains a link-like entry" in installer
+    assert "[int]$SelfCheckTimeoutSeconds = 60" in installer
+    assert "$selfCheck.WaitForExit($SelfCheckTimeoutSeconds * 1000)" in installer
+    assert "self-check exceeded $SelfCheckTimeoutSeconds seconds" in installer
+    assert "@('/PID', [string]$selfCheck.Id, '/T', '/F')" in installer

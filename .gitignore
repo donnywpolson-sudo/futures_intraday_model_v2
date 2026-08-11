@@ -105,6 +105,7 @@ state/lock_recovery/
 state/lease_recovery/
 state/run_logs/
 state/msr/*
+state/live_cockpit/*
 state/archive_copy_*.log
 state/archive_verify_*.log
 state/archive_verify_*.err.log

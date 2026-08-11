@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
 import math
 from typing import Any, Mapping
 
 
-PROTOCOL_VERSION = 1
+PROTOCOL_VERSION = 2
+# One-week minute snapshots are intentionally large; execution/control payloads
+# remain far smaller and entity collections have their own strict cap.
+MAX_MESSAGE_BYTES = 4_194_304
+MAX_EXECUTION_ENTITIES = 500
+SECRET_FIELD_SUFFIXES = frozenset(
+    {"token", "password", "secret", "authorization", "apikey"}
+)
 EVENT_TYPES = frozenset(
     {
         "bootstrap",
@@ -18,6 +26,30 @@ EVENT_TYPES = frozenset(
         "data_health",
         "prediction_update",
         "history_cache_status",
+        "execution_capability",
+        "execution_readiness",
+        "account_snapshot",
+        "position_snapshot",
+        "order_snapshot",
+        "fill_event",
+        "order_intent_preview",
+        "order_submission_result",
+        "reconciliation_status",
+        "execution_health",
+        "arm_state",
+        "compliance_decision",
+    }
+)
+COMMAND_TYPES = frozenset(
+    {
+        "PREVIEW_ORDER_INTENT",
+        "ARM_EXECUTION",
+        "DISARM_EXECUTION",
+        "SUBMIT_ORDER_INTENT",
+        "CANCEL_ORDER",
+        "CANCEL_ALL_ENTRIES",
+        "FLATTEN_POSITION",
+        "FLATTEN_ALL",
     }
 )
 MARKET_STATES = frozenset({"LIVE", "WAITING", "STALE", "ERROR"})
@@ -99,6 +131,201 @@ DATA_HEALTH_REASON_CODES = frozenset(
         "NO_BAR_DATA",
     }
 )
+
+
+def _secret_field_name(value: object) -> bool:
+    normalized = "".join(character for character in str(value).lower() if character.isalnum())
+    return any(normalized.endswith(marker) for marker in SECRET_FIELD_SUFFIXES)
+
+
+def _contains_secret_field(value: object) -> bool:
+    if isinstance(value, Mapping):
+        return any(
+            _secret_field_name(key) or _contains_secret_field(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_contains_secret_field(item) for item in value)
+    return False
+
+
+def _bounded_message(value: Mapping[str, Any]) -> None:
+    if _contains_secret_field(value):
+        raise ValueError("cockpit payload contains a forbidden secret field")
+    try:
+        size = len(json.dumps(value, separators=(",", ":"), ensure_ascii=True).encode("utf-8"))
+    except (TypeError, ValueError) as exc:
+        raise ValueError("cockpit payload is not JSON serializable") from exc
+    if size > MAX_MESSAGE_BYTES:
+        raise ValueError("cockpit payload is oversized")
+
+
+def _exact_fields(payload: Mapping[str, Any], fields: set[str], *, name: str) -> None:
+    if set(payload) != fields:
+        raise ValueError(f"{name} fields are not exact")
+
+
+def _bounded_string(value: object, *, name: str, maximum: int = 160, nullable: bool = False) -> str | None:
+    if value is None and nullable:
+        return None
+    if not isinstance(value, str) or not value or len(value) > maximum:
+        raise ValueError(f"{name} must be a bounded string")
+    return value
+
+
+def _aware_timestamp(value: object, *, name: str) -> datetime:
+    if not isinstance(value, str) or len(value) > 64:
+        raise ValueError(f"{name} must be an ISO-8601 timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValueError(f"{name} must be an ISO-8601 timestamp") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError(f"{name} must be timezone-aware")
+    return parsed
+
+
+def validate_execution_capability_payload(payload: Mapping[str, Any]) -> None:
+    _exact_fields(payload, {
+        "mode", "origin", "simulated", "provider_id", "platform_id", "profile_id",
+        "account_stage", "connection_id", "connection_hash", "entitlement_status",
+        "account_binding_present", "account_binding_id", "cost_profile_id",
+        "exact_costs_verified", "production_readiness", "execution_authorized",
+        "order_paths_reachable", "provider_connection_opened", "armed", "arm_expires_at",
+        "blockers", "verified_micro_mappings", "disabled_signal_roots",
+    }, name="execution capability")
+    modes = {
+        "OBSERVATION_ONLY", "TRADOVATE_READ_ONLY", "LOCAL_EXECUTION_SIMULATOR",
+        "MFF_TRADOVATE_SIM_FUNDED", "MFF_TRADOVATE_LIVE",
+    }
+    if payload.get("mode") not in modes:
+        raise ValueError("execution mode is invalid")
+    if payload.get("origin") not in {"LOCAL_CONFIGURATION", "LOCAL_SIMULATOR", "PROVIDER_BACKED"}:
+        raise ValueError("execution origin is invalid")
+    for name in ("simulated", "account_binding_present", "exact_costs_verified", "production_readiness", "execution_authorized", "order_paths_reachable", "provider_connection_opened", "armed"):
+        if not isinstance(payload.get(name), bool):
+            raise ValueError(f"{name} must be a boolean")
+    for name in ("provider_id", "platform_id", "profile_id", "account_stage", "connection_id", "cost_profile_id", "entitlement_status"):
+        _bounded_string(payload.get(name), name=name)
+    connection_hash = payload.get("connection_hash")
+    if not isinstance(connection_hash, str) or len(connection_hash) != 64:
+        raise ValueError("connection_hash is invalid")
+    if payload.get("account_binding_id") is not None:
+        _bounded_string(payload.get("account_binding_id"), name="account_binding_id")
+    if payload.get("arm_expires_at") is not None:
+        _aware_timestamp(payload.get("arm_expires_at"), name="arm_expires_at")
+    for name in ("blockers", "verified_micro_mappings", "disabled_signal_roots"):
+        values = payload.get(name)
+        if not isinstance(values, list) or len(values) > 64 or any(not isinstance(item, str) or not item or len(item) > 160 for item in values):
+            raise ValueError(f"{name} must be a bounded string list")
+    if payload.get("production_readiness") is False and payload.get("order_paths_reachable") is not False:
+        raise ValueError("order paths cannot be reachable while production readiness is false")
+
+
+def validate_execution_entity_payload(payload: Mapping[str, Any], *, event_type: str) -> None:
+    required = {"provider_id", "account_id", "profile_id", "account_stage", "origin", "simulated", "observed_at", "entities"}
+    _exact_fields(payload, required, name=event_type)
+    for name in ("provider_id", "profile_id", "account_stage", "origin"):
+        _bounded_string(payload.get(name), name=name)
+    if not isinstance(payload.get("account_id"), int) or payload["account_id"] <= 0:
+        raise ValueError("account_id must be positive")
+    if not isinstance(payload.get("simulated"), bool):
+        raise ValueError("simulated must be a boolean")
+    _aware_timestamp(payload.get("observed_at"), name="observed_at")
+    entities = payload.get("entities")
+    if not isinstance(entities, list) or len(entities) > MAX_EXECUTION_ENTITIES or any(not isinstance(item, Mapping) for item in entities):
+        raise ValueError("execution entities are invalid")
+
+
+def validate_execution_status_payload(payload: Mapping[str, Any], *, event_type: str) -> None:
+    common = {"provider_id", "account_id", "profile_id", "account_stage", "origin", "simulated", "observed_at"}
+    specific = {
+        "order_intent_preview": {"intent_id", "allowed", "authoritative_quantity", "blockers"},
+        "order_submission_result": {"intent_id", "accepted", "provider_order_id", "status", "reason_codes"},
+        "reconciliation_status": {"status", "blockers", "orphan_order_ids", "sequence"},
+        "execution_health": {"state", "connected", "last_sync_at", "blockers"},
+        "arm_state": {"armed", "expires_at", "reason", "binding_id", "mode"},
+        "compliance_decision": {"decision_id", "intent_id", "allowed", "actions", "reasons"},
+    }[event_type]
+    _exact_fields(payload, common | specific, name=event_type)
+    for name in ("provider_id", "profile_id", "account_stage", "origin"):
+        _bounded_string(payload.get(name), name=name)
+    account_id = payload.get("account_id")
+    if account_id is not None and (not isinstance(account_id, int) or account_id <= 0):
+        raise ValueError("account_id must be null or positive")
+    if not isinstance(payload.get("simulated"), bool):
+        raise ValueError("simulated must be a boolean")
+    _aware_timestamp(payload.get("observed_at"), name="observed_at")
+    for name in ("allowed", "accepted", "connected", "armed"):
+        if name in payload and not isinstance(payload.get(name), bool):
+            raise ValueError(f"{name} must be a boolean")
+    for name in ("blockers", "reason_codes", "actions", "reasons"):
+        if name in payload:
+            values = payload.get(name)
+            if not isinstance(values, list) or len(values) > 64 or any(not isinstance(item, str) or not item or len(item) > 160 for item in values):
+                raise ValueError(f"{name} must be a bounded string list")
+    for name in ("intent_id", "status", "state", "reason", "binding_id", "mode", "decision_id"):
+        if name in payload and payload.get(name) is not None:
+            _bounded_string(payload.get(name), name=name)
+    for name in ("last_sync_at", "expires_at"):
+        if name in payload and payload.get(name) is not None:
+            _aware_timestamp(payload.get(name), name=name)
+    for name in ("authoritative_quantity", "sequence"):
+        if name in payload:
+            _nonnegative_int(payload.get(name), name=name)
+    provider_order_id = payload.get("provider_order_id")
+    if "provider_order_id" in payload and provider_order_id is not None and (not isinstance(provider_order_id, int) or provider_order_id <= 0):
+        raise ValueError("provider_order_id must be null or positive")
+    orphan_ids = payload.get("orphan_order_ids")
+    if orphan_ids is not None and (not isinstance(orphan_ids, list) or len(orphan_ids) > MAX_EXECUTION_ENTITIES or any(not isinstance(item, int) or item <= 0 for item in orphan_ids)):
+        raise ValueError("orphan_order_ids are invalid")
+
+
+def validate_command(command: Mapping[str, Any]) -> None:
+    _bounded_message(command)
+    _exact_fields(command, {"v", "type", "payload"}, name="cockpit command")
+    if command.get("v") != PROTOCOL_VERSION or command.get("type") not in COMMAND_TYPES or not isinstance(command.get("payload"), Mapping):
+        raise ValueError("cockpit command envelope is invalid")
+    payload = command["payload"]
+    command_type = command["type"]
+    fields = {
+        "PREVIEW_ORDER_INTENT": {"execution_symbol", "side", "order_type", "price", "stop_price", "target_price", "quantity"},
+        "ARM_EXECUTION": {"binding_id", "confirmation", "duration_seconds"},
+        "DISARM_EXECUTION": {"reason"},
+        "SUBMIT_ORDER_INTENT": {"intent_id"},
+        "CANCEL_ORDER": {"provider_order_id"},
+        "CANCEL_ALL_ENTRIES": set(),
+        "FLATTEN_POSITION": {"contract_id"},
+        "FLATTEN_ALL": set(),
+    }[command_type]
+    _exact_fields(payload, fields, name=str(command_type))
+    if command_type == "PREVIEW_ORDER_INTENT":
+        if payload.get("execution_symbol") not in {"MES", "MCL", "M6E"}:
+            raise ValueError("execution symbol is not a verified micro")
+        if payload.get("side") not in {"BUY", "SELL"} or payload.get("order_type") not in {"MARKET", "LIMIT", "STOP", "STOP_LIMIT"}:
+            raise ValueError("order side or type is invalid")
+        _nonnegative_int(payload.get("quantity"), name="quantity")
+        if payload.get("quantity") == 0:
+            raise ValueError("quantity must be positive")
+        for name in ("price", "stop_price", "target_price"):
+            if payload.get(name) is not None:
+                _finite_number(payload.get(name), name=name)
+        if payload.get("stop_price") is None:
+            raise ValueError("protective stop is mandatory")
+    elif command_type == "ARM_EXECUTION":
+        _bounded_string(payload.get("binding_id"), name="binding_id")
+        _bounded_string(payload.get("confirmation"), name="confirmation", maximum=240)
+        duration = payload.get("duration_seconds")
+        if not isinstance(duration, int) or not 30 <= duration <= 900:
+            raise ValueError("arm duration is invalid")
+    elif command_type in {"SUBMIT_ORDER_INTENT"}:
+        _bounded_string(payload.get("intent_id"), name="intent_id")
+    elif command_type in {"CANCEL_ORDER", "FLATTEN_POSITION"}:
+        field = "provider_order_id" if command_type == "CANCEL_ORDER" else "contract_id"
+        if not isinstance(payload.get(field), int) or payload[field] <= 0:
+            raise ValueError(f"{field} must be positive")
+    elif command_type == "DISARM_EXECUTION":
+        _bounded_string(payload.get("reason"), name="reason", maximum=120)
 
 
 def _finite_number(value: object, *, name: str) -> float:
@@ -357,21 +584,32 @@ def event(event_type: str, payload: Mapping[str, Any]) -> dict[str, Any]:
         validate_data_health_payload(payload)
     elif event_type == "history_cache_status":
         validate_history_cache_payload(payload)
-    return {
+    elif event_type in {"execution_capability", "execution_readiness"}:
+        validate_execution_capability_payload(payload)
+    elif event_type in {"account_snapshot", "position_snapshot", "order_snapshot", "fill_event"}:
+        validate_execution_entity_payload(payload, event_type=event_type)
+    elif event_type in {"order_intent_preview", "order_submission_result", "reconciliation_status", "execution_health", "arm_state", "compliance_decision"}:
+        validate_execution_status_payload(payload, event_type=event_type)
+    message = {
         "v": PROTOCOL_VERSION,
         "type": event_type,
         "sent_at": datetime.now(timezone.utc).isoformat(),
         "payload": dict(payload),
     }
+    _bounded_message(message)
+    return message
 
 
 def validate_event(message: Mapping[str, Any]) -> None:
+    _bounded_message(message)
+    _exact_fields(message, {"v", "type", "sent_at", "payload"}, name="cockpit event")
     if message.get("v") != PROTOCOL_VERSION:
         raise ValueError("unsupported cockpit protocol version")
     if message.get("type") not in EVENT_TYPES:
         raise ValueError("unsupported cockpit event type")
     if not isinstance(message.get("payload"), Mapping):
         raise ValueError("cockpit event payload must be a mapping")
+    _aware_timestamp(message.get("sent_at"), name="sent_at")
     payload = message["payload"]
     if message.get("type") == "prediction_update":
         validate_prediction_payload(payload)
@@ -379,6 +617,12 @@ def validate_event(message: Mapping[str, Any]) -> None:
         validate_data_health_payload(payload)
     elif message.get("type") == "history_cache_status":
         validate_history_cache_payload(payload)
+    elif message.get("type") in {"execution_capability", "execution_readiness"}:
+        validate_execution_capability_payload(payload)
+    elif message.get("type") in {"account_snapshot", "position_snapshot", "order_snapshot", "fill_event"}:
+        validate_execution_entity_payload(payload, event_type=str(message.get("type")))
+    elif message.get("type") in {"order_intent_preview", "order_submission_result", "reconciliation_status", "execution_health", "arm_state", "compliance_decision"}:
+        validate_execution_status_payload(payload, event_type=str(message.get("type")))
 
 
 def timestamp_seconds(value: datetime | str | int | float) -> int:

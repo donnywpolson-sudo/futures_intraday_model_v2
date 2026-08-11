@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [string]$PythonExecutable = ''
+    [string]$PythonExecutable = '',
+    [string]$CandidatePath = ''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -29,6 +30,17 @@ if (-not [string]::Equals(
 }
 $previousDistutilsMode = $env:SETUPTOOLS_USE_DISTUTILS
 $backupCreated = $false
+$candidateBuild = [bool]$CandidatePath
+if ($candidateBuild) {
+    $CandidatePath = [IO.Path]::GetFullPath((Join-Path $repoRoot $CandidatePath))
+    $repoPrefix = $repoRoot.TrimEnd('\') + '\'
+    if (-not $CandidatePath.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'CandidatePath must stay inside the repository.'
+    }
+    if (Test-Path -LiteralPath $CandidatePath) {
+        throw 'CandidatePath already exists; candidate builds never overwrite output.'
+    }
+}
 
 try {
     # This Python 3.11 environment imports stdlib distutils before PyInstaller's
@@ -64,22 +76,29 @@ try {
         }
     }
 
-    if (Test-Path -LiteralPath $publishPath) {
+    if ($candidateBuild) {
+        $candidateParent = Split-Path -Parent $CandidatePath
+        New-Item -ItemType Directory -Path $candidateParent -Force | Out-Null
+        Move-Item -LiteralPath $stagedApp -Destination $CandidatePath
+    }
+    elseif (Test-Path -LiteralPath $publishPath) {
         Move-Item -LiteralPath $publishPath -Destination $backupPath
         $backupCreated = $true
     }
-    try {
-        Move-Item -LiteralPath $stagedApp -Destination $publishPath
-    }
-    catch {
-        if (
-            $backupCreated -and
-            -not (Test-Path -LiteralPath $publishPath)
-        ) {
-            Move-Item -LiteralPath $backupPath -Destination $publishPath
-            $backupCreated = $false
+    if (-not $candidateBuild) {
+        try {
+            Move-Item -LiteralPath $stagedApp -Destination $publishPath
         }
-        throw
+        catch {
+            if (
+                $backupCreated -and
+                -not (Test-Path -LiteralPath $publishPath)
+            ) {
+                Move-Item -LiteralPath $backupPath -Destination $publishPath
+                $backupCreated = $false
+            }
+            throw
+        }
     }
 
     if ($backupCreated) {

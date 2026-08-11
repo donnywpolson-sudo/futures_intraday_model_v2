@@ -183,6 +183,57 @@
               </dl>
             </section>
 
+            <section class="execution-card" aria-label="Execution capability">
+              <div id="execution-banner" class="execution-banner blocked">MFF SIM FUNDED &mdash; EXECUTION DISABLED</div>
+              <div class="panel-section-heading"><span>Supervised execution</span><strong id="execution-arm-state">DISARMED</strong></div>
+              <dl class="execution-status-grid">
+                <div><dt>Mode</dt><dd id="execution-mode">OBSERVATION ONLY</dd></div>
+                <div><dt>Origin</dt><dd id="execution-origin">LOCAL CONFIG</dd></div>
+                <div><dt>Profile</dt><dd id="execution-profile">MFF Rapid EOD 50K</dd></div>
+                <div><dt>Stage</dt><dd id="execution-stage">SIM FUNDED</dd></div>
+                <div><dt>Tradovate</dt><dd id="execution-connection">NOT CONNECTED</dd></div>
+                <div><dt>Entitlement</dt><dd id="execution-entitlement">UNCONFIRMED</dd></div>
+                <div><dt>Account</dt><dd id="execution-account">UNBOUND</dd></div>
+                <div><dt>Costs</dt><dd id="execution-costs">UNSET</dd></div>
+                <div><dt>Broker sync</dt><dd id="execution-broker-age">NOT AVAILABLE</dd></div>
+                <div><dt>Market data</dt><dd id="execution-market-age">WAITING</dd></div>
+                <div><dt>News</dt><dd id="execution-news-age">NOT BOUND</dd></div>
+                <div><dt>Session</dt><dd id="execution-session-age">NOT BOUND</dd></div>
+                <div><dt>Price limits</dt><dd id="execution-limit-age">NOT BOUND</dd></div>
+                <div><dt>Balance / equity</dt><dd id="execution-balance">&mdash;</dd></div>
+                <div><dt>MFF floor</dt><dd id="execution-floor">&mdash;</dd></div>
+                <div><dt>Floor distance</dt><dd id="execution-floor-distance">&mdash;</dd></div>
+              </dl>
+              <div class="execution-collections">
+                <span>Positions <strong id="execution-position-count">0</strong></span>
+                <span>Orders <strong id="execution-order-count">0</strong></span>
+                <span>Fills <strong id="execution-fill-count">0</strong></span>
+              </div>
+              <fieldset class="order-ticket" disabled>
+                <legend>Supervised order ticket</legend>
+                <label>Micro contract<select id="execution-symbol"><option>MES</option><option>MCL</option><option>M6E</option></select></label>
+                <label>Side<select id="execution-side"><option>BUY</option><option>SELL</option></select></label>
+                <label>Order type<select id="execution-order-type"><option>LIMIT</option><option>MARKET</option></select></label>
+                <label>Quantity<input id="execution-quantity" type="number" min="1" max="1" value="1" /></label>
+                <label>Entry price<input id="execution-entry-price" inputmode="decimal" /></label>
+                <label>Stop price <em>required</em><input id="execution-stop-price" inputmode="decimal" /></label>
+                <label>Target price<input id="execution-target-price" inputmode="decimal" /></label>
+                <dl class="ticket-estimates">
+                  <div><dt>Authoritative max</dt><dd id="execution-max-quantity">0</dd></div>
+                  <div><dt>Stop risk</dt><dd>&mdash;</dd></div>
+                  <div><dt>Verified fees</dt><dd>UNSET</dd></div>
+                  <div><dt>Aggregate micros</dt><dd>&mdash; / 30</dd></div>
+                </dl>
+                <button id="execution-submit" type="button" disabled>Review and submit</button>
+              </fieldset>
+              <div class="emergency-controls" aria-label="Emergency execution controls">
+                <button type="button" disabled>Cancel selected</button><button type="button" disabled>Cancel entries</button>
+                <button type="button" disabled>Flatten selected</button><button type="button" disabled>Flatten all</button>
+              </div>
+              <div class="execution-blockers"><strong>Execution blockers</strong><ul id="execution-blocker-list"><li>Execution capability is loading.</li></ul></div>
+              <p class="execution-warning">Model proposals are review-only. Startup, reconnect, or a signal can never submit an order.</p>
+            </section>
+
             <details class="forecast-details">
               <summary>Details</summary>
               <dl>
@@ -230,7 +281,7 @@
                 <small>Historical downloads only run after confirmation. Live feeds stay connected.</small>
               </section>
             </div>
-            <span class="observation-pill">OBSERVATION ONLY</span>
+            <span id="execution-footer-pill" class="observation-pill">OBSERVATION ONLY &middot; DISARMED</span>
             <span>Display only &mdash; no orders</span>
             <span id="render-rate">&le; 10 visual updates/sec</span>
             <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charts by TradingView</a>

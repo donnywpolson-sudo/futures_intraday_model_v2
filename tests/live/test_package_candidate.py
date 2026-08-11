@@ -172,7 +172,53 @@ def test_candidate_topology_rejects_credential_locator(tmp_path: Path) -> None:
     (internal / "credential-source.json").write_text("{}", encoding="utf-8")
     with pytest.raises(
         package_candidate.PackageCandidateError,
-        match="forbidden secret locator",
+        match="forbidden secret, binding, or evidence path",
+    ):
+        package_candidate._validate_candidate(candidate)
+
+
+@pytest.mark.parametrize(
+    "relative",
+    [
+        "_internal/state/live_cockpit/execution_binding.json",
+        "_internal/state/authorization_uses/receipt.json",
+        "_internal/state/unpublished_evidence/audit.json",
+    ],
+)
+def test_candidate_topology_rejects_binding_and_protected_evidence(
+    tmp_path: Path, relative: str
+) -> None:
+    candidate = tmp_path / "FuturesLiveCockpit"
+    internal = candidate / "_internal"
+    internal.mkdir(parents=True)
+    (candidate / "FuturesLiveCockpit.exe").write_bytes(b"exe")
+    (internal / "FuturesLiveCockpit.spec").write_text("spec", encoding="utf-8")
+    (internal / "futures_live_cockpit.py").write_text("entry", encoding="utf-8")
+    forbidden = candidate / relative
+    forbidden.parent.mkdir(parents=True, exist_ok=True)
+    forbidden.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(
+        package_candidate.PackageCandidateError,
+        match="forbidden secret, binding, or evidence path",
+    ):
+        package_candidate._validate_candidate(candidate)
+
+
+def test_candidate_topology_rejects_plaintext_private_key(tmp_path: Path) -> None:
+    candidate = tmp_path / "FuturesLiveCockpit"
+    internal = candidate / "_internal"
+    internal.mkdir(parents=True)
+    (candidate / "FuturesLiveCockpit.exe").write_bytes(b"exe")
+    (internal / "FuturesLiveCockpit.spec").write_text("spec", encoding="utf-8")
+    (internal / "futures_live_cockpit.py").write_text("entry", encoding="utf-8")
+    (internal / "unexpected.bin").write_bytes(
+        b"prefix-----BEGIN PRIVATE KEY-----suffix"
+    )
+
+    with pytest.raises(
+        package_candidate.PackageCandidateError,
+        match="plaintext private-key material",
     ):
         package_candidate._validate_candidate(candidate)
 

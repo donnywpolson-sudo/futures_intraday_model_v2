@@ -198,8 +198,17 @@ to the ignored v2-local `api.env`.
 
 The cockpit provides search/grouping, live charts, history controls, bounded
 cache, persisted preferences, explicit provider errors, prediction abstention,
-and all 41 approved markets. It is observation-only: it contains no broker,
-order, or trading-control interface and creates no auto-start entry.
+and all 41 approved markets. It now also displays a gated MFF/Tradovate
+execution-capability panel and a disabled supervised ticket. Normal startup is
+still `OBSERVATION_ONLY`: no Tradovate client is created, execution starts
+disarmed, and entitlement, account binding, fees, compliance feeds, production
+readiness, and authorization remain false. The deterministic local simulator
+is synthetic-only and is never described as MFF execution.
+
+See [`docs/MFF_TRADOVATE_EXECUTION.md`](docs/MFF_TRADOVATE_EXECUTION.md) for
+execution modes, official-source distinctions, credential storage, account
+binding, reconciliation, emergency behavior, blockers, self-check, packaging,
+and the separate authorization required for future provider smokes.
 
 Do not run a provider-backed smoke or replace shortcuts without one
 plain-language confirmation. High-risk CLIs prepare a scope summary only;

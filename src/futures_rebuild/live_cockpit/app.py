@@ -35,6 +35,9 @@ from .engine import (
     LiveCockpitEngine,
 )
 from .market_groups import load_alpha_tier_grouping
+from .execution.runtime import ExecutionRuntime
+from .execution.fake import LocalExecutionSimulator
+from .single_instance import SingleInstance
 
 
 APP_NAME = "Futures Live Cockpit"
@@ -228,6 +231,7 @@ def self_check(*, env: Mapping[str, str] | None = None) -> dict[str, Any]:
         and all(imports.values())
         and cache_writeable
     )
+    execution_runtime = ExecutionRuntime(root=ROOT)
     return {
         "status": "PASS" if core_pass and webview2_runtime else "FAIL",
         "provider_connection_opened": False,
@@ -246,11 +250,18 @@ def self_check(*, env: Mapping[str, str] | None = None) -> dict[str, Any]:
         "credential_locator_present": locator_present,
         "credential_locator_valid": None,
         "credential_error": None,
+        "execution": execution_runtime.self_check_payload(),
     }
 
 
 class CockpitController:
-    def __init__(self, engine: CockpitEngine, *, state_path: Path) -> None:
+    def __init__(
+        self,
+        engine: CockpitEngine,
+        *,
+        state_path: Path,
+        execution_runtime: ExecutionRuntime | None = None,
+    ) -> None:
         self.engine = engine
         self.state_path = state_path
         self.window: object | None = None
@@ -261,6 +272,7 @@ class CockpitController:
         self._stop_complete = threading.Event()
         self._pending: list[dict[str, Any]] = []
         self._lock = threading.RLock()
+        self.execution_runtime = execution_runtime
 
     def attach_window(self, window: object) -> None:
         self.window = window
@@ -278,6 +290,10 @@ class CockpitController:
                 )
                 self.engine.set_visual_update_mode(visual_mode)
                 payload["ui_preferences"] = preferences
+                if self.execution_runtime is not None:
+                    payload["execution_capability"] = (
+                        self.execution_runtime.capability_payload()
+                    )
             if not self._started:
                 self._started = True
                 threading.Thread(
@@ -398,6 +414,15 @@ class CockpitController:
             self._fullscreen = not current
             return {"ok": True, "fullscreen": self._fullscreen}
 
+    def preview_order_intent(self, payload: object) -> dict[str, Any]:
+        if self.execution_runtime is None or not isinstance(payload, Mapping):
+            return {
+                "ok": False,
+                "authoritative_maximum": 0,
+                "blockers": ["EXECUTION_RUNTIME_UNAVAILABLE"],
+            }
+        return self.execution_runtime.preview_order(payload)
+
     def request_stop(self, *_args: object) -> None:
         with self._lock:
             if self._stop_started:
@@ -413,6 +438,8 @@ class CockpitController:
         try:
             self.engine.stop()
         finally:
+            if self.execution_runtime is not None:
+                self.execution_runtime.shutdown()
             self._stop_complete.set()
 
     def stop(self, *_args: object) -> None:
@@ -462,6 +489,9 @@ class CockpitApi:
     def toggle_fullscreen(self) -> dict[str, bool]:
         return self._controller.toggle_fullscreen()
 
+    def preview_order_intent(self, payload: object) -> dict[str, Any]:
+        return self._controller.preview_order_intent(payload)
+
 
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
@@ -492,24 +522,39 @@ def run_desktop(*, engine: CockpitEngine, state_path: Path, demo: bool) -> int:
         print("Missing pywebview; install the cockpit runtime dependencies.", file=sys.stderr)
         return 2
 
-    asset_target = desktop_asset_target(demo=demo)
-    controller = CockpitController(engine, state_path=state_path)
-    api = CockpitApi(controller)
-    window = webview.create_window(
-        APP_NAME,
-        url=asset_target,
-        js_api=api,
-        width=1366,
-        height=768,
-        min_size=(960, 640),
-        background_color="#09111d",
-    )
-    controller.attach_window(window)
-    window.events.closed += controller.request_stop
+    instance = SingleInstance(state_path.with_name("cockpit-instance.lock"))
+    if not instance.acquire():
+        print("Futures Live Cockpit is already running.", file=sys.stderr)
+        return 3
+    controller: CockpitController | None = None
     try:
+        asset_target = desktop_asset_target(demo=demo)
+        execution_runtime = ExecutionRuntime(
+            root=ROOT,
+            adapter=LocalExecutionSimulator() if demo else None,
+        )
+        controller = CockpitController(
+            engine,
+            state_path=state_path,
+            execution_runtime=execution_runtime,
+        )
+        api = CockpitApi(controller)
+        window = webview.create_window(
+            APP_NAME,
+            url=asset_target,
+            js_api=api,
+            width=1366,
+            height=768,
+            min_size=(960, 640),
+            background_color="#09111d",
+        )
+        controller.attach_window(window)
+        window.events.closed += controller.request_stop
         webview.start(gui="edgechromium", debug=False, http_server=True)
     finally:
-        controller.stop()
+        if controller is not None:
+            controller.stop()
+        instance.release()
     return 0
 
 
@@ -538,11 +583,6 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
-    if not args.demo:
-        raise SystemExit(
-            "BLOCKED: live cockpit launch requires an approved Codex high-risk task; use --prepare-live-smoke first"
-        )
-
     root = app_data_dir()
     state_path = root / STATE_FILENAME
     persisted = load_state(state_path)

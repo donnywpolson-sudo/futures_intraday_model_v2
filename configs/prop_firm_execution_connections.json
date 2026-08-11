@@ -1,0 +1,72 @@
+{
+  "schema_version": "prop_firm_execution_connections/1.0.0",
+  "active_connection_id": "mff_tradovate_candidate_2026_08_11",
+  "startup_mode": "OBSERVATION_ONLY",
+  "connections": {
+    "mff_tradovate_candidate_2026_08_11": {
+      "connection_schema_id": "mff_tradovate_connection/1.0.0",
+      "provider_id": "my_funded_futures",
+      "platform_id": "tradovate",
+      "selected_implementation_candidate": true,
+      "entitlement_status": "UNCONFIRMED",
+      "api_key_generation_confirmed": false,
+      "rest_access_confirmed": false,
+      "websocket_access_confirmed": false,
+      "order_permission_confirmed": false,
+      "authentication_method": "UNCONFIRMED_FOR_MFF_ISSUED_USER",
+      "manual_order_is_automated_treatment": "UNCONFIRMED",
+      "generic_service_roots": {
+        "demo_rest": "https://demo.tradovateapi.com/v1",
+        "demo_websocket": "wss://demo.tradovateapi.com/v1/websocket",
+        "live_rest": "https://live.tradovateapi.com/v1",
+        "live_websocket": "wss://live.tradovateapi.com/v1/websocket"
+      },
+      "stage_bindings": {
+        "evaluation": {
+          "endpoint_environment": "UNCONFIRMED",
+          "exact_account_binding": "UNSET",
+          "execution_authorized": false
+        },
+        "sim_funded": {
+          "endpoint_environment": "UNCONFIRMED",
+          "exact_account_binding": "UNSET",
+          "execution_authorized": false
+        },
+        "live": {
+          "endpoint_environment": "UNCONFIRMED",
+          "exact_account_binding": "UNSET",
+          "execution_authorized": false
+        }
+      },
+      "official_cost_profile": "UNSET",
+      "production_readiness": false,
+      "read_only_authorized": false,
+      "execution_authorized": false,
+      "credential_reference": {
+        "mechanism": "WINDOWS_CREDENTIAL_MANAGER",
+        "target_name": "futures_intraday_model_v2/tradovate",
+        "configured": false
+      },
+      "blockers": [
+        "MFF_CUSTOM_API_PERMISSION_UNCONFIRMED",
+        "TRADOVATE_API_ENTITLEMENT_UNCONFIRMED",
+        "MFF_AUTHENTICATION_METHOD_UNCONFIRMED",
+        "MFF_STAGE_ENDPOINTS_UNCONFIRMED",
+        "EXACT_ACCOUNT_BINDING_UNSET",
+        "MANUAL_ORDER_AUTOMATION_FLAG_UNCONFIRMED",
+        "OFFICIAL_MFF_PLATFORM_FEES_UNSET",
+        "LIVE_EVENT_CALENDAR_NOT_BOUND",
+        "LIVE_SESSION_CALENDAR_NOT_BOUND",
+        "LIVE_PRICE_LIMIT_FEED_NOT_BOUND",
+        "STRATEGY_POLICY_NOT_OOS_PROMOTED",
+        "PROVIDER_SMOKE_NOT_AUTHORIZED"
+      ],
+      "authority": {
+        "provider_connection": false,
+        "account_query": false,
+        "order_change": false,
+        "trading": false
+      }
+    }
+  }
+}

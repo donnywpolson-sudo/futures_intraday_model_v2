@@ -702,6 +702,7 @@ a:focus-visible {
 
 .forecast-card,
 .health-card,
+.execution-card,
 .forecast-details {
   border: 1px solid var(--line);
   border-radius: 9px;
@@ -709,9 +710,41 @@ a:focus-visible {
 }
 
 .forecast-card,
-.health-card { padding: 12px; }
 .health-card,
+.execution-card { padding: 12px; }
+.health-card,
+.execution-card,
 .forecast-details { margin-top: 10px; }
+
+.execution-card { display: grid; gap: 10px; }
+.execution-banner { padding: 8px 9px; border: 1px solid rgba(240, 111, 121, 0.34); border-radius: 7px; background: rgba(240, 111, 121, 0.08); color: #ffb2b9; font-size: 10px; font-weight: 800; letter-spacing: 0.06em; text-align: center; }
+.execution-banner.simulator { border-color: rgba(230, 184, 92, 0.38); background: rgba(230, 184, 92, 0.08); color: var(--warning); }
+.execution-status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0; }
+.execution-status-grid div { display: grid; min-width: 0; gap: 2px; }
+.execution-status-grid dt,
+.order-ticket label,
+.ticket-estimates dt { color: var(--muted); font-size: 9px; font-weight: 650; }
+.execution-status-grid dd,
+.ticket-estimates dd { margin: 0; overflow: hidden; color: var(--text); font-size: 10px; text-overflow: ellipsis; white-space: nowrap; }
+.execution-collections { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.execution-collections span { padding: 6px; border: 1px solid var(--line); border-radius: 6px; color: var(--muted); font-size: 9px; text-align: center; }
+.execution-collections strong { color: var(--text); }
+.order-ticket { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin: 0; padding: 9px; border: 1px solid var(--line); border-radius: 7px; }
+.order-ticket legend { padding: 0 4px; color: var(--muted-2); font-size: 9px; font-weight: 750; letter-spacing: 0.05em; text-transform: uppercase; }
+.order-ticket label { display: grid; gap: 3px; }
+.order-ticket label em { color: var(--error); font-size: 8px; font-style: normal; }
+.order-ticket input,
+.order-ticket select { min-width: 0; padding: 6px; border: 1px solid var(--line); border-radius: 5px; background: #09131f; color: var(--text); font: inherit; }
+.order-ticket[disabled] { opacity: 0.58; }
+.order-ticket button { grid-column: 1 / -1; padding: 7px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-soft); color: var(--muted-2); }
+.ticket-estimates { display: grid; grid-column: 1 / -1; grid-template-columns: 1fr 1fr; gap: 6px; margin: 2px 0; }
+.ticket-estimates div { display: grid; gap: 2px; }
+.emergency-controls { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.emergency-controls button { padding: 6px; border: 1px solid rgba(240, 111, 121, 0.22); border-radius: 5px; background: rgba(240, 111, 121, 0.04); color: var(--muted-2); font-size: 9px; }
+.execution-blockers { display: grid; gap: 5px; }
+.execution-blockers > strong { color: var(--warning); font-size: 9px; letter-spacing: 0.04em; text-transform: uppercase; }
+.execution-blockers ul { display: grid; gap: 3px; max-height: 92px; margin: 0; padding: 7px 7px 7px 20px; overflow: auto; border: 1px solid rgba(230, 184, 92, 0.18); border-radius: 6px; background: rgba(230, 184, 92, 0.035); color: var(--muted-2); font-size: 9px; }
+.execution-warning { margin: 0; color: var(--muted-2); font-size: 9px; line-height: 1.45; }
 
 .forecast-status-line,
 .panel-section-heading {

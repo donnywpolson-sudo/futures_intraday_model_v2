@@ -1,7 +1,7 @@
 (() => {
   "use strict";
 
-  const PROTOCOL_VERSION = 1;
+  const PROTOCOL_VERSION = 2;
   const TIMEFRAME_SECONDS = {
     "1m": 60,
     "5m": 300,
@@ -73,6 +73,7 @@
     sessionMarkers: [],
     sessionBoundaryRenderQueued: false,
     sessionResizeObserver: null,
+    chartResizeFrame: null,
     latestBar: null,
     bridgeReady: false,
     browserDemo: false,
@@ -110,6 +111,7 @@
     prediction: null,
     predictionMarkers: null,
     dataHealth: null,
+    executionCapability: null,
     alphaTierGroupingAvailable: false,
     alphaTierGroups: [],
     draggedMarketGroup: null,
@@ -212,7 +214,62 @@
     historyCacheConfirm: document.getElementById("history-cache-confirm"),
     historyCachePause: document.getElementById("history-cache-pause"),
     historyCacheRetry: document.getElementById("history-cache-retry"),
+    executionBanner: document.getElementById("execution-banner"),
+    executionArmState: document.getElementById("execution-arm-state"),
+    executionMode: document.getElementById("execution-mode"),
+    executionOrigin: document.getElementById("execution-origin"),
+    executionProfile: document.getElementById("execution-profile"),
+    executionStage: document.getElementById("execution-stage"),
+    executionConnection: document.getElementById("execution-connection"),
+    executionEntitlement: document.getElementById("execution-entitlement"),
+    executionAccount: document.getElementById("execution-account"),
+    executionCosts: document.getElementById("execution-costs"),
+    executionBrokerAge: document.getElementById("execution-broker-age"),
+    executionMarketAge: document.getElementById("execution-market-age"),
+    executionNewsAge: document.getElementById("execution-news-age"),
+    executionSessionAge: document.getElementById("execution-session-age"),
+    executionLimitAge: document.getElementById("execution-limit-age"),
+    executionBlockerList: document.getElementById("execution-blocker-list"),
+    executionMaxQuantity: document.getElementById("execution-max-quantity"),
+    executionFooterPill: document.getElementById("execution-footer-pill"),
   };
+
+  function executionLabel(value) {
+    return String(value || "UNKNOWN").replaceAll("_", " ");
+  }
+
+  function renderExecution() {
+    const capability = state.executionCapability;
+    if (!capability) return;
+    const simulator = capability.mode === "LOCAL_EXECUTION_SIMULATOR";
+    const stageLabel = executionLabel(capability.account_stage);
+    elements.executionBanner.textContent = simulator
+      ? "LOCAL SIMULATOR - SYNTHETIC ONLY"
+      : `MFF ${stageLabel} - EXECUTION DISABLED`;
+    elements.executionBanner.classList.toggle("simulator", simulator);
+    elements.executionArmState.textContent = capability.armed ? "ARMED" : "DISARMED";
+    elements.executionMode.textContent = executionLabel(capability.mode);
+    elements.executionOrigin.textContent = executionLabel(capability.origin);
+    elements.executionProfile.textContent = capability.profile_id;
+    elements.executionStage.textContent = stageLabel;
+    elements.executionConnection.textContent = capability.provider_connection_opened ? "CONNECTED" : "NOT CONNECTED";
+    elements.executionEntitlement.textContent = capability.entitlement_status;
+    elements.executionAccount.textContent = capability.account_binding_present ? capability.account_binding_id : "UNBOUND";
+    elements.executionCosts.textContent = capability.exact_costs_verified ? capability.cost_profile_id : "UNSET / UNVERIFIED";
+    elements.executionBrokerAge.textContent = "NOT AVAILABLE";
+    elements.executionMarketAge.textContent = state.dataHealth?.last_bar_time ? relativeTime(state.dataHealth.last_bar_time) : "WAITING";
+    elements.executionNewsAge.textContent = "NOT BOUND";
+    elements.executionSessionAge.textContent = "NOT BOUND";
+    elements.executionLimitAge.textContent = "NOT BOUND";
+    elements.executionMaxQuantity.textContent = "0";
+    elements.executionFooterPill.textContent = `${executionLabel(capability.mode)} - ${capability.armed ? "ARMED" : "DISARMED"}`;
+    const blockers = Array.isArray(capability.blockers) ? capability.blockers : [];
+    elements.executionBlockerList.replaceChildren(...blockers.map((reason) => {
+      const item = document.createElement("li");
+      item.textContent = executionLabel(reason);
+      return item;
+    }));
+  }
 
   function statusClass(value) {
     return STATUS_CLASS[String(value || "WAITING").toUpperCase()] || "waiting";
@@ -246,7 +303,7 @@
     const LWC = window.LightweightCharts;
     const localTime = window.CockpitTime;
     state.chart = LWC.createChart(elements.chart, {
-      autoSize: true,
+      autoSize: false,
       layout: {
         background: { type: LWC.ColorType ? LWC.ColorType.Solid : "solid", color: "transparent" },
         textColor: "#8493a8",
@@ -356,9 +413,30 @@
       timeScale.subscribeVisibleLogicalRangeChange(queueSessionBoundaryRender);
     }
     if (window.ResizeObserver) {
-      state.sessionResizeObserver = new ResizeObserver(queueSessionBoundaryRender);
+      state.sessionResizeObserver = new ResizeObserver(queueChartResize);
       state.sessionResizeObserver.observe(elements.chart);
     }
+    queueChartResize();
+  }
+
+  function resizeChartToContainer() {
+    state.chartResizeFrame = null;
+    if (!state.chart) return;
+    const width = Math.floor(elements.chart.clientWidth);
+    const height = Math.floor(elements.chart.clientHeight);
+    if (width <= 0 || height <= 0) return;
+    state.chart.resize(width, height, true);
+    queueSessionBoundaryRender();
+  }
+
+  function queueChartResize() {
+    if (state.chartResizeFrame !== null) return;
+    state.chartResizeFrame = window.requestAnimationFrame(resizeChartToContainer);
+  }
+
+  function settleFullscreenChartLayout() {
+    resizeChartToContainer();
+    if (state.chart) state.chart.timeScale().fitContent();
   }
 
   function sessionBoundaryKind(marker) {
@@ -580,6 +658,9 @@
   function setPanelOpen(open, { persist = false } = {}) {
     state.panelOpen = Boolean(open);
     elements.workspaceContent.classList.toggle("panel-collapsed", !state.panelOpen);
+    elements.workspaceContent.style.gridTemplateColumns = state.panelOpen
+      ? "minmax(0, 1fr) 304px"
+      : "minmax(0, 1fr) 44px";
     elements.predictionRail.setAttribute("aria-expanded", String(state.panelOpen));
     elements.predictionPanelToggle.setAttribute("aria-expanded", String(state.panelOpen));
     elements.predictionPanelToggle.setAttribute(
@@ -734,6 +815,8 @@
       ? "Exit full screen (F11)"
       : "Enter full screen (F11)";
     if (label) label.textContent = state.fullscreen ? "Exit full screen" : "Full screen";
+    queueChartResize();
+    window.setTimeout(settleFullscreenChartLayout, 160);
   }
 
   async function toggleFullscreen() {
@@ -891,6 +974,9 @@
 
   function renderMarkets() {
     const query = elements.marketSearch.value.trim().toLowerCase();
+    const exactSymbolQuery = Boolean(query) && state.markets.some(
+      (market) => market.symbol.toLowerCase() === query,
+    );
     const mode = activeGroupingMode();
     updateGroupingControls();
     const groups = canonicalMarketGroups(mode);
@@ -903,7 +989,9 @@
       if (!group) return;
       const groupMarkets = group.markets.filter((market) => {
         if (!query) return true;
-        return market.symbol.toLowerCase().includes(query)
+        const symbol = market.symbol.toLowerCase();
+        if (exactSymbolQuery) return symbol === query;
+        return symbol.includes(query)
           || String(market.family || "").toLowerCase().includes(query)
           || group.label.toLowerCase().includes(query);
       });
@@ -1338,6 +1426,7 @@
     state.timeframe = payload.timeframe || "1m";
     state.timeframes = Array.isArray(payload.timeframes) ? payload.timeframes : Object.keys(TIMEFRAME_SECONDS);
     state.mode = payload.mode || "live";
+    state.executionCapability = payload.execution_capability || state.executionCapability;
     state.predictionCapability = payload.prediction_capability || {
       mode: "offline",
       synthetic: false,
@@ -1357,6 +1446,7 @@
     applyUiPreferences(payload.ui_preferences || {});
     clearSelectionContext();
     renderTimeframes();
+    renderExecution();
     renderMarkets();
     initializeChart();
     if (state.startupWatchdog) window.clearTimeout(state.startupWatchdog);
@@ -1509,6 +1599,10 @@
     else if (message.type === "data_health") applyDataHealth(message.payload);
     else if (message.type === "prediction_update") applyPrediction(message.payload);
     else if (message.type === "history_cache_status") applyHistoryCacheStatus(message.payload);
+    else if (message.type === "execution_capability" || message.type === "execution_readiness") {
+      state.executionCapability = message.payload;
+      renderExecution();
+    }
   }
 
   function newestCurrentBarEventAge(messages, nowMs) {
@@ -1751,12 +1845,12 @@
     const contract = `${market}M6`;
     const instrumentId = 100_000 + Math.max(0, DEMO_MARKETS.findIndex(([symbol]) => symbol === market));
     receive({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "chart_snapshot",
       payload: { market, contract, timeframe, bars, markers: [], source: "browser demo", generation: state.generation },
     });
-    receive({ v: 1, type: "data_health", payload: browserDemoHealth(market, contract, instrumentId, timeframe, bars) });
-    receive({ v: 1, type: "prediction_update", payload: browserDemoPrediction(market, contract, instrumentId, timeframe, bars) });
+    receive({ v: PROTOCOL_VERSION, type: "data_health", payload: browserDemoHealth(market, contract, instrumentId, timeframe, bars) });
+    receive({ v: PROTOCOL_VERSION, type: "prediction_update", payload: browserDemoPrediction(market, contract, instrumentId, timeframe, bars) });
     setFocusStatus("LIVE", "Deterministic demo stream active");
   }
 
@@ -1778,7 +1872,7 @@
       };
     });
     receive({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "bootstrap",
       payload: {
         markets,
@@ -1802,10 +1896,20 @@
           adaptive_floor_hz: VISUAL_UPDATE_HZ.efficient,
         },
         ui_preferences: {},
+        execution_capability: {
+          mode: "LOCAL_EXECUTION_SIMULATOR", origin: "LOCAL_SIMULATOR", simulated: true,
+          provider_id: "my_funded_futures", platform_id: "tradovate", profile_id: "mff_rapid_eod_50k_2026_08_10",
+          account_stage: "sim_funded", connection_id: "LOCAL-SIMULATOR", connection_hash: "0".repeat(64),
+          entitlement_status: "NOT_APPLICABLE_LOCAL_SIMULATOR", account_binding_present: false, account_binding_id: null,
+          cost_profile_id: "mff_micro_provisional_stress_v1", exact_costs_verified: false, production_readiness: false,
+          execution_authorized: false, order_paths_reachable: false, provider_connection_opened: false, armed: false,
+          arm_expires_at: null, blockers: ["LOCAL_SIMULATOR_NOT_PROVIDER_EXECUTION", "ORDER_ENTRY_DISABLED_IN_BROWSER_DEMO"],
+          verified_micro_mappings: ["MES", "MCL", "M6E"], disabled_signal_roots: ["ZN"],
+        },
       },
     });
     receive({
-      v: 1,
+      v: PROTOCOL_VERSION,
       type: "history_cache_status",
       payload: {
         state: "COMPLETE",
@@ -1976,6 +2080,7 @@
     renderDataHealth();
   }
   window.addEventListener("resize", () => {
+    queueChartResize();
     if (!state.panelPreferenceExplicit) setPanelOpen(window.innerWidth >= 1440);
   });
   applyUiPreferences({});
