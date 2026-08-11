@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import importlib.metadata
 import json
 import os
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -29,8 +32,9 @@ PLAN_SCHEMA = "live_cockpit_package_candidate_plan/1.1.0"
 APPROVAL_SCHEMA = "live_cockpit_package_candidate_approval/1.1.0"  # historic reader
 CONFIRMATION_SCHEMA = "live_cockpit_package_candidate_confirmation/2.0.0"
 INVENTORY_SCHEMA = "live_cockpit_package_candidate_inventory/1.1.0"
-CANDIDATE_SCHEMA = "live_cockpit_package_candidate_receipt/1.1.0"
+CANDIDATE_SCHEMA = "live_cockpit_package_candidate_receipt/1.2.0"
 TERMINAL_SCHEMA = "live_cockpit_package_candidate_terminal/1.1.0"
+PRIVATE_KEY_SCANNER_VERSION = "structured-private-key-scanner/1.0.0"
 OPERATION = "RUN_LIVE_COCKPIT_PACKAGE_CANDIDATE"
 MAX_DURATION_SECONDS = 900
 SELF_CHECK_TIMEOUT_SECONDS = 60
@@ -153,16 +157,61 @@ FORBIDDEN_PACKAGE_PATH_PARTS = frozenset(
         "execution_binding.json",
     }
 )
-PRIVATE_KEY_HEADERS = (
-    b"-----BEGIN PRIVATE KEY-----",
-    b"-----BEGIN RSA PRIVATE KEY-----",
-    b"-----BEGIN EC PRIVATE KEY-----",
-    b"-----BEGIN OPENSSH PRIVATE KEY-----",
+PRIVATE_KEY_LABELS = (
+    "PRIVATE KEY",
+    "RSA PRIVATE KEY",
+    "EC PRIVATE KEY",
+    "DSA PRIVATE KEY",
+    "OPENSSH PRIVATE KEY",
+    "ENCRYPTED PRIVATE KEY",
+    "PGP PRIVATE KEY BLOCK",
 )
+PRIVATE_KEY_ENCODINGS = (
+    ("ASCII", "ascii"),
+    ("UTF-16LE", "utf-16le"),
+    ("UTF-16BE", "utf-16be"),
+)
+TEXT_LIKE_SUFFIXES = frozenset(
+    {
+        ".bat",
+        ".cfg",
+        ".cmd",
+        ".conf",
+        ".css",
+        ".csv",
+        ".env",
+        ".html",
+        ".ini",
+        ".js",
+        ".json",
+        ".log",
+        ".md",
+        ".ps1",
+        ".py",
+        ".spec",
+        ".toml",
+        ".tsv",
+        ".txt",
+        ".xml",
+        ".yaml",
+        ".yml",
+    }
+)
+NATIVE_SUFFIXES = frozenset({".dll", ".exe", ".pyd"})
+MAX_PRIVATE_KEY_BLOCK_BYTES = 1024 * 1024
+MIN_PRIVATE_KEY_PAYLOAD_CHARS = 32
 
 
 class PackageCandidateError(RuntimeError):
     """The package-candidate contract is absent, stale, or violated."""
+
+
+class PrivateKeyScanError(PackageCandidateError):
+    """A package contains a fail-closed private-key scanner finding."""
+
+    def __init__(self, result: Mapping[str, Any]) -> None:
+        super().__init__("candidate contains rejected private-key material")
+        self.result = dict(result)
 
 
 def _repo_root() -> Path:
@@ -203,7 +252,7 @@ def _input_hashes(root: Path) -> list[dict[str, Any]]:
     ]
 
 
-def _validate_dependency_lock(root: Path) -> str:
+def _validated_dependency_receipt(root: Path) -> dict[str, Any]:
     path = root / "configs/dependency_lock_receipt.json"
     try:
         receipt = json.loads(path.read_text(encoding="utf-8"))
@@ -245,7 +294,11 @@ def _validate_dependency_lock(root: Path) -> str:
     }
     if actual_packages != runtime["packages"]:
         raise PackageCandidateError("dependency lock package mismatch")
-    return str(receipt["receipt_id"])
+    return dict(receipt)
+
+
+def _validate_dependency_lock(root: Path) -> str:
+    return str(_validated_dependency_receipt(root)["receipt_id"])
 
 
 def _validate_canary(root: Path) -> str:
@@ -410,16 +463,448 @@ def _inventory(candidate: Path) -> tuple[list[dict[str, Any]], int]:
     return files, total_bytes
 
 
-def _contains_private_key(path: Path) -> bool:
-    overlap = max(len(value) for value in PRIVATE_KEY_HEADERS) - 1
-    previous = b""
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            value = previous + chunk
-            if any(header in value for header in PRIVATE_KEY_HEADERS):
-                return True
-            previous = value[-overlap:]
-    return False
+def _all_offsets(value: bytes, marker: bytes) -> list[int]:
+    offsets: list[int] = []
+    start = 0
+    while True:
+        offset = value.find(marker, start)
+        if offset < 0:
+            return offsets
+        offsets.append(offset)
+        start = offset + len(marker)
+
+
+def _context_sha256(value: bytes, offset: int, marker_size: int) -> str:
+    start = max(0, offset - 64)
+    stop = min(len(value), offset + marker_size + 64)
+    return hashlib.sha256(value[start:stop]).hexdigest()
+
+
+def _is_text_like(path: Path, value: bytes) -> bool:
+    if path.suffix.lower() in TEXT_LIKE_SUFFIXES:
+        return True
+    sample = value[: 64 * 1024]
+    if b"\x00" in sample:
+        return False
+    try:
+        text = sample.decode("utf-8")
+    except UnicodeDecodeError:
+        return False
+    if not text:
+        return True
+    printable = sum(
+        character.isprintable() or character.isspace() for character in text
+    )
+    return printable / len(text) >= 0.90
+
+
+def _unescape_text_with_offsets(value: str) -> tuple[str, list[int]]:
+    decoded: list[str] = []
+    offsets: list[int] = []
+    index = 0
+    simple = {"n": "\n", "r": "\r", "t": "\t", "\\": "\\", '"': '"', "/": "/"}
+    while index < len(value):
+        if value[index] != "\\" or index + 1 >= len(value):
+            decoded.append(value[index])
+            offsets.append(index)
+            index += 1
+            continue
+        kind = value[index + 1]
+        length = 0
+        digits = ""
+        if kind == "u" and index + 6 <= len(value):
+            length = 6
+            digits = value[index + 2 : index + 6]
+        elif kind == "x" and index + 4 <= len(value):
+            length = 4
+            digits = value[index + 2 : index + 4]
+        if length and re.fullmatch(r"[0-9a-fA-F]+", digits):
+            decoded.append(chr(int(digits, 16)))
+            offsets.append(index)
+            index += length
+            continue
+        if kind in simple:
+            decoded.append(simple[kind])
+            offsets.append(index)
+            index += 2
+            continue
+        decoded.append(value[index])
+        offsets.append(index)
+        index += 1
+    return "".join(decoded), offsets
+
+
+def _escaped_text_findings(
+    *, value: bytes, relative: str
+) -> list[dict[str, Any]]:
+    if b"\\" not in value:
+        return []
+    findings: list[dict[str, Any]] = []
+    views: list[tuple[str, str, int]] = [("ESCAPED_UTF-8", "utf-8-sig", 3)]
+    if value.startswith(b"\xff\xfe"):
+        views.append(("ESCAPED_UTF-16LE", "utf-16le", 2))
+    elif value.startswith(b"\xfe\xff"):
+        views.append(("ESCAPED_UTF-16BE", "utf-16be", 2))
+    elif b"\x00" in value[: 64 * 1024]:
+        views.extend(
+            (
+                ("ESCAPED_UTF-16LE", "utf-16le", 0),
+                ("ESCAPED_UTF-16BE", "utf-16be", 0),
+            )
+        )
+    for encoding_label, encoding, possible_bom_size in views:
+        try:
+            text = value.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+        has_bom = (
+            value.startswith(b"\xef\xbb\xbf")
+            if possible_bom_size == 3
+            else value.startswith((b"\xff\xfe", b"\xfe\xff"))
+            if possible_bom_size == 2
+            else False
+        )
+        bom_size = possible_bom_size if has_bom else 0
+        if bom_size == 2 and text.startswith("\ufeff"):
+            text = text[1:]
+        decoded, source_offsets = _unescape_text_with_offsets(text)
+        for label in PRIVATE_KEY_LABELS:
+            marker = f"-----BEGIN {label}-----"
+            start = 0
+            while True:
+                decoded_offset = decoded.find(marker, start)
+                if decoded_offset < 0:
+                    break
+                source_character_offset = source_offsets[decoded_offset]
+                byte_offset = bom_size + len(
+                    text[:source_character_offset].encode(
+                        "utf-8" if encoding == "utf-8-sig" else encoding
+                    )
+                )
+                raw_marker = marker.encode(
+                    "ascii" if encoding == "utf-8-sig" else encoding
+                )
+                if not value[byte_offset:].startswith(raw_marker):
+                    findings.append(
+                        {
+                            "file_relative_path": relative,
+                            "classification": "TEXT_PRIVATE_KEY_MARKER",
+                            "label": label,
+                            "encoding": encoding_label,
+                            "offset": byte_offset,
+                            "context_sha256": _context_sha256(value, byte_offset, 1),
+                            "verification_reason": (
+                                "escaped private-key marker in text-like content"
+                            ),
+                            "dependency": None,
+                        }
+                    )
+                start = decoded_offset + len(marker)
+    return findings
+
+
+def _decode_record_hash(value: str) -> str:
+    padding = "=" * (-len(value) % 4)
+    try:
+        return base64.b64decode(value + padding, altchars=b"-_", validate=True).hex()
+    except (ValueError, base64.binascii.Error) as exc:
+        raise PackageCandidateError(
+            "native dependency RECORD hash is malformed"
+        ) from exc
+
+
+def _normalized_distribution_name(value: str) -> str:
+    return re.sub(r"[-_.]+", "-", value).lower()
+
+
+def _valid_pe(path: Path) -> dict[str, Any]:
+    try:
+        import pefile
+
+        image = pefile.PE(str(path), fast_load=True)
+    except Exception as exc:
+        raise PackageCandidateError(
+            "marker-bearing native dependency is not a valid PE image"
+        ) from exc
+    try:
+        if image.NT_HEADERS.Signature != 0x4550:
+            raise PackageCandidateError(
+                "marker-bearing native dependency is not a valid PE image"
+            )
+        return {
+            "machine": f"0x{image.FILE_HEADER.Machine:04x}",
+            "optional_header_magic": f"0x{image.OPTIONAL_HEADER.Magic:04x}",
+            "sections": int(image.FILE_HEADER.NumberOfSections),
+        }
+    finally:
+        image.close()
+
+
+def _verified_native_dependency(
+    *, root: Path, candidate: Path, path: Path
+) -> dict[str, Any]:
+    relative_parts = path.relative_to(candidate).parts
+    if len(relative_parts) < 3 or relative_parts[0].lower() != "_internal":
+        raise PackageCandidateError(
+            "marker-bearing binary has unknown package ownership"
+        )
+    if path.suffix.lower() not in NATIVE_SUFFIXES:
+        raise PackageCandidateError(
+            "marker-bearing binary is not an expected native dependency"
+        )
+    distribution_relative = "/".join(relative_parts[1:])
+    receipt = _validated_dependency_receipt(root)
+    locked_packages = receipt["runtime"]["packages"]
+    readable_lock_lines = (root / "requirements.lock").read_text(
+        encoding="utf-8"
+    ).splitlines()
+    readable_lock = {
+        _normalized_distribution_name(line.split("==", 1)[0]): line.split("==", 1)[1]
+        for line in readable_lock_lines
+        if line.strip() and not line.lstrip().startswith("#") and "==" in line
+    }
+    hashed_lock: dict[str, dict[str, str]] = {}
+    target_artifact: str | None = None
+    for line in (root / "requirements.sha256.lock").read_text(
+        encoding="utf-8"
+    ).splitlines():
+        if line.startswith(("# target-wheel: ", "# target-sdist: ")):
+            target_artifact = line.split(": ", 1)[1]
+            continue
+        match = re.fullmatch(
+            r"([^\s=]+)==([^\s=]+) --hash=sha256:([0-9a-f]{64})",
+            line.strip(),
+        )
+        if match is not None and target_artifact is not None:
+            hashed_lock[_normalized_distribution_name(match.group(1))] = {
+                "version": match.group(2),
+                "artifact": target_artifact,
+                "sha256": match.group(3),
+            }
+            target_artifact = None
+    owners: list[tuple[str, str, Any, Any]] = []
+    for package, version in locked_packages.items():
+        normalized = _normalized_distribution_name(str(package))
+        if readable_lock.get(normalized) != str(version):
+            continue
+        try:
+            distribution = importlib.metadata.distribution(str(package))
+        except importlib.metadata.PackageNotFoundError:
+            continue
+        if distribution.version != str(version):
+            continue
+        records = [
+            item
+            for item in (distribution.files or [])
+            if str(item).replace("\\", "/").lower()
+            == distribution_relative.lower()
+        ]
+        if len(records) == 1:
+            owners.append((str(package), str(version), distribution, records[0]))
+    if len(owners) != 1:
+        raise PackageCandidateError(
+            "marker-bearing binary has unknown package ownership"
+        )
+    package, version, distribution, record = owners[0]
+    locked_artifact = hashed_lock.get(_normalized_distribution_name(package))
+    if (
+        locked_artifact is None
+        or locked_artifact["version"] != version
+        or not locked_artifact["artifact"].lower().endswith(".whl")
+    ):
+        raise PackageCandidateError(
+            "native dependency is absent from the hashed wheel lock"
+        )
+    if record.hash is None or record.hash.mode != "sha256" or record.size is None:
+        raise PackageCandidateError("native dependency RECORD provenance is incomplete")
+    record_path = Path(str(record))
+    if record_path.is_absolute() or ".." in record_path.parts:
+        raise PackageCandidateError("native dependency RECORD path is unsafe")
+    source = Path(distribution.locate_file(record)).resolve()
+    if (
+        not source.is_file()
+        or source.is_symlink()
+        or bool(getattr(source.stat(), "st_file_attributes", 0) & 0x400)
+    ):
+        raise PackageCandidateError("native dependency source file is unavailable")
+    source_sha256 = sha256_file(source)
+    packaged_sha256 = sha256_file(path)
+    record_sha256 = _decode_record_hash(record.hash.value)
+    if (
+        source.stat().st_size != record.size
+        or record_sha256 != source_sha256
+        or path.stat().st_size != source.stat().st_size
+        or packaged_sha256 != source_sha256
+    ):
+        raise PackageCandidateError("native dependency provenance hash mismatch")
+    pe_metadata = _valid_pe(source)
+    if _valid_pe(path) != pe_metadata:
+        raise PackageCandidateError("packaged native dependency PE metadata mismatch")
+    return {
+        "distribution": package,
+        "version": version,
+        "record_path": str(record).replace("\\", "/"),
+        "record_sha256": record_sha256,
+        "record_size": int(record.size),
+        "source_sha256": source_sha256,
+        "packaged_sha256": packaged_sha256,
+        "candidate_relative_path": path.relative_to(candidate).as_posix(),
+        "dependency_lock_receipt_id": str(receipt["receipt_id"]),
+        "locked_wheel_filename": locked_artifact["artifact"],
+        "locked_wheel_sha256": locked_artifact["sha256"],
+        "native_format": "PE",
+        **pe_metadata,
+    }
+
+
+def _private_key_scan_result(findings: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+    rejected = [
+        item
+        for item in findings
+        if item["classification"] != "VERIFIED_DEPENDENCY_PARSER_LITERAL"
+    ]
+    counts: dict[str, int] = {}
+    for item in findings:
+        classification = str(item["classification"])
+        counts[classification] = counts.get(classification, 0) + 1
+    return {
+        "scanner_version": PRIVATE_KEY_SCANNER_VERSION,
+        "result": (
+            "REJECTED_PRIVATE_KEY_MATERIAL"
+            if rejected
+            else "VERIFIED_DEPENDENCY_PARSER_LITERALS_ONLY"
+            if findings
+            else "NO_PRIVATE_KEY_MATERIAL"
+        ),
+        "classification_counts": dict(sorted(counts.items())),
+        "findings": [dict(item) for item in findings],
+    }
+
+
+def _scan_candidate_private_keys(
+    candidate: Path, *, root: Path | None = None
+) -> dict[str, Any]:
+    selected_root = (root or _repo_root()).resolve()
+    findings: list[dict[str, Any]] = []
+    for path in sorted(item for item in candidate.rglob("*") if item.is_file()):
+        value = path.read_bytes()
+        relative = path.relative_to(candidate).as_posix()
+        text_like = _is_text_like(path, value)
+        path_findings: list[dict[str, Any]] = []
+        for label in PRIVATE_KEY_LABELS:
+            for encoding_label, encoding in PRIVATE_KEY_ENCODINGS:
+                begin = f"-----BEGIN {label}-----".encode(encoding)
+                end = f"-----END {label}-----".encode(encoding)
+                end_offsets = _all_offsets(value, end)
+                for offset in _all_offsets(value, begin):
+                    matching = next(
+                        (
+                            end_offset
+                            for end_offset in end_offsets
+                            if offset
+                            < end_offset
+                            <= offset + MAX_PRIVATE_KEY_BLOCK_BYTES
+                        ),
+                        None,
+                    )
+                    actual = False
+                    suspicious = False
+                    if matching is not None:
+                        payload_bytes = value[offset + len(begin) : matching]
+                        unit = 2 if encoding_label.startswith("UTF-16") else 1
+                        nul_terminated = payload_bytes.startswith(b"\x00" * unit)
+                        try:
+                            payload_text = payload_bytes.decode(encoding)
+                        except UnicodeDecodeError:
+                            payload_text = ""
+                        compact = "".join(payload_text.split())
+                        base64_like = bool(
+                            len(compact) >= MIN_PRIVATE_KEY_PAYLOAD_CHARS
+                            and re.fullmatch(r"[A-Za-z0-9+/]*={0,2}", compact)
+                        )
+                        decoded = b""
+                        if base64_like:
+                            try:
+                                decoded = base64.b64decode(compact, validate=True)
+                            except (ValueError, base64.binascii.Error):
+                                decoded = b""
+                        actual = bool(
+                            decoded
+                            and (
+                                decoded.startswith(b"0")
+                                or decoded.startswith(b"openssh-key-v1\x00")
+                            )
+                        )
+                        boundary_layout = payload_text.startswith(("\r", "\n"))
+                        suspicious = bool(
+                            actual
+                            or boundary_layout
+                            or base64_like
+                            or not nul_terminated
+                        )
+                    if actual:
+                        classification = "ACTUAL_PRIVATE_KEY_MATERIAL"
+                        reason = (
+                            "complete private-key block with decodable key-shaped payload"
+                        )
+                    elif suspicious:
+                        classification = "SUSPICIOUS_COMPLETE_PRIVATE_KEY_BLOCK"
+                        reason = "complete or ambiguous private-key block"
+                    elif text_like:
+                        classification = "TEXT_PRIVATE_KEY_MARKER"
+                        reason = "private-key marker in text-like content"
+                    else:
+                        classification = "UNVERIFIED_BINARY_PRIVATE_KEY_MARKER"
+                        reason = (
+                            "isolated private-key marker lacks verified dependency provenance"
+                        )
+                    path_findings.append(
+                        {
+                            "file_relative_path": relative,
+                            "classification": classification,
+                            "label": label,
+                            "encoding": encoding_label,
+                            "offset": offset,
+                            "context_sha256": _context_sha256(
+                                value, offset, len(begin)
+                            ),
+                            "verification_reason": reason,
+                            "dependency": None,
+                        }
+                    )
+        if text_like:
+            path_findings.extend(
+                _escaped_text_findings(value=value, relative=relative)
+            )
+        unverified = [
+            item
+            for item in path_findings
+            if item["classification"] == "UNVERIFIED_BINARY_PRIVATE_KEY_MARKER"
+        ]
+        if unverified:
+            provenance_failure: str | None = None
+            try:
+                provenance = _verified_native_dependency(
+                    root=selected_root, candidate=candidate, path=path
+                )
+            except PackageCandidateError as exc:
+                provenance = None
+                provenance_failure = str(exc)
+            if provenance is not None:
+                for item in unverified:
+                    item["classification"] = "VERIFIED_DEPENDENCY_PARSER_LITERAL"
+                    item["verification_reason"] = (
+                        "isolated parser literal in exact locked native dependency bytes"
+                    )
+                    item["dependency"] = dict(provenance)
+            elif provenance_failure is not None:
+                for item in unverified:
+                    item["verification_reason"] = provenance_failure
+        findings.extend(path_findings)
+    result = _private_key_scan_result(findings)
+    if result["result"] == "REJECTED_PRIVATE_KEY_MATERIAL":
+        raise PrivateKeyScanError(result)
+    return result
 
 
 def _scoped_path(root: Path, template: str, plan_id: str) -> Path:
@@ -454,7 +939,9 @@ def _validate_path_budget(
     return projected
 
 
-def _validate_candidate(candidate: Path) -> tuple[list[dict[str, Any]], int]:
+def _validate_candidate(
+    candidate: Path, *, root: Path | None = None
+) -> tuple[list[dict[str, Any]], int, dict[str, Any]]:
     if candidate.is_symlink() or bool(
         getattr(candidate.stat(), "st_file_attributes", 0) & 0x400
     ):
@@ -488,14 +975,13 @@ def _validate_candidate(candidate: Path) -> tuple[list[dict[str, Any]], int]:
             forbidden.append(path.relative_to(candidate).as_posix())
     if forbidden:
         raise PackageCandidateError("candidate contains a forbidden secret, binding, or evidence path")
-    if any(_contains_private_key(path) for path in descendants if path.is_file()):
-        raise PackageCandidateError("candidate contains plaintext private-key material")
+    private_key_scan = _scan_candidate_private_keys(candidate, root=root)
     files, total_bytes = _inventory(candidate)
     if not files or len(files) > MAX_CANDIDATE_FILES:
         raise PackageCandidateError("candidate file limit was violated")
     if total_bytes <= 0 or total_bytes > MAX_CANDIDATE_BYTES:
         raise PackageCandidateError("candidate byte limit was violated")
-    return files, total_bytes
+    return files, total_bytes, private_key_scan
 
 
 def _finalize_smoke_plan(candidate: Path) -> tuple[dict[str, Any], Path]:
@@ -686,7 +1172,9 @@ def run_candidate(
             raise PackageCandidateError("package build failed")
         staged_candidate = dist / "FuturesLiveCockpit"
         smoke_plan, smoke_plan_path = _finalize_smoke_plan(staged_candidate)
-        files, total_bytes = _validate_candidate(staged_candidate)
+        files, total_bytes, private_key_scan = _validate_candidate(
+            staged_candidate, root=root
+        )
         self_check_code, self_stdout_sha, self_stderr_sha = _run_process(
             [str(staged_candidate / "FuturesLiveCockpit.exe"), "--self-check"],
             cwd=staged_candidate,
@@ -730,6 +1218,7 @@ def run_candidate(
             "file_count": len(files),
             "total_bytes": total_bytes,
             "self_check": "PASS",
+            "private_key_scan": private_key_scan,
             "provider_connection_opened": False,
             "credential_source_read": False,
             "install_ready": False,
@@ -749,6 +1238,7 @@ def run_candidate(
                 "inventory_sha256": candidate_receipt["inventory_sha256"],
                 "file_count": len(files),
                 "total_bytes": total_bytes,
+                "private_key_scan": private_key_scan,
             }
         )
         existing_hash = sha256_file(
@@ -765,6 +1255,9 @@ def run_candidate(
         terminal_state = "CANDIDATE_VERIFIED"
         category = None
         shutil.rmtree(scratch_root)
+    except PrivateKeyScanError as exc:
+        category = "PRIVATE_KEY_SCAN_REJECTED"
+        details["private_key_scan"] = exc.result
     except PackageCandidateError as exc:
         if str(exc) == "bounded process timed out":
             category = "TIMEOUT"

@@ -120,6 +120,35 @@ is byte-for-byte identical to the original installed tree. It also verifies
 the published tree against the validated candidate tree before reporting
 success.
 
+The packaged cockpit retains the locked PyArrow dependency. Databento 0.78.0
+declares PyArrow as a runtime dependency, and the supported cockpit history
+path converts DBN stores to pandas frames. Removing PyArrow from the executable
+would therefore break the declared Databento runtime closure.
+
+The mandatory package validator distinguishes a private-key object from an
+isolated parser-format literal without granting any native-binary exemption.
+Complete or ambiguous private-key blocks always fail, including ASCII or
+UTF-16 blocks embedded in a DLL, executable, source/configuration file, or
+other binary. An isolated marker in text-like content also fails. An isolated
+marker in a native dependency is non-secret only when package metadata proves
+the exact distribution and version, its wheel `RECORD` path/hash/size, the
+repository dependency-lock receipt, a valid expected PE image, the expected
+package-relative ownership path, and byte-identical source-versus-packaged
+hashes. Missing provenance, a rename, substitution, version change, one-byte
+change, appended content, or an unknown owner fails closed.
+
+There is intentionally no filename-only or path-only exception for
+`arrow.dll`. A PyArrow upgrade invalidates the prior source hash and `RECORD`
+binding and must pass fresh package validation. Candidate receipts use
+`live_cockpit_package_candidate_receipt/1.2.0` and record the scanner version,
+overall result, classification counts, and safe findings containing only the
+relative path, classification, label, byte offset, bounded-context hash,
+verification reason, and dependency provenance. They never contain a key
+payload. Current safe native findings are classified
+`VERIFIED_DEPENDENCY_PARSER_LITERAL`; rejected classifications remain
+`ACTUAL_PRIVATE_KEY_MATERIAL`, `SUSPICIOUS_COMPLETE_PRIVATE_KEY_BLOCK`,
+`TEXT_PRIVATE_KEY_MARKER`, or `UNVERIFIED_BINARY_PRIVATE_KEY_MARKER`.
+
 The preparation commands only print a bounded, hash-bound scope. They do not
 authenticate or connect. A future read-only smoke requires separate approval
 for exact executable/config hashes, endpoint, stage, operations, duration, and
