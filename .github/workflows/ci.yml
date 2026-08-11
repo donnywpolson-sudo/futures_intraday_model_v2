@@ -39,6 +39,7 @@ jobs:
           $basetemp = Join-Path $env:RUNNER_TEMP "ci-provider-free-current"
           python -m pytest -q --basetemp=$basetemp `
             tests/test_dependency_lock.py `
+            tests/test_repository_surface.py `
             tests/test_workflow_lanes.py `
             tests/test_operational_documents.py::test_current_documents_use_one_plain_language_workflow_surface `
             tests/test_operational_documents.py::test_agents_requires_a_value_case_for_new_policy_controls `
