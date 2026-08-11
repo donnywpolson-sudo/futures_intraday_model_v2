@@ -8,7 +8,6 @@ from futures_rebuild.canonical import sha256_file
 from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 from futures_rebuild.tier1_phase8_real_adapter import (
     _approved_real_read_for_codex_task,
-    _read_pinned_rows_after_approval,
     convert_pinned_source_bars_to_execution_rows,
     derive_fold_local_directions,
     schedule_one_contract_execution_rows,
@@ -19,7 +18,6 @@ from futures_rebuild.tier1_phase8_real_adapter import (
 from futures_rebuild.tier1_phase8_evaluation_config import load_tier1_phase8_evaluation_config
 from futures_rebuild.tier1_phase8_evaluator import Phase8SyntheticTrade, evaluate_tier1_phase8_synthetic
 from futures_rebuild.tier1_phase8_runner import (
-    _publish_reports_after_approval,
     build_phase8_evaluation_reports,
 )
 
@@ -87,11 +85,8 @@ def test_adapter_pins_hashes_but_rejects_direct_real_row_access(tmp_path: Path) 
     with pytest.raises(UnauthorizedOperation, match="Codex confirmation required"):
         read_pinned_phase8_rows(pinned=pinned)
 
-    rows = _read_pinned_rows_after_approval(
-        approved_read=_approved_real_read_for_codex_task(), pinned=pinned
-    )
-    assert len(rows) == 1
-    assert rows[0]["market"] == "ES"
+    with pytest.raises(UnauthorizedOperation, match="is retired"):
+        _approved_real_read_for_codex_task()
 
 
 def test_adapter_rejects_changed_prediction_payload(tmp_path: Path) -> None:
@@ -275,11 +270,5 @@ def test_report_payloads_are_provisional_and_create_once(tmp_path: Path) -> None
     reports = build_phase8_evaluation_reports(pinned=pinned, evaluation=result, preparation_id="e" * 64)
     assert reports.model_selection["result_label"] == "PROVISIONAL_EXECUTION_COSTS"
     assert reports.model_selection["cost_scenarios"]["base"]["identical_fixed_risk_comparator_matches"] is True
-    paths = _publish_reports_after_approval(
-        approved_read=_approved_real_read_for_codex_task(), root=tmp_path, reports=reports
-    )
-    assert all(path.is_file() for path in paths)
-    with pytest.raises(IntegrityError, match="collision"):
-        _publish_reports_after_approval(
-            approved_read=_approved_real_read_for_codex_task(), root=tmp_path, reports=reports
-        )
+    with pytest.raises(UnauthorizedOperation, match="is retired"):
+        _approved_real_read_for_codex_task()

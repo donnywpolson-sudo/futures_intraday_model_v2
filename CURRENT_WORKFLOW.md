@@ -69,11 +69,48 @@ when it times out or produces no report. A successor must use a new immutable
 plan and approval; it may not silently reuse the consumed claim.
 The cockpit remains observation-only and credentials remain outside Git.
 
-## Phase 8 risk default
+When present, the machine-local accepted micro-contract source catalog is the
+immutable legacy publication at `data/active/catalogs/apex_micro.json`. Its
+pointer and catalog are exact local evidence, not tracked checkout inputs and
+not dependencies of the canonical `current` test lane. Exact-byte checks run
+only in the fail-closed `local_evidence` lane with an explicit hash manifest.
+New code and prospective artifacts use the `micro_futures_*` namespace. The prepare-only generic cutover
+plan is `configs/micro_futures_catalog_migration_plan_v1.json`; creating its
+proposed catalog or pointer is a separate active-data mutation and is not
+authorized by ordinary local work. See `docs/NAMING_AND_LINEAGE.md`.
 
-Phase 8 uses the Apex Trader Funding $50K EOD Performance Account as its current
-risk profile. See `docs/PROP_FIRM_RISK.md`; the active, switchable parameters
-are in `configs/prop_firm_risk_profile.json`.
+## Prop-firm risk profiles
+
+Future research preparation uses the provider-neutral profiles in
+`configs/prop_firm_profiles.json`. The active immutable profile is
+`mff_rapid_eod_50k_2026_08_10` at explicit stage `sim_funded`. Its modeled
+ledger starts at $0, uses an EOD-only $2,000 trailing floor with a permanent
++$100 lock, and permits micro-only strategy intents under one portfolio-wide
+30-micro-equivalent cap. Evaluation and inactive Live rules are separate
+stages and cannot leak into funded research.
+
+Strategy risk, execution mapping, platform costs, and payout policy live in
+separate `prop_firm_*` configurations and their selected IDs/hashes are part of
+every current run/cache identity. The platform and official MFF fees are
+currently `UNSET`; unknown current news/session/price-limit data also fails
+closed. Production/live readiness therefore remains false. The hash-bound
+`configs/prop_firm_risk_profile.json`, previous provider profile, and former
+Phase 8 chain are historical evidence. Current Phase 8 model-evaluation
+preparation uses
+`configs/prop_firm_phase8_evaluation.json` and
+`src/futures_rebuild/prop_firm_phase8.py`. See `docs/PROP_FIRM_RISK.md` and
+`docs/NAMING_AND_LINEAGE.md` before changing providers.
+
+Read-only preparation commands:
+
+```powershell
+.\.venv\Scripts\python.exe -m futures_rebuild.pipeline prop-firm-risk-policy
+.\.venv\Scripts\python.exe -m futures_rebuild.pipeline prop-firm-phase8
+```
+
+These commands print deterministic, non-authorizing preparation records. They
+do not access provider services or rows and do not grant model or prop-firm
+evaluation, publication, active-data, payout, deployment, or trading authority.
 
 ## Historic workflow material
 

@@ -1,0 +1,45 @@
+{
+  "schema_version": "micro_futures_legacy_lineage/1.0.0",
+  "state": "IMMUTABLE_LEGACY_LINEAGE_NOT_CURRENT_AUTHORITY",
+  "purpose": "Classify preserved provider-branded micro-futures paths and operation identifiers without authorizing their reuse.",
+  "retired_path_families": [
+    "configs/apex_micro_*",
+    "scripts/prepare_apex_micro_*",
+    "state/unpublished_evidence/apex_micro_*",
+    "state/data_publication_staging/apex_integer_micro_11/*",
+    "state/data_publication_staging/apex_micro_phase2_diagnostic_v1/*",
+    "state/provider_acquisition_staging/apex_micro_*"
+  ],
+  "retired_operation_ids": [
+    "ACQUIRE_APEX_MICRO_TIER01_RAW_DBN_INACTIVE_CUSTODY_ONCE",
+    "ACQUIRE_APEX_MICRO_TIER01_RAW_DBN_INACTIVE_CUSTODY_V21_ONCE",
+    "ACQUIRE_APEX_MICRO_TIER01_RAW_DBN_INACTIVE_CUSTODY_V22_ONCE",
+    "ACQUIRE_APEX_MICRO_TIER01_RAW_DBN_INACTIVE_CUSTODY_V24_ONCE",
+    "BUILD_APEX_MICRO_PHASE1B2_INACTIVE_FOUNDATION_V1_ONCE",
+    "BUILD_APEX_MICRO_PHASE2_CERTIFIED_INACTIVE_SUCCESSOR_V4_ONCE",
+    "DIAGNOSE_APEX_MICRO_DEFINITION_DUPLICATE_SEMANTICS_V3_ONCE",
+    "DIAGNOSE_APEX_MICRO_PHASE2_FIRST_GROUP_V2_ONCE",
+    "DIAGNOSE_APEX_MICRO_PHASE2_FIRST_INTERVAL_V1_ONCE",
+    "PREFLIGHT_APEX_MICRO_TIER01_DATABENTO_METADATA_ONCE",
+    "REPAIR_APEX_MICRO_V24_HARDLINK_CUSTODY_V2_ONCE"
+  ],
+  "lineage_bindings": {
+    "configs/active_micro_alpha_research_ladder.json": "243170c72638c1ad60cf66ee1cd3b6a50ed025662cd5964f3f3ff92a23d40f72",
+    "data/active/catalogs/apex_micro.json": "9ecc6708cf37993441c805a3f40c396f55b2248884ba016a992c3767dd7b684a",
+    "src/futures_rebuild/research_gateway_policy.py": "b129dcdfd86a8549352b852bc6824dfa93bf884210ebef3da20ccf2ee5d4b57e"
+  },
+  "generic_successor": {
+    "catalog_path": "data/active/catalogs/micro_futures.json",
+    "pointer_path": "configs/active_micro_futures_research_ladder.json",
+    "lane_id": "micro_futures_integer_11",
+    "future_operation_namespace": "MICRO_FUTURES"
+  },
+  "authority": {
+    "provider_access": false,
+    "historical_row_read": false,
+    "operation_reuse": false,
+    "publication": false,
+    "active_data_mutation": false,
+    "trading": false
+  }
+}

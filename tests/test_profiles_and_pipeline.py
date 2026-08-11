@@ -56,6 +56,18 @@ def test_full_pipeline_proves_all_phases_without_granting_authority() -> None:
     assert all(value is False for value in result["authority"].values())
     assert result["phases"][-2]["state"] == "PASS_GUARD_CLOSED"
     assert result["phases"][-1]["state"] == "PASS_GUARD_CLOSED"
+    phase8 = next(item for item in result["phases"] if item["phase"] == "8")
+    assert phase8["evidence"]["prop_firm_profile_id"] == (
+        "mff_rapid_eod_50k_2026_08_10"
+    )
+    assert phase8["evidence"]["account_stage"] == "sim_funded"
+    assert phase8["evidence"]["exact_provider_account_costs_verified"] is False
+    assert len(phase8["evidence"]["prop_firm_runtime_identity"]["cache_identity"]) == 64
+    assert (
+        phase8["evidence"]["evaluation_result_label"]
+        == "UNRESOLVED_SELECTED_PROVIDER_ACCOUNT_COSTS"
+    )
+    assert phase8["evidence"]["evaluation_authorized"] is False
 
 
 def test_cli_blocks_real_history_before_output(tmp_path: Path) -> None:
@@ -73,6 +85,42 @@ def test_cli_profile_validation_includes_the_active_alpha_ladder(capsys) -> None
         "profile_id": "18fbb7a3a405ee2bcaef5dd7d6e757cfb3a69ec8485afd34e5fcf1f627aaeca6",
         "state": "ACTIVE_HASH_BOUND",
     }
+    assert payload["active_prop_firm_profile"]["profile_id"] == (
+        "mff_rapid_eod_50k_2026_08_10"
+    )
+    assert payload["active_prop_firm_profile"]["account_stage"] == "sim_funded"
+    assert payload["active_prop_firm_profile"]["production_readiness"] is False
+    assert payload["active_prop_firm_profile"]["state"] == (
+        "SELECTED_NON_AUTHORIZING_PRODUCTION_BLOCKED"
+    )
+
+
+def test_cli_exposes_generic_prop_firm_prepare_only_interfaces(capsys) -> None:
+    assert main(["prop-firm-risk-policy"]) == 0
+    policy = json.loads(capsys.readouterr().out)
+    assert policy["schema_version"] == "prop_firm_eod_risk_policy/2.0.0"
+    assert policy["profile_id"] == "mff_rapid_eod_50k_2026_08_10"
+    assert policy["account_stage"] == "sim_funded"
+    assert policy["production_readiness"] is False
+    assert all(value is False for value in policy["authority"].values())
+
+    assert main(["prop-firm-phase8"]) == 0
+    phase8 = json.loads(capsys.readouterr().out)
+    assert phase8["schema_version"] == "prop_firm_phase8_preparation/2.0.0"
+    assert phase8["state"] == (
+        "PREPARED_MODEL_EVALUATION_NOT_AUTHORIZED_PRODUCTION_BLOCKED"
+    )
+    assert "exact_apex_live_costs_verified" not in phase8
+    assert all(value is False for value in phase8["authority"].values())
+
+
+def test_cli_lists_generic_prop_firm_interfaces(capsys) -> None:
+    assert main(["list"]) == 0
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["preparation_interfaces"] == [
+        "prop-firm-risk-policy",
+        "prop-firm-phase8",
+    ]
 
 
 def test_cli_output_is_content_addressed_and_no_overwrite(tmp_path: Path) -> None:

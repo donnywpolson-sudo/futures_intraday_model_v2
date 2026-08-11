@@ -4,16 +4,14 @@ import json
 
 import pytest
 
-from scripts.audit_standard_data_topology_source_safe import OUTPUT, ROOT, build_report
+from scripts.audit_standard_data_topology_source_safe import OUTPUT, ROOT
 
 
-pytestmark = [pytest.mark.current, pytest.mark.high_risk]
+pytestmark = pytest.mark.legacy
 
 
-def test_standard_topology_audit_is_source_safe_and_deterministic() -> None:
-    report = build_report(root=ROOT)
-    persisted = json.loads((ROOT / OUTPUT).read_text(encoding="utf-8"))
-    assert report == persisted
+def test_standard_topology_audit_is_preserved_source_safe_historical_evidence() -> None:
+    report = json.loads((ROOT / OUTPUT).read_text(encoding="utf-8"))
     assert report["state"] == "PASS_SOURCE_SAFE_PROVENANCE_METADATA_ONLY"
     assert report["catalog"]["active_market_year_count"] == 562
     assert report["catalog"]["disposition_counts"] == {

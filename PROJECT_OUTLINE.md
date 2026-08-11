@@ -4,7 +4,7 @@
 
 Operate a reproducible, point-in-time, bias-resistant research system with two
 strictly separated Alpha lanes: the approved 41-market standard/full-contract
-universe and an Apex-deployable integer-micro universe. Both use immutable data
+universe and a provider-profile-selected integer-micro universe. Both use immutable data
 releases, explicit trial accounting, chronological validation, net economics,
 one sealed 2025 holdout, post-freeze forward monitoring, and an observation-only
 live cockpit. Automatic order execution is outside this project's scope.
@@ -364,7 +364,7 @@ sealed until the frozen candidate reaches its declared terminal tier. Forward
 monitoring begins only after the exact mechanism is frozen; the calendar year
 alone cannot make a period forward evidence.
 
-### Apex integer-micro lane
+### Micro-futures integer lane (legacy Apex source lineage)
 
 The micro successor has complete inactive Phase 1A raw custody and one preserved
 failed-closed Phase 1B/2 attempt. That attempt created all 120 expected inactive
@@ -381,11 +381,15 @@ then proved that all 308 repeats have identical retained semantics and that
 zero are distinct same-key updates; it preserved every row and reported counts
 only. The full successor reconstructed that classification for every interval,
 preserved all retained-semantics repeats, and deduplicated zero Phase 1B rows.
-None of these bytes are
-published, active, registered, research-admitted, or backed by an active micro
-catalog.
-Its prepared pointer remains beside the unpublished contract and profile; the
-future active path `configs/active_micro_alpha_research_ladder.json` is absent.
+The certified 2018-2024 source bytes were subsequently published through 144
+immutable manifests and admitted to the dedicated legacy source catalog. They
+are active as source data only: no mechanism is frozen and no registration,
+evaluation, holdout/forward access, or trading authority follows.
+The machine-local accepted legacy pointer is
+`configs/active_micro_alpha_research_ladder.json`. Future namespace migration is
+prepared under `micro_futures_*` and requires a separate active-data cutover.
+Neither this ignored pointer nor its ignored catalog is a tracked-checkout or
+canonical-current-test dependency; exact checks belong to `local_evidence`.
 
 - `tier_0`: MES synthetic engineering and one locked MES qualification fold.
 - `tier_1`: MES, MCL, MGC, and M6E. These four represent equity, energy,
@@ -438,7 +442,7 @@ prediction, sealing, holdout, and order authority. Any production adapter must
 check the corresponding exact receipt before reading protected data or writing
 an authoritative artifact.
 
-## Corrected Apex micro Phase 1A/1B/2 route
+## Preserved legacy micro Phase 1A/1B/2 route
 
 This route reuses the standard folder grammar without mixing catalogs:
 
@@ -480,7 +484,7 @@ v2 metadata-only Databento preflight -> FAIL_CLOSED_METADATA_ONLY (2 calls; $0; 
   -> data/market_state/{status|statistics}/<market>/...              [Phase 1B diagnostics]
   -> data/outcome_sources/<market>/...                               [Phase 1B execution]
   -> data/causally_gated_normalized/...                             [Phase 2 causal 1m foundation]
-  -> separately certified micro catalog                            [not yet active]
+  -> separately certified legacy micro source catalog              [machine-local evidence; active source only]
 ```
 
 The required Databento Standard historical schemas are `definition`, `status`,
@@ -791,27 +795,29 @@ zero retries, zero provider calls, and $0 external cost. It opened zero DBNs and
 zero 2025/2026 payloads, used status/statistics only as diagnostics, retained
 one-second semantics as reported-trade bars only, and created no features,
 outcomes, predictions, returns, or evaluation. Terminal evidence was written
-last. The source certificate and catalog candidate are certified but unpublished
-and inactive; neither `data/active/catalogs/apex_micro.json` nor
-`configs/active_micro_alpha_research_ladder.json` exists.
+last. The source certificate and catalog candidate were consumed by the
+successful legacy publication. When present on an evidence-bearing machine,
+`data/active/catalogs/apex_micro.json` and
+`configs/active_micro_alpha_research_ladder.json` are immutable active
+source-catalog lineage. They are not required by a clean tracked checkout or
+the canonical current lane. The proposed generic catalog and pointer do not exist.
 
-The next research boundary is not another Phase 1B/2 decode. Publication or
-activation of the inactive micro catalog, mechanism Tier 0, registration, and
-economic evaluation each remain separately controlled. Official micro
+The next naming boundary is the prepared create-only migration to the generic
+micro-futures catalog and pointer; it is a separately controlled active-data
+cutover. Mechanism Tier 0, registration, and economic evaluation remain
+separately controlled. Official micro
 commission verification remains a mechanism-freeze blocker. The shared 2025
 holdout and pre-freeze 2026 rows remain sealed, and any filesystem cleanup still
 requires a fresh exact candidate manifest and separate approval.
 
-The bounded micro publisher is now implemented as a prepare-only, hash-bound
-adapter in `src/futures_rebuild/micro_alpha_publication.py`, with preparation in
-`scripts/prepare_apex_micro_publication_v1.py`. It preserves both inactive
-staging generations, publishes 144 exact byte copies through layout-v2 manifests,
-writes the dedicated micro catalog, and creates the source-catalog-only pointer
-last. Its preparation CLI cannot execute. A plan and audit require committed
-implementation, and actual publication/activation remains a separate one-use
-active-data mutation approval. It cannot open DBNs or 2025/2026 payloads, mutate
-the standard active catalog, freeze a mechanism, register or evaluate a trial,
-or authorize trading.
+The bounded legacy micro publisher completed its accepted one-use publication:
+144 exact byte copies through layout-v2 manifests, the dedicated source catalog,
+and its pointer written last. Its implementation and Apex-named paths are now
+historical lineage, not a future command surface. The generic prepare-only
+migration is `src/futures_rebuild/micro_futures_catalog_migration.py` with
+`scripts/prepare_micro_futures_catalog_migration_v1.py`; it has no active-write
+function and cannot open DBNs or 2025/2026 payloads, mutate either catalog,
+freeze a mechanism, register or evaluate a trial, or authorize trading.
 
 The one-second source proves reported-trade-bar evidence only. It cannot prove
 BBO availability, queue priority, guaranteed market-order execution, or precise
@@ -826,10 +832,12 @@ availability, explicit missing/sparse/duplicate/prelaunch/ambiguous
 dispositions, inactive micro-catalog certification, and lane-aware gateway
 bindings. Status/statistics stay diagnostic-only, and one-second bars stay
 reported-trade evidence without BBO, queue, fill, or within-second ordering
-claims. The existing Apex risk policy explicitly covers full contracts only,
-so it cannot be silently reused for micros. MES, MCL, MGC, and M6E commission
-verification remains fail-closed and must be resolved from an official Apex
-source before mechanism freeze, not from observed outcomes. The executor and
+claims. The historical Apex risk policy explicitly covers full contracts only,
+so it cannot be silently reused for micros. Future risk work uses
+provider-neutral `prop_firm_*` profiles. MES, MCL, MGC, and M6E commission
+verification remains fail-closed and must be resolved from an official
+selected-provider source before mechanism freeze, not from observed outcomes.
+The executor and
 tests do not imply group-diagnostic or successor row authority; the group
 diagnostic implementation must first be committed, then an immutable plan/audit
 and separate exact confirmation are mandatory.

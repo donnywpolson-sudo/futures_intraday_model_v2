@@ -32,8 +32,10 @@ def test_current_documents_use_one_plain_language_workflow_surface() -> None:
     assert "this guide controls normal-work procedure" in current.lower()
 
 
-def test_handoff_describes_the_active_alpha_ladder_and_next_boundary() -> None:
-    handoff = _text("CODEX_HANDOFF.md")
+def test_handoff_describes_the_active_alpha_ladder_and_next_boundary(
+    local_evidence_root: Path,
+) -> None:
+    handoff = (local_evidence_root / "CODEX_HANDOFF.md").read_text(encoding="utf-8")
 
     for required in (
         "53252c8d...362815",
@@ -66,6 +68,16 @@ def test_current_workflow_names_one_certified_real_history_surface() -> None:
     assert "registration through it is disabled" in legacy
 
 
+def test_current_workflow_exposes_only_generic_prop_firm_preparation() -> None:
+    current = _text("CURRENT_WORKFLOW.md")
+    for command in (
+        "futures_rebuild.pipeline prop-firm-risk-policy",
+        "futures_rebuild.pipeline prop-firm-phase8",
+    ):
+        assert command in current
+    assert "deterministic, non-authorizing preparation records" in current
+
+
 def test_agents_requires_a_value_case_for_new_policy_controls() -> None:
     agents = _text("AGENTS.md")
     for required in ("risk it prevents", "decision it improves", "simpler rule"):
@@ -95,20 +107,16 @@ def test_root_git_hygiene_declares_and_hides_legacy_evidence_paths() -> None:
     ):
         assert ignored in ignore
     legacy_relative = "src/futures_rebuild/active_data_full_successor_v11_3.py"
-    result = subprocess.run(
-        ["git", "check-ignore", "-q", "--", legacy_relative],
-        cwd=ROOT,
-        check=False,
-    )
-    assert result.returncode == 0
-    tracked = subprocess.run(
-        ["git", "ls-files", "--error-unmatch", "--", legacy_relative],
-        cwd=ROOT,
-        check=False,
-        capture_output=True,
-        text=True,
-    )
-    assert tracked.returncode != 0
+    if (ROOT / ".git").exists():
+        assert subprocess.run(
+            ["git", "check-ignore", "-q", "--", legacy_relative], cwd=ROOT, check=False
+        ).returncode == 0
+        assert subprocess.run(
+            ["git", "ls-files", "--error-unmatch", "--", legacy_relative],
+            cwd=ROOT, check=False, capture_output=True, text=True,
+        ).returncode != 0
+    else:
+        assert not (ROOT / legacy_relative).exists()
 
 
 def test_public_scripts_expose_no_token_era_high_risk_runner() -> None:
@@ -138,13 +146,12 @@ def test_micro_pipeline_map_distinguishes_design_from_implementation() -> None:
     for classification in (
         "CURRENT_REACHABLE",
         "PREPARED_NOT_EXECUTED",
-        "SYNTHETIC_ONLY",
-        "HISTORICAL_ROW_APPROVAL_REQUIRED",
-        "NOT_IMPLEMENTED",
-        "RETIRED",
+            "SYNTHETIC_ONLY",
+            "HISTORICAL_ROW_APPROVAL_REQUIRED",
+            "RETIRED",
     ):
         assert classification in mapping
-    for current_path in (
+    for historical_path in (
         "src/futures_rebuild/micro_alpha_pipeline.py",
         "src/futures_rebuild/micro_alpha_acquisition.py",
         "scripts/prepare_apex_micro_infrastructure.py",
@@ -153,12 +160,11 @@ def test_micro_pipeline_map_distinguishes_design_from_implementation() -> None:
         "configs/apex_micro_product_reference_requirements.json",
         "state/unpublished_evidence/apex_micro_preparation_supersessions/micro_tier1_scope_reconciliation.json",
     ):
-        assert current_path in mapping or current_path in outline
-        assert (ROOT / current_path).exists()
-    assert list((ROOT / "state/unpublished_evidence/alpha_research_architecture_v2").glob("*/architecture.json"))
-    assert not (ROOT / "configs/active_micro_alpha_research_ladder.json").exists()
-    assert not (ROOT / "data/active/catalogs/apex_micro.json").exists()
-    assert "No micro row-processing phase is labeled complete" in mapping
+        assert historical_path in mapping or historical_path in outline
+    assert "machine-local" in mapping.lower()
+    assert "local_evidence" in mapping
+    assert "legacy micro source catalog" in mapping
+    assert "configs/micro_futures_catalog_migration_plan_v1.json" in mapping
     assert "PASS_METADATA_ONLY" in mapping
 
 

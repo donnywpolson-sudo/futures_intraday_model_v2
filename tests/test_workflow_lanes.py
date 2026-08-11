@@ -1,5 +1,6 @@
 from pathlib import Path
 from types import SimpleNamespace
+import inspect
 
 from tests.conftest import (
     LEGACY_RESEARCH_TEST_FILES,
@@ -7,6 +8,7 @@ from tests.conftest import (
     LOCAL_EVIDENCE_TEST_FILES,
     LOCAL_EVIDENCE_TEST_NODES,
     _lane_for,
+    pytest_collection_modifyitems,
 )
 
 
@@ -25,6 +27,13 @@ def test_default_lane_is_current(pytestconfig) -> None:
     assert pytestconfig.option.markexpr == "current"
 
 
+def test_collection_preserves_explicit_lane_markers_and_uses_effective_lane_filter() -> None:
+    source = inspect.getsource(pytest_collection_modifyitems)
+    assert "own_markers[:]" not in source
+    assert "_effective_workflow_lane" in source
+    assert '"local_evidence": 3' in source
+
+
 def test_superseded_research_snapshots_are_explicit_not_pattern_accidents() -> None:
     assert {
         "test_tier1_authoritative_certified_lifecycle.py",
@@ -41,12 +50,20 @@ def test_superseded_research_snapshots_are_explicit_not_pattern_accidents() -> N
 
 def test_machine_local_evidence_has_an_explicit_fail_closed_lane() -> None:
     assert "test_tier1_economics_only.py" in LOCAL_EVIDENCE_TEST_FILES
-    assert len(LOCAL_EVIDENCE_TEST_NODES) == 26
+    assert len(LOCAL_EVIDENCE_TEST_NODES) == 28
     assert (
         "tests/test_phase8_economics_index.py::"
         "test_live_foundation_selection_is_explicit_and_complete"
     ) in LOCAL_EVIDENCE_TEST_NODES
     assert all(node.startswith("tests/") for node in LOCAL_EVIDENCE_TEST_NODES)
+    assert (
+        "tests/test_generic_naming_policy.py::"
+        "test_legacy_lineage_bindings_still_match_exact_bytes"
+    ) in LOCAL_EVIDENCE_TEST_NODES
+    assert (
+        "tests/test_operational_documents.py::"
+        "test_handoff_describes_the_active_alpha_ladder_and_next_boundary"
+    ) in LOCAL_EVIDENCE_TEST_NODES
 
 
 def test_clean_export_routes_ignored_and_exact_evidence_out_of_source_safe_lanes(

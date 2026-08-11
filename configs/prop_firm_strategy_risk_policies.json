@@ -1,0 +1,78 @@
+{
+  "schema_version": "prop_firm_strategy_risk_policies/1.0.0",
+  "active_strategy_policy_id": "mff_micro_risk_research_v1",
+  "policies": {
+    "mff_micro_risk_research_v1": {
+      "policy_schema_id": "mff_micro_risk_policy/1.0.0",
+      "account_stage": "sim_funded",
+      "execution_contract_type": "MICRO_ONLY",
+      "strategy_account_count": 1,
+      "state": "BOUNDED_RESEARCH_DESIGN_NOT_OOS_PROMOTED",
+      "production_readiness": false,
+      "internal_flatten_buffer_minutes": 5,
+      "news_safety_lead_seconds": 60,
+      "order_rate_limit_per_minute": 12,
+      "duplicate_order_window_seconds": 5,
+      "runtime_limits": {
+        "firm_micro_equivalent_cap": 30,
+        "per_execution_symbol_micros": {"MES": 10, "MCL": 10, "M6E": 10},
+        "per_underlying_risk_group_micros": 15,
+        "platform_micro_cap": 30,
+        "liquidity_micro_caps": {"MES": 10, "MCL": 10, "M6E": 10},
+        "classification": "INTERNAL_CONSERVATIVE_RESEARCH_CONTROLS_NOT_FIRM_RULES_OR_OPTIMAL_PARAMETERS"
+      },
+      "candidate_design": {
+        "method": "SEQUENTIAL_COARSE_TO_FINE_WITH_FROZEN_FINAL_TEST",
+        "planned_risk_per_trade_usd": ["50", "75", "100", "125", "150", "200"],
+        "maximum_concurrent_open_risk_usd": ["100", "150", "200", "300", "400"],
+        "internal_session_stop_usd": ["200", "300", "400", "500", "600"],
+        "minimum_reserved_cushion_usd": ["400", "500", "600", "800"],
+        "maximum_entries_per_session": [1, 2, 3, 4, 5],
+        "pyramiding": [false, true],
+        "constraints": [
+          "PLANNED_RISK_LE_CONCURRENT_RISK",
+          "CONCURRENT_RISK_LE_SESSION_STOP",
+          "ORDER_RISK_LE_FLOOR_CUSHION_AFTER_RESERVE",
+          "FINAL_100_USD_FLOOR_NOT_NORMAL_OPERATING_CAPITAL",
+          "REALISTIC_MICRO_COSTS_REQUIRED",
+          "NO_FINAL_TEST_RETUNING"
+        ]
+      },
+      "selection_metrics": [
+        "net_trader_cash_payouts_after_split",
+        "account_breach_probability",
+        "expected_funded_account_lifespan",
+        "median_time_to_first_payout",
+        "payout_count_and_amount",
+        "risk_adjusted_payout_value_per_account_month",
+        "desired_orders_clipped_by_firm_cap_percent",
+        "strategy_profit_lost_to_contract_clipping",
+        "maximum_concurrent_stop_defined_risk",
+        "worst_intraday_equity_distance_to_firm_floor",
+        "withdrawal_effects",
+        "news_and_session_exclusions",
+        "inactivity_exposure",
+        "walk_forward_parameter_stability"
+      ],
+      "legacy_seed": {
+        "state": "HISTORICAL_STRATEGY_POLICY_SEED_NOT_FIRM_RULE",
+        "one_standard_contract_equivalent": 1,
+        "planned_risk_per_trade_usd": "250",
+        "internal_daily_stop_usd": "500",
+        "internal_total_drawdown_stop_usd": "1500",
+        "reserve_usd": "500",
+        "pyramiding": false,
+        "maximum_entries_per_session": 3
+      },
+      "focused_smoke_command": ".\\.venv\\Scripts\\python.exe -m pytest -q tests/test_prop_firm_account_runtime.py tests/test_prop_firm_eod_risk.py tests/test_prop_firm_phase8.py",
+      "full_study_operation": "BLOCKED_UNTIL_REGISTERED_CURRENT_RESEARCH_GATEWAY_OPERATION_EXISTS",
+      "authority": {
+        "historical_row_read": false,
+        "evaluation": false,
+        "promotion": false,
+        "deployment": false,
+        "trading": false
+      }
+    }
+  }
+}

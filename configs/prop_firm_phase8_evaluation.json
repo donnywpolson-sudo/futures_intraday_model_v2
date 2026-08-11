@@ -1,0 +1,23 @@
+{
+  "schema_version": "prop_firm_phase8_evaluation/2.0.0",
+  "phase": 8,
+  "profile_document_path": "configs/prop_firm_profiles.json",
+  "account_stage": "sim_funded",
+  "signal_roots": ["ES", "CL", "ZN", "6E"],
+  "evaluation_result_labels": {
+    "exact": "EXACT_SELECTED_PROVIDER_ACCOUNT_COSTS",
+    "provisional": "PROVISIONAL_SELECTED_PROVIDER_ACCOUNT_COSTS",
+    "unresolved": "UNRESOLVED_SELECTED_PROVIDER_ACCOUNT_COSTS"
+  },
+  "purpose": "Provider-neutral Phase 8 preparation for funded-strategy model evaluation. Prop-firm challenge evaluation is a separate account stage.",
+  "authority": {
+    "provider_access": false,
+    "historical_row_read": false,
+    "model_evaluation": false,
+    "prop_firm_challenge_evaluation": false,
+    "publication": false,
+    "active_data_mutation": false,
+    "deployment": false,
+    "trading": false
+  }
+}

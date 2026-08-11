@@ -11,14 +11,14 @@ work and every real-data or publishing action remains separately controlled.
 | `CURRENT_REACHABLE` | `data/active/causally_gated_normalized/` | Only catalog-selected flattened standard-lane research view; 562 admitted market-years with adjacent certification sidecars | Resolve through `data/active/catalog.json`; direct globs forbidden |
 | `CURRENT_REACHABLE` | `data/causally_gated_normalized/` | Content-addressed immutable Phase 2 release history with multiple preserved generations; not a second active view | Release inputs only through pinned manifests and catalog bindings |
 | `CURRENT_REACHABLE` | `scripts/audit_standard_data_topology_source_safe.py`; `state/unpublished_evidence/standard_data_topology_source_safe_audit/report.json` | Source-safe PASS verifies catalog self-hash, foundation/DBN release bindings, 562 active sidecars, and referenced Phase 1B/2 paths without opening payloads | Does not recertify rows or grant research authority |
-| `CURRENT_REACHABLE` | `scripts/audit_data_topology_source_safe_v2.py`; `state/unpublished_evidence/data_topology_source_safe_audit_v2/report.json` | Successor metadata-only PASS inventories every top-level data root, binds repaired micro custody, and confirms release history versus catalog-selected active-view roles | Zero data-root cleanup candidates; no payload opened or cleanup authority granted |
+| `RETIRED` | `scripts/audit_data_topology_source_safe_v2.py`; `state/unpublished_evidence/data_topology_source_safe_audit_v2/report.json` | Preserved pre-publication metadata-only PASS expected the micro pointer and catalog to be absent; that premise ended when the accepted micro source publication succeeded | Historical topology evidence only; no payload or cleanup authority |
 | `RETIRED` | `scripts/prepare_safe_cleanup_inventory_v4.py`; `state/unpublished_evidence/safe_cleanup_preparation_v4/plan.json` | Preserved no-delete preparation bound to pre-commit HEAD `558ee094...`; it became stale after the approved implementation commit and cannot authorize cleanup | Execution forbidden; no cleanup occurred |
 | `PREPARED_NOT_EXECUTED` | `scripts/prepare_safe_cleanup_inventory_v5.py`; `state/unpublished_evidence/safe_cleanup_preparation_v5/plan.json` | Stable preserve-first cleanup policy with no frozen candidates or prepared-HEAD claim; exact literal cache census and execution HEAD are deliberately deferred until all prior writes finish | Separate exact cleanup approval required after a fresh census; all gates rerun immediately before/after mutation |
 | `PREPARED_NOT_EXECUTED` | `scripts/prepare_safe_cleanup_candidate_census_v6.py`; `state/unpublished_evidence/safe_cleanup_candidate_census_v6/census.json` | Post-commit metadata-only census froze 13 exact untracked, Git-ignored cache directories outside data/state/config roots; records filesystem counts but never opens DBN or Parquet payloads | Grants no delete/move authority; separate exact cleanup approval and immediate revalidation remain required |
 | `RETIRED` | `safe_cleanup_preparation` v1-v3 plans and supersession records | Preserved prepare-only drafts; v1/v2 had self-referential inventory drift and v3 used an unsuitable dynamic worktree binding | Execution forbidden; no cleanup occurred |
 | `SYNTHETIC_ONLY` | `futures-pipeline`; `src/futures_rebuild/pipeline.py` | Generated mechanics fixtures only | No historical or alpha authority |
 | `RETIRED` | `configs/apex_micro_tier01_databento_preflight_plan.json`; obsolete `febccafd...` preparation | Preserved MES/MGC/M6E/M6A bytes, classified `SUPERSEDED_PREPARATION — MICRO_TIER1_SCOPE_RECONCILIATION`; cannot execute as current | No provider or publication authority |
-| `PREPARED_NOT_EXECUTED` | Corrected contract/profile/pointer under `state/unpublished_evidence/apex_micro_ladder_preparation_v2/`; architecture under `alpha_research_architecture_v2/` | Inactive MES/MCL/MGC/M6E successor; no active micro pointer or catalog | None |
+| `RETIRED` | Corrected contract/profile/pointer under `state/unpublished_evidence/apex_micro_ladder_preparation_v2/`; architecture under `alpha_research_architecture_v2/` | Preserved inputs to the completed legacy micro source publication | Immutable lineage; no new execution authority |
 | `PREPARED_NOT_EXECUTED` | `scripts/prepare_apex_micro_infrastructure.py`; `configs/apex_micro_product_reference_requirements.json`; `state/unpublished_evidence/apex_micro_preparation_supersessions/micro_tier1_scope_reconciliation.json` | Deterministic create-only successor preparation and byte-bound supersession classification | No provider or activation authority |
 | `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v2.json`; `src/futures_rebuild/micro_alpha_databento_preflight.py`; `state/unpublished_evidence/apex_micro_metadata_preflight_v2/report.json` | One approved metadata-only attempt executed and failed closed on `list_schemas` `ReadTimeout` after two calls; $0, zero retries/downloads/rows/DBNs; report and authorization use preserved | Consumed authorization cannot execute again; report grants no acquisition authority |
 | `RETIRED` | `configs/apex_micro_tier01_databento_metadata_preflight_v3.json`; `state/unpublished_evidence/apex_micro_metadata_preflight_v3_supersession.json` | Unexecuted local preparation preserved after executor self-hash drift before staging; no provider access, authorization, or report | Execution forbidden; grants no authority |
@@ -61,9 +61,10 @@ work and every real-data or publishing action remains separately controlled.
 | `CURRENT_REACHABLE` | `src/futures_rebuild/micro_alpha_phase1b2_group_diagnostic.py`; exact plan/audit; consumed authorization; report/terminal under `state/unpublished_evidence/apex_micro_phase1b2_phase2_group_diagnostic_v2/` | One approved run opened exactly five M6E 2018 Phase 1B Parquets / 86,344,286 bytes, verified all hashes before/after, serialized five receipts, and passed transition mechanics; the definition legacy key counted 308 repeats and every other schema counted zero | `PASS_FIRST_GROUP_TRANSITION_DIAGNOSTIC` with `DUPLICATE` disposition; no Phase 2 Parquet, DBN, sixth Parquet, 2025/2026, raw-value report, publication, or activation; authority consumed |
 | `CURRENT_REACHABLE` | `src/futures_rebuild/micro_alpha_phase1b2_definition_duplicate_diagnostic.py`; exact plan/audit; consumed authorization; report/terminal under `state/unpublished_evidence/apex_micro_phase1b2_definition_duplicate_diagnostic_v3/` | One approved run opened only the 68,274-byte M6E 2018 definition Parquet and classified all 308 legacy-key repeats as exact retained-semantics duplicates with zero distinct same-key updates; all 1,481 rows preserved | `PASS_DEFINITION_DUPLICATE_SEMANTICS_DIAGNOSTIC`; no raw values/keys, Parquet output, DBN, second Parquet, 2025/2026, publication, or activation; authority consumed |
 | `CURRENT_REACHABLE` | `src/futures_rebuild/micro_alpha_phase1b2_phase2_successor.py`; exact v4 plan/audit; consumed authorization; report/candidate/terminal under `state/unpublished_evidence/apex_micro_phase1b2_phase2_successor_v4/`; 24 Parquets under `state/data_publication_staging/apex_integer_micro_11/49beef616481be65a191d2da/` | One approved attempt certified all 120 Phase 1B Parquets / 6,627,486,838 bytes, all 140 coverage cells and all 24 intervals; created 24 read-only causal Parquets / 454,578,644 bytes plus an unpublished certificate and inactive catalog candidate | `SUCCESS_CERTIFIED_INACTIVE_PHASE2`; zero retries, DBNs, 2025/2026 opens, provider calls, raw-value reports, deduplication, publication, activation, registration, evaluation, trading, or standard-lane mutation; authority consumed |
-| `PREPARED_NOT_EXECUTED` | `src/futures_rebuild/micro_alpha_publication.py`; `scripts/prepare_apex_micro_publication_v1.py` | Source-safe, stat-only preparation binds 120 Phase 1B and 24 Phase 2 staged payloads to 144 layout-v2 immutable release manifests, a dedicated micro catalog, and a source-catalog-only pointer written last | Implementation and synthetic mechanics only; plan/audit require committed implementation, and publication/activation requires a separate exact active-data mutation approval |
+| `RETIRED` | `src/futures_rebuild/micro_alpha_publication.py`; `scripts/prepare_apex_micro_publication_v1.py`; accepted plan/audit/report/terminal | Completed the one-use legacy publication: 144 manifests and about 7.08 GB, dedicated source catalog, pointer last, standard catalog unchanged, zero 2025/2026 opens | Accepted immutable lineage; not a future publication command surface |
 | `HISTORICAL_ROW_APPROVAL_REQUIRED` | Inactive 2025 holdout and 2026 forward micro DBNs and every downstream row surface | Raw bytes remain in inactive immutable custody and were excluded from the successful 2018-2024 Phase 1B/2 execution | Separate holdout/forward row approval remains mandatory; 2026 also requires a prior immutable mechanism-freeze timestamp |
-| `PREPARED_TARGET_ABSENT` | `configs/active_micro_alpha_research_ladder.json`; `data/active/catalogs/apex_micro.json` | Intentionally absent until the prepared bounded publisher receives exact publication/activation authority and verifies all 144 immutable releases | No active micro source catalog; no mechanism freeze, registration, evaluation, or trading authority |
+| `LOCAL_EVIDENCE` | legacy `configs/active_micro_alpha_research_ladder.json`; legacy `data/active/catalogs/apex_micro.json` | Machine-local accepted source-catalog lineage; exact-byte checks require the fail-closed `local_evidence` lane and a hash manifest | Not a tracked checkout or canonical-current-lane dependency; no mechanism freeze, registration, evaluation, holdout/forward access, or trading authority |
+| `PREPARED_NOT_EXECUTED` | `configs/micro_futures_catalog_migration_plan_v1.json`; `src/futures_rebuild/micro_futures_catalog_migration.py`; `scripts/prepare_micro_futures_catalog_migration_v1.py` | Deterministically proposes generic catalog, pointer, lane, lock, failure, and evidence names while preserving the legacy publication | Prepare-only; separate active-data cutover approval required |
 | `CURRENT_REACHABLE` | `src/futures_rebuild/certified_research_gateway.py` | Standard registration and one-use historical execution | Exact certified authority required |
 | `CURRENT_REACHABLE` | `src/futures_rebuild/live_cockpit/`; `python -m futures_rebuild.live_cockpit` | Observation only | No order or position-changing authority |
 | `RETIRED` | Versioned trial modules, old Phase 3-8 chain, registries, receipts, reports | Interpretation and provenance only | Cannot authorize current work |
@@ -89,7 +90,7 @@ one-use economic execution --separate approval--> PASS or REJECT
 No other public script or imported legacy helper is a current real-history
 trial surface. Unknown or retired operation names fail closed.
 
-## Prepared Apex micro dependency flow
+## Preserved micro-futures dependency flow
 
 ```text
 PROJECT_OUTLINE design
@@ -124,8 +125,9 @@ PROJECT_OUTLINE design
   -> Phase 1A DBN + sidecar inactive custody                       CURRENT_REACHABLE / 160 + 160 / single-link / no decode
   -> Phase 1B definition/status/statistics/1m/1s decoding          CURRENT_REACHABLE / 120 inactive Parquets
   -> Phase 2 causal 1m foundation                                  CURRENT_REACHABLE / 24 inactive Parquets
-  -> source certification + inactive micro catalog candidate       CURRENT_REACHABLE / certified, unpublished, inactive
-  -> micro catalog publication/activation                          NOT_IMPLEMENTED
+  -> source certification + inactive micro catalog candidate       RETIRED / consumed publication input
+  -> legacy micro source catalog publication                       LOCAL_EVIDENCE / machine-local accepted source catalog only
+  -> generic micro-futures catalog cutover                         PREPARED_NOT_EXECUTED / active-data approval required
   -> micro mechanism Tier 0 and later research                     blocked
 ```
 
@@ -140,7 +142,10 @@ status, statistics, ohlcv-1m, and ohlcv-1s. All 160 target DBNs and adjacent
 sidecars now exist only at their final read-only single-link paths. The v2
 repair terminal verifies all 1,849,575,228 DBN bytes without decoding rows.
 
-No micro row-processing phase is labeled complete. The v2, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, and v20 metadata-only attempts
+The 2018-2024 micro source foundation and source-catalog publication are
+complete; no mechanism, registration, or evaluation is authorized. The v2,
+v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19,
+and v20 metadata-only attempts
 executed once each and produced only preserved fail-closed metadata evidence.
 The two official CME product-date reports are sealed for MES, MCL, MGC, and
 M6E. V20 executed once and is preserved as fail-closed timeout evidence. The
@@ -168,7 +173,8 @@ aliases, verified every DBN hash and sidecar identity before/after, restored
 read-only final state, and wrote terminal evidence last. Phase 1A inactive
 custody is now complete. V3 produced 120 inactive Phase 1B Parquets but failed
 closed before Phase 2; the one-source causal materializer diagnostic later
-passed without certifying the lane. The micro catalog is inactive, registration is blocked, and all
+passed without certifying the lane. When present, the machine-local legacy micro source catalog is active,
+registration is blocked, and all
 download/repair authority is consumed. Apart
 from the preserved price-free v2, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16, v17, v18, v19, and v20 failure reports and the v21 PASS report, the code proves downloader mechanics
 with synthetic records only.

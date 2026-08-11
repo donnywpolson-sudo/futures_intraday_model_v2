@@ -1,0 +1,36 @@
+{
+  "schema_version": "prop_firm_execution_costs/1.0.0",
+  "active_cost_profile_id": "mff_platform_unset_2026_08_10",
+  "cost_profiles": {
+    "mff_platform_unset_2026_08_10": {
+      "cost_profile_schema_id": "generic_unresolved_execution_costs/1.0.0",
+      "provider_id": "my_funded_futures",
+      "platform_connection_id": "UNSET",
+      "schedule_status": "UNSET_MFF_PLATFORM_AND_OFFICIAL_FEES_REQUIRED",
+      "exact_provider_account_costs_verified": false,
+      "round_turn_commission_usd": {},
+      "research_proxy_allowed": true,
+      "research_proxy_requirements": [
+        "EXPLICITLY_LABELED_PROVISIONAL",
+        "MICRO_SPECIFIC",
+        "SPREAD_SLIPPAGE_AND_FEE_STRESS_CASES",
+        "NO_PRODUCTION_OR_LIVE_READINESS_CLAIM"
+      ],
+      "production_readiness": false,
+      "blockers": ["EXECUTION_PLATFORM_UNSET", "OFFICIAL_MFF_PLATFORM_FEES_UNSET"]
+    },
+    "mff_micro_provisional_stress_v1": {
+      "cost_profile_schema_id": "generic_provisional_research_costs/1.0.0",
+      "provider_id": "my_funded_futures",
+      "platform_connection_id": "UNSELECTED_RESEARCH_PROXY",
+      "schedule_status": "PROVISIONAL_MICRO_RESEARCH_STRESS_NOT_PROVIDER_VERIFIED",
+      "exact_provider_account_costs_verified": false,
+      "round_turn_commission_usd": {"MES": "3.00", "MCL": "3.00", "M6E": "3.00"},
+      "expected_slippage_usd": {"MES": "2.00", "MCL": "2.00", "M6E": "2.00"},
+      "research_proxy_allowed": true,
+      "provisional": true,
+      "production_readiness": false,
+      "blockers": ["EXECUTION_PLATFORM_UNSET", "OFFICIAL_MFF_PLATFORM_FEES_UNSET", "PROVISIONAL_ECONOMICS"]
+    }
+  }
+}

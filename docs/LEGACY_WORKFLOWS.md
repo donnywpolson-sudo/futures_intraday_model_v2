@@ -69,6 +69,44 @@ named in `CURRENT_WORKFLOW.md`.
   manifests and reports
 - associated closure, transport, scheduler, and recovery scripts
 
+## Apex-named micro and prop-firm lineage
+
+The completed Apex-named micro source build and publication family is retained
+at its original paths because plans, manifests, receipts, catalogs, pointers,
+and evidence bind those names and bytes. This includes `configs/apex_micro_*`,
+`scripts/prepare_apex_micro_*`, `state/unpublished_evidence/apex_micro_*`, the
+accepted `data/active/catalogs/apex_micro.json` catalog, its
+`configs/active_micro_alpha_research_ladder.json` pointer, and embedded Apex
+schema, operation, and lane identifiers.
+
+Completed publication staging under
+`state/data_publication_staging/apex_integer_micro_11/`, the retained
+`state/data_publication_staging/apex_micro_phase2_diagnostic_v1/` diagnostic,
+and provider attempts under `state/provider_acquisition_staging/apex_micro_*`
+are historical lineage as well. Ignored Apex-named bytecode caches inherit
+legacy module names and carry no operating authority.
+
+`src/futures_rebuild/micro_alpha_publication.py` and
+`scripts/prepare_apex_micro_publication_v1.py` are retired after their accepted
+single-use publication. They are not future publication command surfaces. The
+`apex_tradovate_50k_eod_risk_policy` module, config, report, and test are also
+historical because micro preparation evidence binds their exact bytes.
+The original `configs/prop_firm_risk_profile.json` and
+`configs/tier1_phase8_evaluation.json` are hash-bound Phase 8 lineage. The
+corresponding `tier1_phase8_*` modules and tests are retired compatibility and
+reconstruction surfaces; current Phase 8 preparation uses the
+`prop_firm_phase8_*` successor.
+
+Future account/risk work uses `prop_firm_*`; future micro catalog work uses
+`micro_futures_*`. See `docs/NAMING_AND_LINEAGE.md`. Moving the active catalog
+or pointer to the generic namespace is a separately approved active-data
+cutover, not a local rename.
+
+`configs/micro_futures_legacy_lineage.json` inventories the retained Apex
+operation identifiers present in the hash-bound historical policy. They are
+lineage identifiers, not names for a new plan, receipt, lock, failure root, or
+evidence writer.
+
 These families are intentionally ignored by normal Git status. Ignored files
 remain in place and can be inspected. Force-adding one is allowed only for an
 explicit archival task; it never makes that artifact current workflow authority.

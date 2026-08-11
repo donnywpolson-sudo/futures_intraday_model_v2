@@ -1,0 +1,309 @@
+{
+  "schema_version": "prop_firm_profiles/2.0.0",
+  "purpose": "Provider-neutral, immutable prop-firm account profiles. Selection grants no provider, evaluation, publication, active-data, deployment, payout-submission, or trading authority.",
+  "active_profile_id": "mff_rapid_eod_50k_2026_08_10",
+  "switching_instructions": "Add a new immutable sourced profile and select its profile ID plus an explicit account stage. Never rewrite a profile already bound to a research manifest.",
+  "profiles": {
+    "apex_eod_performance_50k": {
+      "provider_id": "apex_trader_funding",
+      "firm": "Apex Trader Funding",
+      "program": "EOD Performance Account",
+      "reviewed_on": "2026-08-08",
+      "execution_connection": {
+        "connection_id": "tradovate",
+        "display_name": "Tradovate"
+      },
+      "account": {
+        "account_size_usd": "50000",
+        "initial_level": "LEVEL_1",
+        "starting_balance_usd": "50000",
+        "maximum_strategy_contracts": 1,
+        "maximum_strategy_trades_per_session": 1,
+        "full_contracts_only": true
+      },
+      "external_limits": {
+        "maximum_eod_drawdown_usd": "2000",
+        "initial_eod_threshold_usd": "48000",
+        "locked_eod_threshold_usd": "50100",
+        "lock_trigger_highest_eod_balance_usd": "52100",
+        "initial_daily_loss_limit_usd": "1000",
+        "threshold_enforced_intraday": true
+      },
+      "project_limits": {
+        "maximum_standard_contract_equivalents": 1,
+        "daily_stop_loss_usd": 500,
+        "maximum_initial_risk_usd": 250,
+        "maximum_total_drawdown_usd": 1500,
+        "external_drawdown_reserve_usd": 500,
+        "maximum_entries_per_session": 3,
+        "maximum_single_market_risk_fraction": "0.25",
+        "maximum_sector_risk_fraction": "0.50"
+      },
+      "market_access": {
+        "full_contract_universe": [
+          "ES", "NQ", "RTY", "YM", "CL", "NG", "RB", "HO", "GC", "SI", "HG", "PL", "SR3", "SR1", "ZQ", "TN", "ZT", "ZF", "ZN", "ZB", "UB", "6A", "6B", "6C", "6E", "6J", "6M", "6N", "6S", "ZC", "ZS", "ZL", "ZM", "ZW", "KE", "LE", "HE", "GF", "BTC", "ETH", "PA"
+        ],
+        "supported_full_contracts": [
+          "ES", "NQ", "RTY", "YM", "CL", "NG", "RB", "HO", "GC", "SI", "HG", "PL", "PA", "6A", "6B", "6C", "6E", "6J", "6N", "6S", "ZC", "ZS", "ZL", "ZM", "ZW", "LE", "HE", "GF"
+        ],
+        "unsupported_full_contracts": [
+          "6M", "BTC", "ETH", "KE", "SR1", "SR3", "TN", "UB", "ZB", "ZF", "ZN", "ZQ", "ZT"
+        ]
+      },
+      "execution_costs": {
+        "schedule_status": "PROVISIONAL_PROVIDER_CONNECTION_SCHEDULE",
+        "exact_live_costs_verified": false,
+        "official_round_turn_usd": {
+          "ES": "3.10", "NQ": "3.10", "RTY": "3.10", "YM": "3.10",
+          "CL": "3.34", "NG": "3.54",
+          "GC": "3.54", "SI": "3.54", "HG": "3.54", "PL": "3.54", "PA": "3.54",
+          "6A": "3.54", "6B": "3.54", "6C": "3.54", "6E": "3.54", "6J": "3.54", "6N": "3.54", "6S": "3.54",
+          "ZC": "4.54", "ZS": "4.54", "ZL": "4.54", "ZM": "4.54", "ZW": "4.54", "LE": "4.54", "HE": "4.54", "GF": "4.54"
+        },
+        "fallback_round_turn_usd": "4.54",
+        "fallback_markets": ["HO", "RB"],
+        "fallback_basis": "MAXIMUM_PUBLISHED_ROUND_TURN_AMONG_SUPPORTED_FULL_CONTRACTS_IN_PROFILE_UNIVERSE",
+        "unsupported_markets_never_receive_fallback": true
+      },
+      "official_sources": {
+        "account_rules": "https://apextraderfunding.com/help-center/eod-trailing-drawdown-accounts/eod-performance-accounts-pa/",
+        "daily_loss_limit": "https://apextraderfunding.com/help-center/additional-helpful-items/daily-loss-limit-explained/",
+        "scaling_levels": "https://apextraderfunding.com/help-center/additional-helpful-items/scaling-levels-pa-explained/",
+        "commission_schedule": "https://apextraderfunding.com/help-center/tradovate/tradovate-commission-instruments/"
+      },
+      "review_required_before_real_evaluation": true
+    },
+    "mff_rapid_eod_50k_2026_08_10": {
+      "profile_schema_id": "mff_rapid_eod_50k/1.0.0",
+      "provider_id": "my_funded_futures",
+      "firm": "MyFundedFutures",
+      "program": "Rapid EOD 50K",
+      "plan": "50K Rapid EOD",
+      "rules_as_of": "2026-08-10",
+      "reviewed_on": "2026-08-10",
+      "active_account_stage": "sim_funded",
+      "allowed_account_stages": ["evaluation", "sim_funded", "live"],
+      "execution_connection": {
+        "connection_id": "UNSET",
+        "display_name": "UNSET",
+        "selected": false
+      },
+      "binding_ids": {
+        "strategy_policy_id": "mff_micro_risk_research_v1",
+        "execution_instrument_mapping_id": "mff_micro_execution_mapping_2026_08_10",
+        "execution_cost_profile_id": "mff_platform_unset_2026_08_10",
+        "payout_policy_id": "mff_rapid_eod_payout_2026_08_10",
+        "provisional_research_cost_profile_ids": ["mff_micro_provisional_stress_v1"]
+      },
+      "stages": {
+        "evaluation": {
+          "stage_active": false,
+          "nominal_plan_size_usd": "50000",
+          "ledger_starting_balance_usd": "50000",
+          "activation_fee_usd": "0",
+          "profit_target_usd": "3000",
+          "maximum_eod_loss_usd": "2000",
+          "firm_daily_loss_limit_usd": null,
+          "maximum_minis": 3,
+          "maximum_micros": 30,
+          "micro_units_per_mini": 10,
+          "evaluation_consistency_percent": "30",
+          "minimum_trading_days": 4,
+          "t1_news_policy": "ALLOWED",
+          "inactivity_policy": "SOURCE_CONFLICT_UNRESOLVED",
+          "drawdown_state_machine": "EVALUATION_STAGE_NOT_SIM_FUNDED_STATE"
+        },
+        "sim_funded": {
+          "stage_active": true,
+          "nominal_plan_size_usd": "50000",
+          "ledger_starting_balance_usd": "0",
+          "activation_fee_usd": "0",
+          "maximum_eod_loss_usd": "2000",
+          "initial_loss_floor_usd": "-2000",
+          "loss_floor_lock_usd": "100",
+          "firm_daily_loss_limit_usd": null,
+          "funded_consistency_rule": null,
+          "maximum_minis": 3,
+          "maximum_micros": 30,
+          "micro_units_per_mini": 10,
+          "maximum_active_accounts": 3,
+          "strategy_account_count_default": 1,
+          "t1_news_policy": "RESTRICTED",
+          "inactivity_calendar_days": 7,
+          "funded_scaling_rule": null,
+          "drawdown_state_machine": "ZERO_BASED_EOD_TRAILING_LOCKED"
+        },
+        "live": {
+          "stage_active": false,
+          "nominal_plan_size_usd": "50000",
+          "ledger_starting_balance_usd": "0",
+          "maximum_eod_loss_usd": "2000",
+          "initial_loss_floor_usd": "-2000",
+          "loss_floor_lock_usd": "0",
+          "firm_daily_loss_limit_usd": null,
+          "maximum_minis": 4,
+          "maximum_micros": 40,
+          "micro_units_per_mini": 10,
+          "profit_split_trader_percent": "90",
+          "profit_split_firm_percent": "10",
+          "payout_frequency": "DAILY",
+          "payout_buffer_usd": "0",
+          "automatic_transition_trigger_net_profit_one_session_usd": "10000",
+          "reserve_program_maximum_usd": "5000",
+          "drawdown_state_machine": "ZERO_BASED_EOD_TRAILING_LOCKED"
+        }
+      },
+      "market_access": {
+        "execution_contract_type": "MICRO_ONLY",
+        "signal_root_universe": ["ES", "CL", "ZN", "6E"],
+        "enabled_signal_roots": ["ES", "CL", "6E"],
+        "disabled_signal_roots": ["ZN"],
+        "aggregate_position_measure": "MICRO_EQUIVALENT_UNITS",
+        "working_entry_orders_included": true
+      },
+      "compliance": {
+        "session_timezone": "America/New_York",
+        "provider_session_open_local": "18:00:00",
+        "provider_session_close_local": "16:10:00",
+        "news_restricted_seconds_before": 120,
+        "news_restricted_seconds_after": 120,
+        "price_limit_zone_policy": "CURRENT_CONTRACT_SPECIFIC_CME_DATA_REQUIRED",
+        "same_underlying_hedging": "PROHIBITED",
+        "unexpected_stage_transition": "BLOCK_NEW_ORDERS_UNTIL_RECONCILED",
+        "provider_auto_liquidation_reliance": false
+      },
+      "ambiguities": [
+        {
+          "id": "T1_DOUBLE_NEGATIVE",
+          "resolution": "Use the plan table and separate news policy: Rapid Sim Funded is restricted; evaluation is allowed.",
+          "live_readiness_effect": "DATA_DRIVEN_NEWS_CALENDAR_AND_CURRENT_EVENT_UNIVERSE_REQUIRED"
+        },
+        {
+          "id": "NEWS_ANY_DATA_RELEASE_SCOPE",
+          "resolution": "Keep event classifications data-driven and fail closed; the broader any-data-release wording is not silently narrowed to the named T1 categories.",
+          "live_readiness_effect": "COMPLETE_CURRENT_RESTRICTED_EVENT_UNIVERSE_REQUIRED"
+        },
+        {
+          "id": "EVALUATION_INACTIVITY_CONFLICT",
+          "resolution": "Keep unresolved and exclude it from Sim Funded optimization.",
+          "live_readiness_effect": "EVALUATION_STAGE_REVIEW_REQUIRED"
+        },
+        {
+          "id": "PROVIDER_EST_WORDING",
+          "resolution": "Use America/New_York with daylight-saving behavior, plus a verified holiday/session calendar.",
+          "live_readiness_effect": "VERIFIED_SESSION_CALENDAR_REQUIRED"
+        },
+        {
+          "id": "STANDARD_RAPID_SCALING_EXAMPLE",
+          "resolution": "Do not apply standard Rapid scaling to Rapid EOD without a plan-specific source.",
+          "live_readiness_effect": "NO_FUNDED_SCALING_ASSUMED"
+        },
+        {
+          "id": "FLOOR_TOUCH_WORDING",
+          "resolution": "Conservative enforcement treats equity less than or equal to the floor as breached.",
+          "live_readiness_effect": "CONSERVATIVE_BLOCK"
+        },
+        {
+          "id": "MAXIMUM_WITHDRAWABLE_AMOUNT",
+          "resolution": "Eligibility is modeled, but automated maximum requests fail closed pending current official confirmation.",
+          "live_readiness_effect": "AUTOMATED_PAYOUT_REQUESTS_DISABLED"
+        }
+      ],
+      "official_sources": [
+        {
+          "source_id": "rapid_eod_50k",
+          "title": "Rapid EOD 50k - A Comprehensive Look",
+          "url": "https://help.myfundedfutures.com/en/articles/16158363-rapid-eod-50k-a-comprehensive-look",
+          "accessed_on": "2026-08-10",
+          "provider_updated_at": "2026-08-05T15:48:51Z",
+          "supports": ["evaluation", "sim_funded", "payout", "position_limits", "activation_fee"],
+          "verification_status": "OFFICIAL_PAGE_METADATA_AND_TASK_SPECIFICATION_REVIEWED"
+        },
+        {
+          "source_id": "news_policy",
+          "title": "News Trading Policy",
+          "url": "https://help.myfundedfutures.com/en/articles/8230009-news-trading-policy",
+          "accessed_on": "2026-08-10",
+          "provider_updated_on": "2026-02-23",
+          "supports": ["news_window", "t1_categories", "stage_scope"]
+        },
+        {
+          "source_id": "permitted_times",
+          "title": "Permitted Times to Trade",
+          "url": "https://help.myfundedfutures.com/en/articles/9558251-permitted-times-to-trade",
+          "accessed_on": "2026-08-10",
+          "provider_updated_on": "2026-03-02",
+          "supports": ["session_open", "session_close", "holiday_close"]
+        },
+        {
+          "source_id": "max_eod_trailing",
+          "title": "Max EOD Trailing",
+          "url": "https://help.myfundedfutures.com/en/articles/8348565-max-eod-trailing",
+          "accessed_on": "2026-08-10",
+          "provider_updated_on": "2026-03-02",
+          "supports": ["eod_trailing", "floor_lock", "open_equity_breach"]
+        },
+        {
+          "source_id": "inactivity",
+          "title": "Inactivity Rule",
+          "url": "https://help.myfundedfutures.com/en/articles/11972075-inactivity-rule",
+          "accessed_on": "2026-08-10",
+          "provider_updated_on": "2025-11-10",
+          "supports": ["sim_funded_seven_calendar_days", "pause"]
+        },
+        {
+          "source_id": "price_limit",
+          "title": "2% Price Limit Rule",
+          "url": "https://help.myfundedfutures.com/en/articles/9698984-2-price-limit-rule",
+          "accessed_on": "2026-08-10",
+          "provider_updated_on": "2026-03-02",
+          "supports": ["sim_funded", "live", "contract_specific_limit_data"]
+        },
+        {
+          "source_id": "fair_play",
+          "title": "Fair Play and Prohibited Trading Practices",
+          "url": "https://help.myfundedfutures.com/en/articles/8444599-fair-play-and-prohibited-trading-practices",
+          "accessed_on": "2026-08-10",
+          "provider_updated_on": "2025-11-24",
+          "supports": ["no_hedging", "automation", "duplicate_orders", "fill_conduct", "no_copy_trading"]
+        },
+        {
+          "source_id": "cross_instrument",
+          "title": "Cross Instrument Policy",
+          "url": "https://help.myfundedfutures.com/en/articles/10244682-cross-instrument-policy",
+          "accessed_on": "2026-08-10",
+          "provider_updated_on": "2026-03-03",
+          "supports": ["aggregate_position_limit"]
+        },
+        {
+          "source_id": "rapid_live",
+          "title": "Understanding Rapid Live",
+          "url": "https://help.myfundedfutures.com/en/articles/13134718-understanding-rapid-live",
+          "accessed_on": "2026-08-10",
+          "provider_updated_on": "2026-07-08",
+          "supports": ["live_stage", "transition", "live_limits", "reserve"]
+        }
+      ],
+      "production_readiness": false,
+      "readiness_blockers": [
+        "EXECUTION_PLATFORM_UNSET",
+        "OFFICIAL_MFF_PLATFORM_FEES_UNSET",
+        "STRATEGY_POLICY_NOT_OOS_PROMOTED",
+        "LIVE_EVENT_CALENDAR_NOT_BOUND",
+        "LIVE_SESSION_CALENDAR_NOT_BOUND",
+        "LIVE_PRICE_LIMIT_FEED_NOT_BOUND",
+        "PAYOUT_MAXIMUM_WITHDRAWABLE_UNRESOLVED"
+      ],
+      "authority": {
+        "provider_access": false,
+        "historical_row_read": false,
+        "evaluation": false,
+        "publication": false,
+        "active_data_mutation": false,
+        "deployment": false,
+        "payout_submission": false,
+        "trading": false
+      }
+    }
+  }
+}

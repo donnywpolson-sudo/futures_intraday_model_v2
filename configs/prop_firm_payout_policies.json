@@ -1,0 +1,25 @@
+{
+  "schema_version": "prop_firm_payout_policies/1.0.0",
+  "active_payout_policy_id": "mff_rapid_eod_payout_2026_08_10",
+  "payout_policies": {
+    "mff_rapid_eod_payout_2026_08_10": {
+      "policy_schema_id": "mff_rapid_eod_payout/1.0.0",
+      "account_stage": "sim_funded",
+      "rules_as_of": "2026-08-10",
+      "first_payout_min_completed_trading_days": 1,
+      "first_buffer_usd": "2100",
+      "minimum_request_usd": "500",
+      "subsequent_net_profit_required_usd": "500",
+      "frequency": "DAILY",
+      "trader_share": "0.90",
+      "firm_share": "0.10",
+      "payout_cycle_amount_cap_usd": null,
+      "maximum_withdrawable_rule": "UNRESOLVED_MANUAL_CONFIRMATION_REQUIRED",
+      "automatic_maximum_request": false,
+      "provider_submission_supported": false,
+      "withdrawal_changes_active_loss_floor": false,
+      "production_readiness": false,
+      "blockers": ["MAXIMUM_WITHDRAWABLE_AMOUNT_UNRESOLVED", "PROVIDER_SUBMISSION_NOT_IMPLEMENTED"]
+    }
+  }
+}

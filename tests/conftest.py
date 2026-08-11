@@ -39,6 +39,8 @@ LEGACY_PATH_PARTS = (
     "tests/test_calendar_",
     "tests/test_dbn_flat_",
     "tests/test_migration",
+    "tests/test_micro_alpha_",
+    "tests/test_tier1_phase8_",
     "tests/test_phase1a_layout",
     "tests/test_successor",
     "tests/live/test_activate_",
@@ -50,8 +52,13 @@ CURRENT_TEST_FILES = {
     "test_controlled_rebuild_authorization.py",
     "test_data_layout.py",
     "test_dependency_lock.py",
+    "test_generic_naming_policy.py",
     "test_operational_documents.py",
+    "test_micro_futures_catalog_migration.py",
     "test_profiles_and_pipeline.py",
+    "test_prop_firm_eod_risk.py",
+    "test_prop_firm_account_runtime.py",
+    "test_prop_firm_phase8.py",
     "test_project_isolation.py",
     "test_repo_boundary.py",
     "test_runtime_environment.py",
@@ -63,6 +70,8 @@ CURRENT_TEST_FILES = {
     "test_workflow_lanes.py",
 }
 LEGACY_RESEARCH_TEST_FILES = {
+    "test_data_topology_source_safe_v2.py",
+    "test_apex_tradovate_eod_risk.py",
     "test_alpha_ladder_feature_gap_diagnostic.py",
     "test_alpha_ladder_reported_trade_exit_readiness.py",
     "test_cash_open_calendar_grid_publication.py",
@@ -70,6 +79,7 @@ LEGACY_RESEARCH_TEST_FILES = {
     "test_cash_open_source_compatibility_census_v2.py",
     "test_reported_bar_fixed_horizon_census.py",
     "test_reported_bar_trade_triggered_census.py",
+    "test_standard_data_topology_source_safe_audit.py",
     "test_tier1_authoritative_certified_lifecycle.py",
     "test_tier1_authoritative_lifecycle.py",
     "test_tier1_authoritative_stable_lifecycle.py",
@@ -115,7 +125,6 @@ LEGACY_RESEARCH_TEST_NODES = {
     ),
 }
 CURRENT_HIGH_RISK_TEST_FILES = {
-    "test_apex_tradovate_eod_risk.py",
     "test_alpha_ladder_full_contract_risk_census.py",
     "test_alpha_ladder_full_regular_source_observable_successor.py",
 }
@@ -123,6 +132,8 @@ LOCAL_EVIDENCE_TEST_FILES = {
     "test_tier1_economics_only.py",
 }
 LOCAL_EVIDENCE_TEST_NODES = {
+    "tests/test_operational_documents.py::test_handoff_describes_the_active_alpha_ladder_and_next_boundary",
+    "tests/test_generic_naming_policy.py::test_legacy_lineage_bindings_still_match_exact_bytes",
     "tests/live/test_package_candidate.py::test_package_candidate_plan_binds_reviewed_bytes_and_is_create_only",
     "tests/test_alpha_ladder_full_regular_tier0.py::test_live_evidence_is_transition_stable_when_present",
     "tests/test_alpha_ladder_reported_trade_exit_tier0.py::test_live_evidence_is_transition_stable_when_present",
@@ -251,6 +262,7 @@ def pytest_configure(config: pytest.Config) -> None:
         config.option.markexpr = "current"
 
 
+@pytest.hookimpl(tryfirst=True)
 def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item]) -> None:
     """Classify every test into one mutually exclusive operating lane."""
 
@@ -265,8 +277,25 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
         "attempt-1/pilot_decision.json"
     )
     for item in items:
-        lane = _lane_for(item)
-        item.add_marker(getattr(pytest.mark, lane))
+        lane = ""
+        node: pytest.Node | None = item
+        while node is not None:
+            local_lanes = {
+                marker.name
+                for marker in node.own_markers
+                if marker.name in {"current", "high_risk", "legacy", "local_evidence"}
+            }
+            if local_lanes:
+                lane = max(
+                    local_lanes,
+                    key={"current": 0, "high_risk": 1, "legacy": 2, "local_evidence": 3}.get,
+                )
+                break
+            node = node.parent
+        if not lane:
+            lane = _lane_for(item)
+            item.add_marker(getattr(pytest.mark, lane))
+        setattr(item, "_effective_workflow_lane", lane)
         if (
             published_v6.exists()
             and item.nodeid.endswith(
@@ -294,6 +323,15 @@ def pytest_collection_modifyitems(config: pytest.Config, items: list[pytest.Item
                 strict=True,
             ))
     markexpr = getattr(config.option, "markexpr", "")
+    if markexpr in {"current", "high_risk", "legacy", "local_evidence"}:
+        selected = [
+            item for item in items
+            if getattr(item, "_effective_workflow_lane", None) == markexpr
+        ]
+        deselected = [item for item in items if item not in selected]
+        if deselected:
+            config.hook.pytest_deselected(items=deselected)
+        items[:] = selected
     if "local_evidence" in markexpr:
         _load_local_evidence_manifest(config)
 

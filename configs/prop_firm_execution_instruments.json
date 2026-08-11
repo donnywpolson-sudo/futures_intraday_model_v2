@@ -1,0 +1,94 @@
+{
+  "schema_version": "prop_firm_execution_instruments/1.0.0",
+  "active_mapping_id": "mff_micro_execution_mapping_2026_08_10",
+  "mappings": {
+    "mff_micro_execution_mapping_2026_08_10": {
+      "mapping_schema_id": "mff_micro_execution_mapping/1.0.0",
+      "rules_as_of": "2026-08-10",
+      "execution_contract_type": "MICRO_ONLY",
+      "instruments": {
+        "ES": {
+          "execution_symbol": "MES",
+          "underlying_risk_group": "SP500_EQUITY_INDEX",
+          "contract_multiplier": "5",
+          "tick_size": "0.25",
+          "tick_value_usd": "1.25",
+          "session_calendar": "CME_EQUITY_INDEX_US",
+          "expiration_roll_policy": "QUARTERLY_MATCH_SIGNAL_CONTRACT_AND_ROLL",
+          "mini_to_micro_economic_ratio": "0.1",
+          "provider_micro_equivalent_units": 1,
+          "signal_execution_relationship": "STANDARD_SIGNAL_MICRO_EXECUTION",
+          "execution_model_status": "VERIFIED_CONTRACT_SPEC_RESEARCH_PROXY_PENDING_MICRO_LIQUIDITY_VALIDATION",
+          "source": {
+            "title": "Micro E-mini Futures Fact Card",
+            "url": "https://www.cmegroup.com/trading/equity-index/files/cme-micro-e-mini-futures-fact-card.pdf",
+            "accessed_on": "2026-08-10",
+            "provider_updated_on": null,
+            "supports": ["execution_symbol", "contract_multiplier", "tick_size", "tick_value", "expiration_cycle"]
+          }
+        },
+        "CL": {
+          "execution_symbol": "MCL",
+          "underlying_risk_group": "WTI_CRUDE_OIL",
+          "contract_multiplier": "100",
+          "tick_size": "0.01",
+          "tick_value_usd": "1.00",
+          "session_calendar": "NYMEX_ENERGY_US",
+          "expiration_roll_policy": "MONTHLY_MATCH_SIGNAL_DELIVERY_MONTH_AND_ROLL",
+          "mini_to_micro_economic_ratio": "0.1",
+          "provider_micro_equivalent_units": 1,
+          "signal_execution_relationship": "STANDARD_SIGNAL_MICRO_EXECUTION",
+          "execution_model_status": "VERIFIED_CONTRACT_SPEC_RESEARCH_PROXY_PENDING_MICRO_LIQUIDITY_VALIDATION",
+          "source": {
+            "title": "Micro WTI Crude Oil Futures Contract Specs",
+            "url": "https://www.cmegroup.com/markets/energy/crude-oil/micro-wti-crude-oil.contractSpecs.html",
+            "accessed_on": "2026-08-10",
+            "provider_updated_on": null,
+            "supports": ["execution_symbol", "contract_multiplier", "tick_size", "tick_value", "expiration_cycle"]
+          }
+        },
+        "6E": {
+          "execution_symbol": "M6E",
+          "underlying_risk_group": "EUR_USD_FX",
+          "contract_multiplier": "12500",
+          "tick_size": "0.0001",
+          "tick_value_usd": "1.25",
+          "session_calendar": "CME_FX_US",
+          "expiration_roll_policy": "QUARTERLY_MATCH_SIGNAL_CONTRACT_AND_ROLL",
+          "mini_to_micro_economic_ratio": "0.1",
+          "provider_micro_equivalent_units": 1,
+          "signal_execution_relationship": "STANDARD_SIGNAL_MICRO_EXECUTION",
+          "execution_model_status": "VERIFIED_CONTRACT_SPEC_RESEARCH_PROXY_PENDING_MICRO_LIQUIDITY_VALIDATION",
+          "source": {
+            "title": "E-micro FX Futures Sell Sheet",
+            "url": "https://www.cmegroup.com/trading/fx/files/FX-220_E-micros_Sell_Sheet_updated_version.pdf",
+            "accessed_on": "2026-08-10",
+            "provider_updated_on": null,
+            "supports": ["execution_symbol", "contract_multiplier", "tick_size", "tick_value", "expiration_cycle"]
+          }
+        },
+        "ZN": {
+          "execution_symbol": null,
+          "underlying_risk_group": "US_TREASURY_10Y",
+          "enabled": false,
+          "disposition": "NO_VERIFIED_DIRECTLY_INTERCHANGEABLE_MICRO_MAPPING",
+          "prohibited_substitutions": ["YIELD_FUTURE", "DIFFERENT_TREASURY_TENOR"],
+          "source": {
+            "title": "10-Year T-Note Futures Contract Specs",
+            "url": "https://www.cmegroup.com/markets/interest-rates/us-treasury/10-year-us-treasury-note.contractSpecs.html",
+            "accessed_on": "2026-08-10",
+            "provider_updated_on": null,
+            "supports": ["signal_contract_reference_only"],
+            "verification_status": "NO_DIRECT_MICRO_EXECUTION_MAPPING_CONFIRMED_IN_CONFIGURATION"
+          }
+        }
+      },
+      "live_readiness": false,
+      "readiness_blockers": [
+        "MICRO_TRANSACTION_COST_PROFILE_UNSET",
+        "MICRO_SPREAD_AND_SLIPPAGE_VALIDATION_PENDING",
+        "ROLL_ALIGNMENT_REQUIRES_DATASET_CERTIFICATION"
+      ]
+    }
+  }
+}

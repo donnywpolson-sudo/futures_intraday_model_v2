@@ -25,6 +25,9 @@ from .historical_engine_contracts import (
 from .historical_evaluator import evaluate_frozen_research_run
 from .historical_splitter import split_synthetic_research_run
 from .profiles import ProfileContractError, validate_profiles
+from .errors import ContractError
+from .prop_firm_eod_risk import build_active_draft_policy
+from .prop_firm_phase8 import build_phase8_preparation
 from .research import (
     SessionWindow,
     TemporalSamples,
@@ -146,9 +149,11 @@ def run_synthetic_pipeline(
 ) -> dict[str, Any]:
     """Run the full deterministic smoke path without reading historical data."""
 
+    root = repository_root or _repository_root()
     profile_summary = validate_profiles(
         profile_path, repository_root=repository_root
     )
+    prop_firm_phase8 = build_phase8_preparation(root=root)
     dataset = _synthetic_dataset()
     raw = np.ascontiguousarray(dataset.features.copy())
     causal = np.ascontiguousarray(raw - raw.mean(axis=0, keepdims=True))
@@ -238,6 +243,26 @@ def run_synthetic_pipeline(
                 ),
                 "promotion_ready": False,
                 "portfolio_risk_gate": "SYNTHETIC_ONLY",
+                "prop_firm_profile_id": prop_firm_phase8["profile_id"],
+                "prop_firm_profile_sha256": prop_firm_phase8[
+                    "profile_hash"
+                ],
+                "prop_firm_profile_document_sha256": prop_firm_phase8[
+                    "profile_document_sha256"
+                ],
+                "provider_id": prop_firm_phase8["provider_id"],
+                "account_stage": prop_firm_phase8["account_stage"],
+                "prop_firm_runtime_identity": prop_firm_phase8[
+                    "runtime_identity"
+                ],
+                "cost_status": prop_firm_phase8["cost_status"],
+                "exact_provider_account_costs_verified": prop_firm_phase8[
+                    "exact_provider_account_costs_verified"
+                ],
+                "evaluation_result_label": prop_firm_phase8[
+                    "evaluation_result_label"
+                ],
+                "evaluation_authorized": False,
             },
         ),
         _phase_record(
@@ -301,6 +326,8 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("list")
     subparsers.add_parser("validate-profiles")
+    subparsers.add_parser("prop-firm-risk-policy")
+    subparsers.add_parser("prop-firm-phase8")
     subparsers.add_parser("smoke")
     for phase in PHASES:
         subparsers.add_parser(f"phase{phase.lower()}")
@@ -320,6 +347,10 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "list":
             result: dict[str, Any] = {
                 "schema_version": PIPELINE_SCHEMA,
+                "preparation_interfaces": [
+                    "prop-firm-risk-policy",
+                    "prop-firm-phase8",
+                ],
                 "phases": [
                     {"phase": phase, "purpose": PHASE_PURPOSES[phase]}
                     for phase in PHASES
@@ -334,6 +365,21 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "profile_id": profile["profile_id"],
                 "state": "ACTIVE_HASH_BOUND",
             }
+            phase8 = build_phase8_preparation(root=root)
+            result["active_prop_firm_profile"] = {
+                "profile_id": phase8["profile_id"],
+                "profile_hash": phase8["profile_hash"],
+                "profile_document_sha256": phase8["profile_document_sha256"],
+                "phase8_preparation_id": phase8["preparation_id"],
+                "account_stage": phase8["account_stage"],
+                "cache_identity": phase8["runtime_identity"]["cache_identity"],
+                "production_readiness": phase8["production_readiness"],
+                "state": "SELECTED_NON_AUTHORIZING_PRODUCTION_BLOCKED",
+            }
+        elif args.command == "prop-firm-risk-policy":
+            result = build_active_draft_policy(root=root)
+        elif args.command == "prop-firm-phase8":
+            result = build_phase8_preparation(root=root)
         else:
             full = run_synthetic_pipeline(
                 profile_path=profiles, repository_root=root
@@ -345,7 +391,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = next(
                     item for item in full["phases"] if item["phase"] == requested
                 )
-    except (ProfileContractError, PipelineGateError, ValueError) as exc:
+    except (ContractError, ProfileContractError, PipelineGateError, ValueError) as exc:
         raise SystemExit(f"BLOCKED: {exc}") from exc
 
     if args.output is not None:

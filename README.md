@@ -102,15 +102,30 @@ returns across a roll. CME documents are retained as historic/reference
 evidence and are needed only to resolve an audit conflict or unresolved
 economics signature.
 
-Phase 8's current risk default is an **Apex Trader Funding $50K EOD Performance
-Account**. The editable, source-linked profile is
-[`configs/prop_firm_risk_profile.json`](configs/prop_firm_risk_profile.json);
-see [`docs/PROP_FIRM_RISK.md`](docs/PROP_FIRM_RISK.md) before changing firms or
-starting a real evaluation. The current Tier 1 costs, sizing, risk limits,
-baselines, and metrics are locked locally in
-[`configs/tier1_phase8_evaluation.json`](configs/tier1_phase8_evaluation.json).
-Before any real-data run, use the metadata-only Phase 8 readiness audit; it
-checks the pinned releases and local controls without opening market-data rows.
+Future research preparation uses provider-neutral profiles in
+[`configs/prop_firm_profiles.json`](configs/prop_firm_profiles.json). The
+active immutable profile is `mff_rapid_eod_50k_2026_08_10` with explicit
+`sim_funded` stage, zero-based ledger, micro-only execution, and a portfolio-wide
+30-micro-equivalent cap. Historic Phase 8 configs and prior-provider policy
+artifacts remain unchanged where immutable evidence binds their hashes. See
+[`configs/prop_firm_phase8_evaluation.json`](configs/prop_firm_phase8_evaluation.json)
+and `src/futures_rebuild/prop_firm_phase8.py` for current provider-neutral
+Phase 8 preparation. See
+[`docs/PROP_FIRM_RISK.md`](docs/PROP_FIRM_RISK.md) and
+[`docs/NAMING_AND_LINEAGE.md`](docs/NAMING_AND_LINEAGE.md).
+Runtime sizing resolves micro metadata, provisional-or-verified economics, open
+and working stop risk, and every cap from the selected hash-bound bindings.
+Session IDs are derived from verified provider-calendar records, and funded
+drawdown/payout state has deterministic restart serialization. The current MFF
+platform and official fees remain unresolved, so production/live readiness is
+false and the named research stress-cost profile cannot be treated as verified.
+
+The public prepare-only interfaces are:
+
+```powershell
+.\.venv\Scripts\python.exe -m futures_rebuild.pipeline prop-firm-risk-policy
+.\.venv\Scripts\python.exe -m futures_rebuild.pipeline prop-firm-phase8
+```
 
 ## Daily use
 
