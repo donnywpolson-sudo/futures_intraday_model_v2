@@ -1,8 +1,9 @@
 import hashlib
-from pathlib import Path
-import subprocess
-
 import json
+from pathlib import Path
+import re
+import subprocess
+import tomllib
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,10 +25,124 @@ PROJECT_OUTLINE_SNAPSHOT_SHA256 = (
 )
 PROJECT_OUTLINE_SNAPSHOT_BYTE_COUNT = 69_556
 PROJECT_OUTLINE_BODY_MARKER = "<!-- BEGIN EXACT PROJECT_OUTLINE SOURCE BODY -->"
+PROJECT_OUTLINE_RETAINED_HEADINGS = (
+    ("Futures intraday research project", "Purpose and scope"),
+    ("Research discipline", "Research invariants"),
+    ("Non-negotiable data rules", "Research invariants"),
+    ("Label, feature, and split rules", "Research invariants"),
+    ("Stop conditions", "Stop conditions"),
+)
+PROJECT_OUTLINE_CONDENSED_HEADINGS = (
+    ("Objective", "Purpose and scope"),
+    ("Source-of-truth roles", "Authority and navigation"),
+    ("Data manifest and rule index", "Current source-of-truth inputs"),
+    ("Alpha research lanes", "Current research lanes"),
+    ("Standard/full-contract 41-market lane", "Standard/full-contract Alpha lane"),
+    (
+        "Micro-futures integer lane (legacy Apex source lineage)",
+        "Micro-source lane",
+    ),
+    ("Synthetic Phase 1A-11 mechanics", "Current phase map"),
+    ("Runnable commands", "Current phase map"),
+    ("Audit commands", "Evidence, outputs, and folder roles"),
+    ("Cockpit workflow", "Cockpit and execution boundary"),
+    ("Evaluation and model-trust standard", "Research invariants"),
+    ("Acceptance standards", "Stop conditions"),
+    ("Reporting standard", "Evidence, outputs, and folder roles"),
+)
+PROJECT_OUTLINE_DELEGATED_HEADINGS = (
+    ("Active layout", "SOURCE_OF_TRUTH.md", "SOURCE_OF_TRUTH.md"),
+    (
+        "Preserved legacy micro Phase 1A/1B/2 route",
+        PROJECT_OUTLINE_SNAPSHOT_PATH,
+        PROJECT_OUTLINE_SNAPSHOT_PATH,
+    ),
+    ("Approval gates", "CURRENT_WORKFLOW.md", "CURRENT_WORKFLOW.md"),
+    ("Bounded execution policy", "AGENTS.md", "AGENTS.md"),
+)
+PROJECT_OUTLINE_UNRESOLVED_HEADINGS = frozenset()
+PROJECT_OUTLINE_EXPECTED_FORMER_HEADINGS = frozenset(
+    {
+        "Futures intraday research project",
+        "Objective",
+        "Source-of-truth roles",
+        "Research discipline",
+        "Data manifest and rule index",
+        "Active layout",
+        "Alpha research lanes",
+        "Standard/full-contract 41-market lane",
+        "Micro-futures integer lane (legacy Apex source lineage)",
+        "Synthetic Phase 1A-11 mechanics",
+        "Preserved legacy micro Phase 1A/1B/2 route",
+        "Non-negotiable data rules",
+        "Label, feature, and split rules",
+        "Runnable commands",
+        "Audit commands",
+        "Cockpit workflow",
+        "Approval gates",
+        "Evaluation and model-trust standard",
+        "Bounded execution policy",
+        "Acceptance standards",
+        "Reporting standard",
+        "Stop conditions",
+    }
+)
 
 
 def _text(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
+
+
+def _markdown_headings(text: str) -> set[str]:
+    return {
+        line.lstrip("#").strip()
+        for line in text.splitlines()
+        if re.fullmatch(r"#{1,6} .+", line)
+    }
+
+
+def _assert_project_outline_heading_disposition_contract() -> None:
+    outline = _text("PROJECT_OUTLINE.md")
+    current_headings = _markdown_headings(outline)
+
+    snapshot_bytes = (ROOT / PROJECT_OUTLINE_SNAPSHOT_PATH).read_bytes()
+    marker_with_lf = (PROJECT_OUTLINE_BODY_MARKER + "\n").encode("utf-8")
+    assert snapshot_bytes.count(marker_with_lf) == 1
+    _, preserved_body = snapshot_bytes.split(marker_with_lf, 1)
+    former_headings = _markdown_headings(preserved_body.decode("utf-8"))
+
+    retained = PROJECT_OUTLINE_RETAINED_HEADINGS
+    condensed = PROJECT_OUTLINE_CONDENSED_HEADINGS
+    delegated = PROJECT_OUTLINE_DELEGATED_HEADINGS
+    unresolved = PROJECT_OUTLINE_UNRESOLVED_HEADINGS
+
+    assert len(retained) == 5
+    assert len(condensed) == 13
+    assert len(delegated) == 4
+    assert len(unresolved) == 0
+
+    classified = [former for former, _ in retained]
+    classified.extend(former for former, _ in condensed)
+    classified.extend(former for former, _, _ in delegated)
+    classified.extend(unresolved)
+    assert len(classified) == 22
+    assert len(classified) == len(set(classified))
+    assert set(classified) == PROJECT_OUTLINE_EXPECTED_FORMER_HEADINGS
+    assert PROJECT_OUTLINE_EXPECTED_FORMER_HEADINGS <= former_headings
+
+    for former, current in retained + condensed:
+        assert former
+        assert current
+        assert former in former_headings
+        assert current in current_headings
+
+    for former, destination, durable_pointer in delegated:
+        assert former
+        assert destination
+        assert durable_pointer
+        assert former in former_headings
+        assert (ROOT / destination).is_file()
+        assert durable_pointer in outline
 
 
 def _assert_project_outline_historical_snapshot_contract() -> None:
@@ -203,6 +318,90 @@ def _assert_public_snapshot_is_historical() -> None:
         assert misleading.lower() not in lowered
 
 
+def _assert_project_outline_is_concise_current_runbook() -> None:
+    outline_path = ROOT / "PROJECT_OUTLINE.md"
+    outline_bytes = outline_path.read_bytes()
+    outline = outline_bytes.decode("utf-8")
+    lowered = " ".join(outline.split()).lower()
+
+    assert b"\r" not in outline_bytes
+    assert outline_bytes.endswith(b"\n")
+    assert not outline_bytes.endswith(b"\n\n")
+    assert len(outline.split()) <= 3_500
+    assert len(outline_bytes) <= 24 * 1_024
+    assert len(outline.splitlines()) <= 450
+
+    for required in (
+        "Futures intraday research runbook",
+        "CURRENT_WORKFLOW.md",
+        "AGENTS.md",
+        "SOURCE_OF_TRUTH.md",
+        "configs/repository_surface.json",
+        "docs/LEGACY_WORKFLOWS.md",
+        PROJECT_OUTLINE_SNAPSHOT_PATH,
+        PROJECT_OUTLINE_SNAPSHOT_MANIFEST_PATH,
+        "MASTER_AUDIT.md",
+        "META_MASTER_AUDIT.md",
+        "CURRENT_WORKFLOW.md controls normal work",
+        "historical chronology",
+        "standard/full-contract Alpha lane",
+        "Micro-source lane",
+        "Micro source selection does not grant research or trading authority",
+        "CertifiedResearchGateway",
+        "only current real-history registration and economic-execution boundary",
+        "futures-pipeline` is synthetic-only",
+        "Directory presence",
+        "Current phase map",
+        "Purpose and current entry point",
+        "Principal output",
+        "Gate or stop condition",
+        "Authority boundary",
+        "Research invariants",
+        "Stop conditions",
+    ):
+        assert required.lower() in lowered
+
+    assert "project_outline.md controls normal work" not in lowered
+    assert "project_outline.md is the normal-work workflow authority" not in lowered
+    assert "metadata preflight v2" not in lowered
+    assert "acquisition v21" not in lowered
+    assert "custody repair v2" not in lowered
+    assert "preserved legacy micro phase 1a/1b/2 route" not in lowered
+    assert lowered.count("consumed authoriz") <= 1
+
+    assert re.search(r"(?i)\b[A-Z]:\\", outline) is None
+    assert "%TEMP%" not in outline
+    assert "AppData\\Local\\Temp" not in outline
+    assert re.search(r"(?i)(api[_-]?key|password|token)\s*[:=]\s*\S+", outline) is None
+    assert re.search(r"\b[0-9a-f]{40}\b", outline) is None
+    assert re.search(r"\b20\d{2}-\d{2}-\d{2}[T ]\d{2}:\d{2}", outline) is None
+    for mutable_status in (
+        "current head",
+        "branch:",
+        "ahead of origin",
+        "working tree is",
+    ):
+        assert mutable_status not in lowered
+
+    pyproject = tomllib.loads(_text("pyproject.toml"))
+    public_commands = set(pyproject["project"]["scripts"])
+    named_commands = set(re.findall(r"\bfutures-[a-z0-9-]+\b", outline))
+    assert named_commands
+    assert named_commands <= public_commands
+    for retired in (
+        "futures-live-cockpit",
+        "futures-closure-workflow",
+        "futures-calendar",
+        "futures-active-view",
+    ):
+        assert retired not in named_commands
+
+    snapshot_bytes = (ROOT / PROJECT_OUTLINE_SNAPSHOT_PATH).read_bytes()
+    marker_with_lf = (PROJECT_OUTLINE_BODY_MARKER + "\n").encode("utf-8")
+    _, preserved_body = snapshot_bytes.split(marker_with_lf, 1)
+    assert outline_bytes != preserved_body
+
+
 def test_current_documents_use_one_plain_language_workflow_surface() -> None:
     agents = _text("AGENTS.md")
     readme = _text("README.md")
@@ -222,6 +421,8 @@ def test_current_documents_use_one_plain_language_workflow_surface() -> None:
     assert "futures-live-cockpit-workflow" not in combined
     assert "futures-closure-workflow" not in combined
     assert "this guide controls normal-work procedure" in current.lower()
+    _assert_project_outline_heading_disposition_contract()
+    _assert_project_outline_is_concise_current_runbook()
     _assert_public_snapshot_is_historical()
     _assert_project_outline_historical_snapshot_contract()
 
@@ -232,6 +433,14 @@ def test_public_snapshot_is_an_explicit_historical_record() -> None:
 
 def test_project_outline_copy_first_snapshot_is_exact_and_non_authorizing() -> None:
     _assert_project_outline_historical_snapshot_contract()
+
+
+def test_project_outline_is_current_runbook_not_historical_ledger() -> None:
+    _assert_project_outline_is_concise_current_runbook()
+
+
+def test_project_outline_heading_dispositions_are_complete_and_resolved() -> None:
+    _assert_project_outline_heading_disposition_contract()
 
 
 def test_handoff_describes_the_active_alpha_ladder_and_next_boundary(
