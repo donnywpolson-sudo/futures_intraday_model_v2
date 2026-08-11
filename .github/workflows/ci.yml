@@ -1,0 +1,51 @@
+name: Provider-free CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  provider-free-contracts:
+    runs-on: windows-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11.9"
+
+      - name: Install locked dependencies
+        shell: pwsh
+        run: |
+          python -m pip install --require-hashes -r requirements.sha256.lock
+          $env:SETUPTOOLS_USE_DISTUTILS = "stdlib"
+          python -m pip install --no-deps --no-build-isolation -e .
+
+      - name: Run current policy and safety checks
+        shell: pwsh
+        run: |
+          python -m pytest -q --basetemp=.pytest_tmp/ci-provider-free-current `
+            tests/test_dependency_lock.py `
+            tests/test_workflow_lanes.py `
+            tests/test_operational_documents.py::test_current_documents_use_one_plain_language_workflow_surface `
+            tests/test_operational_documents.py::test_agents_requires_a_value_case_for_new_policy_controls `
+            tests/test_operational_documents.py::test_public_scripts_expose_no_token_era_high_risk_runner
+
+      - name: Run legacy and credential boundary checks
+        shell: pwsh
+        run: |
+          python -m pytest -q -m "legacy or high_risk" --basetemp=.pytest_tmp/ci-provider-free-boundaries `
+            tests/test_closure_workflow.py::test_governing_documents_do_not_require_copied_approval_lines `
+            tests/live/test_package_candidate.py::test_candidate_topology_rejects_credential_locator
