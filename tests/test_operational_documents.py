@@ -1,3 +1,4 @@
+import hashlib
 from pathlib import Path
 import subprocess
 
@@ -5,10 +6,145 @@ import json
 
 
 ROOT = Path(__file__).resolve().parents[1]
+PROJECT_OUTLINE_SNAPSHOT_PATH = (
+    "docs/history/PROJECT_OUTLINE_SNAPSHOT_2026-08-11.md"
+)
+PROJECT_OUTLINE_SNAPSHOT_MANIFEST_PATH = (
+    "docs/history/PROJECT_OUTLINE_SNAPSHOT_2026-08-11.json"
+)
+PROJECT_OUTLINE_SOURCE_COMMIT = "f4a0444e92f80124c3340fd6ad81fc242953d2bc"
+PROJECT_OUTLINE_SOURCE_GIT_BLOB_SHA1 = "66ec967e98d76a1abade9c3fc5f30cdc81c5ade2"
+PROJECT_OUTLINE_SOURCE_SHA256 = (
+    "a08c53978ac7a47175ed96640a5f32dad977ce9a52a169a4368ded2910931879"
+)
+PROJECT_OUTLINE_SOURCE_BYTE_COUNT = 68_467
+PROJECT_OUTLINE_SOURCE_LINE_COUNT = 1_036
+PROJECT_OUTLINE_SNAPSHOT_SHA256 = (
+    "ec0f62dc7f5294d49429cbc619a09df831a266172d249c54dbf6ce990cbe8b91"
+)
+PROJECT_OUTLINE_SNAPSHOT_BYTE_COUNT = 69_556
+PROJECT_OUTLINE_BODY_MARKER = "<!-- BEGIN EXACT PROJECT_OUTLINE SOURCE BODY -->"
 
 
 def _text(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
+
+
+def _assert_project_outline_historical_snapshot_contract() -> None:
+    snapshot_path = ROOT / PROJECT_OUTLINE_SNAPSHOT_PATH
+    manifest_path = ROOT / PROJECT_OUTLINE_SNAPSHOT_MANIFEST_PATH
+    assert snapshot_path.is_file()
+    assert manifest_path.is_file()
+
+    snapshot_bytes = snapshot_path.read_bytes()
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    assert isinstance(manifest, dict)
+    assert manifest["schema_version"] == "project_outline_historical_snapshot/1.0.0"
+    assert manifest["record_type"] == "PROJECT_OUTLINE_COPY_FIRST_SNAPSHOT"
+    assert manifest["record_date"] == "2026-08-11"
+    assert (
+        manifest["state"]
+        == "HISTORICAL_EXACT_SOURCE_BODY_PRESERVED_NON_AUTHORIZING"
+    )
+    assert manifest["current_replacement"] == "PROJECT_OUTLINE.md"
+
+    source = manifest["source"]
+    assert source == {
+        "byte_count": PROJECT_OUTLINE_SOURCE_BYTE_COUNT,
+        "commit": PROJECT_OUTLINE_SOURCE_COMMIT,
+        "final_newline": True,
+        "git_blob_sha1": PROJECT_OUTLINE_SOURCE_GIT_BLOB_SHA1,
+        "line_endings": "LF",
+        "line_count": PROJECT_OUTLINE_SOURCE_LINE_COUNT,
+        "path": "PROJECT_OUTLINE.md",
+        "sha256": PROJECT_OUTLINE_SOURCE_SHA256,
+    }
+
+    snapshot = manifest["snapshot"]
+    assert snapshot["path"] == PROJECT_OUTLINE_SNAPSHOT_PATH
+    assert snapshot["body_marker"] == PROJECT_OUTLINE_BODY_MARKER
+    assert snapshot["exact_source_body"] is True
+    assert snapshot["sha256"] == PROJECT_OUTLINE_SNAPSHOT_SHA256
+    assert snapshot["byte_count"] == PROJECT_OUTLINE_SNAPSHOT_BYTE_COUNT
+    assert snapshot["preserved_body_sha256"] == PROJECT_OUTLINE_SOURCE_SHA256
+    assert snapshot["preserved_body_byte_count"] == PROJECT_OUTLINE_SOURCE_BYTE_COUNT
+    assert hashlib.sha256(snapshot_bytes).hexdigest() == PROJECT_OUTLINE_SNAPSHOT_SHA256
+    assert len(snapshot_bytes) == PROJECT_OUTLINE_SNAPSHOT_BYTE_COUNT
+
+    marker_with_lf = (PROJECT_OUTLINE_BODY_MARKER + "\n").encode("utf-8")
+    assert snapshot_bytes.count(marker_with_lf) == 1
+    preamble_bytes, preserved_body = snapshot_bytes.split(marker_with_lf, 1)
+    assert hashlib.sha256(preserved_body).hexdigest() == PROJECT_OUTLINE_SOURCE_SHA256
+    assert len(preserved_body) == PROJECT_OUTLINE_SOURCE_BYTE_COUNT
+    assert preserved_body.endswith(b"\n") and not preserved_body.endswith(b"\n\n")
+    assert b"\r" not in preserved_body
+
+    preamble = preamble_bytes.decode("utf-8")
+    for required in (
+        "Historical PROJECT_OUTLINE snapshot",
+        "2026-08-11",
+        PROJECT_OUTLINE_SOURCE_COMMIT,
+        "PROJECT_OUTLINE.md",
+        "non-authoritative",
+        "does not control normal work",
+        "CURRENT_WORKFLOW.md",
+        "does not claim to be the current research runbook",
+        "does not claim that those embedded historical statements remain current",
+        "authorize provider access",
+    ):
+        assert required in preamble
+
+    expected_authority_fields = {
+        "active_state_mutation",
+        "activation",
+        "commit",
+        "deletion",
+        "historical_row_access",
+        "installation",
+        "live_smoke",
+        "move_or_rename",
+        "normal_work",
+        "order_placement",
+        "provider_access",
+        "publication",
+        "push",
+        "research",
+        "safety_policy",
+        "staging",
+        "trading",
+    }
+    assert set(manifest["authority"]) == expected_authority_fields
+    assert all(value is False for value in manifest["authority"].values())
+
+    registry = json.loads(_text("configs/repository_surface.json"))
+    for path, role in (
+        (PROJECT_OUTLINE_SNAPSHOT_PATH, "PROJECT_OUTLINE_HISTORICAL_SNAPSHOT"),
+        (
+            PROJECT_OUTLINE_SNAPSHOT_MANIFEST_PATH,
+            "PROJECT_OUTLINE_HISTORICAL_SNAPSHOT_MANIFEST",
+        ),
+    ):
+        matches = [
+            entry
+            for entry in registry["entries"]
+            if entry["match_type"] == "EXACT" and entry["path_or_pattern"] == path
+        ]
+        assert len(matches) == 1
+        entry = matches[0]
+        assert entry["classification"] == "HISTORICAL_HASH_BOUND"
+        assert entry["authority_role"] == role
+        assert entry["current_replacement"] == "PROJECT_OUTLINE.md"
+        assert entry["hash_bound"] is True
+        assert entry["tracked_expected"] == "TRACKED"
+        assert entry["local_only"] is False
+        assert entry["deletion_policy"] == "PRESERVE"
+        for required_note in (
+            "normal work",
+            "authoriz",
+            "Preserve",
+            "relocation or deletion",
+        ):
+            assert required_note.lower() in entry["notes"].lower()
 
 
 def _assert_public_snapshot_is_historical() -> None:
@@ -87,10 +223,15 @@ def test_current_documents_use_one_plain_language_workflow_surface() -> None:
     assert "futures-closure-workflow" not in combined
     assert "this guide controls normal-work procedure" in current.lower()
     _assert_public_snapshot_is_historical()
+    _assert_project_outline_historical_snapshot_contract()
 
 
 def test_public_snapshot_is_an_explicit_historical_record() -> None:
     _assert_public_snapshot_is_historical()
+
+
+def test_project_outline_copy_first_snapshot_is_exact_and_non_authorizing() -> None:
+    _assert_project_outline_historical_snapshot_contract()
 
 
 def test_handoff_describes_the_active_alpha_ladder_and_next_boundary(

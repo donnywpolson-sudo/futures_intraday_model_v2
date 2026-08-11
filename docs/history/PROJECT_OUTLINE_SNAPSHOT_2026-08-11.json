@@ -1,0 +1,46 @@
+{
+  "authority": {
+    "active_state_mutation": false,
+    "activation": false,
+    "commit": false,
+    "deletion": false,
+    "historical_row_access": false,
+    "installation": false,
+    "live_smoke": false,
+    "move_or_rename": false,
+    "normal_work": false,
+    "order_placement": false,
+    "provider_access": false,
+    "publication": false,
+    "push": false,
+    "research": false,
+    "safety_policy": false,
+    "staging": false,
+    "trading": false
+  },
+  "current_replacement": "PROJECT_OUTLINE.md",
+  "purpose": "Copy-first preservation boundary for the complete pre-reconciliation PROJECT_OUTLINE.md source body before later current-runbook reconciliation.",
+  "record_date": "2026-08-11",
+  "record_type": "PROJECT_OUTLINE_COPY_FIRST_SNAPSHOT",
+  "schema_version": "project_outline_historical_snapshot/1.0.0",
+  "snapshot": {
+    "body_marker": "<!-- BEGIN EXACT PROJECT_OUTLINE SOURCE BODY -->",
+    "byte_count": 69556,
+    "exact_source_body": true,
+    "path": "docs/history/PROJECT_OUTLINE_SNAPSHOT_2026-08-11.md",
+    "preserved_body_byte_count": 68467,
+    "preserved_body_sha256": "a08c53978ac7a47175ed96640a5f32dad977ce9a52a169a4368ded2910931879",
+    "sha256": "ec0f62dc7f5294d49429cbc619a09df831a266172d249c54dbf6ce990cbe8b91"
+  },
+  "source": {
+    "byte_count": 68467,
+    "commit": "f4a0444e92f80124c3340fd6ad81fc242953d2bc",
+    "final_newline": true,
+    "git_blob_sha1": "66ec967e98d76a1abade9c3fc5f30cdc81c5ade2",
+    "line_endings": "LF",
+    "line_count": 1036,
+    "path": "PROJECT_OUTLINE.md",
+    "sha256": "a08c53978ac7a47175ed96640a5f32dad977ce9a52a169a4368ded2910931879"
+  },
+  "state": "HISTORICAL_EXACT_SOURCE_BODY_PRESERVED_NON_AUTHORIZING"
+}
