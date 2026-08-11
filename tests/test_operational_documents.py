@@ -11,6 +11,62 @@ def _text(relative: str) -> str:
     return (ROOT / relative).read_text(encoding="utf-8")
 
 
+def _assert_public_snapshot_is_historical() -> None:
+    snapshot = _text("PUBLIC_SNAPSHOT.md")
+    lowered = " ".join(snapshot.split()).lower()
+
+    for required in (
+        "Historical public source snapshot record",
+        "e9363688873d90af41c998054d4b219f5e950f0e",
+        "2026-07-25",
+        "sanitized public source export",
+        "does not describe the current operational checkout",
+        "files omitted from this historical snapshot",
+        "not evidence that any named file is absent from the current checkout",
+        "The snapshot omitted:",
+        "CURRENT_WORKFLOW.md",
+        "AGENTS.md",
+        "SOURCE_OF_TRUTH.md",
+        "does not authorize",
+        "not the complete current operational test command",
+        "not a Master Audit, Meta Audit",
+        "model-trust result",
+        "provider authorization",
+        "trading-readiness claim",
+    ):
+        assert required.lower() in lowered
+
+    for required_non_authority in (
+        "provider access",
+        "market-data reads",
+        "real-history evaluation",
+        "prediction materialization",
+        "candidate sealing",
+        "holdout access",
+        "publication",
+        "installation",
+        "activation",
+        "live smoke",
+        "trading",
+        "order placement",
+        "deletion",
+        "movement or renaming",
+        "staging",
+        "commit",
+        "push",
+    ):
+        assert required_non_authority in lowered
+
+    for misleading in (
+        "This repository is a sanitized source snapshot",
+        "The current repository omits CODEX_HANDOFF.md",
+        "The operational checkout omits all mutable continuation state",
+        "This document defines current workflow",
+        "The snapshot commit is the current HEAD",
+    ):
+        assert misleading.lower() not in lowered
+
+
 def test_current_documents_use_one_plain_language_workflow_surface() -> None:
     agents = _text("AGENTS.md")
     readme = _text("README.md")
@@ -30,6 +86,11 @@ def test_current_documents_use_one_plain_language_workflow_surface() -> None:
     assert "futures-live-cockpit-workflow" not in combined
     assert "futures-closure-workflow" not in combined
     assert "this guide controls normal-work procedure" in current.lower()
+    _assert_public_snapshot_is_historical()
+
+
+def test_public_snapshot_is_an_explicit_historical_record() -> None:
+    _assert_public_snapshot_is_historical()
 
 
 def test_handoff_describes_the_active_alpha_ladder_and_next_boundary(
