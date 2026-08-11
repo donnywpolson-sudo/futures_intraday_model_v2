@@ -802,6 +802,17 @@ commission verification remains a mechanism-freeze blocker. The shared 2025
 holdout and pre-freeze 2026 rows remain sealed, and any filesystem cleanup still
 requires a fresh exact candidate manifest and separate approval.
 
+The bounded micro publisher is now implemented as a prepare-only, hash-bound
+adapter in `src/futures_rebuild/micro_alpha_publication.py`, with preparation in
+`scripts/prepare_apex_micro_publication_v1.py`. It preserves both inactive
+staging generations, publishes 144 exact byte copies through layout-v2 manifests,
+writes the dedicated micro catalog, and creates the source-catalog-only pointer
+last. Its preparation CLI cannot execute. A plan and audit require committed
+implementation, and actual publication/activation remains a separate one-use
+active-data mutation approval. It cannot open DBNs or 2025/2026 payloads, mutate
+the standard active catalog, freeze a mechanism, register or evaluate a trial,
+or authorize trading.
+
 The one-second source proves reported-trade-bar evidence only. It cannot prove
 BBO availability, queue priority, guaranteed market-order execution, or precise
 within-second tick ordering. Later Phase 2 contracts require entry after causal
