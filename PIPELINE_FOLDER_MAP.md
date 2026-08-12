@@ -13,6 +13,7 @@ This map is concise current navigation. It is generated and is not an authority 
 - `configs/repository_surface.json` is the canonical machine-readable path-role registry.
 - `SOURCE_OF_TRUTH.md` is the broader generated repository navigation view.
 - `PIPELINE_FOLDER_MAP.md` is this generated topology view only.
+- `ACTIVE_SOURCE_FILES.txt` is the generated virtual view of tracked current operational and supporting files.
 - `pyproject.toml` defines the public package and command surface.
 - `docs/LEGACY_WORKFLOWS.md` controls interpretation of retired workflow material.
 - The complete former map is preserved at `docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.md`.
@@ -29,6 +30,8 @@ Rows below resolve from canonical registry roles. Directory or file presence nev
 | Normal work | `CURRENT_WORKFLOW.md` | `CURRENT_OPERATIONAL` | no | The sole day-to-day workflow authority; the current worktree version controls machine-local work. |
 | Durable safety policy | `AGENTS.md` | `CURRENT_OPERATIONAL` | no | Durable safety and research policy; it defers normal procedure to CURRENT_WORKFLOW.md. |
 | Generated source-of-truth view | `SOURCE_OF_TRUTH.md` | `CURRENT_SUPPORTING` | no | Deterministic human navigation view derived from configs/repository_surface.json and pyproject.toml. It is not workflow, safety-policy, pointer, catalog, trial, execution, or cleanup authority and grants no provider, data-read, publication, installation, trading, Git, or active-state authority. |
+| Generated pipeline-folder-map view | `PIPELINE_FOLDER_MAP.md` | `CURRENT_SUPPORTING` | no | Deterministically rendered from configs/repository_surface.json and pyproject.toml as a current topology and navigation view. It is not the normal-work authority, safety-policy authority, canonical machine-readable registry, or historical evidence ledger. The complete former map is preserved under docs/history/. This view grants no provider, research, data-read, publication, installation, trading, cleanup, Git, or active-state authority. |
+| Generated active-source-files view | `ACTIVE_SOURCE_FILES.txt` | `CURRENT_SUPPORTING` | no | Deterministically rendered from the tracked path inventory and configs/repository_surface.json. It lists only files classified CURRENT_OPERATIONAL or CURRENT_SUPPORTING and is a virtual active-source view that does not physically move or hide files. It is not normal-work authority, not safety-policy authority, and not the canonical registry. It grants no provider, research, data-read, publication, installation, trading, deletion, Git, or active-state authority. Historical paths remain preserved in place, and absent paths in sanitized no-Git exports do not establish deletion or retirement. |
 | Public package and commands | `pyproject.toml` | `CURRENT_OPERATIONAL` | no | Defines the Python package, dependency surface, pytest baseline, and public console commands. |
 | Standard Alpha pointer | `configs/active_alpha_research_ladder.json` | `CURRENT_OPERATIONAL` | no | Machine-readable standard Alpha contract and profile pointer; distinct from the micro source pointer. |
 | Standard active data catalog | `data/active/catalog.json` | `CURRENT_OPERATIONAL` | yes | Machine-local standard-data selection metadata; absence is permitted in provider-free source exports. |
@@ -87,7 +90,7 @@ The counts below use only the canonical classification vocabulary and count regi
 | Classification | Entry count |
 | --- | --- |
 | `CURRENT_OPERATIONAL` | 27 |
-| `CURRENT_SUPPORTING` | 31 |
+| `CURRENT_SUPPORTING` | 32 |
 | `HISTORICAL_HASH_BOUND` | 56 |
 | `HISTORICAL_UNBOUND` | 3 |
 | `PREPARED_NOT_EXECUTED` | 6 |

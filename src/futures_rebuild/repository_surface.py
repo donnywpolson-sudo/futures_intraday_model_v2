@@ -33,7 +33,20 @@ PIPELINE_FOLDER_MAP_ROLE = "GENERATED_PIPELINE_FOLDER_MAP_VIEW"
 PIPELINE_FOLDER_MAP_MAX_WORDS = 1_800
 PIPELINE_FOLDER_MAP_MAX_BYTES = 20 * 1024
 PIPELINE_FOLDER_MAP_MAX_TABLE_ROWS = 50
-EXPECTED_REGISTRY_ENTRY_COUNT = 182
+ACTIVE_SOURCE_FILES_PATH = Path("ACTIVE_SOURCE_FILES.txt")
+ACTIVE_SOURCE_FILES_ROLE = "GENERATED_ACTIVE_SOURCE_FILES_VIEW"
+ACTIVE_SOURCE_FILES_MAX_BYTES = 256 * 1024
+ACTIVE_SOURCE_CLASSIFICATIONS = (
+    "CURRENT_OPERATIONAL",
+    "CURRENT_SUPPORTING",
+)
+ACTIVE_SOURCE_HEADER = (
+    "# ACTIVE_SOURCE_FILES",
+    "# Deterministically generated from configs/repository_surface.json and the tracked repository file inventory.",
+    "# Inclusion: CURRENT_OPERATIONAL and CURRENT_SUPPORTING.",
+    "# Virtual view only; no file is moved or hidden, and this file grants no operational authority.",
+)
+EXPECTED_REGISTRY_ENTRY_COUNT = 183
 EXPECTED_UNRESOLVED_ENTRY_COUNT = 14
 EXPECTED_PUBLIC_COMMAND_COUNT = 7
 
@@ -63,6 +76,8 @@ PIPELINE_FOLDER_MAP_AUTHORITY_ROLES = (
     ("Normal work", "NORMAL_WORKFLOW_AUTHORITY"),
     ("Durable safety policy", "DURABLE_SAFETY_POLICY_AUTHORITY"),
     ("Generated source-of-truth view", SOURCE_OF_TRUTH_ROLE),
+    ("Generated pipeline-folder-map view", PIPELINE_FOLDER_MAP_ROLE),
+    ("Generated active-source-files view", ACTIVE_SOURCE_FILES_ROLE),
     ("Public package and commands", "PUBLIC_PACKAGE_AND_COMMAND_AUTHORITY"),
     ("Standard Alpha pointer", "ACTIVE_STANDARD_ALPHA_IDENTITY"),
     ("Standard active data catalog", "ACTIVE_STANDARD_DATA_SELECTION"),
@@ -417,6 +432,7 @@ def validate_repository_surface(
     _validate_authority_roles(entries, authority_precedence)
     _validate_source_of_truth_registry_entry(entries)
     _validate_pipeline_folder_map_registry_entry(entries)
+    _validate_active_source_files_registry_entry(entries)
     _validate_generated_root_policies(entries)
     _validate_standard_and_micro_roles(entries)
 
@@ -427,6 +443,7 @@ def validate_repository_surface(
         _validate_pointer_metadata(surface, root)
         compare_source_of_truth_file(surface, root)
         compare_pipeline_folder_map_file(surface, root)
+        compare_active_source_files_file(surface, root)
 
 
 def _validate_authority_roles(
@@ -567,6 +584,63 @@ def _validate_pipeline_folder_map_registry_entry(
     return entry
 
 
+def _validate_active_source_files_registry_entry(
+    entries: Sequence[Mapping[str, object]],
+) -> Mapping[str, object]:
+    matches = [
+        entry
+        for entry in entries
+        if entry.get("path_or_pattern") == ACTIVE_SOURCE_FILES_PATH.as_posix()
+    ]
+    if len(matches) != 1:
+        raise RepositorySurfaceError(
+            "ACTIVE_SOURCE_FILES.txt must have exactly one registry entry"
+        )
+    entry = matches[0]
+    expected = {
+        "match_type": "EXACT",
+        "classification": "CURRENT_SUPPORTING",
+        "authority_role": ACTIVE_SOURCE_FILES_ROLE,
+        "tracked_expected": "TRACKED",
+        "local_only": False,
+        "hash_bound": False,
+        "deletion_policy": "PRESERVE",
+    }
+    for field, value in expected.items():
+        if entry.get(field) != value:
+            raise RepositorySurfaceError(
+                f"ACTIVE_SOURCE_FILES.txt {field} must be {value!r}"
+            )
+    role_matches = [
+        item for item in entries if item.get("authority_role") == ACTIVE_SOURCE_FILES_ROLE
+    ]
+    if role_matches != matches:
+        raise RepositorySurfaceError(
+            "generated active-source-files role must be unique to ACTIVE_SOURCE_FILES.txt"
+        )
+    notes = str(entry.get("notes", "")).lower()
+    required = (
+        "deterministically rendered",
+        "tracked path inventory",
+        "configs/repository_surface.json",
+        "current_operational",
+        "current_supporting",
+        "virtual active-source view",
+        "does not physically move or hide",
+        "not normal-work authority",
+        "not safety-policy authority",
+        "not the canonical registry",
+        "grants no",
+        "historical paths remain preserved in place",
+        "sanitized no-git exports",
+    )
+    if any(fragment not in notes for fragment in required):
+        raise RepositorySurfaceError(
+            "ACTIVE_SOURCE_FILES.txt registry notes must preserve derivation, virtual-view scope, and non-authority"
+        )
+    return entry
+
+
 def _validate_generated_root_policies(entries: Sequence[Mapping[str, object]]) -> None:
     for root in GENERATED_OR_AMBIGUOUS_ROOTS:
         entry = resolve_surface_entry(entries, root)
@@ -676,10 +750,20 @@ def resolve_surface_entry(
     return winners[0]
 
 
-def _git_tracked_paths(root: Path) -> list[str]:
+def _normalize_repository_inventory_path(value: str, *, name: str) -> str:
+    if any(ord(character) < 32 or ord(character) == 127 for character in value):
+        raise RepositorySurfaceError(f"{name} contains a control character")
+    normalized = value.replace("\\", "/")
+    return _validate_relative_pattern(normalized, "EXACT", name)
+
+
+def collect_tracked_repository_paths(repository_root: Path | str) -> list[str]:
+    """Return the exact stage-zero Git file inventory using binary-safe output."""
+
+    root = Path(repository_root).resolve(strict=True)
     try:
         result = subprocess.run(
-            ["git", "ls-files", "-z"],
+            ["git", "ls-files", "--stage", "-z"],
             cwd=root,
             check=False,
             capture_output=True,
@@ -689,10 +773,38 @@ def _git_tracked_paths(root: Path) -> list[str]:
         raise RepositorySurfaceError("git ls-files could not be executed") from exc
     if result.returncode != 0:
         raise RepositorySurfaceError("git ls-files failed")
-    try:
-        return [item.decode("utf-8") for item in result.stdout.split(b"\0") if item]
-    except UnicodeDecodeError as exc:
-        raise RepositorySurfaceError("git ls-files returned non-UTF-8 paths") from exc
+    paths: list[str] = []
+    seen: set[str] = set()
+    for index, raw_record in enumerate(result.stdout.split(b"\0")):
+        if not raw_record:
+            continue
+        metadata, separator, raw_path = raw_record.partition(b"\t")
+        if not separator:
+            raise RepositorySurfaceError("git ls-files returned malformed stage data")
+        fields = metadata.split()
+        if len(fields) != 3:
+            raise RepositorySurfaceError("git ls-files returned malformed metadata")
+        mode, _object_id, stage = fields
+        if stage != b"0":
+            raise RepositorySurfaceError("git index contains an unmerged tracked path")
+        if mode == b"160000":
+            raise RepositorySurfaceError("submodules are not supported by the active-source view")
+        try:
+            decoded = raw_path.decode("utf-8")
+        except UnicodeDecodeError as exc:
+            raise RepositorySurfaceError("git ls-files returned a non-UTF-8 path") from exc
+        path = _normalize_repository_inventory_path(
+            decoded, name=f"git tracked path[{index}]"
+        )
+        if path in seen:
+            raise RepositorySurfaceError(f"git tracked inventory contains a duplicate: {path}")
+        seen.add(path)
+        paths.append(path)
+    return sorted(paths)
+
+
+def _git_tracked_paths(root: Path) -> list[str]:
+    return collect_tracked_repository_paths(root)
 
 
 def validate_tracked_root_coverage(
@@ -705,7 +817,10 @@ def validate_tracked_root_coverage(
 
     root = Path(repository_root).resolve(strict=True)
     if tracked_paths is not None:
-        paths = list(tracked_paths)
+        paths = [
+            _normalize_repository_inventory_path(str(path), name="supplied tracked path")
+            for path in tracked_paths
+        ]
         mode = "SUPPLIED_TRACKED_PATHS"
     elif (root / ".git").exists():
         paths = _git_tracked_paths(root)
@@ -1053,6 +1168,7 @@ def render_pipeline_folder_map(
         "- `configs/repository_surface.json` is the canonical machine-readable path-role registry.",
         "- `SOURCE_OF_TRUTH.md` is the broader generated repository navigation view.",
         "- `PIPELINE_FOLDER_MAP.md` is this generated topology view only.",
+        "- `ACTIVE_SOURCE_FILES.txt` is the generated virtual view of tracked current operational and supporting files.",
         "- `pyproject.toml` defines the public package and command surface.",
         "- `docs/LEGACY_WORKFLOWS.md` controls interpretation of retired workflow material.",
         "- The complete former map is preserved at `docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.md`.",
@@ -1228,6 +1344,7 @@ def validate_pipeline_folder_map(
         "AGENTS.md` contains durable safety",
         "canonical machine-readable path-role registry",
         "SOURCE_OF_TRUTH.md` is the broader generated",
+        "ACTIVE_SOURCE_FILES.txt` is the generated virtual view",
         "CertifiedResearchGateway",
         "sole current real-history",
         "futures-pipeline` is synthetic-only",
@@ -1413,6 +1530,269 @@ def compare_pipeline_folder_map_file(
     )
 
 
+def active_source_paths(
+    surface: Mapping[str, object], tracked_paths: Iterable[str]
+) -> dict[str, list[str]]:
+    """Resolve one tracked inventory through the canonical registry matcher."""
+
+    result = {classification: [] for classification in ACTIVE_SOURCE_CLASSIFICATIONS}
+    seen: set[str] = set()
+    for index, raw_path in enumerate(tracked_paths):
+        path = _normalize_repository_inventory_path(
+            str(raw_path), name=f"active-source inventory path[{index}]"
+        )
+        if path in seen:
+            raise RepositorySurfaceError(
+                f"active-source inventory contains a duplicate: {path}"
+            )
+        seen.add(path)
+        entry = resolve_surface_entry(surface, path)
+        if entry is None:
+            raise RepositorySurfaceError(
+                f"tracked path does not resolve through the registry: {path}"
+            )
+        classification = str(entry["classification"])
+        if classification in result:
+            result[classification].append(path)
+    for paths in result.values():
+        paths.sort()
+    return result
+
+
+def render_active_source_files(
+    surface: Mapping[str, object], tracked_paths: Iterable[str]
+) -> str:
+    """Render the deterministic virtual active-source file list."""
+
+    _validate_active_source_files_registry_entry(_surface_entries(surface))
+    classified = active_source_paths(surface, tracked_paths)
+    lines = [*ACTIVE_SOURCE_HEADER, ""]
+    for index, classification in enumerate(ACTIVE_SOURCE_CLASSIFICATIONS):
+        lines.append(f"# {classification}")
+        lines.extend(classified[classification])
+        if index != len(ACTIVE_SOURCE_CLASSIFICATIONS) - 1:
+            lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+def _parse_active_source_files(document: bytes) -> dict[str, list[str]]:
+    if len(document) > ACTIVE_SOURCE_FILES_MAX_BYTES:
+        raise RepositorySurfaceError("ACTIVE_SOURCE_FILES.txt exceeds the byte limit")
+    if b"\r" in document or not document.endswith(b"\n") or document.endswith(b"\n\n"):
+        raise RepositorySurfaceError(
+            "ACTIVE_SOURCE_FILES.txt must use LF and exactly one final newline"
+        )
+    try:
+        text = document.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RepositorySurfaceError("ACTIVE_SOURCE_FILES.txt is not UTF-8") from exc
+    lines = text.splitlines()
+    prefix = [*ACTIVE_SOURCE_HEADER, "", f"# {ACTIVE_SOURCE_CLASSIFICATIONS[0]}"]
+    if lines[: len(prefix)] != prefix:
+        raise RepositorySurfaceError("ACTIVE_SOURCE_FILES.txt header or section order is invalid")
+    cursor = len(prefix)
+    result: dict[str, list[str]] = {ACTIVE_SOURCE_CLASSIFICATIONS[0]: []}
+    while cursor < len(lines) and lines[cursor] != "":
+        result[ACTIVE_SOURCE_CLASSIFICATIONS[0]].append(lines[cursor])
+        cursor += 1
+    if cursor + 1 >= len(lines) or lines[cursor : cursor + 2] != [
+        "",
+        f"# {ACTIVE_SOURCE_CLASSIFICATIONS[1]}",
+    ]:
+        raise RepositorySurfaceError("ACTIVE_SOURCE_FILES.txt section boundary is invalid")
+    result[ACTIVE_SOURCE_CLASSIFICATIONS[1]] = lines[cursor + 2 :]
+    all_paths: list[str] = []
+    for classification in ACTIVE_SOURCE_CLASSIFICATIONS:
+        paths = result[classification]
+        if not paths:
+            raise RepositorySurfaceError(
+                f"ACTIVE_SOURCE_FILES.txt has no {classification} files"
+            )
+        normalized = [
+            _validate_relative_pattern(path, "EXACT", "active-source listed path")
+            for path in paths
+        ]
+        if normalized != paths:
+            raise RepositorySurfaceError("ACTIVE_SOURCE_FILES.txt paths are not normalized")
+        if paths != sorted(paths):
+            raise RepositorySurfaceError(
+                f"ACTIVE_SOURCE_FILES.txt {classification} paths are not sorted"
+            )
+        if len(paths) != len(set(paths)):
+            raise RepositorySurfaceError(
+                f"ACTIVE_SOURCE_FILES.txt {classification} paths contain duplicates"
+            )
+        all_paths.extend(paths)
+    if len(all_paths) != len(set(all_paths)):
+        raise RepositorySurfaceError("ACTIVE_SOURCE_FILES.txt repeats a path across sections")
+    return result
+
+
+def _present_export_file_paths(root: Path) -> list[str]:
+    paths: list[str] = []
+    for directory, directory_names, file_names in os.walk(root, topdown=True, followlinks=False):
+        directory_path = Path(directory)
+        directory_names[:] = sorted(
+            name
+            for name in directory_names
+            if name != ".git" and not (directory_path / name).is_symlink()
+        )
+        for name in sorted(file_names):
+            candidate = directory_path / name
+            if candidate.is_symlink() or not candidate.is_file():
+                continue
+            relative = candidate.relative_to(root).as_posix()
+            paths.append(
+                _normalize_repository_inventory_path(
+                    relative, name="present export path"
+                )
+            )
+    return sorted(paths)
+
+
+def _active_source_inventory(
+    surface: Mapping[str, object],
+    root: Path,
+    *,
+    tracked_paths: Iterable[str] | None = None,
+) -> tuple[str, list[str]]:
+    entry = _validate_active_source_files_registry_entry(_surface_entries(surface))
+    if tracked_paths is not None:
+        mode = "SUPPLIED_TRACKED_EXACT"
+        paths = [
+            _normalize_repository_inventory_path(str(path), name="supplied tracked path")
+            for path in tracked_paths
+        ]
+    elif (root / ".git").exists():
+        mode = "GIT_TRACKED_EXACT"
+        paths = collect_tracked_repository_paths(root)
+    else:
+        return "PRESENT_EXPORT_SUBSET", _present_export_file_paths(root)
+    pending_self = ACTIVE_SOURCE_FILES_PATH.as_posix()
+    if pending_self not in paths:
+        if entry.get("tracked_expected") != "TRACKED":
+            raise RepositorySurfaceError(
+                "pending ACTIVE_SOURCE_FILES.txt requires TRACKED registry expectation"
+            )
+        paths.append(pending_self)
+    return mode, sorted(paths)
+
+
+def validate_active_source_files(
+    document: bytes,
+    *,
+    surface: Mapping[str, object],
+    repository_root: Path | str,
+    tracked_paths: Iterable[str] | None = None,
+) -> dict[str, object]:
+    """Validate exact Git-backed completeness or an explicit no-Git subset."""
+
+    root = Path(repository_root).resolve(strict=True)
+    if len(_surface_entries(surface)) != EXPECTED_REGISTRY_ENTRY_COUNT:
+        raise RepositorySurfaceError(
+            f"registry entry count must remain {EXPECTED_REGISTRY_ENTRY_COUNT}"
+        )
+    parsed = _parse_active_source_files(document)
+    mode, inventory = _active_source_inventory(
+        surface, root, tracked_paths=tracked_paths
+    )
+    listed = [path for classification in ACTIVE_SOURCE_CLASSIFICATIONS for path in parsed[classification]]
+    if ACTIVE_SOURCE_FILES_PATH.as_posix() not in listed:
+        raise RepositorySurfaceError("ACTIVE_SOURCE_FILES.txt must include itself")
+    for classification in ACTIVE_SOURCE_CLASSIFICATIONS:
+        for path in parsed[classification]:
+            entry = resolve_surface_entry(surface, path)
+            if entry is None or entry.get("classification") != classification:
+                raise RepositorySurfaceError(
+                    f"ACTIVE_SOURCE_FILES.txt classification mismatch: {path}"
+                )
+    completeness_reconstructed = mode != "PRESENT_EXPORT_SUBSET"
+    if completeness_reconstructed:
+        expected = render_active_source_files(surface, inventory).encode("utf-8")
+        if document != expected:
+            raise RepositorySurfaceError(
+                "ACTIVE_SOURCE_FILES.txt is missing, stale, manually edited, overinclusive, or incomplete"
+            )
+    else:
+        listed_set = set(listed)
+        missing_present: list[str] = []
+        for path in inventory:
+            entry = resolve_surface_entry(surface, path)
+            if entry is None:
+                continue
+            if (
+                entry.get("classification") in ACTIVE_SOURCE_CLASSIFICATIONS
+                and entry.get("local_only") is False
+                and path not in listed_set
+            ):
+                missing_present.append(path)
+        if missing_present:
+            raise RepositorySurfaceError(
+                "ACTIVE_SOURCE_FILES.txt omits present export active files: "
+                + ", ".join(missing_present)
+            )
+    commands = validate_public_command_surfaces(surface, root)
+    missing_targets = sorted(set(commands.values()) - set(listed))
+    if missing_targets:
+        raise RepositorySurfaceError(
+            "ACTIVE_SOURCE_FILES.txt omits public command targets: "
+            + ", ".join(missing_targets)
+        )
+    return {
+        "valid": True,
+        "inventory_mode": mode,
+        "completeness_reconstructed": completeness_reconstructed,
+        "operational_file_count": len(parsed["CURRENT_OPERATIONAL"]),
+        "supporting_file_count": len(parsed["CURRENT_SUPPORTING"]),
+        "total_file_count": len(listed),
+        "byte_count": len(document),
+        "line_count": len(document.splitlines()),
+    }
+
+
+def expected_active_source_files_bytes(
+    surface: Mapping[str, object], repository_root: Path | str
+) -> bytes:
+    """Return validated deterministic active-source bytes without writing."""
+
+    root = Path(repository_root).resolve(strict=True)
+    if not (root / ".git").exists():
+        path = _safe_control_path(root, ACTIVE_SOURCE_FILES_PATH.as_posix())
+        if path.is_symlink() or not path.is_file():
+            raise RepositorySurfaceError("ACTIVE_SOURCE_FILES.txt is missing")
+        document = path.read_bytes()
+        validate_active_source_files(
+            document, surface=surface, repository_root=root
+        )
+        return document
+    _mode, inventory = _active_source_inventory(surface, root)
+    rendered = render_active_source_files(surface, inventory).encode("utf-8")
+    validate_active_source_files(
+        rendered, surface=surface, repository_root=root
+    )
+    return rendered
+
+
+def compare_active_source_files_file(
+    surface: Mapping[str, object], repository_root: Path | str
+) -> dict[str, object]:
+    """Validate the tracked active-source view without mutating the checkout."""
+
+    root = Path(repository_root).resolve(strict=True)
+    path = _safe_control_path(root, ACTIVE_SOURCE_FILES_PATH.as_posix())
+    if path.is_symlink() or not path.is_file():
+        raise RepositorySurfaceError("ACTIVE_SOURCE_FILES.txt is missing")
+    try:
+        actual = path.read_bytes()
+    except OSError as exc:
+        raise RepositorySurfaceError("ACTIVE_SOURCE_FILES.txt is unreadable") from exc
+    return validate_active_source_files(
+        actual,
+        surface=surface,
+        repository_root=root,
+    )
+
+
 def _validate_pointer_document(path: Path, *, schema: str) -> None:
     if path.stat().st_size > 262_144:
         raise RepositorySurfaceError(f"pointer control document is unexpectedly large: {path.name}")
@@ -1481,6 +1861,7 @@ def validate_repository_checkout(repository_root: Path | str) -> dict[str, objec
         )
     source_of_truth = compare_source_of_truth_file(surface, root)
     pipeline_folder_map = compare_pipeline_folder_map_file(surface, root)
+    active_source_files = compare_active_source_files_file(surface, root)
     unresolved_count = dict(_classification_counts(surface))[
         "UNRESOLVED_MANUAL_REVIEW"
     ]
@@ -1490,9 +1871,11 @@ def validate_repository_checkout(repository_root: Path | str) -> dict[str, objec
         "registry_valid": True,
         "source_of_truth_valid": source_of_truth["valid"],
         "pipeline_folder_map_valid": pipeline_folder_map["valid"],
+        "active_source_files_valid": active_source_files["valid"],
         "entry_count": len(surface["entries"]),
         "unresolved_entry_count": unresolved_count,
         "tracked_root_mode": coverage["mode"],
+        "active_source_inventory_mode": active_source_files["inventory_mode"],
         "public_commands": commands,
         "public_command_count": len(commands),
         "source_of_truth_word_count": source_of_truth["word_count"],
@@ -1502,6 +1885,15 @@ def validate_repository_checkout(repository_root: Path | str) -> dict[str, objec
         "pipeline_folder_map_table_row_count": pipeline_folder_map[
             "table_row_count"
         ],
+        "active_source_operational_file_count": active_source_files[
+            "operational_file_count"
+        ],
+        "active_source_supporting_file_count": active_source_files[
+            "supporting_file_count"
+        ],
+        "active_source_total_file_count": active_source_files["total_file_count"],
+        "active_source_byte_count": active_source_files["byte_count"],
+        "active_source_line_count": active_source_files["line_count"],
         "mutations_performed": False,
     }
 
@@ -1520,6 +1912,11 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="print the deterministic topology view without writing files",
     )
+    output.add_argument(
+        "--print-active-source-files",
+        action="store_true",
+        help="print the deterministic virtual active-source view without writing files",
+    )
     return parser
 
 
@@ -1537,6 +1934,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             surface = load_repository_surface(root)
             validate_repository_surface(surface, repository_root=None)
             sys.stdout.buffer.write(expected_pipeline_folder_map_bytes(surface, root))
+            return 0
+        if args.print_active_source_files:
+            root = args.root.resolve(strict=True)
+            surface = load_repository_surface(root)
+            validate_repository_surface(surface, repository_root=None)
+            sys.stdout.buffer.write(expected_active_source_files_bytes(surface, root))
             return 0
         report = validate_repository_checkout(args.root)
     except RepositorySurfaceError as exc:

@@ -12,6 +12,9 @@ import tomllib
 import pytest
 
 from futures_rebuild.repository_surface import (
+    ACTIVE_SOURCE_CLASSIFICATIONS,
+    ACTIVE_SOURCE_FILES_MAX_BYTES,
+    ACTIVE_SOURCE_FILES_ROLE,
     EXPECTED_PUBLIC_COMMAND_COUNT,
     EXPECTED_REGISTRY_ENTRY_COUNT,
     EXPECTED_UNRESOLVED_ENTRY_COUNT,
@@ -26,14 +29,20 @@ from futures_rebuild.repository_surface import (
     SOURCE_OF_TRUTH_MAX_BYTES,
     SOURCE_OF_TRUTH_MAX_WORDS,
     SOURCE_OF_TRUTH_SECTIONS,
+    active_source_paths,
+    collect_tracked_repository_paths,
+    compare_active_source_files_file,
     compare_pipeline_folder_map_file,
     compare_source_of_truth_file,
+    expected_active_source_files_bytes,
     expected_pipeline_folder_map_bytes,
     expected_source_of_truth_bytes,
     load_repository_surface,
+    render_active_source_files,
     render_pipeline_folder_map,
     render_source_of_truth,
     resolve_surface_entry,
+    validate_active_source_files,
     validate_public_command_surfaces,
     validate_pipeline_folder_map,
     validate_repository_checkout,
@@ -47,6 +56,7 @@ ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = ROOT / "configs" / "repository_surface.json"
 SOURCE_OF_TRUTH_PATH = ROOT / "SOURCE_OF_TRUTH.md"
 PIPELINE_FOLDER_MAP_PATH = ROOT / "PIPELINE_FOLDER_MAP.md"
+ACTIVE_SOURCE_FILES_PATH = ROOT / "ACTIVE_SOURCE_FILES.txt"
 pytestmark = pytest.mark.current
 
 
@@ -84,6 +94,7 @@ def _write_export_controls(
     *,
     include_document: bool = True,
     include_pipeline_map: bool = True,
+    include_active_source_files: bool = True,
 ) -> None:
     (root / "configs").mkdir(parents=True)
     (root / "src" / "futures_rebuild").mkdir(parents=True)
@@ -107,6 +118,10 @@ def _write_export_controls(
         (root / "PIPELINE_FOLDER_MAP.md").write_bytes(
             expected_pipeline_folder_map_bytes(_surface(), root)
         )
+    if include_active_source_files:
+        (root / "ACTIVE_SOURCE_FILES.txt").write_bytes(
+            ACTIVE_SOURCE_FILES_PATH.read_bytes()
+        )
 
 
 def test_valid_registry_loads_and_validates_current_checkout() -> None:
@@ -115,7 +130,7 @@ def test_valid_registry_loads_and_validates_current_checkout() -> None:
     validate_repository_surface(surface, repository_root=ROOT)
 
     assert surface["schema_version"] == "repository_surface/1.0.0"
-    assert len(surface["entries"]) == 182
+    assert len(surface["entries"]) == 183
 
 
 def test_unknown_classification_is_rejected() -> None:
@@ -672,10 +687,12 @@ def test_default_cli_reports_all_generated_surface_validity() -> None:
     assert report["registry_valid"] is True
     assert report["source_of_truth_valid"] is True
     assert report["pipeline_folder_map_valid"] is True
-    assert report["entry_count"] == EXPECTED_REGISTRY_ENTRY_COUNT == 182
+    assert report["active_source_files_valid"] is True
+    assert report["entry_count"] == EXPECTED_REGISTRY_ENTRY_COUNT == 183
     assert report["unresolved_entry_count"] == EXPECTED_UNRESOLVED_ENTRY_COUNT == 14
     assert report["public_command_count"] == EXPECTED_PUBLIC_COMMAND_COUNT == 7
     assert report["tracked_root_mode"] == "GIT_LS_FILES"
+    assert report["active_source_inventory_mode"] == "GIT_TRACKED_EXACT"
     assert report["mutations_performed"] is False
 
 
@@ -722,6 +739,9 @@ def test_validate_repository_checkout_reports_source_of_truth_metrics() -> None:
         PIPELINE_FOLDER_MAP_PATH.read_text(encoding="utf-8").split()
     )
     assert report["pipeline_folder_map_byte_count"] == PIPELINE_FOLDER_MAP_PATH.stat().st_size
+    assert report["active_source_files_valid"] is True
+    assert report["active_source_total_file_count"] > 0
+    assert report["active_source_byte_count"] == ACTIVE_SOURCE_FILES_PATH.stat().st_size
 
 
 def test_pipeline_folder_map_registry_entry_is_unique_generated_view() -> None:
@@ -972,5 +992,323 @@ def test_print_pipeline_folder_map_cli_is_stdout_only_and_read_only() -> None:
     assert result.stdout == PIPELINE_FOLDER_MAP_PATH.read_bytes()
     assert result.stderr == b""
     assert {path: path.read_bytes() for path in observed} == before
-    render_pipeline_folder_map,
-    validate_pipeline_folder_map,
+
+
+def test_active_source_registry_entry_is_unique_generated_view() -> None:
+    surface = _surface()
+    entry = _entry(surface, "ACTIVE_SOURCE_FILES.txt")
+
+    assert entry["match_type"] == "EXACT"
+    assert entry["classification"] == "CURRENT_SUPPORTING"
+    assert entry["authority_role"] == ACTIVE_SOURCE_FILES_ROLE
+    assert entry["tracked_expected"] == "TRACKED"
+    assert entry["local_only"] is False
+    assert entry["hash_bound"] is False
+    assert entry["deletion_policy"] == "PRESERVE"
+    assert sum(
+        item["authority_role"] == ACTIVE_SOURCE_FILES_ROLE
+        for item in surface["entries"]  # type: ignore[index]
+    ) == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("match_type", "PREFIX"),
+        ("classification", "CURRENT_OPERATIONAL"),
+        ("authority_role", "HUMAN_SOURCE_OF_TRUTH_VIEW"),
+        ("tracked_expected", "OPTIONAL"),
+        ("local_only", True),
+        ("hash_bound", None),
+        ("deletion_policy", "NO_AUTOMATIC_DELETE"),
+    ],
+)
+def test_active_source_registry_contract_fails_closed(
+    field: str, value: object
+) -> None:
+    surface = _surface()
+    _entry(surface, "ACTIVE_SOURCE_FILES.txt")[field] = value
+
+    with pytest.raises(RepositorySurfaceError):
+        validate_repository_surface(surface)
+
+
+def test_git_backed_tracked_inventory_collection_is_binary_safe(tmp_path: Path) -> None:
+    subprocess.run(
+        ["git", "-c", "core.longpaths=true", "init", "-q"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+    (tmp_path / "src").mkdir()
+    (tmp_path / "src" / "alpha file.py").write_text("pass\n", encoding="utf-8")
+    (tmp_path / "README.md").write_text("read me\n", encoding="utf-8")
+    subprocess.run(
+        ["git", "add", "--", "README.md", "src/alpha file.py"],
+        cwd=tmp_path,
+        check=True,
+        capture_output=True,
+    )
+
+    assert collect_tracked_repository_paths(tmp_path) == [
+        "README.md",
+        "src/alpha file.py",
+    ]
+
+
+def test_active_source_rendering_is_deterministic_complete_and_exact() -> None:
+    surface = _surface()
+    tracked = collect_tracked_repository_paths(ROOT)
+    first = expected_active_source_files_bytes(surface, ROOT)
+    second = render_active_source_files(
+        copy.deepcopy(surface), [*tracked, "ACTIVE_SOURCE_FILES.txt"]
+    ).encode("utf-8")
+    report = compare_active_source_files_file(surface, ROOT)
+
+    assert first == second == ACTIVE_SOURCE_FILES_PATH.read_bytes()
+    assert report["valid"] is True
+    assert report["inventory_mode"] == "GIT_TRACKED_EXACT"
+    assert report["completeness_reconstructed"] is True
+    assert report["operational_file_count"] > 0
+    assert report["supporting_file_count"] > 0
+    assert report["total_file_count"] == (
+        report["operational_file_count"] + report["supporting_file_count"]
+    )
+
+
+def test_active_source_format_sections_ordering_and_limits_are_exact() -> None:
+    document = ACTIVE_SOURCE_FILES_PATH.read_bytes()
+    text = document.decode("utf-8")
+    lines = text.splitlines()
+    operational_index = lines.index("# CURRENT_OPERATIONAL")
+    supporting_index = lines.index("# CURRENT_SUPPORTING")
+    operational = lines[operational_index + 1 : supporting_index - 1]
+    supporting = lines[supporting_index + 1 :]
+
+    assert b"\r" not in document
+    assert document.endswith(b"\n") and not document.endswith(b"\n\n")
+    assert len(document) <= ACTIVE_SOURCE_FILES_MAX_BYTES
+    assert operational and supporting
+    assert operational == sorted(operational)
+    assert supporting == sorted(supporting)
+    assert len(operational + supporting) == len(set(operational + supporting))
+    assert all("\\" not in path and not Path(path).is_absolute() for path in operational + supporting)
+
+
+def test_active_source_includes_governing_generated_and_public_targets() -> None:
+    listed = set(
+        line
+        for line in ACTIVE_SOURCE_FILES_PATH.read_text(encoding="utf-8").splitlines()
+        if line and not line.startswith("#")
+    )
+    required = {
+        "AGENTS.md",
+        "CURRENT_WORKFLOW.md",
+        "README.md",
+        "SOURCE_OF_TRUTH.md",
+        "PIPELINE_FOLDER_MAP.md",
+        "ACTIVE_SOURCE_FILES.txt",
+        "configs/repository_surface.json",
+        "pyproject.toml",
+        ".github/workflows/ci.yml",
+        "src/futures_rebuild/repository_surface.py",
+        *validate_public_command_surfaces(_surface(), ROOT).values(),
+    }
+
+    assert required <= listed
+
+
+def test_active_source_excludes_every_tracked_noncurrent_classification() -> None:
+    surface = _surface()
+    tracked = collect_tracked_repository_paths(ROOT)
+    listed = {
+        line
+        for line in ACTIVE_SOURCE_FILES_PATH.read_text(encoding="utf-8").splitlines()
+        if line and not line.startswith("#")
+    }
+    excluded = {
+        path
+        for path in tracked
+        if resolve_surface_entry(surface, path)["classification"]  # type: ignore[index]
+        not in ACTIVE_SOURCE_CLASSIFICATIONS
+    }
+    excluded_classifications = {
+        resolve_surface_entry(surface, path)["classification"]  # type: ignore[index]
+        for path in excluded
+    }
+
+    assert excluded
+    assert {
+        "HISTORICAL_HASH_BOUND",
+        "HISTORICAL_UNBOUND",
+        "PREPARED_NOT_EXECUTED",
+        "GENERATED_OUTPUT",
+        "LOCAL_RUNTIME_STATE",
+        "LOCAL_SECRET",
+        "UNRESOLVED_MANUAL_REVIEW",
+    } <= excluded_classifications
+    synthetic_noncurrent = active_source_paths(
+        surface,
+        [
+            "src/futures_rebuild/__pycache__/example.pyc",
+            "FuturesLiveCockpit",
+        ],
+    )
+    assert synthetic_noncurrent == {
+        "CURRENT_OPERATIONAL": [],
+        "CURRENT_SUPPORTING": [],
+    }
+    assert listed.isdisjoint(excluded)
+    assert "docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.md" not in listed
+    assert "docs/history/PROJECT_OUTLINE_SNAPSHOT_2026-08-11.md" not in listed
+    assert "src/futures_rebuild/live_cockpit/offline_network.py" in listed
+    assert "configs/active_micro_alpha_research_ladder.json" not in listed
+
+
+@pytest.mark.parametrize(
+    "mutator",
+    [
+        lambda text: text.replace("AGENTS.md\n", "AGENTS.md\nAGENTS.md\n", 1),
+        lambda text: text.replace("AGENTS.md\nCURRENT_WORKFLOW.md", "CURRENT_WORKFLOW.md\nAGENTS.md", 1),
+        lambda text: text.replace("AGENTS.md", "C:/outside/AGENTS.md", 1),
+        lambda text: text.replace("AGENTS.md", "outside\\AGENTS.md", 1),
+        lambda text: text.replace("AGENTS.md", "../AGENTS.md", 1),
+        lambda text: text.replace("# Virtual view only", "# Manually curated view", 1),
+    ],
+)
+def test_active_source_rejects_duplicate_unsorted_unsafe_or_manual_edits(
+    mutator: object,
+) -> None:
+    edited = mutator(ACTIVE_SOURCE_FILES_PATH.read_text(encoding="utf-8")).encode(  # type: ignore[operator]
+        "utf-8"
+    )
+
+    with pytest.raises(RepositorySurfaceError):
+        validate_active_source_files(
+            edited,
+            surface=_surface(),
+            repository_root=ROOT,
+        )
+
+
+def test_active_source_changes_with_registry_and_tracked_inventory() -> None:
+    surface = _surface()
+    tracked = collect_tracked_repository_paths(ROOT)
+    baseline = ACTIVE_SOURCE_FILES_PATH.read_bytes()
+
+    changed_surface = copy.deepcopy(surface)
+    _entry(changed_surface, "README.md")["classification"] = "HISTORICAL_UNBOUND"
+    assert render_active_source_files(
+        changed_surface, [*tracked, "ACTIVE_SOURCE_FILES.txt"]
+    ).encode("utf-8") != baseline
+    with pytest.raises(RepositorySurfaceError):
+        validate_active_source_files(
+            baseline,
+            surface=changed_surface,
+            repository_root=ROOT,
+        )
+
+    added = render_active_source_files(
+        surface, [*tracked, "tests/new_active_source_test.py", "ACTIVE_SOURCE_FILES.txt"]
+    )
+    removed = render_active_source_files(
+        surface,
+        [path for path in tracked if path != "README.md"] + ["ACTIVE_SOURCE_FILES.txt"],
+    )
+    assert "tests/new_active_source_test.py" in added
+    assert "README.md" not in removed.splitlines()
+
+
+def test_missing_active_source_file_is_rejected(tmp_path: Path) -> None:
+    _write_export_controls(tmp_path, include_active_source_files=False)
+
+    with pytest.raises(RepositorySurfaceError, match="missing"):
+        compare_active_source_files_file(_surface(), tmp_path)
+
+
+def test_no_git_export_uses_explicit_subset_mode_and_tolerates_absence(
+    tmp_path: Path,
+) -> None:
+    _write_export_controls(tmp_path)
+
+    report = compare_active_source_files_file(_surface(), tmp_path)
+
+    assert report["valid"] is True
+    assert report["inventory_mode"] == "PRESENT_EXPORT_SUBSET"
+    assert report["completeness_reconstructed"] is False
+    assert not (tmp_path / ".git").exists()
+    assert not (tmp_path / "README.md").exists()
+
+
+def test_no_git_export_rejects_present_active_file_missing_from_view(
+    tmp_path: Path,
+) -> None:
+    _write_export_controls(tmp_path)
+    (tmp_path / "tests").mkdir()
+    (tmp_path / "tests" / "new_present.py").write_text("pass\n", encoding="utf-8")
+
+    with pytest.raises(RepositorySurfaceError, match="classification mismatch|present export active files"):
+        compare_active_source_files_file(_surface(), tmp_path)
+
+
+def test_changed_public_command_target_must_be_in_active_source_view(
+    tmp_path: Path,
+) -> None:
+    _write_export_controls(tmp_path)
+    (tmp_path / "src" / "futures_rebuild" / "extra.py").write_text(
+        "def main(): return 0\n", encoding="utf-8"
+    )
+    (tmp_path / "pyproject.toml").write_text(
+        '[project]\nname = "surface-export"\nversion = "1"\n'
+        '[project.scripts]\nfutures-pipeline = "futures_rebuild.pipeline:main"\n'
+        'futures-extra = "futures_rebuild.extra:main"\n',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RepositorySurfaceError,
+        match="targets non-current surface|present export active files|public command targets",
+    ):
+        compare_active_source_files_file(_surface(), tmp_path)
+
+
+def test_print_active_source_files_cli_is_stdout_only_and_read_only() -> None:
+    observed = [
+        ACTIVE_SOURCE_FILES_PATH,
+        PIPELINE_FOLDER_MAP_PATH,
+        SOURCE_OF_TRUTH_PATH,
+        REGISTRY_PATH,
+        ROOT / "src" / "futures_rebuild" / "repository_surface.py",
+        ROOT / "tests" / "test_repository_surface.py",
+    ]
+    before = {path: path.read_bytes() for path in observed}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-m",
+            "futures_rebuild.repository_surface",
+            "--print-active-source-files",
+        ],
+        cwd=ROOT,
+        env=os.environ.copy(),
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+
+    assert result.stdout == ACTIVE_SOURCE_FILES_PATH.read_bytes()
+    assert result.stderr == b""
+    assert {path: path.read_bytes() for path in observed} == before
+
+
+def test_phase4a_pipeline_map_and_source_of_truth_generated_views_are_exact() -> None:
+    surface = _surface()
+    pipeline = PIPELINE_FOLDER_MAP_PATH.read_text(encoding="utf-8")
+
+    assert expected_pipeline_folder_map_bytes(surface, ROOT) == PIPELINE_FOLDER_MAP_PATH.read_bytes()
+    assert expected_source_of_truth_bytes(surface, ROOT) == SOURCE_OF_TRUTH_PATH.read_bytes()
+    assert "Generated active-source-files view" in pipeline
+    assert "`ACTIVE_SOURCE_FILES.txt`" in pipeline
+    assert "| `CURRENT_SUPPORTING` |" in pipeline
