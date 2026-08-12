@@ -1076,6 +1076,84 @@ def test_active_source_rendering_is_deterministic_complete_and_exact() -> None:
     )
 
 
+def test_active_source_validation_accepts_pending_generated_self_path() -> None:
+    surface = _surface()
+    document = ACTIVE_SOURCE_FILES_PATH.read_bytes()
+    pending_self = ACTIVE_SOURCE_FILES_PATH.relative_to(ROOT).as_posix()
+    listed = [
+        line
+        for line in document.decode("utf-8").splitlines()
+        if line and not line.startswith("#")
+    ]
+    supplied_tracked_paths = [path for path in listed if path != pending_self]
+
+    assert listed.count(pending_self) == 1
+    assert pending_self not in supplied_tracked_paths
+    assert len(supplied_tracked_paths) == len(listed) - 1
+    assert set(listed) - set(supplied_tracked_paths) == {pending_self}
+
+    report = validate_active_source_files(
+        document,
+        surface=surface,
+        repository_root=ROOT,
+        tracked_paths=supplied_tracked_paths,
+    )
+    classified = active_source_paths(
+        surface, [*supplied_tracked_paths, pending_self]
+    )
+    validated_paths = [
+        path
+        for classification in ACTIVE_SOURCE_CLASSIFICATIONS
+        for path in classified[classification]
+    ]
+    self_entry = _entry(surface, pending_self)
+
+    assert report["valid"] is True
+    assert report["inventory_mode"] == "SUPPLIED_TRACKED_EXACT"
+    assert report["completeness_reconstructed"] is True
+    assert validated_paths.count(pending_self) == 1
+    assert report["operational_file_count"] == len(
+        classified["CURRENT_OPERATIONAL"]
+    )
+    assert report["supporting_file_count"] == len(
+        classified["CURRENT_SUPPORTING"]
+    )
+    assert report["total_file_count"] == len(validated_paths) == len(listed)
+    assert report["total_file_count"] == (
+        report["operational_file_count"] + report["supporting_file_count"]
+    )
+    assert resolve_surface_entry(surface, pending_self) == self_entry
+    assert {
+        "match_type": self_entry["match_type"],
+        "classification": self_entry["classification"],
+        "authority_role": self_entry["authority_role"],
+        "tracked_expected": self_entry["tracked_expected"],
+    } == {
+        "match_type": "EXACT",
+        "classification": "CURRENT_SUPPORTING",
+        "authority_role": ACTIVE_SOURCE_FILES_ROLE,
+        "tracked_expected": "TRACKED",
+    }
+
+    with pytest.raises(
+        RepositorySurfaceError,
+        match=(
+            r"active-source inventory contains a duplicate: "
+            r"ACTIVE_SOURCE_FILES\.txt"
+        ),
+    ):
+        validate_active_source_files(
+            document,
+            surface=surface,
+            repository_root=ROOT,
+            tracked_paths=[
+                *supplied_tracked_paths,
+                pending_self,
+                pending_self,
+            ],
+        )
+
+
 def test_active_source_format_sections_ordering_and_limits_are_exact() -> None:
     document = ACTIVE_SOURCE_FILES_PATH.read_bytes()
     text = document.decode("utf-8")
