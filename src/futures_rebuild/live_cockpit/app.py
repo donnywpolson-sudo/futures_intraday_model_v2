@@ -10,8 +10,9 @@ import sys
 import threading
 import time
 import uuid
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Iterator, Mapping
 
 from .credentials import (
     default_credential_locator_path,
@@ -35,6 +36,7 @@ from .engine import (
     LiveCockpitEngine,
 )
 from .market_groups import load_alpha_tier_grouping
+from .offline_network import DemoLoopbackDenyProxy
 from .execution.runtime import ExecutionRuntime
 from .execution.fake import LocalExecutionSimulator
 from .single_instance import SingleInstance
@@ -69,6 +71,31 @@ GROUP_LIST_UI_PREFERENCE_KEYS = frozenset(
 )
 MARKET_GROUPING_MODES = frozenset({"sector", "alpha_tier"})
 MAX_PERSISTED_GROUP_IDS = 32
+WEBVIEW2_BROWSER_ARGUMENTS_ENV = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"
+DEMO_WEBVIEW2_BACKGROUND_ARGUMENT = "--disable-background-networking"
+
+
+@contextmanager
+def demo_webview2_offline_environment(*, demo: bool) -> Iterator[None]:
+    """Route nonlocal WebView2 demo requests into a local rejecting proxy."""
+
+    if not demo:
+        yield
+        return
+    with DemoLoopbackDenyProxy() as deny_proxy:
+        was_present = WEBVIEW2_BROWSER_ARGUMENTS_ENV in os.environ
+        prior = os.environ.get(WEBVIEW2_BROWSER_ARGUMENTS_ENV)
+        os.environ[WEBVIEW2_BROWSER_ARGUMENTS_ENV] = (
+            f"{DEMO_WEBVIEW2_BACKGROUND_ARGUMENT} "
+            f"--proxy-server={deny_proxy.endpoint}"
+        )
+        try:
+            yield
+        finally:
+            if was_present and prior is not None:
+                os.environ[WEBVIEW2_BROWSER_ARGUMENTS_ENV] = prior
+            else:
+                os.environ.pop(WEBVIEW2_BROWSER_ARGUMENTS_ENV, None)
 
 
 def app_data_dir(env: Mapping[str, str] | None = None) -> Path:
@@ -550,7 +577,8 @@ def run_desktop(*, engine: CockpitEngine, state_path: Path, demo: bool) -> int:
         )
         controller.attach_window(window)
         window.events.closed += controller.request_stop
-        webview.start(gui="edgechromium", debug=False, http_server=True)
+        with demo_webview2_offline_environment(demo=demo):
+            webview.start(gui="edgechromium", debug=False, http_server=True)
     finally:
         if controller is not None:
             controller.stop()

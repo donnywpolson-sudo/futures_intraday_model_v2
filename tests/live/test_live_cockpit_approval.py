@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from io import StringIO
 from pathlib import Path
 
 import pytest
@@ -17,7 +18,6 @@ from futures_rebuild.live_cockpit.approval import (
     verify_live_smoke_approval,
 )
 import futures_rebuild.live_cockpit.smoke as cockpit_smoke
-from futures_rebuild.live_cockpit.smoke import SmokeResult
 from futures_rebuild.live_cockpit.smoke import main as smoke_main
 from futures_rebuild.live_cockpit.smoke import run_smoke
 
@@ -80,7 +80,7 @@ def test_generated_plan_is_exactly_41_market_and_bounded() -> None:
     assert plan["execution_authorized"] is False
 
 
-def test_pending_receipt_blocks_before_provider_execution(
+def test_prepare_only_cli_rejects_pending_execution_arguments_before_provider(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     plan_path = _plan_path(tmp_path)
@@ -97,7 +97,7 @@ def test_pending_receipt_blocks_before_provider_execution(
         "run_smoke",
         lambda **_kwargs: pytest.fail("provider smoke was called"),
     )
-    assert (
+    with pytest.raises(SystemExit) as caught:
         smoke_main(
             [
                 "--plan",
@@ -109,43 +109,25 @@ def test_pending_receipt_blocks_before_provider_execution(
             ],
             stdout=None,
         )
-        == 2
-    )
+    assert caught.value.code == 2
     assert not result_path.exists()
 
 
-def test_source_runtime_blocks_before_provider_execution(
+def test_prepare_only_cli_emits_confirmation_without_provider_execution(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    plan_path = _plan_path(tmp_path)
-    approval_path = _approved_receipt(tmp_path, plan_path)
-    result_path = (
-        tmp_path
-        / "reports"
-        / "live_cockpit"
-        / "bounded_live_smoke_result_attempt_7.json"
-    )
-    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         cockpit_smoke,
         "run_smoke",
         lambda **_kwargs: pytest.fail("provider smoke was called"),
     )
-    assert (
-        smoke_main(
-            [
-                "--plan",
-                str(plan_path),
-                "--approval",
-                str(approval_path),
-                "--result-output",
-                str(result_path),
-            ],
-            stdout=None,
-        )
-        == 2
-    )
-    assert not result_path.exists()
+    output = StringIO()
+
+    assert smoke_main(["--prepare"], stdout=output) == 0
+
+    prepared = json.loads(output.getvalue())
+    assert prepared["status"] == "CONFIRMATION_REQUIRED"
+    assert prepared["operation"] == "cockpit live smoke"
 
 
 def test_exact_core_hash_receipt_is_accepted(tmp_path: Path) -> None:
@@ -195,12 +177,11 @@ def test_receipt_cannot_survive_plan_tamper(tmp_path: Path) -> None:
         )
 
 
-def test_success_result_is_hash_bound_create_only_and_package_bound(
+def test_prepare_only_cli_rejects_approved_execution_receipt_and_writes_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     plan_path = _plan_path(tmp_path)
     approval_path = _approved_receipt(tmp_path, plan_path)
-    plan = json.loads(plan_path.read_text(encoding="utf-8"))
     result_path = (
         tmp_path
         / "reports"
@@ -210,29 +191,8 @@ def test_success_result_is_hash_bound_create_only_and_package_bound(
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
         cockpit_smoke,
-        "_verify_package_runtime",
-        lambda _plan: {
-            "frozen": True,
-            "executable_sha256": plan["scope"]["prepared_executable_sha256"],
-        },
-    )
-    monkeypatch.setattr(
-        cockpit_smoke,
         "run_smoke",
-        lambda **_kwargs: SmokeResult(
-            status="PASS",
-            exit_code=0,
-            summary={
-                "status": "PASS",
-                "reasons": [],
-                "runtime": {
-                    "frozen": True,
-                    "executable_sha256": plan["scope"][
-                        "prepared_executable_sha256"
-                    ],
-                },
-            },
-        ),
+        lambda **_kwargs: pytest.fail("provider smoke was called"),
     )
 
     args = [
@@ -243,10 +203,7 @@ def test_success_result_is_hash_bound_create_only_and_package_bound(
         "--result-output",
         str(result_path),
     ]
-    assert smoke_main(args, stdout=None) == 0
-    receipt = json.loads(result_path.read_text(encoding="utf-8"))
-    core = {key: value for key, value in receipt.items() if key != "result_id"}
-    assert receipt["status"] == "PASS"
-    assert receipt["result_id"] == sha256_json(core)
-    assert receipt["summary"]["runtime"]["frozen"] is True
-    assert smoke_main(args, stdout=None) == 2
+    with pytest.raises(SystemExit) as caught:
+        smoke_main(args, stdout=None)
+    assert caught.value.code == 2
+    assert not result_path.exists()

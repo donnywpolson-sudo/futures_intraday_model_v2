@@ -99,6 +99,7 @@ RUNTIME_OVERLAYS = (
     "src/futures_rebuild/live_cockpit/history.py",
     "src/futures_rebuild/live_cockpit/market_groups.py",
     "src/futures_rebuild/live_cockpit/observation_status.py",
+    "src/futures_rebuild/live_cockpit/offline_network.py",
     "src/futures_rebuild/live_cockpit/predictions.py",
     "src/futures_rebuild/live_cockpit/protocol.py",
     "src/futures_rebuild/live_cockpit/smoke.py",

@@ -2374,6 +2374,9 @@ def test_desktop_uses_local_server_instead_of_file_uri(
 
     def start(**kwargs):
         calls["start_kwargs"] = kwargs
+        calls["browser_arguments"] = os.environ.get(
+            cockpit_app.WEBVIEW2_BROWSER_ARGUMENTS_ENV
+        )
 
     monkeypatch.setitem(
         cockpit_app.sys.modules,
@@ -2398,7 +2401,43 @@ def test_desktop_uses_local_server_instead_of_file_uri(
         "debug": False,
         "http_server": True,
     }
+    browser_arguments = calls["browser_arguments"]
+    assert browser_arguments.startswith(
+        cockpit_app.DEMO_WEBVIEW2_BACKGROUND_ARGUMENT
+    )
+    assert "--proxy-server=http://127.0.0.1:" in browser_arguments
+    assert cockpit_app.WEBVIEW2_BROWSER_ARGUMENTS_ENV not in os.environ
     assert engine.stopped is True
+
+
+def test_demo_webview2_offline_environment_restores_inherited_value(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(cockpit_app.WEBVIEW2_BROWSER_ARGUMENTS_ENV, "--inherited")
+
+    with cockpit_app.demo_webview2_offline_environment(demo=True):
+        assert (
+            os.environ[cockpit_app.WEBVIEW2_BROWSER_ARGUMENTS_ENV]
+            .startswith(cockpit_app.DEMO_WEBVIEW2_BACKGROUND_ARGUMENT)
+        )
+
+    assert (
+        os.environ[cockpit_app.WEBVIEW2_BROWSER_ARGUMENTS_ENV] == "--inherited"
+    )
+
+
+def test_normal_webview_environment_is_not_changed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(cockpit_app.WEBVIEW2_BROWSER_ARGUMENTS_ENV, "--normal-mode")
+
+    with cockpit_app.demo_webview2_offline_environment(demo=False):
+        assert (
+            os.environ[cockpit_app.WEBVIEW2_BROWSER_ARGUMENTS_ENV]
+            == "--normal-mode"
+        )
+
+    assert os.environ[cockpit_app.WEBVIEW2_BROWSER_ARGUMENTS_ENV] == "--normal-mode"
 
 
 def test_self_check_inspects_installed_credentials_by_existence_only(

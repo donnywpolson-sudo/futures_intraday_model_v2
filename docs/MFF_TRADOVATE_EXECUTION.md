@@ -103,6 +103,62 @@ delete the credential reference, and restart. Startup still remains
 .\scripts\install_live_cockpit_candidate.ps1 -ExpectedCandidateSha256 <validated-64-character-sha256>
 ```
 
+The mandatory current-source lane must also pass from a detached committed-only
+checkout while using the operational virtual environment as the dependency
+source:
+
+```powershell
+$env:PYTHONPATH = 'C:\clean-source\src'
+$env:PYTHONDONTWRITEBYTECODE = '1'
+C:\path\to\operational\.venv\Scripts\python.exe -m pytest -q -p no:cacheprovider --basetemp=C:\short-clean-temp -m current
+```
+
+The 2026-08 clean-source remediation corrected three failures in
+`tests/test_runtime_environment.py`: the exact-lock check, the aggregated
+package-mismatch check, and the global-interpreter rejection check. All three
+failed before their assertions because the validator required a
+checkout-local `.venv`, even though a clean committed checkout intentionally
+contains no virtual environment. A clean checkout now accepts only the active
+locked virtual-environment interpreter; a checkout-local `.venv`, when
+present, remains the required interpreter. Global interpreters still fail.
+
+Packaged offline validation uses
+`scripts/validate_live_cockpit_offline.ps1`. It launches only an exact absolute
+candidate path through `System.Diagnostics.ProcessStartInfo`, passes
+`--self-check` or `--demo` separately, sets `UseShellExecute=false`, removes
+all inherited Databento, Tradovate, and MFF environment variables without
+reading their values, and records the root plus every observed descendant
+process. Computer Use is not a launch path.
+
+Socket evidence reports polling samples, raw repeated observations, unique
+socket identities, first-seen and last-seen times, owners, listeners, outbound
+connections, and loopback/private/link-local/multicast/broadcast/global
+classification separately. Repeated samples are not new connections.
+Unrelated known host processes are excluded; unknown socket ownership and
+root-path mismatches fail closed. WebView2 descendants are part of the
+candidate process tree and are never ignored. Process identity includes PID,
+parent, executable, command line, and start time; socket identities include
+that start time so PID reuse cannot merge different processes. An incomplete
+descendant identity or an early demo exit fails validation, and the requested
+observation duration must complete.
+
+pywebview serves local assets over loopback HTTP. In demo mode only, the
+cockpit starts a dynamically allocated loopback proxy that rejects nonlocal
+WebView2 requests. WebView2 officially supports
+[additional browser arguments](https://learn.microsoft.com/en-us/dotnet/api/microsoft.web.webview2.core.corewebview2environmentoptions.additionalbrowserarguments),
+and Chromium documents both
+[manual proxy configuration and its implicit localhost bypass](https://chromium.googlesource.com/chromium/src/+/HEAD/net/docs/proxy.md).
+That bypass keeps required local IPC direct. The configuration uses no
+external IP/domain allowlist and does not change normal or future separately
+authorized provider modes. Both demo and self-check must show zero globally
+routable process-tree sockets; only the documented local loopback IPC is
+eligible. An unknown owner or any nonloopback outbound socket fails
+validation.
+
+Candidate preparation and installation remain separate future operations.
+Offline remediation validation creates only temporary packages, removes them
+after validation, and never emits or retains an installation approval line.
+
 The candidate build never overwrites the installed tree. After its self-check,
 tests, secret scan, and visual demo inspection pass, installation is a separate
 approved cutover to `FuturesLiveCockpit\FuturesLiveCockpit.exe`. The installer
