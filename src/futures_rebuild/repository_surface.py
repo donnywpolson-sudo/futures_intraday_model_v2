@@ -28,6 +28,14 @@ SOURCE_OF_TRUTH_PATH = Path("SOURCE_OF_TRUTH.md")
 SOURCE_OF_TRUTH_ROLE = "HUMAN_SOURCE_OF_TRUTH_VIEW"
 SOURCE_OF_TRUTH_MAX_WORDS = 1_600
 SOURCE_OF_TRUTH_MAX_BYTES = 16 * 1024
+PIPELINE_FOLDER_MAP_PATH = Path("PIPELINE_FOLDER_MAP.md")
+PIPELINE_FOLDER_MAP_ROLE = "GENERATED_PIPELINE_FOLDER_MAP_VIEW"
+PIPELINE_FOLDER_MAP_MAX_WORDS = 1_800
+PIPELINE_FOLDER_MAP_MAX_BYTES = 20 * 1024
+PIPELINE_FOLDER_MAP_MAX_TABLE_ROWS = 50
+EXPECTED_REGISTRY_ENTRY_COUNT = 182
+EXPECTED_UNRESOLVED_ENTRY_COUNT = 14
+EXPECTED_PUBLIC_COMMAND_COUNT = 7
 
 SOURCE_OF_TRUTH_SECTIONS = (
     "Purpose and authority",
@@ -40,6 +48,29 @@ SOURCE_OF_TRUTH_SECTIONS = (
     "Cleanup and deletion rules",
     "Supersession rules",
     "What this document does not authorize",
+)
+PIPELINE_FOLDER_MAP_SECTIONS = (
+    "Purpose and authority",
+    "Current authority and pointer surfaces",
+    "Public commands",
+    "Major repository topology",
+    "Classification summary",
+    "Historical and retired boundaries",
+    "Generated, local-only, mixed, and unresolved material",
+    "Safety and non-authority boundary",
+)
+PIPELINE_FOLDER_MAP_AUTHORITY_ROLES = (
+    ("Normal work", "NORMAL_WORKFLOW_AUTHORITY"),
+    ("Durable safety policy", "DURABLE_SAFETY_POLICY_AUTHORITY"),
+    ("Generated source-of-truth view", SOURCE_OF_TRUTH_ROLE),
+    ("Public package and commands", "PUBLIC_PACKAGE_AND_COMMAND_AUTHORITY"),
+    ("Standard Alpha pointer", "ACTIVE_STANDARD_ALPHA_IDENTITY"),
+    ("Standard active data catalog", "ACTIVE_STANDARD_DATA_SELECTION"),
+    ("Micro source-selection pointer", "ACTIVE_MICRO_SOURCE_SELECTION"),
+    ("Micro source catalog", "ACTIVE_MICRO_DATA_SELECTION"),
+    ("Current real-history boundary", "CURRENT_REAL_HISTORY_GATEWAY"),
+    ("Synthetic-only public pipeline", "PUBLIC_SYNTHETIC_PIPELINE_TARGET"),
+    ("Retired workflow registry", "RETIRED_WORKFLOW_REGISTRY"),
 )
 ACTIVE_POINTER_ROLES = (
     ("Standard Alpha pointer", "ACTIVE_STANDARD_ALPHA_IDENTITY"),
@@ -385,6 +416,7 @@ def validate_repository_surface(
 
     _validate_authority_roles(entries, authority_precedence)
     _validate_source_of_truth_registry_entry(entries)
+    _validate_pipeline_folder_map_registry_entry(entries)
     _validate_generated_root_policies(entries)
     _validate_standard_and_micro_roles(entries)
 
@@ -394,6 +426,7 @@ def validate_repository_surface(
         validate_public_command_surfaces(surface, root)
         _validate_pointer_metadata(surface, root)
         compare_source_of_truth_file(surface, root)
+        compare_pipeline_folder_map_file(surface, root)
 
 
 def _validate_authority_roles(
@@ -477,6 +510,59 @@ def _validate_source_of_truth_registry_entry(
     if any(fragment not in notes for fragment in required):
         raise RepositorySurfaceError(
             "SOURCE_OF_TRUTH.md registry notes must preserve derivation and non-authority"
+        )
+    return entry
+
+
+def _validate_pipeline_folder_map_registry_entry(
+    entries: Sequence[Mapping[str, object]],
+) -> Mapping[str, object]:
+    matches = [
+        entry
+        for entry in entries
+        if entry.get("path_or_pattern") == PIPELINE_FOLDER_MAP_PATH.as_posix()
+    ]
+    if len(matches) != 1:
+        raise RepositorySurfaceError(
+            "PIPELINE_FOLDER_MAP.md must have exactly one registry entry"
+        )
+    entry = matches[0]
+    expected = {
+        "match_type": "EXACT",
+        "classification": "CURRENT_SUPPORTING",
+        "authority_role": PIPELINE_FOLDER_MAP_ROLE,
+        "tracked_expected": "TRACKED",
+        "local_only": False,
+        "hash_bound": False,
+        "deletion_policy": "PRESERVE",
+    }
+    for field, value in expected.items():
+        if entry.get(field) != value:
+            raise RepositorySurfaceError(
+                f"PIPELINE_FOLDER_MAP.md {field} must be {value!r}"
+            )
+    role_matches = [
+        item for item in entries if item.get("authority_role") == PIPELINE_FOLDER_MAP_ROLE
+    ]
+    if role_matches != matches:
+        raise RepositorySurfaceError(
+            "generated pipeline-folder-map role must be unique to PIPELINE_FOLDER_MAP.md"
+        )
+    notes = str(entry.get("notes", "")).lower()
+    required = (
+        "deterministically rendered",
+        "configs/repository_surface.json",
+        "pyproject.toml",
+        "current topology",
+        "not the normal-work authority",
+        "canonical machine-readable registry",
+        "historical evidence ledger",
+        "docs/history/",
+        "grants no",
+    )
+    if any(fragment not in notes for fragment in required):
+        raise RepositorySurfaceError(
+            "PIPELINE_FOLDER_MAP.md registry notes must preserve derivation and non-authority"
         )
     return entry
 
@@ -880,6 +966,307 @@ def render_source_of_truth(
     return "\n".join(lines) + "\n"
 
 
+def _surface_entries(surface: Mapping[str, object]) -> list[Mapping[str, object]]:
+    raw_entries = surface.get("entries")
+    if not isinstance(raw_entries, Sequence):
+        raise RepositorySurfaceError("entries are unavailable")
+    entries = [entry for entry in raw_entries if isinstance(entry, Mapping)]
+    if len(entries) != len(raw_entries):
+        raise RepositorySurfaceError("entries contain a non-object value")
+    return entries
+
+
+def _classification_counts(surface: Mapping[str, object]) -> list[tuple[str, int]]:
+    entries = _surface_entries(surface)
+    raw_order = surface.get("allowed_classifications")
+    if not isinstance(raw_order, Sequence):
+        raise RepositorySurfaceError("allowed classifications are unavailable")
+    order = [str(item) for item in raw_order]
+    return [
+        (classification, sum(entry.get("classification") == classification for entry in entries))
+        for classification in order
+    ]
+
+
+def _major_family_classifications(
+    surface: Mapping[str, object], family: str
+) -> list[str]:
+    entries = _surface_entries(surface)
+    represented = {
+        str(entry["classification"])
+        for entry in entries
+        if str(entry["path_or_pattern"]).split("/", 1)[0] == family
+    }
+    return [
+        classification
+        for classification, _count in _classification_counts(surface)
+        if classification in represented
+    ]
+
+
+def _markdown_table_body_row_count(text: str) -> int:
+    lines = text.splitlines()
+    count = 0
+    for index in range(len(lines) - 1):
+        if not lines[index].startswith("|") or not lines[index + 1].startswith("| ---"):
+            continue
+        cursor = index + 2
+        while cursor < len(lines) and lines[cursor].startswith("|"):
+            count += 1
+            cursor += 1
+    return count
+
+
+def render_pipeline_folder_map(
+    surface: Mapping[str, object], public_commands: Mapping[str, str]
+) -> str:
+    """Render the concise topology guide from the registry and pyproject scripts."""
+
+    entries = _surface_entries(surface)
+    _validate_pipeline_folder_map_registry_entry(entries)
+    registry_match = resolve_surface_entry(surface, REGISTRY_PATH.as_posix())
+    if registry_match is None:
+        raise RepositorySurfaceError("canonical registry path is unclassified")
+    authority_entries = [
+        (label, _entry_for_role(surface, role))
+        for label, role in PIPELINE_FOLDER_MAP_AUTHORITY_ROLES
+    ]
+    folder_entries = [
+        (path, _exact_entry(surface, path)) for path in MAJOR_FOLDER_PATHS
+    ]
+    classification_counts = _classification_counts(surface)
+    unresolved_count = dict(classification_counts).get("UNRESOLVED_MANUAL_REVIEW", 0)
+
+    lines = [
+        "# Current pipeline folder map",
+        "",
+        "> **Generated topology view.** This file is deterministically rendered from",
+        "> `configs/repository_surface.json` and `pyproject.toml`. Do not maintain",
+        "> topology classifications independently in this file.",
+        "",
+        "## Purpose and authority",
+        "",
+        "This map is concise current navigation. It is generated and is not an authority system.",
+        "",
+        "- `CURRENT_WORKFLOW.md` controls normal work.",
+        "- `AGENTS.md` contains durable safety and research-integrity policy.",
+        "- `configs/repository_surface.json` is the canonical machine-readable path-role registry.",
+        "- `SOURCE_OF_TRUTH.md` is the broader generated repository navigation view.",
+        "- `PIPELINE_FOLDER_MAP.md` is this generated topology view only.",
+        "- `pyproject.toml` defines the public package and command surface.",
+        "- `docs/LEGACY_WORKFLOWS.md` controls interpretation of retired workflow material.",
+        "- The complete former map is preserved at `docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.md`.",
+        "",
+        "This view does not replace the workflow, safety policy, canonical registry, or broader source-of-truth view, and it does not establish research, provider, production, execution, or trading readiness.",
+        "",
+        "## Current authority and pointer surfaces",
+        "",
+        "Rows below resolve from canonical registry roles. Directory or file presence never supplies authority.",
+        "",
+        "| Role | Path | Classification | Local only | Registry boundary |",
+        "| --- | --- | --- | --- | --- |",
+        f"| Canonical path-role registry | `{REGISTRY_PATH.as_posix()}` | `{_markdown_cell(registry_match['classification'])}` | {'yes' if registry_match['local_only'] else 'no'} | {_markdown_cell(surface['purpose'])} |",
+    ]
+    for label, entry in authority_entries:
+        lines.append(
+            "| "
+            f"{_markdown_cell(label)} | `{_markdown_cell(entry['path_or_pattern'])}` | "
+            f"`{_markdown_cell(entry['classification'])}` | "
+            f"{'yes' if entry['local_only'] else 'no'} | {_markdown_cell(entry['notes'])} |"
+        )
+    lines.extend(
+        [
+            "",
+            "The standard Alpha pointer/catalog and micro source pointer/catalog remain separate. Local-only controls may be absent from clean provider-free exports. Micro source selection does not establish a frozen mechanism, registered trial, historical-row authority, research passage, holdout authority, production readiness, execution readiness, or trading authority.",
+            "",
+            "`CertifiedResearchGateway` is the sole current real-history registration and trial-execution boundary; use remains separately controlled. `futures-pipeline` is synthetic-only. No other public command provides a real-history execution surface.",
+            "",
+            "## Public commands",
+            "",
+            "This is the exact deterministic `[project.scripts]` mapping from `pyproject.toml`.",
+            "",
+            "| Command | Python target |",
+            "| --- | --- |",
+        ]
+    )
+    for name, target in sorted(public_commands.items()):
+        lines.append(f"| `{_markdown_cell(name)}` | `{_markdown_cell(target)}` |")
+    lines.extend(
+        [
+            "",
+            "Private helpers, documentation-only commands, historical scripts, ignored installation candidates, and untracked execution-looking modules are not public commands.",
+            "",
+            "## Major repository topology",
+            "",
+            "Each family appears once. Its exact root entry supplies the role, tracking/local state, deletion policy, and notes; represented classifications summarize all registry entries in that family.",
+            "",
+            "| Family | Current role | Represented classifications | Tracking and locality | Deletion policy | Registry notes |",
+            "| --- | --- | --- | --- | --- | --- |",
+        ]
+    )
+    for path, entry in folder_entries:
+        represented = ", ".join(
+            f"`{classification}`"
+            for classification in _major_family_classifications(surface, path)
+        )
+        lines.append(
+            f"| `{path}/` | `{_markdown_cell(entry['authority_role'])}` | {represented} | "
+            f"`{_markdown_cell(entry['tracked_expected'])}`; local-only: "
+            f"{'yes' if entry['local_only'] else 'no'} | "
+            f"`{_markdown_cell(entry['deletion_policy'])}` | {_markdown_cell(entry['notes'])} |"
+        )
+    lines.extend(
+        [
+            "",
+            "## Classification summary",
+            "",
+            "The counts below use only the canonical classification vocabulary and count registry entries, not files present in this checkout.",
+            "",
+            "| Classification | Entry count |",
+            "| --- | --- |",
+        ]
+    )
+    for classification, count in classification_counts:
+        lines.append(f"| `{classification}` | {count} |")
+    lines.extend(
+        [
+            "",
+            "## Historical and retired boundaries",
+            "",
+            "The former complete map, including its version-by-version status chronology, is preserved at `docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.md`; its provenance manifest is `docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.json`. That historical record is not a runtime renderer input.",
+            "",
+            "Historical exact paths may remain at their original locations. `docs/LEGACY_WORKFLOWS.md` controls interpretation of retired workflow material. Historical path presence does not make a surface current; tracked does not imply current; ignored does not imply disposable; and a current replacement must be explicitly declared. No version-by-version history belongs in this generated root map.",
+            "",
+            "## Generated, local-only, mixed, and unresolved material",
+            "",
+            "Local-only files may be absent from clean provider-free exports. Generated-looking paths are not automatically disposable. `FuturesLiveCockpit/` is a mixed packaging source/output surface. Directory presence does not grant authority, and untracked execution-looking code is not current merely because it exists.",
+            "",
+            f"The registry currently contains {unresolved_count} `UNRESOLVED_MANUAL_REVIEW` entries. They require explicit review; use `configs/repository_surface.json` for their exact paths and policies.",
+            "",
+            "## Safety and non-authority boundary",
+            "",
+            "Neither this generated map nor the registry authorizes deletion, movement or renaming, provider access, credential access, market-data reads, historical-row access, holdout or forward access, research execution, prediction publication, candidate sealing, active-data mutation, publication, installation, activation, live smoke, trading, order placement, staging, commit, or push.",
+            "",
+            "Cache deletion still requires a fresh exact machine-local census and separate approval.",
+        ]
+    )
+    return "\n".join(lines) + "\n"
+
+
+def validate_pipeline_folder_map(
+    document: bytes,
+    *,
+    surface: Mapping[str, object],
+    public_commands: Mapping[str, str],
+) -> dict[str, object]:
+    """Validate exact deterministic topology bytes and non-authority limits."""
+
+    if len(_surface_entries(surface)) != EXPECTED_REGISTRY_ENTRY_COUNT:
+        raise RepositorySurfaceError(
+            f"registry entry count must remain {EXPECTED_REGISTRY_ENTRY_COUNT}"
+        )
+    classification_counts = dict(_classification_counts(surface))
+    if classification_counts.get("UNRESOLVED_MANUAL_REVIEW") != EXPECTED_UNRESOLVED_ENTRY_COUNT:
+        raise RepositorySurfaceError(
+            f"unresolved entry count must remain {EXPECTED_UNRESOLVED_ENTRY_COUNT}"
+        )
+    expected = render_pipeline_folder_map(surface, public_commands).encode("utf-8")
+    if document != expected:
+        raise RepositorySurfaceError(
+            "PIPELINE_FOLDER_MAP.md is absent, stale, manually edited, or inconsistent"
+        )
+    if len(document) > PIPELINE_FOLDER_MAP_MAX_BYTES:
+        raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md exceeds the byte limit")
+    if b"\r" in document or not document.endswith(b"\n") or document.endswith(b"\n\n"):
+        raise RepositorySurfaceError(
+            "PIPELINE_FOLDER_MAP.md must use LF and exactly one final newline"
+        )
+    try:
+        text = document.decode("utf-8")
+    except UnicodeDecodeError as exc:
+        raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md is not UTF-8") from exc
+    word_count = len(text.split())
+    if word_count > PIPELINE_FOLDER_MAP_MAX_WORDS:
+        raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md exceeds the word limit")
+    table_row_count = _markdown_table_body_row_count(text)
+    if table_row_count > PIPELINE_FOLDER_MAP_MAX_TABLE_ROWS:
+        raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md exceeds the table-row limit")
+    headings = [line[3:] for line in text.splitlines() if line.startswith("## ")]
+    if headings != list(PIPELINE_FOLDER_MAP_SECTIONS):
+        raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md section order is invalid")
+    scrubbed = text.replace(
+        "docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.md", ""
+    ).replace("docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.json", "")
+    if (
+        _MACHINE_PATH.search(text)
+        or _ABSOLUTE_POSIX_PATH.search(text)
+        or _UNC_PATH.search(text)
+        or "futures-v2-" in text
+    ):
+        raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md contains a machine path")
+    if _DATE_OR_TIMESTAMP.search(scrubbed) or _COMMIT_SHA.search(text):
+        raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md contains transient identity")
+    if _CREDENTIAL_VALUE.search(text):
+        raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md contains a credential value")
+    for variable in ("USERNAME", "USER"):
+        username = os.environ.get(variable, "").strip()
+        if len(username) >= 3 and re.search(rf"(?i)\b{re.escape(username)}\b", text):
+            raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md contains a user name")
+    for path in MAJOR_FOLDER_PATHS:
+        if text.count(f"| `{path}/` |") != 1:
+            raise RepositorySurfaceError(
+                f"PIPELINE_FOLDER_MAP.md major family must appear once: {path}"
+            )
+    text_lines = text.splitlines()
+    for classification, count in classification_counts.items():
+        if text_lines.count(f"| `{classification}` | {count} |") != 1:
+            raise RepositorySurfaceError(
+                f"PIPELINE_FOLDER_MAP.md classification row is invalid: {classification}"
+            )
+    required_fragments = (
+        "CURRENT_WORKFLOW.md` controls normal work",
+        "AGENTS.md` contains durable safety",
+        "canonical machine-readable path-role registry",
+        "SOURCE_OF_TRUTH.md` is the broader generated",
+        "CertifiedResearchGateway",
+        "sole current real-history",
+        "futures-pipeline` is synthetic-only",
+        "docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.md",
+        "docs/LEGACY_WORKFLOWS.md",
+        "Neither this generated map nor the registry authorizes",
+        "fresh exact machine-local census and separate approval",
+    )
+    for fragment in required_fragments:
+        if fragment not in text:
+            raise RepositorySurfaceError(
+                f"PIPELINE_FOLDER_MAP.md omits required boundary: {fragment}"
+            )
+    for forbidden in (
+        "`CURRENT_REACHABLE`",
+        "`SYNTHETIC_ONLY`",
+        "`HISTORICAL_ROW_APPROVAL_REQUIRED`",
+        "`RETIRED`",
+        "Phase 1A",
+        "Phase 11",
+        "metadata preflight v2",
+        "acquisition v21",
+        "PASS_METADATA_ONLY",
+        "live_cockpit/execution",
+        "Tradovate",
+    ):
+        if forbidden.lower() in text.lower():
+            raise RepositorySurfaceError(
+                f"PIPELINE_FOLDER_MAP.md contains historical or untracked material: {forbidden}"
+            )
+    return {
+        "valid": True,
+        "word_count": word_count,
+        "byte_count": len(document),
+        "table_row_count": table_row_count,
+        "public_command_count": len(public_commands),
+    }
+
+
 def validate_source_of_truth(
     document: bytes,
     *,
@@ -987,6 +1374,45 @@ def compare_source_of_truth_file(
     )
 
 
+def expected_pipeline_folder_map_bytes(
+    surface: Mapping[str, object], repository_root: Path | str
+) -> bytes:
+    """Return validated deterministic topology bytes without writing a file."""
+
+    root = Path(repository_root).resolve(strict=True)
+    validate_public_command_surfaces(surface, root)
+    commands = _load_public_command_targets(root)
+    rendered = render_pipeline_folder_map(surface, commands).encode("utf-8")
+    validate_pipeline_folder_map(
+        rendered,
+        surface=surface,
+        public_commands=commands,
+    )
+    return rendered
+
+
+def compare_pipeline_folder_map_file(
+    surface: Mapping[str, object], repository_root: Path | str
+) -> dict[str, object]:
+    """Fail closed unless the tracked topology map equals deterministic bytes."""
+
+    root = Path(repository_root).resolve(strict=True)
+    path = _safe_control_path(root, PIPELINE_FOLDER_MAP_PATH.as_posix())
+    if path.is_symlink() or not path.is_file():
+        raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md is missing")
+    try:
+        actual = path.read_bytes()
+    except OSError as exc:
+        raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md is unreadable") from exc
+    validate_public_command_surfaces(surface, root)
+    commands = _load_public_command_targets(root)
+    return validate_pipeline_folder_map(
+        actual,
+        surface=surface,
+        public_commands=commands,
+    )
+
+
 def _validate_pointer_document(path: Path, *, schema: str) -> None:
     if path.stat().st_size > 262_144:
         raise RepositorySurfaceError(f"pointer control document is unexpectedly large: {path.name}")
@@ -1049,18 +1475,33 @@ def validate_repository_checkout(repository_root: Path | str) -> dict[str, objec
     validate_repository_surface(surface, repository_root=root)
     coverage = validate_tracked_root_coverage(surface, root)
     commands = validate_public_command_surfaces(surface, root)
+    if len(commands) != EXPECTED_PUBLIC_COMMAND_COUNT:
+        raise RepositorySurfaceError(
+            f"public command count must remain {EXPECTED_PUBLIC_COMMAND_COUNT}"
+        )
     source_of_truth = compare_source_of_truth_file(surface, root)
+    pipeline_folder_map = compare_pipeline_folder_map_file(surface, root)
+    unresolved_count = dict(_classification_counts(surface))[
+        "UNRESOLVED_MANUAL_REVIEW"
+    ]
     return {
         "schema_version": SCHEMA_VERSION,
         "valid": True,
         "registry_valid": True,
         "source_of_truth_valid": source_of_truth["valid"],
+        "pipeline_folder_map_valid": pipeline_folder_map["valid"],
         "entry_count": len(surface["entries"]),
+        "unresolved_entry_count": unresolved_count,
         "tracked_root_mode": coverage["mode"],
         "public_commands": commands,
         "public_command_count": len(commands),
         "source_of_truth_word_count": source_of_truth["word_count"],
         "source_of_truth_byte_count": source_of_truth["byte_count"],
+        "pipeline_folder_map_word_count": pipeline_folder_map["word_count"],
+        "pipeline_folder_map_byte_count": pipeline_folder_map["byte_count"],
+        "pipeline_folder_map_table_row_count": pipeline_folder_map[
+            "table_row_count"
+        ],
         "mutations_performed": False,
     }
 
@@ -1068,10 +1509,16 @@ def validate_repository_checkout(repository_root: Path | str) -> dict[str, objec
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Validate repository surface registry")
     parser.add_argument("--root", type=Path, default=Path.cwd())
-    parser.add_argument(
+    output = parser.add_mutually_exclusive_group()
+    output.add_argument(
         "--print-source-of-truth",
         action="store_true",
         help="print the deterministic Markdown view without writing files",
+    )
+    output.add_argument(
+        "--print-pipeline-folder-map",
+        action="store_true",
+        help="print the deterministic topology view without writing files",
     )
     return parser
 
@@ -1084,6 +1531,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             surface = load_repository_surface(root)
             validate_repository_surface(surface, repository_root=None)
             sys.stdout.buffer.write(expected_source_of_truth_bytes(surface, root))
+            return 0
+        if args.print_pipeline_folder_map:
+            root = args.root.resolve(strict=True)
+            surface = load_repository_surface(root)
+            validate_repository_surface(surface, repository_root=None)
+            sys.stdout.buffer.write(expected_pipeline_folder_map_bytes(surface, root))
             return 0
         report = validate_repository_checkout(args.root)
     except RepositorySurfaceError as exc:

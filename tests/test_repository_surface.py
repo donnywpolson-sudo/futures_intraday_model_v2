@@ -12,16 +12,30 @@ import tomllib
 import pytest
 
 from futures_rebuild.repository_surface import (
+    EXPECTED_PUBLIC_COMMAND_COUNT,
+    EXPECTED_REGISTRY_ENTRY_COUNT,
+    EXPECTED_UNRESOLVED_ENTRY_COUNT,
+    MAJOR_FOLDER_PATHS,
+    PIPELINE_FOLDER_MAP_AUTHORITY_ROLES,
+    PIPELINE_FOLDER_MAP_MAX_BYTES,
+    PIPELINE_FOLDER_MAP_MAX_TABLE_ROWS,
+    PIPELINE_FOLDER_MAP_MAX_WORDS,
+    PIPELINE_FOLDER_MAP_ROLE,
+    PIPELINE_FOLDER_MAP_SECTIONS,
     RepositorySurfaceError,
     SOURCE_OF_TRUTH_MAX_BYTES,
     SOURCE_OF_TRUTH_MAX_WORDS,
     SOURCE_OF_TRUTH_SECTIONS,
+    compare_pipeline_folder_map_file,
     compare_source_of_truth_file,
+    expected_pipeline_folder_map_bytes,
     expected_source_of_truth_bytes,
     load_repository_surface,
+    render_pipeline_folder_map,
     render_source_of_truth,
     resolve_surface_entry,
     validate_public_command_surfaces,
+    validate_pipeline_folder_map,
     validate_repository_checkout,
     validate_repository_surface,
     validate_source_of_truth,
@@ -32,6 +46,7 @@ from futures_rebuild.repository_surface import (
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY_PATH = ROOT / "configs" / "repository_surface.json"
 SOURCE_OF_TRUTH_PATH = ROOT / "SOURCE_OF_TRUTH.md"
+PIPELINE_FOLDER_MAP_PATH = ROOT / "PIPELINE_FOLDER_MAP.md"
 pytestmark = pytest.mark.current
 
 
@@ -64,7 +79,12 @@ def _public_commands(root: Path = ROOT) -> dict[str, str]:
     return dict(sorted(payload["project"]["scripts"].items()))
 
 
-def _write_export_controls(root: Path, *, include_document: bool = True) -> None:
+def _write_export_controls(
+    root: Path,
+    *,
+    include_document: bool = True,
+    include_pipeline_map: bool = True,
+) -> None:
     (root / "configs").mkdir(parents=True)
     (root / "src" / "futures_rebuild").mkdir(parents=True)
     (root / "configs" / "active_alpha_research_ladder.json").write_text(
@@ -82,6 +102,10 @@ def _write_export_controls(root: Path, *, include_document: bool = True) -> None
     if include_document:
         (root / "SOURCE_OF_TRUTH.md").write_bytes(
             expected_source_of_truth_bytes(_surface(), root)
+        )
+    if include_pipeline_map:
+        (root / "PIPELINE_FOLDER_MAP.md").write_bytes(
+            expected_pipeline_folder_map_bytes(_surface(), root)
         )
 
 
@@ -632,7 +656,7 @@ def test_clean_export_rendering_needs_no_local_pointer_or_payload(
     assert not (tmp_path / "data").exists()
 
 
-def test_default_cli_reports_registry_and_source_of_truth_validity() -> None:
+def test_default_cli_reports_all_generated_surface_validity() -> None:
     env = os.environ.copy()
     result = subprocess.run(
         [sys.executable, "-B", "-m", "futures_rebuild.repository_surface"],
@@ -647,8 +671,10 @@ def test_default_cli_reports_registry_and_source_of_truth_validity() -> None:
     assert result.stderr == b""
     assert report["registry_valid"] is True
     assert report["source_of_truth_valid"] is True
-    assert report["entry_count"] == 182
-    assert report["public_command_count"] == 7
+    assert report["pipeline_folder_map_valid"] is True
+    assert report["entry_count"] == EXPECTED_REGISTRY_ENTRY_COUNT == 182
+    assert report["unresolved_entry_count"] == EXPECTED_UNRESOLVED_ENTRY_COUNT == 14
+    assert report["public_command_count"] == EXPECTED_PUBLIC_COMMAND_COUNT == 7
     assert report["tracked_root_mode"] == "GIT_LS_FILES"
     assert report["mutations_performed"] is False
 
@@ -691,3 +717,260 @@ def test_validate_repository_checkout_reports_source_of_truth_metrics() -> None:
         SOURCE_OF_TRUTH_PATH.read_text(encoding="utf-8").split()
     )
     assert report["source_of_truth_byte_count"] == SOURCE_OF_TRUTH_PATH.stat().st_size
+    assert report["pipeline_folder_map_valid"] is True
+    assert report["pipeline_folder_map_word_count"] == len(
+        PIPELINE_FOLDER_MAP_PATH.read_text(encoding="utf-8").split()
+    )
+    assert report["pipeline_folder_map_byte_count"] == PIPELINE_FOLDER_MAP_PATH.stat().st_size
+
+
+def test_pipeline_folder_map_registry_entry_is_unique_generated_view() -> None:
+    surface = _surface()
+    entry = _entry(surface, "PIPELINE_FOLDER_MAP.md")
+
+    assert entry["match_type"] == "EXACT"
+    assert entry["classification"] == "CURRENT_SUPPORTING"
+    assert entry["authority_role"] == PIPELINE_FOLDER_MAP_ROLE
+    assert entry["tracked_expected"] == "TRACKED"
+    assert entry["local_only"] is False
+    assert entry["hash_bound"] is False
+    assert entry["deletion_policy"] == "PRESERVE"
+    assert sum(
+        item["authority_role"] == PIPELINE_FOLDER_MAP_ROLE
+        for item in surface["entries"]  # type: ignore[index]
+    ) == 1
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("match_type", "PREFIX"),
+        ("classification", "CURRENT_OPERATIONAL"),
+        ("authority_role", "TOPOLOGY_REFERENCE_NO_AUTHORITY"),
+        ("tracked_expected", "OPTIONAL"),
+        ("local_only", True),
+        ("hash_bound", None),
+        ("deletion_policy", "NO_AUTOMATIC_DELETE"),
+    ],
+)
+def test_pipeline_folder_map_registry_contract_fails_closed(
+    field: str, value: object
+) -> None:
+    surface = _surface()
+    _entry(surface, "PIPELINE_FOLDER_MAP.md")[field] = value
+
+    with pytest.raises(RepositorySurfaceError):
+        validate_repository_surface(surface)
+
+
+def test_pipeline_folder_map_rendering_is_deterministic_and_matches_tracked_file() -> None:
+    surface = _surface()
+    first = expected_pipeline_folder_map_bytes(surface, ROOT)
+    second = expected_pipeline_folder_map_bytes(copy.deepcopy(surface), ROOT)
+
+    assert first == second == PIPELINE_FOLDER_MAP_PATH.read_bytes()
+    assert compare_pipeline_folder_map_file(surface, ROOT)["valid"] is True
+
+
+def test_pipeline_folder_map_format_sections_and_limits_are_stable() -> None:
+    document = PIPELINE_FOLDER_MAP_PATH.read_bytes()
+    text = document.decode("utf-8")
+    headings = [line[3:] for line in text.splitlines() if line.startswith("## ")]
+    table_rows = 0
+    lines = text.splitlines()
+    for index in range(len(lines) - 1):
+        if lines[index].startswith("|") and lines[index + 1].startswith("| ---"):
+            cursor = index + 2
+            while cursor < len(lines) and lines[cursor].startswith("|"):
+                table_rows += 1
+                cursor += 1
+
+    assert b"\r" not in document
+    assert document.endswith(b"\n") and not document.endswith(b"\n\n")
+    assert headings == list(PIPELINE_FOLDER_MAP_SECTIONS)
+    assert len(text.split()) <= PIPELINE_FOLDER_MAP_MAX_WORDS
+    assert len(document) <= PIPELINE_FOLDER_MAP_MAX_BYTES
+    assert table_rows <= PIPELINE_FOLDER_MAP_MAX_TABLE_ROWS
+
+
+def test_pipeline_folder_map_authority_rows_are_complete_unique_and_stable() -> None:
+    surface = _surface()
+    text = PIPELINE_FOLDER_MAP_PATH.read_text(encoding="utf-8")
+    positions = [text.index("| Canonical path-role registry |")]
+
+    assert "`configs/repository_surface.json`" in text
+    for label, role in PIPELINE_FOLDER_MAP_AUTHORITY_ROLES:
+        matches = [
+            entry
+            for entry in surface["entries"]  # type: ignore[index]
+            if entry["authority_role"] == role
+        ]
+        assert len(matches) == 1
+        row_start = f"| {label} | `{matches[0]['path_or_pattern']}` |"
+        assert text.count(row_start) == 1
+        positions.append(text.index(row_start))
+    assert positions == sorted(positions)
+
+
+def test_pipeline_folder_map_public_commands_are_exact_and_sorted() -> None:
+    text = PIPELINE_FOLDER_MAP_PATH.read_text(encoding="utf-8")
+    commands = _public_commands()
+    expected_rows = [f"| `{name}` | `{target}` |" for name, target in commands.items()]
+    rendered_rows = [line for line in text.splitlines() if line in expected_rows]
+
+    assert list(commands) == sorted(commands)
+    assert rendered_rows == expected_rows
+    assert len(rendered_rows) == len(commands) == EXPECTED_PUBLIC_COMMAND_COUNT
+
+
+def test_pipeline_folder_map_major_roots_and_classification_counts_are_exact() -> None:
+    surface = _surface()
+    text = PIPELINE_FOLDER_MAP_PATH.read_text(encoding="utf-8")
+    counts = {
+        classification: sum(
+            entry["classification"] == classification
+            for entry in surface["entries"]  # type: ignore[index]
+        )
+        for classification in surface["allowed_classifications"]  # type: ignore[index]
+    }
+
+    for family in MAJOR_FOLDER_PATHS:
+        assert text.count(f"| `{family}/` |") == 1
+    for classification, count in counts.items():
+        assert text.splitlines().count(f"| `{classification}` | {count} |") == 1
+    assert counts["UNRESOLVED_MANUAL_REVIEW"] == EXPECTED_UNRESOLVED_ENTRY_COUNT
+
+
+def test_pipeline_folder_map_has_no_transient_identity_or_second_taxonomy() -> None:
+    text = PIPELINE_FOLDER_MAP_PATH.read_text(encoding="utf-8")
+    scrubbed = text.replace(
+        "docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.md", ""
+    ).replace("docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.json", "")
+
+    assert not re.search(r"[A-Za-z]:[\\/]", text)
+    assert not re.search(r"\\\\[^\\\s]+\\", text)
+    assert "AppData" not in text and "futures-v2-" not in text
+    assert not re.search(r"\b(?:19|20)\d{2}-\d{2}-\d{2}\b", scrubbed)
+    assert not re.search(r"\b[0-9a-f]{40}\b", text)
+    for forbidden in (
+        "`CURRENT_REACHABLE`",
+        "`SYNTHETIC_ONLY`",
+        "`HISTORICAL_ROW_APPROVAL_REQUIRED`",
+        "`RETIRED`",
+        "Phase 1A",
+        "Phase 11",
+        "PASS_METADATA_ONLY",
+        "live_cockpit/execution",
+        "Tradovate",
+    ):
+        assert forbidden.lower() not in text.lower()
+
+
+def test_pipeline_folder_map_preserves_historical_and_non_authority_boundaries() -> None:
+    text = PIPELINE_FOLDER_MAP_PATH.read_text(encoding="utf-8")
+
+    for required in (
+        "docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.md",
+        "docs/LEGACY_WORKFLOWS.md",
+        "tracked does not imply current",
+        "ignored does not imply disposable",
+        "FuturesLiveCockpit/` is a mixed packaging source/output surface",
+        "untracked execution-looking code is not current",
+        "Neither this generated map nor the registry authorizes",
+        "fresh exact machine-local census and separate approval",
+    ):
+        assert required in text
+
+
+def test_manual_or_stale_pipeline_folder_map_is_rejected() -> None:
+    edited = PIPELINE_FOLDER_MAP_PATH.read_bytes().replace(
+        b"Generated topology view", b"Manually maintained topology view", 1
+    )
+
+    with pytest.raises(RepositorySurfaceError, match="stale|manually edited"):
+        validate_pipeline_folder_map(
+            edited,
+            surface=_surface(),
+            public_commands=_public_commands(),
+        )
+
+
+def test_changed_registry_data_changes_pipeline_map_and_rejects_old_bytes() -> None:
+    surface = _surface()
+    baseline = PIPELINE_FOLDER_MAP_PATH.read_bytes()
+    _entry(surface, "dist")["classification"] = "CURRENT_SUPPORTING"
+    changed = render_pipeline_folder_map(surface, _public_commands()).encode("utf-8")
+
+    assert changed != baseline
+    with pytest.raises(RepositorySurfaceError, match="stale|inconsistent"):
+        validate_pipeline_folder_map(
+            baseline,
+            surface=surface,
+            public_commands=_public_commands(),
+        )
+
+
+def test_changed_public_command_changes_pipeline_map_and_rejects_old_bytes() -> None:
+    commands = _public_commands()
+    changed_commands = dict(commands)
+    changed_commands["futures-example"] = "futures_rebuild.example:main"
+    changed = render_pipeline_folder_map(_surface(), changed_commands).encode("utf-8")
+
+    assert changed != PIPELINE_FOLDER_MAP_PATH.read_bytes()
+    with pytest.raises(RepositorySurfaceError, match="stale|inconsistent"):
+        validate_pipeline_folder_map(
+            PIPELINE_FOLDER_MAP_PATH.read_bytes(),
+            surface=_surface(),
+            public_commands=changed_commands,
+        )
+
+
+def test_missing_pipeline_folder_map_file_is_rejected(tmp_path: Path) -> None:
+    _write_export_controls(tmp_path, include_pipeline_map=False)
+
+    with pytest.raises(RepositorySurfaceError, match="missing"):
+        compare_pipeline_folder_map_file(_surface(), tmp_path)
+
+
+def test_clean_export_pipeline_rendering_needs_no_local_pointer_or_payload(
+    tmp_path: Path,
+) -> None:
+    _write_export_controls(tmp_path)
+
+    report = compare_pipeline_folder_map_file(_surface(), tmp_path)
+
+    assert report["valid"] is True
+    assert not (tmp_path / "configs" / "active_micro_alpha_research_ladder.json").exists()
+    assert not (tmp_path / "data").exists()
+
+
+def test_print_pipeline_folder_map_cli_is_stdout_only_and_read_only() -> None:
+    observed = [
+        PIPELINE_FOLDER_MAP_PATH,
+        SOURCE_OF_TRUTH_PATH,
+        REGISTRY_PATH,
+        ROOT / "src" / "futures_rebuild" / "repository_surface.py",
+        ROOT / "tests" / "test_repository_surface.py",
+    ]
+    before = {path: path.read_bytes() for path in observed}
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-B",
+            "-m",
+            "futures_rebuild.repository_surface",
+            "--print-pipeline-folder-map",
+        ],
+        cwd=ROOT,
+        env=os.environ.copy(),
+        check=True,
+        capture_output=True,
+        timeout=30,
+    )
+
+    assert result.stdout == PIPELINE_FOLDER_MAP_PATH.read_bytes()
+    assert result.stderr == b""
+    assert {path: path.read_bytes() for path in observed} == before
+    render_pipeline_folder_map,
+    validate_pipeline_folder_map,

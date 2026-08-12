@@ -443,6 +443,83 @@ def _assert_pipeline_folder_map_historical_snapshot_contract() -> None:
             assert required_note.lower() in entry["notes"].lower()
 
 
+def _assert_pipeline_folder_map_is_concise_generated_current_view() -> None:
+    path = ROOT / "PIPELINE_FOLDER_MAP.md"
+    document = path.read_bytes()
+    text = document.decode("utf-8")
+    lowered = " ".join(text.split()).lower()
+
+    assert b"\r" not in document
+    assert document.endswith(b"\n") and not document.endswith(b"\n\n")
+    assert len(text.split()) <= 1_800
+    assert len(document) <= 20 * 1_024
+
+    table_rows = 0
+    lines = text.splitlines()
+    for index in range(len(lines) - 1):
+        if lines[index].startswith("|") and lines[index + 1].startswith("| ---"):
+            cursor = index + 2
+            while cursor < len(lines) and lines[cursor].startswith("|"):
+                table_rows += 1
+                cursor += 1
+    assert table_rows <= 50
+
+    for required in (
+        "deterministically rendered from",
+        "configs/repository_surface.json",
+        "pyproject.toml",
+        "CURRENT_WORKFLOW.md` controls normal work",
+        "AGENTS.md` contains durable safety",
+        "SOURCE_OF_TRUTH.md` is the broader generated",
+        PIPELINE_FOLDER_MAP_SNAPSHOT_PATH,
+        "docs/LEGACY_WORKFLOWS.md",
+        "CertifiedResearchGateway",
+        "sole current real-history",
+        "futures-pipeline` is synthetic-only",
+        "standard Alpha pointer/catalog and micro source pointer/catalog remain separate",
+        "Micro source selection does not establish",
+        "FuturesLiveCockpit/` is a mixed packaging source/output surface",
+        "UNRESOLVED_MANUAL_REVIEW",
+        "Neither this generated map nor the registry authorizes",
+    ):
+        assert required.lower() in lowered
+
+    registry = json.loads(_text("configs/repository_surface.json"))
+    map_entries = [
+        entry
+        for entry in registry["entries"]
+        if entry["path_or_pattern"] == "PIPELINE_FOLDER_MAP.md"
+    ]
+    assert len(map_entries) == 1
+    map_entry = map_entries[0]
+    assert map_entry["match_type"] == "EXACT"
+    assert map_entry["classification"] == "CURRENT_SUPPORTING"
+    assert map_entry["authority_role"] == "GENERATED_PIPELINE_FOLDER_MAP_VIEW"
+    assert map_entry["tracked_expected"] == "TRACKED"
+    assert map_entry["local_only"] is False
+    assert map_entry["hash_bound"] is False
+    assert map_entry["deletion_policy"] == "PRESERVE"
+
+    scripts = tomllib.loads(_text("pyproject.toml"))["project"]["scripts"]
+    expected_command_rows = [
+        f"| `{name}` | `{target}` |" for name, target in sorted(scripts.items())
+    ]
+    assert [line for line in lines if line in expected_command_rows] == expected_command_rows
+
+    for forbidden in (
+        "`CURRENT_REACHABLE`",
+        "`SYNTHETIC_ONLY`",
+        "`HISTORICAL_ROW_APPROVAL_REQUIRED`",
+        "`RETIRED`",
+        "Phase 1A",
+        "Phase 11",
+        "PASS_METADATA_ONLY",
+        "live_cockpit/execution",
+        "Tradovate",
+    ):
+        assert forbidden.lower() not in text.lower()
+
+
 def _assert_public_snapshot_is_historical() -> None:
     snapshot = _text("PUBLIC_SNAPSHOT.md")
     lowered = " ".join(snapshot.split()).lower()
@@ -607,6 +684,7 @@ def test_current_documents_use_one_plain_language_workflow_surface() -> None:
     _assert_public_snapshot_is_historical()
     _assert_project_outline_historical_snapshot_contract()
     _assert_pipeline_folder_map_historical_snapshot_contract()
+    _assert_pipeline_folder_map_is_concise_generated_current_view()
 
 
 def test_public_snapshot_is_an_explicit_historical_record() -> None:
@@ -619,6 +697,10 @@ def test_project_outline_copy_first_snapshot_is_exact_and_non_authorizing() -> N
 
 def test_pipeline_folder_map_copy_first_snapshot_is_exact_and_non_authorizing() -> None:
     _assert_pipeline_folder_map_historical_snapshot_contract()
+
+
+def test_pipeline_folder_map_is_a_concise_generated_current_view() -> None:
+    _assert_pipeline_folder_map_is_concise_generated_current_view()
 
 
 def test_project_outline_is_current_runbook_not_historical_ledger() -> None:
@@ -730,39 +812,60 @@ def test_public_scripts_expose_no_token_era_high_risk_runner() -> None:
 
 
 def test_pipeline_map_names_only_the_current_real_history_gateway() -> None:
+    current = _text("CURRENT_WORKFLOW.md")
     mapping = _text("PIPELINE_FOLDER_MAP.md")
+    registry = json.loads(_text("configs/repository_surface.json"))
+    scripts = tomllib.loads(_text("pyproject.toml"))["project"]["scripts"]
+
+    assert "The only current code surface" in current
     assert "CertifiedResearchGateway" in mapping
-    assert "No other public script" in mapping
+    matches = [
+        entry
+        for entry in registry["entries"]
+        if entry["authority_role"] == "CURRENT_REAL_HISTORY_GATEWAY"
+    ]
+    assert len(matches) == 1
+    assert matches[0]["path_or_pattern"] == (
+        "src/futures_rebuild/certified_research_gateway.py"
+    )
+    assert "No other public command provides a real-history execution surface" in mapping
+    assert all("certified_research_gateway" not in target for target in scripts.values())
     assert "retired" in mapping.lower()
-    assert "local_evidence" in mapping
 
 
 def test_micro_pipeline_map_distinguishes_design_from_implementation() -> None:
     mapping = _text("PIPELINE_FOLDER_MAP.md")
-    outline = _text("PROJECT_OUTLINE.md")
-    for classification in (
-        "CURRENT_REACHABLE",
-        "PREPARED_NOT_EXECUTED",
-            "SYNTHETIC_ONLY",
-            "HISTORICAL_ROW_APPROVAL_REQUIRED",
-            "RETIRED",
-    ):
-        assert classification in mapping
-    for historical_path in (
-        "src/futures_rebuild/micro_alpha_pipeline.py",
-        "src/futures_rebuild/micro_alpha_acquisition.py",
-        "scripts/prepare_apex_micro_infrastructure.py",
-        "configs/apex_micro_tier01_databento_metadata_preflight_v2.json",
-        "configs/apex_micro_tier01_databento_metadata_preflight_v4.json",
-        "configs/apex_micro_product_reference_requirements.json",
-        "state/unpublished_evidence/apex_micro_preparation_supersessions/micro_tier1_scope_reconciliation.json",
-    ):
-        assert historical_path in mapping or historical_path in outline
+    registry = json.loads(_text("configs/repository_surface.json"))
+
+    roles = {
+        entry["authority_role"]: entry["path_or_pattern"]
+        for entry in registry["entries"]
+        if entry["authority_role"]
+        in {
+            "ACTIVE_STANDARD_ALPHA_IDENTITY",
+            "ACTIVE_STANDARD_DATA_SELECTION",
+            "ACTIVE_MICRO_SOURCE_SELECTION",
+            "ACTIVE_MICRO_DATA_SELECTION",
+        }
+    }
+    assert roles == {
+        "ACTIVE_STANDARD_ALPHA_IDENTITY": "configs/active_alpha_research_ladder.json",
+        "ACTIVE_STANDARD_DATA_SELECTION": "data/active/catalog.json",
+        "ACTIVE_MICRO_SOURCE_SELECTION": "configs/active_micro_alpha_research_ladder.json",
+        "ACTIVE_MICRO_DATA_SELECTION": "data/active/catalogs/apex_micro.json",
+    }
+    for path in roles.values():
+        assert f"`{path}`" in mapping
     assert "machine-local" in mapping.lower()
-    assert "local_evidence" in mapping
-    assert "legacy micro source catalog" in mapping
-    assert "configs/micro_futures_catalog_migration_plan_v1.json" in mapping
-    assert "PASS_METADATA_ONLY" in mapping
+    assert "Micro source selection does not establish" in mapping
+    assert "untracked execution-looking code is not current" in mapping
+    for old_taxonomy in (
+        "`CURRENT_REACHABLE`",
+        "`SYNTHETIC_ONLY`",
+        "`HISTORICAL_ROW_APPROVAL_REQUIRED`",
+        "`RETIRED`",
+    ):
+        assert old_taxonomy not in mapping
 
 
 def test_micro_preflight_is_metadata_only_and_download_has_no_public_command() -> None:
