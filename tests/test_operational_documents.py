@@ -25,6 +25,32 @@ PROJECT_OUTLINE_SNAPSHOT_SHA256 = (
 )
 PROJECT_OUTLINE_SNAPSHOT_BYTE_COUNT = 69_556
 PROJECT_OUTLINE_BODY_MARKER = "<!-- BEGIN EXACT PROJECT_OUTLINE SOURCE BODY -->"
+PIPELINE_FOLDER_MAP_SNAPSHOT_PATH = (
+    "docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.md"
+)
+PIPELINE_FOLDER_MAP_SNAPSHOT_MANIFEST_PATH = (
+    "docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.json"
+)
+PIPELINE_FOLDER_MAP_SOURCE_COMMIT = "981501502c49c68b791a96652cd2bd65bb82daaf"
+PIPELINE_FOLDER_MAP_SOURCE_GIT_BLOB_SHA1 = (
+    "28174fb1651e692d1b18b33b1cb14d00dac2f297"
+)
+PIPELINE_FOLDER_MAP_SOURCE_SHA256 = (
+    "0e5372ec4ab257dfa8fa411f9e06fddcbc8be77d416784beeb2e19c1d1d6e827"
+)
+PIPELINE_FOLDER_MAP_SOURCE_BYTE_COUNT = 39_521
+PIPELINE_FOLDER_MAP_SOURCE_LINE_COUNT = 230
+PIPELINE_FOLDER_MAP_SNAPSHOT_SHA256 = (
+    "db41420fa8943c12eb329ea56d36b4151f793364843c629fd0a043c9928357bd"
+)
+PIPELINE_FOLDER_MAP_SNAPSHOT_BYTE_COUNT = 40_854
+PIPELINE_FOLDER_MAP_MANIFEST_SHA256 = (
+    "0d6f96383dfe4a7c34b4eaf90538b9deb4d423e59428fd01b80b23315b1d5cd7"
+)
+PIPELINE_FOLDER_MAP_MANIFEST_BYTE_COUNT = 1_948
+PIPELINE_FOLDER_MAP_BODY_MARKER = (
+    "<!-- BEGIN EXACT PIPELINE_FOLDER_MAP SOURCE BODY -->"
+)
 PROJECT_OUTLINE_RETAINED_HEADINGS = (
     ("Futures intraday research project", "Purpose and scope"),
     ("Research discipline", "Research invariants"),
@@ -262,6 +288,161 @@ def _assert_project_outline_historical_snapshot_contract() -> None:
             assert required_note.lower() in entry["notes"].lower()
 
 
+def _assert_pipeline_folder_map_historical_snapshot_contract() -> None:
+    snapshot_path = ROOT / PIPELINE_FOLDER_MAP_SNAPSHOT_PATH
+    manifest_path = ROOT / PIPELINE_FOLDER_MAP_SNAPSHOT_MANIFEST_PATH
+    assert snapshot_path.is_file()
+    assert manifest_path.is_file()
+
+    snapshot_bytes = snapshot_path.read_bytes()
+    manifest_bytes = manifest_path.read_bytes()
+    assert b"\r" not in snapshot_bytes
+    assert b"\r" not in manifest_bytes
+    assert manifest_bytes.endswith(b"\n") and not manifest_bytes.endswith(b"\n\n")
+    assert hashlib.sha256(manifest_bytes).hexdigest() == PIPELINE_FOLDER_MAP_MANIFEST_SHA256
+    assert len(manifest_bytes) == PIPELINE_FOLDER_MAP_MANIFEST_BYTE_COUNT
+
+    manifest = json.loads(manifest_bytes.decode("utf-8"))
+    assert isinstance(manifest, dict)
+    assert (
+        manifest["schema_version"]
+        == "pipeline_folder_map_historical_snapshot/1.0.0"
+    )
+    assert manifest["record_type"] == "PIPELINE_FOLDER_MAP_COPY_FIRST_SNAPSHOT"
+    assert manifest["record_date"] == "2026-08-11"
+    assert (
+        manifest["state"]
+        == "HISTORICAL_EXACT_SOURCE_BODY_PRESERVED_NON_AUTHORIZING"
+    )
+    assert manifest["current_replacement"] == "PIPELINE_FOLDER_MAP.md"
+    assert "copy-first preservation boundary" in manifest["purpose"].lower()
+    assert "deterministic generation" in manifest["purpose"].lower()
+
+    source = manifest["source"]
+    assert source == {
+        "byte_count": PIPELINE_FOLDER_MAP_SOURCE_BYTE_COUNT,
+        "commit": PIPELINE_FOLDER_MAP_SOURCE_COMMIT,
+        "final_newline": True,
+        "git_blob_sha1": PIPELINE_FOLDER_MAP_SOURCE_GIT_BLOB_SHA1,
+        "line_endings": "LF",
+        "line_count": PIPELINE_FOLDER_MAP_SOURCE_LINE_COUNT,
+        "path": "PIPELINE_FOLDER_MAP.md",
+        "role": "TOPOLOGY_REFERENCE_NOT_AUTHORITY",
+        "sha256": PIPELINE_FOLDER_MAP_SOURCE_SHA256,
+    }
+
+    snapshot = manifest["snapshot"]
+    assert snapshot == {
+        "body_marker": PIPELINE_FOLDER_MAP_BODY_MARKER,
+        "byte_count": PIPELINE_FOLDER_MAP_SNAPSHOT_BYTE_COUNT,
+        "exact_source_body": True,
+        "path": PIPELINE_FOLDER_MAP_SNAPSHOT_PATH,
+        "preserved_body_byte_count": PIPELINE_FOLDER_MAP_SOURCE_BYTE_COUNT,
+        "preserved_body_sha256": PIPELINE_FOLDER_MAP_SOURCE_SHA256,
+        "role": "HISTORICAL_REFERENCE_ONLY",
+        "sha256": PIPELINE_FOLDER_MAP_SNAPSHOT_SHA256,
+    }
+    assert hashlib.sha256(snapshot_bytes).hexdigest() == PIPELINE_FOLDER_MAP_SNAPSHOT_SHA256
+    assert len(snapshot_bytes) == PIPELINE_FOLDER_MAP_SNAPSHOT_BYTE_COUNT
+
+    marker_with_lf = (PIPELINE_FOLDER_MAP_BODY_MARKER + "\n").encode("utf-8")
+    assert snapshot_bytes.count(marker_with_lf) == 1
+    preamble_bytes, preserved_body = snapshot_bytes.split(marker_with_lf, 1)
+    assert hashlib.sha256(preserved_body).hexdigest() == PIPELINE_FOLDER_MAP_SOURCE_SHA256
+    assert len(preserved_body) == PIPELINE_FOLDER_MAP_SOURCE_BYTE_COUNT
+    assert preserved_body.count(b"\n") == PIPELINE_FOLDER_MAP_SOURCE_LINE_COUNT
+    assert preserved_body.endswith(b"\n") and not preserved_body.endswith(b"\n\n")
+    assert b"\r" not in preserved_body
+
+    preamble = preamble_bytes.decode("utf-8")
+    normalized_preamble = " ".join(preamble.split())
+    for required in (
+        "Historical PIPELINE_FOLDER_MAP snapshot",
+        "2026-08-11",
+        PIPELINE_FOLDER_MAP_SOURCE_COMMIT,
+        "PIPELINE_FOLDER_MAP.md",
+        "non-authoritative",
+        "does not control normal work",
+        "CURRENT_WORKFLOW.md",
+        "configs/repository_surface.json",
+        "canonical machine-readable",
+        "does not claim that those embedded classifications remain current",
+        "does not claim to be the generated current topology guide",
+        "authorize provider access",
+    ):
+        assert required in normalized_preamble
+
+    for forbidden_claim in (
+        "This document controls normal work",
+        "This document is the canonical machine-readable repository-role registry",
+        "This document defines public commands",
+        "This document is the generated current topology guide",
+    ):
+        assert forbidden_claim.lower() not in preamble.lower()
+
+    expected_authority_fields = {
+        "active_state_mutation",
+        "activation",
+        "commit",
+        "deletion",
+        "historical_row_access",
+        "installation",
+        "live_smoke",
+        "move_or_rename",
+        "normal_work",
+        "order_placement",
+        "provider_access",
+        "public_command_authority",
+        "publication",
+        "push",
+        "repository_role_registry",
+        "research",
+        "safety_policy",
+        "staging",
+        "topology_authority",
+        "trading",
+    }
+    assert set(manifest["authority"]) == expected_authority_fields
+    assert all(value is False for value in manifest["authority"].values())
+
+    registry = json.loads(_text("configs/repository_surface.json"))
+    for path, role in (
+        (
+            PIPELINE_FOLDER_MAP_SNAPSHOT_PATH,
+            "PIPELINE_FOLDER_MAP_HISTORICAL_SNAPSHOT",
+        ),
+        (
+            PIPELINE_FOLDER_MAP_SNAPSHOT_MANIFEST_PATH,
+            "PIPELINE_FOLDER_MAP_HISTORICAL_SNAPSHOT_MANIFEST",
+        ),
+    ):
+        matches = [
+            entry
+            for entry in registry["entries"]
+            if entry["match_type"] == "EXACT" and entry["path_or_pattern"] == path
+        ]
+        assert len(matches) == 1
+        entry = matches[0]
+        assert entry["classification"] == "HISTORICAL_HASH_BOUND"
+        assert entry["authority_role"] == role
+        assert entry["current_replacement"] == "PIPELINE_FOLDER_MAP.md"
+        assert entry["hash_bound"] is True
+        assert entry["tracked_expected"] == "TRACKED"
+        assert entry["local_only"] is False
+        assert entry["deletion_policy"] == "PRESERVE"
+        for required_note in (
+            PIPELINE_FOLDER_MAP_SOURCE_COMMIT,
+            "exact",
+            "normal work",
+            "repository-surface registry",
+            "public commands",
+            "authoriz",
+            "Phase 3C2",
+            "relocation or deletion",
+        ):
+            assert required_note.lower() in entry["notes"].lower()
+
+
 def _assert_public_snapshot_is_historical() -> None:
     snapshot = _text("PUBLIC_SNAPSHOT.md")
     lowered = " ".join(snapshot.split()).lower()
@@ -425,6 +606,7 @@ def test_current_documents_use_one_plain_language_workflow_surface() -> None:
     _assert_project_outline_is_concise_current_runbook()
     _assert_public_snapshot_is_historical()
     _assert_project_outline_historical_snapshot_contract()
+    _assert_pipeline_folder_map_historical_snapshot_contract()
 
 
 def test_public_snapshot_is_an_explicit_historical_record() -> None:
@@ -433,6 +615,10 @@ def test_public_snapshot_is_an_explicit_historical_record() -> None:
 
 def test_project_outline_copy_first_snapshot_is_exact_and_non_authorizing() -> None:
     _assert_project_outline_historical_snapshot_contract()
+
+
+def test_pipeline_folder_map_copy_first_snapshot_is_exact_and_non_authorizing() -> None:
+    _assert_pipeline_folder_map_historical_snapshot_contract()
 
 
 def test_project_outline_is_current_runbook_not_historical_ledger() -> None:

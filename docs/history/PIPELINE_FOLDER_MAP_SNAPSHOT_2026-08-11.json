@@ -1,0 +1,51 @@
+{
+  "authority": {
+    "activation": false,
+    "active_state_mutation": false,
+    "commit": false,
+    "deletion": false,
+    "historical_row_access": false,
+    "installation": false,
+    "live_smoke": false,
+    "move_or_rename": false,
+    "normal_work": false,
+    "order_placement": false,
+    "provider_access": false,
+    "public_command_authority": false,
+    "publication": false,
+    "push": false,
+    "repository_role_registry": false,
+    "research": false,
+    "safety_policy": false,
+    "staging": false,
+    "topology_authority": false,
+    "trading": false
+  },
+  "current_replacement": "PIPELINE_FOLDER_MAP.md",
+  "purpose": "Copy-first preservation boundary for the complete pre-reconciliation PIPELINE_FOLDER_MAP.md source body before later topology-guide reconciliation and deterministic generation.",
+  "record_date": "2026-08-11",
+  "record_type": "PIPELINE_FOLDER_MAP_COPY_FIRST_SNAPSHOT",
+  "schema_version": "pipeline_folder_map_historical_snapshot/1.0.0",
+  "snapshot": {
+    "body_marker": "<!-- BEGIN EXACT PIPELINE_FOLDER_MAP SOURCE BODY -->",
+    "byte_count": 40854,
+    "exact_source_body": true,
+    "path": "docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.md",
+    "preserved_body_byte_count": 39521,
+    "preserved_body_sha256": "0e5372ec4ab257dfa8fa411f9e06fddcbc8be77d416784beeb2e19c1d1d6e827",
+    "role": "HISTORICAL_REFERENCE_ONLY",
+    "sha256": "db41420fa8943c12eb329ea56d36b4151f793364843c629fd0a043c9928357bd"
+  },
+  "source": {
+    "byte_count": 39521,
+    "commit": "981501502c49c68b791a96652cd2bd65bb82daaf",
+    "final_newline": true,
+    "git_blob_sha1": "28174fb1651e692d1b18b33b1cb14d00dac2f297",
+    "line_count": 230,
+    "line_endings": "LF",
+    "path": "PIPELINE_FOLDER_MAP.md",
+    "role": "TOPOLOGY_REFERENCE_NOT_AUTHORITY",
+    "sha256": "0e5372ec4ab257dfa8fa411f9e06fddcbc8be77d416784beeb2e19c1d1d6e827"
+  },
+  "state": "HISTORICAL_EXACT_SOURCE_BODY_PRESERVED_NON_AUTHORIZING"
+}

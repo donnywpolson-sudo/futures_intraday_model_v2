@@ -91,7 +91,7 @@ def test_valid_registry_loads_and_validates_current_checkout() -> None:
     validate_repository_surface(surface, repository_root=ROOT)
 
     assert surface["schema_version"] == "repository_surface/1.0.0"
-    assert len(surface["entries"]) == 180
+    assert len(surface["entries"]) == 182
 
 
 def test_unknown_classification_is_rejected() -> None:
@@ -647,7 +647,7 @@ def test_default_cli_reports_registry_and_source_of_truth_validity() -> None:
     assert result.stderr == b""
     assert report["registry_valid"] is True
     assert report["source_of_truth_valid"] is True
-    assert report["entry_count"] == 180
+    assert report["entry_count"] == 182
     assert report["public_command_count"] == 7
     assert report["tracked_root_mode"] == "GIT_LS_FILES"
     assert report["mutations_performed"] is False
