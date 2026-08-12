@@ -1061,7 +1061,7 @@ def test_active_source_rendering_is_deterministic_complete_and_exact() -> None:
     tracked = collect_tracked_repository_paths(ROOT)
     first = expected_active_source_files_bytes(surface, ROOT)
     second = render_active_source_files(
-        copy.deepcopy(surface), [*tracked, "ACTIVE_SOURCE_FILES.txt"]
+        copy.deepcopy(surface), tracked
     ).encode("utf-8")
     report = compare_active_source_files_file(surface, ROOT)
 
@@ -1199,7 +1199,7 @@ def test_active_source_changes_with_registry_and_tracked_inventory() -> None:
     changed_surface = copy.deepcopy(surface)
     _entry(changed_surface, "README.md")["classification"] = "HISTORICAL_UNBOUND"
     assert render_active_source_files(
-        changed_surface, [*tracked, "ACTIVE_SOURCE_FILES.txt"]
+        changed_surface, tracked
     ).encode("utf-8") != baseline
     with pytest.raises(RepositorySurfaceError):
         validate_active_source_files(
@@ -1209,11 +1209,11 @@ def test_active_source_changes_with_registry_and_tracked_inventory() -> None:
         )
 
     added = render_active_source_files(
-        surface, [*tracked, "tests/new_active_source_test.py", "ACTIVE_SOURCE_FILES.txt"]
+        surface, [*tracked, "tests/new_active_source_test.py"]
     )
     removed = render_active_source_files(
         surface,
-        [path for path in tracked if path != "README.md"] + ["ACTIVE_SOURCE_FILES.txt"],
+        [path for path in tracked if path != "README.md"],
     )
     assert "tests/new_active_source_test.py" in added
     assert "README.md" not in removed.splitlines()
