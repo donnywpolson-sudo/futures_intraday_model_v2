@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 import futures_rebuild.active_data_full_certification as full_certification
+import futures_rebuild.runtime_environment as runtime_environment
 from futures_rebuild.errors import ContractError
 from futures_rebuild.runtime_environment import (
     locked_environment_mismatches,
@@ -48,6 +49,42 @@ def test_environment_audit_rejects_global_interpreter() -> None:
         executable=base_executable,
     )
     assert mismatches and mismatches[0].startswith("interpreter expected=")
+
+
+def test_clean_source_without_embedded_venv_uses_active_locked_interpreter(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        runtime_environment,
+        "PINNED_PYTHON",
+        Path(".venv-clean-source-absent/Scripts/python.exe"),
+    )
+
+    assert locked_environment_mismatches(REPOSITORY_ROOT) == ()
+    base_executable = Path(getattr(sys, "_base_executable", sys.executable))
+    if base_executable.resolve() != Path(sys.executable).resolve():
+        mismatches = locked_environment_mismatches(
+            REPOSITORY_ROOT,
+            executable=base_executable,
+        )
+        assert mismatches and mismatches[0].startswith("interpreter expected=")
+
+
+def test_clean_source_without_embedded_venv_rejects_global_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        runtime_environment,
+        "PINNED_PYTHON",
+        Path(".venv-clean-source-absent/Scripts/python.exe"),
+    )
+    monkeypatch.setattr(runtime_environment.sys, "prefix", sys.base_prefix)
+
+    mismatches = locked_environment_mismatches(REPOSITORY_ROOT)
+
+    assert mismatches[0] == (
+        "interpreter clean-source execution requires an active virtual environment"
+    )
 
 
 def test_full_certification_preflights_before_reading_plan_or_writing_output(

@@ -92,7 +92,12 @@ def locked_environment_mismatches(
     active_executable = (
         Path(sys.executable) if executable is None else executable
     ).resolve(strict=True)
-    pinned_executable = (root / PINNED_PYTHON).resolve(strict=True)
+    repository_executable = root / PINNED_PYTHON
+    pinned_executable = (
+        repository_executable.resolve(strict=True)
+        if repository_executable.is_file()
+        else Path(sys.executable).resolve(strict=True)
+    )
     observed_implementation = (
         platform.python_implementation()
         if implementation is None
@@ -103,6 +108,13 @@ def locked_environment_mismatches(
         platform.python_version() if python_version is None else python_version
     )
     mismatches: list[str] = []
+    if (
+        not repository_executable.is_file()
+        and Path(sys.prefix).resolve() == Path(sys.base_prefix).resolve()
+    ):
+        mismatches.append(
+            "interpreter clean-source execution requires an active virtual environment"
+        )
     if active_executable != pinned_executable:
         mismatches.append(
             f"interpreter expected={pinned_executable} actual={active_executable}"
