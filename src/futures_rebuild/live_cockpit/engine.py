@@ -364,6 +364,17 @@ def provider_control_message(record: object) -> dict[str, Any] | None:
     return None
 
 
+def _provider_system_code(record: object) -> int | None:
+    """Return a Databento system-message code without treating it as an error."""
+
+    if "systemmsg" not in type(record).__name__.lower():
+        return None
+    try:
+        return int(_record_field(record, "code"))
+    except (TypeError, ValueError):
+        return None
+
+
 def _market_payload(info: object, *, alpha_tier_group: str | None = None) -> dict[str, Any]:
     return {
         "symbol": str(getattr(info, "symbol")),
@@ -956,6 +967,7 @@ class LiveCockpitEngine:
         self._replay_subscriptions = 0
         self._last_replay_start: datetime | None = None
         self._replay_watermarks: dict[int, datetime] = {}
+        self._focus_replay_pending: tuple[int, int, datetime] | None = None
         self._cache_reads = 0
         self._cache_writes = 0
         self._history_retry_active = False
@@ -2766,19 +2778,35 @@ class LiveCockpitEngine:
             self._focus_client = None
             self._focus_live_announced_generation = None
             self._stop_client(previous_focus_client)
+            with self._lock:
+                self._focus_replay_pending = (
+                    (generation, resolved.instrument_id, end)
+                    if replay_start is not None
+                    else None
+                )
             client.start()
             self._register_started_client(client, scope="focus")
             if generation != self.generation or self._stop_event.is_set():
+                with self._lock:
+                    if (
+                        self._focus_replay_pending is not None
+                        and self._focus_replay_pending[0] == generation
+                    ):
+                        self._focus_replay_pending = None
                 self._stop_client(client)
                 return
             self._focus_client = client
             if replay_start is not None:
-                with self._lock:
-                    self._replay_watermarks[resolved.instrument_id] = end
                 with self._metrics_lock:
                     self._replay_subscriptions += 1
                     self._last_replay_start = replay_start
         except Exception as exc:
+            with self._lock:
+                if (
+                    self._focus_replay_pending is not None
+                    and self._focus_replay_pending[0] == generation
+                ):
+                    self._focus_replay_pending = None
             self._stop_client(locals().get("client"))
             self._emit(
                 "feed_status",
@@ -2800,6 +2828,41 @@ class LiveCockpitEngine:
         if generation != self.generation or self._stop_event.is_set():
             return
         if self._handle_provider_control(record, scope="focus"):
+            return
+        system_code = _provider_system_code(record)
+        if system_code in {1, 3}:
+            replay_pending = False
+            if system_code == 3:
+                with self._lock:
+                    pending = self._focus_replay_pending
+                    if (
+                        pending is not None
+                        and pending[0] == generation
+                        and pending[1] == self._resolved_instrument_id
+                    ):
+                        self._replay_watermarks[pending[1]] = pending[2]
+                        self._focus_replay_pending = None
+            else:
+                with self._lock:
+                    replay_pending = (
+                        self._focus_replay_pending is not None
+                        and self._focus_replay_pending[0] == generation
+                    )
+            self._emit(
+                "feed_status",
+                {
+                    "scope": "focus",
+                    "market": self.market,
+                    "state": "CONNECTING" if replay_pending else "LIVE",
+                    "message": (
+                        "Focus stream connected; loading up to 24 hours of recent replay"
+                        if replay_pending
+                        else "Focus stream connected; recent replay complete. Awaiting the next trade."
+                        if system_code == 3
+                        else "Focus stream connected; awaiting the next trade (market may be closed)."
+                    ),
+                },
+            )
             return
         if all(
             hasattr(record, field)
@@ -2824,7 +2887,9 @@ class LiveCockpitEngine:
                     self._pending_cache_generation = generation
                 self._pending_cache.append(dict(candle))
                 self._pending_snapshot_generation = generation
-            self._publish_current_focus_health(evaluated_at=event_time)
+            self._publish_current_focus_health(
+                evaluated_at=max(now_utc(), event_time)
+            )
             return
         if hasattr(record, "price") and hasattr(record, "size"):
             try:
@@ -2856,7 +2921,9 @@ class LiveCockpitEngine:
                     self._contract,
                     event_time,
                 )
-            self._publish_current_focus_health(evaluated_at=event_time)
+            self._publish_current_focus_health(
+                evaluated_at=max(now_utc(), event_time)
+            )
             if self._focus_live_announced_generation != generation:
                 self._focus_live_announced_generation = generation
                 self._emit(
@@ -2986,6 +3053,8 @@ class LiveCockpitEngine:
         self._history_wakeup.set()
         self._stop_client(self._focus_client)
         self._focus_client = None
+        with self._lock:
+            self._focus_replay_pending = None
         self._stop_overview()
         for thread in self._threads:
             if thread is not threading.current_thread():

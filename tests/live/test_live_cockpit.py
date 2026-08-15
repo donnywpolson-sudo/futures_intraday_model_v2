@@ -944,6 +944,12 @@ class _FakeLive:
         return None
 
 
+class SystemMsg:
+    def __init__(self, code: int, msg: str = "") -> None:
+        self.code = code
+        self.msg = msg
+
+
 class _FakeDb:
     Live = _FakeLive
     Historical = _FakeHistorical
@@ -1176,6 +1182,81 @@ def test_stale_replay_record_is_discarded(tmp_path: Path) -> None:
     assert len(engine._raw_bars) == 1
     assert engine._pending_snapshot_generation is None
     engine.stop()
+
+
+def test_replay_watermark_advances_only_after_provider_completion(
+    tmp_path: Path,
+) -> None:
+    engine = LiveCockpitEngine(
+        cache_path=tmp_path / "bars.sqlite3",
+        env={"DATABENTO_API_KEY": "db-test"},
+        db_module=_FakeDb,
+    )
+    messages: list[dict[str, object]] = []
+    completed_through = datetime(2026, 8, 14, 20, 0, tzinfo=timezone.utc)
+    engine._publish = messages.append
+    engine.generation = 4
+    engine.market = "ES"
+    engine._contract = "ESU6"
+    engine._resolved_instrument_id = 101
+    engine._focus_replay_pending = (4, 101, completed_through)
+    aggregator = TradeCandleAggregator(timeframe_seconds=60, timeframe="1m")
+    try:
+        engine._on_focus_record(SystemMsg(1), generation=4, aggregator=aggregator)
+        assert 101 not in engine._replay_watermarks
+        assert engine._focus_replay_pending == (4, 101, completed_through)
+        assert messages[-1]["payload"]["state"] == "CONNECTING"
+        assert "loading up to 24 hours" in messages[-1]["payload"]["message"]
+
+        engine._on_focus_record(SystemMsg(3), generation=4, aggregator=aggregator)
+        assert engine._replay_watermarks[101] == completed_through
+        assert engine._focus_replay_pending is None
+        assert messages[-1]["payload"]["state"] == "LIVE"
+        assert "recent replay complete" in messages[-1]["payload"]["message"]
+    finally:
+        engine.stop()
+
+
+def test_old_replay_record_cannot_make_focused_data_current(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    current = datetime(2026, 8, 15, 16, 30, tzinfo=timezone.utc)
+    old_bar = current - timedelta(hours=4)
+    monkeypatch.setattr(cockpit_engine, "now_utc", lambda: current)
+    engine = LiveCockpitEngine(
+        cache_path=tmp_path / "bars.sqlite3",
+        env={"DATABENTO_API_KEY": "db-test"},
+        db_module=_FakeDb,
+    )
+    messages: list[dict[str, object]] = []
+    engine._publish = messages.append
+    engine.generation = 2
+    engine.market = "ES"
+    engine._contract = "ESU6"
+    engine._resolved_instrument_id = 101
+    engine._history_complete_generation = 2
+    try:
+        engine._on_focus_record(
+            SimpleNamespace(
+                ts_event=old_bar,
+                open=100_000_000_000,
+                high=102_000_000_000,
+                low=99_000_000_000,
+                close=101_000_000_000,
+                volume=6,
+            ),
+            generation=2,
+            aggregator=TradeCandleAggregator(timeframe_seconds=60, timeframe="1m"),
+        )
+        health = next(
+            message["payload"]
+            for message in reversed(messages)
+            if message["type"] == "data_health"
+        )
+        assert health["state"] == "DEGRADED"
+        assert "DATA_STALE" in health["reason_codes"]
+    finally:
+        engine.stop()
 
 
 def test_history_backfill_does_not_block_focus_start_or_next_switch(
@@ -2685,6 +2766,15 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert ".workspace-content.panel-collapsed" in stylesheet
     assert ".data-health-pill" in stylesheet
     assert ".history-cache-popover" in stylesheet
+    assert 'id="health-loaded-range"' in html
+    assert 'id="data-health-explanation"' in html
+    assert "Full week ready" in html
+    assert "Approve estimate &amp; update markets" in html
+    assert "No history download has started" in javascript
+    assert "Missing recent history—approval required" in javascript
+    assert "Review & approve update" in javascript
+    assert "loadedChartRange" in javascript
+    assert "Â" not in javascript
     assert ".control-button" in stylesheet
     assert "v5.1.0" in vendor
     assert ".market-grouping" in stylesheet

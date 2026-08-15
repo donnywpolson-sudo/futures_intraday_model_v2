@@ -74,6 +74,7 @@
     sessionBoundaryRenderQueued: false,
     sessionResizeObserver: null,
     chartResizeFrame: null,
+    earliestBar: null,
     latestBar: null,
     bridgeReady: false,
     browserDemo: false,
@@ -202,6 +203,8 @@
     healthCoverage: document.getElementById("health-coverage"),
     healthBars: document.getElementById("health-bars"),
     healthContinuity: document.getElementById("health-continuity"),
+    healthLoadedRange: document.getElementById("health-loaded-range"),
+    dataHealthExplanation: document.getElementById("data-health-explanation"),
     historyCacheToggle: document.getElementById("history-cache-toggle"),
     historyCacheDot: document.getElementById("history-cache-dot"),
     historyCacheCount: document.getElementById("history-cache-count"),
@@ -764,7 +767,7 @@
   }
 
   function formatAge(timestamp) {
-    if (!Number.isFinite(Number(timestamp))) return "—";
+    if (timestamp === null || timestamp === undefined || timestamp === "" || !Number.isFinite(Number(timestamp))) return "—";
     const seconds = Math.max(0, Math.floor(Date.now() / 1000 - Number(timestamp)));
     if (seconds < 5) return "Now";
     if (seconds < 60) return `${seconds}s ago`;
@@ -775,7 +778,7 @@
   }
 
   function formatEventTime(timestamp) {
-    if (!Number.isFinite(Number(timestamp))) return "—";
+    if (timestamp === null || timestamp === undefined || timestamp === "" || !Number.isFinite(Number(timestamp))) return "—";
     return new Intl.DateTimeFormat(undefined, {
       month: "short",
       day: "numeric",
@@ -783,6 +786,13 @@
       minute: "2-digit",
       hour12: false,
     }).format(new Date(Number(timestamp) * 1000));
+  }
+
+  function loadedChartRange() {
+    const start = Number(state.earliestBar?.time);
+    const end = Number(state.latestBar?.time);
+    if (!Number.isFinite(start) || !Number.isFinite(end)) return "No visible bars";
+    return `${formatEventTime(start)} – ${formatEventTime(end)} local`;
   }
 
   function setProbability(name, value) {
@@ -897,7 +907,9 @@
     elements.healthState.textContent = healthState;
     elements.healthState.className = healthClass;
     elements.healthContract.textContent = health?.contract || state.contract || "—";
-    elements.healthLastBar.textContent = health ? formatAge(health.last_bar_time) : "—";
+    elements.healthLastBar.textContent = health && health.last_bar_time !== null && health.last_bar_time !== undefined && Number.isFinite(Number(health.last_bar_time))
+      ? `${formatEventTime(health.last_bar_time)} (${formatAge(health.last_bar_time)})`
+      : "—";
     const history = health?.history;
     elements.healthHistory.textContent = history?.state ? String(history.state).replaceAll("_", " ") : "—";
     elements.healthCoverage.textContent = history
@@ -913,6 +925,23 @@
       const count = Number(continuity.unexpected_gap_count || 0);
       const largest = Number(continuity.largest_gap_seconds || 0);
       elements.healthContinuity.textContent = `${count} gap${count === 1 ? "" : "s"} · max ${Math.round(largest / 60)}m`;
+    }
+    elements.healthLoadedRange.textContent = loadedChartRange();
+    const cacheState = String(state.historyCache?.state || "CHECKING").toUpperCase();
+    const range = loadedChartRange();
+    const age = health && health.last_bar_time !== null && health.last_bar_time !== undefined && Number.isFinite(Number(health.last_bar_time))
+      ? formatAge(health.last_bar_time)
+      : "unknown";
+    if (cacheState === "CONFIRMATION_REQUIRED") {
+      elements.dataHealthExplanation.textContent = `Showing cached data only (${range}). No history download has started. Review the estimate and approve the update to load missing recent days; the newest loaded bar is ${age}.`;
+    } else if (["WARMING", "PAUSED"].includes(cacheState)) {
+      elements.dataHealthExplanation.textContent = `Showing ${range} while missing one-week history is ${cacheState === "PAUSED" ? "paused" : "updated in the background"}.`;
+    } else if (healthState === "CURRENT") {
+      elements.dataHealthExplanation.textContent = `The focused stream and requested history are current. Loaded range: ${range}.`;
+    } else if (health) {
+      elements.dataHealthExplanation.textContent = `The chart is not current. Loaded range: ${range}; newest bar: ${age}. History state: ${String(history?.state || "unknown").replaceAll("_", " ").toLowerCase()}.`;
+    } else {
+      elements.dataHealthExplanation.textContent = "Waiting for chart coverage details.";
     }
   }
 
@@ -1390,9 +1419,10 @@
   function renderSourceState() {
     const label = sourceLabel(state.source);
     const barWord = state.barCount === 1 ? "bar" : "bars";
+    const range = state.barCount > 0 ? ` · ${loadedChartRange()}` : "";
     const base = state.source === "waiting"
       ? label
-      : `${label} · ${state.barCount.toLocaleString()} ${state.timeframe} ${barWord}`;
+      : `${label} · ${state.barCount.toLocaleString()} ${state.timeframe} ${barWord}${range}`;
     elements.sourceState.className = "source-state";
     elements.sourceState.title = "";
     elements.retryHistory.hidden = true;
@@ -1400,20 +1430,23 @@
     elements.retryHistory.textContent = "Retry history";
     const cacheState = String(state.historyCache?.state || "CHECKING").toUpperCase();
     if (cacheState === "WARMING" || cacheState === "PAUSED") {
-      elements.sourceState.textContent = `${base} Â· ${cacheState === "PAUSED" ? "Cache update paused" : "Cache updating"}`;
+      elements.sourceState.textContent = `${base} · ${cacheState === "PAUSED" ? "Cache update paused" : "Cache updating"}`;
       elements.sourceState.classList.add("history-loading");
+      elements.sourceState.title = elements.sourceState.textContent;
       return;
     }
     if (cacheState === "CONFIRMATION_REQUIRED") {
-      elements.sourceState.textContent = `${base} Â· History update ready`;
+      elements.sourceState.textContent = `${base} · Missing recent history—approval required`;
       elements.retryHistory.hidden = false;
-      elements.retryHistory.textContent = "Review history";
+      elements.retryHistory.textContent = "Review & approve update";
+      elements.sourceState.title = elements.sourceState.textContent;
       return;
     }
     if (cacheState === "ERROR" || cacheState === "PARTIAL") {
-      elements.sourceState.textContent = `${base} Â· History incomplete`;
+      elements.sourceState.textContent = `${base} · History incomplete`;
       elements.sourceState.classList.add("history-error");
       elements.retryHistory.hidden = false;
+      elements.sourceState.title = elements.sourceState.textContent;
       return;
     }
     if (state.historyState === "BACKFILLING") {
@@ -1438,6 +1471,7 @@
       return;
     }
     elements.sourceState.textContent = base;
+    elements.sourceState.title = base;
   }
 
   function resetHistoryState() {
@@ -1495,18 +1529,22 @@
     elements.historyCacheReady.textContent = `${ready} of ${total}`;
     elements.historyCacheQueued.textContent = `${queued} ${queued === 1 ? "market" : "markets"}`;
     elements.historyCacheTitle.textContent = titles[cacheState] || "History cache";
-    elements.historyCacheMessage.textContent = cache.message || "History cache status unavailable.";
+    elements.historyCacheMessage.textContent = cacheState === "CONFIRMATION_REQUIRED"
+      ? `${cache.message || "A history update is available."} No download has started. The chart remains on ${loadedChartRange()} until you approve the displayed estimate.`
+      : cache.message || "History cache status unavailable.";
     elements.historyCacheCost.textContent = formatHistoryCost(cache.estimated_cost_usd);
     elements.historyCacheExpiry.textContent = Number.isFinite(Number(cache.estimate_expires_at))
       ? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(Number(cache.estimate_expires_at) * 1000))
       : "—";
     setDot(elements.historyCacheDot, cacheState);
     elements.historyCacheConfirm.hidden = cacheState !== "CONFIRMATION_REQUIRED";
+    elements.historyCacheConfirm.textContent = `Approve estimate & update ${total} markets`;
     elements.historyCachePause.hidden = !["WARMING", "PAUSED"].includes(cacheState);
     elements.historyCachePause.textContent = cacheState === "PAUSED" ? "Resume" : "Pause";
     elements.historyCacheRetry.hidden = !["ERROR", "PARTIAL"].includes(cacheState);
     elements.historyCacheToggle.title = cache.message || titles[cacheState] || "History cache";
     renderSourceState();
+    renderDataHealth();
   }
 
   function applyHistoryCacheStatus(payload) {
@@ -1586,6 +1624,7 @@
       elements.chartEmptyDetail.textContent = `Switching the focus stream to ${market}.`;
       resetHistoryState();
       state.barCount = 0;
+      state.earliestBar = null;
       state.latestBar = null;
       updateQuote(null);
     }
@@ -1761,6 +1800,7 @@
     state.sessionMarkers = Array.isArray(payload.markers) ? payload.markers : [];
     queueSessionBoundaryRender();
     state.latestBar = bars.at(-1) || null;
+    state.earliestBar = bars[0] || null;
     updateQuote(state.latestBar);
     state.source = payload.source || "unknown";
     state.barCount = bars.length;
@@ -1822,6 +1862,7 @@
       color: bar.close >= bar.open ? "rgba(53, 199, 160, 0.34)" : "rgba(240, 111, 121, 0.32)",
     });
     state.latestBar = bar;
+    if (!state.earliestBar) state.earliestBar = bar;
     state.barCloses.set(Number(bar.time), Number(bar.close));
     if (isNewBar) state.barCount += 1;
     if (state.dataHealth) {
