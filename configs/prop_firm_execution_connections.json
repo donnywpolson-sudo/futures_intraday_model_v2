@@ -1,14 +1,42 @@
 {
-  "schema_version": "prop_firm_execution_connections/1.0.0",
+  "schema_version": "prop_firm_execution_connections/1.1.0",
   "active_connection_id": "mff_tradovate_candidate_2026_08_11",
   "startup_mode": "OBSERVATION_ONLY",
   "connections": {
     "mff_tradovate_candidate_2026_08_11": {
-      "connection_schema_id": "mff_tradovate_connection/1.0.0",
+      "connection_schema_id": "mff_tradovate_connection/1.1.0",
       "provider_id": "my_funded_futures",
       "platform_id": "tradovate",
       "selected_implementation_candidate": true,
       "entitlement_status": "UNCONFIRMED",
+      "capability_model_version": "provider_execution_capability/1.0.0",
+      "capability_evidence_ids": ["mff_support_simulated_accounts_manual_only_2026_08_12"],
+      "stage_capabilities": {
+        "evaluation": {
+          "execution_capability": "MANUAL_ONLY",
+          "direct_api_read_access": false,
+          "direct_api_order_access": false,
+          "entitlement_status": "UNAVAILABLE_FOR_SIMULATED_ACCOUNT",
+          "provider_api_readiness": false,
+          "automatic_execution_authorized": false
+        },
+        "sim_funded": {
+          "execution_capability": "MANUAL_ONLY",
+          "direct_api_read_access": false,
+          "direct_api_order_access": false,
+          "entitlement_status": "UNAVAILABLE_FOR_SIMULATED_ACCOUNT",
+          "provider_api_readiness": false,
+          "automatic_execution_authorized": false
+        },
+        "live": {
+          "execution_capability": "UNCONFIRMED",
+          "direct_api_read_access": false,
+          "direct_api_order_access": false,
+          "entitlement_status": "PENDING_ACTUAL_LIVE_ACCOUNT_VERIFICATION",
+          "provider_api_readiness": false,
+          "automatic_execution_authorized": false
+        }
+      },
       "api_key_generation_confirmed": false,
       "rest_access_confirmed": false,
       "websocket_access_confirmed": false,
@@ -48,17 +76,20 @@
         "configured": false
       },
       "blockers": [
-        "MFF_CUSTOM_API_PERMISSION_UNCONFIRMED",
-        "TRADOVATE_API_ENTITLEMENT_UNCONFIRMED",
-        "MFF_AUTHENTICATION_METHOD_UNCONFIRMED",
-        "MFF_STAGE_ENDPOINTS_UNCONFIRMED",
-        "EXACT_ACCOUNT_BINDING_UNSET",
-        "MANUAL_ORDER_AUTOMATION_FLAG_UNCONFIRMED",
+        "MFF_SIMULATED_ACCOUNT_MANUAL_ONLY",
+        "MFF_LIVE_API_ENTITLEMENT_UNCONFIRMED",
         "OFFICIAL_MFF_PLATFORM_FEES_UNSET",
         "LIVE_EVENT_CALENDAR_NOT_BOUND",
         "LIVE_SESSION_CALENDAR_NOT_BOUND",
         "LIVE_PRICE_LIMIT_FEED_NOT_BOUND",
-        "STRATEGY_POLICY_NOT_OOS_PROMOTED",
+        "STRATEGY_POLICY_NOT_OOS_PROMOTED"
+      ],
+      "future_api_blockers": [
+        "MFF_LIVE_API_ENTITLEMENT_UNCONFIRMED",
+        "MFF_AUTHENTICATION_METHOD_UNCONFIRMED",
+        "MFF_LIVE_STAGE_ENDPOINT_UNCONFIRMED",
+        "EXACT_API_ACCOUNT_BINDING_UNSET",
+        "MANUAL_ORDER_AUTOMATION_FLAG_UNCONFIRMED",
         "PROVIDER_SMOKE_NOT_AUTHORIZED"
       ],
       "authority": {

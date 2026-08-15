@@ -41,6 +41,12 @@ valid profile for another provider or account size does not inherit MFF values.
 `evaluation`, `sim_funded`, and `live` are different prop-firm account stages.
 They must not be confused with Phase 8 model evaluation.
 
+MFF Evaluation and Rapid EOD Sim Funded are `MANUAL_ONLY`. They have no direct
+API read or order access and use operator-reported reconciliation. MFF Live
+remains `UNCONFIRMED` until an actual Live account exists and Tradovate verifies
+permissions. These stage capabilities do not weaken risk checks or remove the
+dormant provider-neutral adapter architecture.
+
 - Evaluation is inactive and separately records the $50,000 nominal balance,
   $3,000 target, $2,000 maximum EOD loss, 30% consistency, four trading days,
   3-mini/30-micro limit, and T1-news allowance. Its inactivity-source conflict
@@ -104,6 +110,14 @@ slippage. Production sizing rejects the unresolved active MFF cost profile.
 A named nonzero micro-specific stress profile is available only as visibly
 provisional research economics; its ID/hash enter run identity and readiness
 remains false.
+
+For manual preparation, that conservative provisional profile can make a
+ticket preview available, but it never establishes official costs or manual
+entry readiness by itself. Operator-reported open positions, working entries,
+unknown fills, protection, realized balance, EOD floor, and session P&L feed
+the same authoritative sizing runtime. Unknown submitted orders count at their
+worst-case requested exposure; unprotected fills and uncertain state block all
+new tickets.
 
 ## Internal strategy policy
 

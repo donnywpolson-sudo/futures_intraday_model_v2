@@ -183,9 +183,19 @@
               </dl>
             </section>
 
-            <section class="execution-card" aria-label="Execution capability">
-              <div id="execution-banner" class="execution-banner blocked">MFF SIM FUNDED &mdash; EXECUTION DISABLED</div>
-              <div class="panel-section-heading"><span>Supervised execution</span><strong id="execution-arm-state">DISARMED</strong></div>
+            <section class="execution-card" aria-label="Manual execution assistant">
+              <div id="execution-banner" class="execution-banner blocked">MFF SIMULATED ACCOUNT &mdash; MANUAL TRADOVATE ENTRY REQUIRED</div>
+              <div class="manual-safety-strip" role="status">
+                <strong>NO API ORDER CONNECTION</strong><strong>NO ORDER TRANSMISSION</strong><strong>OPERATOR-REPORTED STATE</strong>
+              </div>
+              <div class="panel-section-heading"><span>Manual execution assistant</span><strong id="execution-arm-state">DISARMED</strong></div>
+              <label id="manual-demo-stage-control" class="manual-demo-stage-control" hidden>
+                Offline demo account stage
+                <select id="manual-demo-stage">
+                  <option value="sim_funded">MFF Rapid EOD Sim Funded</option>
+                  <option value="evaluation">MFF Evaluation</option>
+                </select>
+              </label>
               <dl class="execution-status-grid">
                 <div><dt>Mode</dt><dd id="execution-mode">OBSERVATION ONLY</dd></div>
                 <div><dt>Origin</dt><dd id="execution-origin">LOCAL CONFIG</dd></div>
@@ -193,8 +203,12 @@
                 <div><dt>Stage</dt><dd id="execution-stage">SIM FUNDED</dd></div>
                 <div><dt>Tradovate</dt><dd id="execution-connection">NOT CONNECTED</dd></div>
                 <div><dt>Entitlement</dt><dd id="execution-entitlement">UNCONFIRMED</dd></div>
-                <div><dt>Account</dt><dd id="execution-account">UNBOUND</dd></div>
+                <div><dt>API account binding</dt><dd id="execution-account">UNSET</dd></div>
                 <div><dt>Costs</dt><dd id="execution-costs">UNSET</dd></div>
+                <div><dt>Manual preview</dt><dd id="manual-preview-readiness">AVAILABLE</dd></div>
+                <div><dt>Manual readiness</dt><dd id="manual-assistant-readiness">FALSE</dd></div>
+                <div><dt>Provider API readiness</dt><dd id="provider-api-readiness">FALSE</dd></div>
+                <div><dt>Automatic execution</dt><dd id="automatic-execution-status">DISABLED</dd></div>
                 <div><dt>Broker sync</dt><dd id="execution-broker-age">NOT AVAILABLE</dd></div>
                 <div><dt>Market data</dt><dd id="execution-market-age">WAITING</dd></div>
                 <div><dt>News</dt><dd id="execution-news-age">NOT BOUND</dd></div>
@@ -205,33 +219,78 @@
                 <div><dt>Floor distance</dt><dd id="execution-floor-distance">&mdash;</dd></div>
               </dl>
               <div class="execution-collections">
-                <span>Positions <strong id="execution-position-count">0</strong></span>
-                <span>Orders <strong id="execution-order-count">0</strong></span>
-                <span>Fills <strong id="execution-fill-count">0</strong></span>
+                <span>Reported positions <strong id="execution-position-count">0</strong></span>
+                <span>Reported orders <strong id="execution-order-count">0</strong></span>
+                <span>Reported fills <strong id="execution-fill-count">0</strong></span>
               </div>
-              <fieldset class="order-ticket" disabled>
-                <legend>Supervised order ticket</legend>
-                <label>Micro contract<select id="execution-symbol"><option>MES</option><option>MCL</option><option>M6E</option></select></label>
+              <fieldset class="operator-snapshot-form">
+                <legend>Operator account reconciliation</legend>
+                <label>Local account alias<input id="manual-account-alias" value="MFF Rapid EOD" maxlength="48" /></label>
+                <label>Realized balance (USD)<input id="manual-balance" type="number" value="0" step="0.01" /></label>
+                <label>Active EOD floor (USD)<input id="manual-floor" type="number" value="-2000" step="0.01" /></label>
+                <label>Session realized P&amp;L (USD)<input id="manual-session-pnl" type="number" value="0" step="0.01" /></label>
+                <label>Floor lock status<select id="manual-floor-lock"><option value="UNLOCKED">Unlocked</option><option value="LOCKED">Locked</option><option value="UNKNOWN">Unknown</option></select></label>
+                <label class="manual-json-field">Open positions (exact JSON list)<textarea id="manual-open-positions" rows="2" spellcheck="false">[]</textarea></label>
+                <label class="manual-json-field">Working entries (exact JSON list)<textarea id="manual-working-orders" rows="2" spellcheck="false">[]</textarea></label>
+                <label class="manual-json-field">Protective orders (exact JSON list)<textarea id="manual-protective-orders" rows="2" spellcheck="false">[]</textarea></label>
+                <button id="manual-reconcile" type="button">Reconcile Manual State</button>
+                <p id="manual-reconcile-status" class="manual-authority-label">STALE &mdash; RECONCILIATION REQUIRED &bull; OPERATOR REPORTED</p>
+              </fieldset>
+              <fieldset class="order-ticket">
+                <legend>Manual order-preparation ticket</legend>
+                <label>Exact micro contract<input id="execution-symbol" maxlength="16" value="MESU6" /></label>
                 <label>Side<select id="execution-side"><option>BUY</option><option>SELL</option></select></label>
                 <label>Order type<select id="execution-order-type"><option>LIMIT</option><option>MARKET</option></select></label>
-                <label>Quantity<input id="execution-quantity" type="number" min="1" max="1" value="1" /></label>
-                <label>Entry price<input id="execution-entry-price" inputmode="decimal" /></label>
-                <label>Stop price <em>required</em><input id="execution-stop-price" inputmode="decimal" /></label>
-                <label>Target price<input id="execution-target-price" inputmode="decimal" /></label>
+                <label>Quantity<input id="execution-quantity" type="number" min="1" max="30" value="1" /></label>
+                <label>Entry price<input id="execution-entry-price" inputmode="decimal" value="5482.25" /></label>
+                <label>Stop price <em>required</em><input id="execution-stop-price" inputmode="decimal" value="5476.25" /></label>
+                <label>Target price<input id="execution-target-price" inputmode="decimal" value="5494.25" /></label>
                 <dl class="ticket-estimates">
                   <div><dt>Authoritative max</dt><dd id="execution-max-quantity">0</dd></div>
-                  <div><dt>Stop risk</dt><dd>&mdash;</dd></div>
-                  <div><dt>Verified fees</dt><dd>UNSET</dd></div>
-                  <div><dt>Aggregate micros</dt><dd>&mdash; / 30</dd></div>
+                  <div><dt>Planned stop risk</dt><dd id="manual-planned-risk">&mdash; USD</dd></div>
+                  <div><dt>Costs</dt><dd id="manual-cost-status">PROVISIONAL / NOT OFFICIAL</dd></div>
+                  <div><dt>Aggregate micros</dt><dd id="manual-aggregate-micros">&mdash; / 30 micros</dd></div>
                 </dl>
-                <button id="execution-submit" type="button" disabled>Review and submit</button>
+                <button id="manual-prepare-ticket" type="button">Prepare Manual Ticket</button>
               </fieldset>
-              <div class="emergency-controls" aria-label="Emergency execution controls">
-                <button type="button" disabled>Cancel selected</button><button type="button" disabled>Cancel entries</button>
-                <button type="button" disabled>Flatten selected</button><button type="button" disabled>Flatten all</button>
+              <section id="manual-ticket-output" class="manual-ticket-output" aria-live="polite">
+                <strong>NO ORDER HAS BEEN TRANSMITTED BY FUTURESLIVECOCKPIT</strong>
+                <pre id="manual-copy-text">Prepare a manual ticket to generate copyable Tradovate instructions.</pre>
+                <div class="manual-actions">
+                  <button id="manual-copy-order" type="button" disabled>Copy Manual Order</button>
+                  <button id="manual-mark-submitted" type="button" disabled>Mark Manually Submitted</button>
+                  <button id="manual-record-partial" type="button" disabled>Record Partial Fill</button>
+                  <button id="manual-record-fill" type="button" disabled>Record Actual Fill</button>
+                  <button id="manual-confirm-protection" type="button" disabled>Confirm Protective Stop</button>
+                  <button id="manual-record-rejection" type="button" disabled>Record Rejection</button>
+                  <button id="manual-record-cancellation" type="button" disabled>Record Cancellation</button>
+                  <button id="manual-record-exit" type="button" disabled>Record Exit</button>
+                  <button id="manual-reconcile-ticket" type="button" disabled>Reconcile Ticket</button>
+                  <button id="manual-state-uncertain" type="button" disabled>Mark State Uncertain</button>
+                  <button id="manual-abandon" type="button" disabled>Abandon Ticket</button>
+                </div>
+                <p id="manual-ticket-state" class="manual-authority-label">BLOCKED &bull; MODEL CALCULATED</p>
+              </section>
+              <fieldset class="actual-execution-form">
+                <legend>Planned versus operator-reported actual</legend>
+                <label>Actual contract<input id="manual-actual-contract" maxlength="16" value="MESU6" /></label>
+                <label>Actual side<select id="manual-actual-side"><option value="BUY">Buy</option><option value="SELL">Sell</option></select></label>
+                <label>Actual fill price<input id="manual-actual-fill" inputmode="decimal" value="5482.50" /></label>
+                <label>Actual quantity<input id="manual-actual-quantity" type="number" min="0" max="30" value="1" /></label>
+                <label>Actual stop<input id="manual-actual-stop" inputmode="decimal" value="5476.25" /></label>
+                <label>Actual target<input id="manual-actual-target" inputmode="decimal" value="5494.25" /></label>
+                <label>Actual fees (USD)<input id="manual-actual-fees" inputmode="decimal" value="0.00" /></label>
+                <label>Actual exit price<input id="manual-actual-exit" inputmode="decimal" value="5494.25" /></label>
+                <button id="manual-compare" type="button" disabled>Compare Planned vs Actual</button>
+                <div id="manual-comparison" class="manual-comparison">No operator-reported fill comparison yet.</div>
+              </fieldset>
+              <div class="future-api-controls" aria-label="Future provider API controls">
+                <strong>Future provider API</strong>
+                <button type="button" disabled title="Unavailable for MFF simulated accounts. Manual entry is required.">Provider submit unavailable</button>
+                <p>Unavailable for MFF simulated accounts. Manual entry is required. Provider-neutral READ_ONLY_API and ORDER_API adapters remain dormant.</p>
               </div>
-              <div class="execution-blockers"><strong>Execution blockers</strong><ul id="execution-blocker-list"><li>Execution capability is loading.</li></ul></div>
-              <p class="execution-warning">Model proposals are review-only. Startup, reconnect, or a signal can never submit an order.</p>
+              <div class="execution-blockers"><strong>Complete manual-entry blockers</strong><ul id="execution-blocker-list"><li>Execution capability is loading.</li></ul></div>
+              <p class="execution-warning"><strong>FuturesLiveCockpit does not transmit orders for MFF simulated accounts.</strong> Enter orders manually in Tradovate, then report and reconcile every state here.</p>
             </section>
 
             <details class="forecast-details">

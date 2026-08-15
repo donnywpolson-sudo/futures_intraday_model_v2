@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 import hashlib
 import json
 import os
@@ -13,9 +13,22 @@ from .domain import AccountBinding, ExecutionMode
 
 
 CONFIG_RELATIVE_PATH = Path("configs/prop_firm_execution_connections.json")
+CAPABILITY_EVIDENCE_RELATIVE_PATH = Path("configs/mff_execution_capability_evidence.json")
 BINDING_RELATIVE_PATH = Path("state/live_cockpit/execution_binding.json")
-EXPECTED_SCHEMA = "prop_firm_execution_connections/1.0.0"
-EXPECTED_CONNECTION_SCHEMA = "mff_tradovate_connection/1.0.0"
+EXPECTED_SCHEMA = "prop_firm_execution_connections/1.1.0"
+EXPECTED_CONNECTION_SCHEMA = "mff_tradovate_connection/1.1.0"
+EXECUTION_CAPABILITIES = frozenset({"MANUAL_ONLY", "READ_ONLY_API", "ORDER_API"})
+EXPECTED_CAPABILITY_EVIDENCE_ID = "mff_support_simulated_accounts_manual_only_2026_08_12"
+EXPECTED_SUPPORTED_CAPABILITY_FIELDS = frozenset(
+    {
+        "evaluation.execution_capability",
+        "evaluation.direct_api_read_access",
+        "evaluation.direct_api_order_access",
+        "sim_funded.execution_capability",
+        "sim_funded.direct_api_read_access",
+        "sim_funded.direct_api_order_access",
+    }
+)
 
 
 def canonical_json(value: object) -> bytes:
@@ -38,6 +51,74 @@ def load_execution_config(*, root: Path) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise ValueError("execution configuration must be an object")
     validate_execution_config(value)
+    evidence = load_capability_evidence(root=root)
+    active = value["connections"][value["active_connection_id"]]
+    if active.get("capability_evidence_ids") != [evidence["evidence"][0]["evidence_id"]]:
+        raise ValueError("active execution capability evidence binding is invalid")
+    return value
+
+
+def _contains_evidence_forbidden_field(value: object) -> bool:
+    markers = ("token", "password", "secret", "authorization", "apikey", "accountid", "chatid", "credential")
+    if isinstance(value, Mapping):
+        return any(
+            any("".join(character for character in str(key).lower() if character.isalnum()).endswith(marker) for marker in markers)
+            or _contains_evidence_forbidden_field(item)
+            for key, item in value.items()
+        )
+    if isinstance(value, (list, tuple)):
+        return any(_contains_evidence_forbidden_field(item) for item in value)
+    return False
+
+
+def validate_capability_evidence(value: Mapping[str, Any]) -> None:
+    if set(value) != {"schema_version", "evidence"} or value.get("schema_version") != "provider_capability_evidence/1.0.0":
+        raise ValueError("unsupported provider capability evidence schema")
+    records = value.get("evidence")
+    if not isinstance(records, list) or len(records) != 1 or not isinstance(records[0], Mapping):
+        raise ValueError("provider capability evidence must contain one bounded record")
+    record = records[0]
+    expected_fields = {
+        "evidence_id", "source_type", "provider", "received_date", "scope", "conclusion",
+        "support_statement", "transcript_handling", "supported_configuration_fields", "limitations",
+    }
+    if set(record) != expected_fields or _contains_evidence_forbidden_field(record):
+        raise ValueError("provider capability evidence fields are invalid or secret-bearing")
+    if (
+        record.get("evidence_id") != EXPECTED_CAPABILITY_EVIDENCE_ID
+        or record.get("source_type") != "USER_SUPPLIED_FIRST_PARTY_SUPPORT_RESPONSE"
+        or record.get("provider") != "my_funded_futures"
+        or record.get("scope") != ["evaluation", "rapid_eod_sim_funded"]
+        or record.get("transcript_handling") != "FULL_TRANSCRIPT_EXCLUDED_FROM_GIT_USER_CONTROLLED_OUTSIDE_REPOSITORY"
+    ):
+        raise ValueError("provider capability evidence identity or scope is invalid")
+    try:
+        date.fromisoformat(str(record.get("received_date")))
+    except ValueError as exc:
+        raise ValueError("provider capability evidence date is invalid") from exc
+    for name in ("conclusion", "support_statement"):
+        text = record.get(name)
+        if not isinstance(text, str) or not text or len(text) > 600:
+            raise ValueError(f"provider capability evidence {name} is invalid")
+    supported = record.get("supported_configuration_fields")
+    if not isinstance(supported, list) or any(not isinstance(item, str) for item in supported) or frozenset(supported) != EXPECTED_SUPPORTED_CAPABILITY_FIELDS:
+        raise ValueError("provider capability evidence supports unexpected fields")
+    required_limitations = {
+        "DOES_NOT_ESTABLISH_FUTURE_MFF_LIVE_ACCOUNT_CAPABILITY",
+        "DOES_NOT_VERIFY_OFFICIAL_COMMISSIONS",
+        "DOES_NOT_VERIFY_FUTURE_TRADOVATE_ENTITLEMENT",
+        "DOES_NOT_AUTHORIZE_PROVIDER_CONNECTION",
+    }
+    limitations = record.get("limitations")
+    if not isinstance(limitations, list) or set(limitations) != required_limitations:
+        raise ValueError("provider capability evidence limitations are invalid")
+
+
+def load_capability_evidence(*, root: Path) -> dict[str, Any]:
+    value = json.loads((root / CAPABILITY_EVIDENCE_RELATIVE_PATH).read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError("provider capability evidence must be an object")
+    validate_capability_evidence(value)
     return value
 
 
@@ -57,6 +138,44 @@ def validate_execution_config(value: Mapping[str, Any]) -> None:
         raise ValueError("active execution candidate identity is invalid")
     if connection.get("entitlement_status") != "UNCONFIRMED":
         raise ValueError("unverified entitlement must remain UNCONFIRMED")
+    if connection.get("capability_model_version") != "provider_execution_capability/1.0.0":
+        raise ValueError("unsupported provider capability model")
+    if connection.get("capability_evidence_ids") != [EXPECTED_CAPABILITY_EVIDENCE_ID]:
+        raise ValueError("execution capability evidence IDs are invalid")
+    capabilities = _mapping(connection.get("stage_capabilities"), name="stage capabilities")
+    if set(capabilities) != {"evaluation", "sim_funded", "live"}:
+        raise ValueError("stage capabilities must be exact")
+    for stage in ("evaluation", "sim_funded"):
+        capability = _mapping(capabilities[stage], name=f"{stage} capability")
+        if capability.get("execution_capability") != "MANUAL_ONLY":
+            raise ValueError(f"{stage} must be manual-only")
+        if capability.get("entitlement_status") != "UNAVAILABLE_FOR_SIMULATED_ACCOUNT":
+            raise ValueError(f"{stage} simulated entitlement status is invalid")
+        if any(
+            capability.get(name) is not False
+            for name in (
+                "direct_api_read_access",
+                "direct_api_order_access",
+                "provider_api_readiness",
+                "automatic_execution_authorized",
+            )
+        ):
+            raise ValueError(f"{stage} API capability must remain false")
+    live_capability = _mapping(capabilities["live"], name="live capability")
+    if live_capability.get("execution_capability") != "UNCONFIRMED":
+        raise ValueError("MFF Live capability must remain unconfirmed")
+    if live_capability.get("entitlement_status") != "PENDING_ACTUAL_LIVE_ACCOUNT_VERIFICATION":
+        raise ValueError("MFF Live entitlement status is invalid")
+    if any(
+        live_capability.get(name) is not False
+        for name in (
+            "direct_api_read_access",
+            "direct_api_order_access",
+            "provider_api_readiness",
+            "automatic_execution_authorized",
+        )
+    ):
+        raise ValueError("MFF Live API capability must remain false")
     false_fields = (
         "api_key_generation_confirmed", "rest_access_confirmed", "websocket_access_confirmed",
         "order_permission_confirmed", "production_readiness", "read_only_authorized", "execution_authorized",
@@ -94,6 +213,21 @@ def active_connection(value: Mapping[str, Any]) -> tuple[str, Mapping[str, Any],
     active_id = str(value["active_connection_id"])
     connection = _mapping(value["connections"][active_id], name="active connection")
     return active_id, connection, sha256_value(connection)
+
+
+def stage_capability(connection: Mapping[str, Any], *, stage: str) -> Mapping[str, Any]:
+    """Return one explicit stage capability; unknown values fail closed."""
+
+    capabilities = _mapping(connection.get("stage_capabilities"), name="stage capabilities")
+    if stage not in capabilities:
+        raise ValueError("unknown provider stage")
+    capability = _mapping(capabilities[stage], name=f"{stage} capability")
+    value = capability.get("execution_capability")
+    if value == "UNCONFIRMED" and stage == "live":
+        return capability
+    if value not in EXECUTION_CAPABILITIES:
+        raise ValueError("unknown execution capability")
+    return capability
 
 
 def binding_path(*, root: Path) -> Path:

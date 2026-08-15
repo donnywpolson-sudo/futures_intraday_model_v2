@@ -67,7 +67,11 @@ execution through `CertifiedResearchGateway`.
 Any row-certified preparatory census also consumes its own authorization even
 when it times out or produces no report. A successor must use a new immutable
 plan and approval; it may not silently reuse the consumed claim.
-The cockpit remains observation-only and credentials remain outside Git.
+The cockpit starts observation-only and credentials remain outside Git. MFF
+Evaluation and Rapid EOD Sim Funded are manual-only: the cockpit may prepare a
+risk-gated ticket and persist explicitly operator-reported state, but it does
+not authenticate, bind an API account, or transmit an order. MFF Live API
+capability remains unconfirmed. See `docs/MFF_TRADOVATE_EXECUTION.md`.
 
 When present, the machine-local accepted micro-contract source catalog is the
 immutable legacy publication at `data/active/catalogs/apex_micro.json`. Its

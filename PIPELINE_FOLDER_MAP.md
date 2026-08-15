@@ -90,14 +90,14 @@ The counts below use only the canonical classification vocabulary and count regi
 | Classification | Entry count |
 | --- | --- |
 | `CURRENT_OPERATIONAL` | 27 |
-| `CURRENT_SUPPORTING` | 32 |
+| `CURRENT_SUPPORTING` | 34 |
 | `HISTORICAL_HASH_BOUND` | 56 |
 | `HISTORICAL_UNBOUND` | 3 |
 | `PREPARED_NOT_EXECUTED` | 6 |
 | `GENERATED_OUTPUT` | 10 |
 | `REGENERABLE_CACHE` | 17 |
 | `LOCAL_RUNTIME_STATE` | 7 |
-| `LOCAL_SECRET` | 9 |
+| `LOCAL_SECRET` | 8 |
 | `MIXED_PACKAGING_SOURCE_OUTPUT` | 2 |
 | `UNRESOLVED_MANUAL_REVIEW` | 14 |
 

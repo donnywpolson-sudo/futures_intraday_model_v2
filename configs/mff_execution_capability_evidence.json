@@ -1,0 +1,29 @@
+{
+  "schema_version": "provider_capability_evidence/1.0.0",
+  "evidence": [
+    {
+      "evidence_id": "mff_support_simulated_accounts_manual_only_2026_08_12",
+      "source_type": "USER_SUPPLIED_FIRST_PARTY_SUPPORT_RESPONSE",
+      "provider": "my_funded_futures",
+      "received_date": "2026-08-12",
+      "scope": ["evaluation", "rapid_eod_sim_funded"],
+      "conclusion": "The supplied MFF support response establishes only that MFF Evaluation and Rapid EOD simulated funded accounts do not receive direct Tradovate API capability.",
+      "support_statement": "MFF support described Tradovate API usage as live-account-only in the context of MFF simulated accounts and directed future live-account questions to Tradovate.",
+      "transcript_handling": "FULL_TRANSCRIPT_EXCLUDED_FROM_GIT_USER_CONTROLLED_OUTSIDE_REPOSITORY",
+      "supported_configuration_fields": [
+        "evaluation.execution_capability",
+        "evaluation.direct_api_read_access",
+        "evaluation.direct_api_order_access",
+        "sim_funded.execution_capability",
+        "sim_funded.direct_api_read_access",
+        "sim_funded.direct_api_order_access"
+      ],
+      "limitations": [
+        "DOES_NOT_ESTABLISH_FUTURE_MFF_LIVE_ACCOUNT_CAPABILITY",
+        "DOES_NOT_VERIFY_OFFICIAL_COMMISSIONS",
+        "DOES_NOT_VERIFY_FUTURE_TRADOVATE_ENTITLEMENT",
+        "DOES_NOT_AUTHORIZE_PROVIDER_CONNECTION"
+      ]
+    }
+  ]
+}

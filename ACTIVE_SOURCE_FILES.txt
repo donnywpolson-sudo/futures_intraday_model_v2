@@ -41,6 +41,7 @@ src/futures_rebuild/live_cockpit/execution/domain.py
 src/futures_rebuild/live_cockpit/execution/errors.py
 src/futures_rebuild/live_cockpit/execution/fake.py
 src/futures_rebuild/live_cockpit/execution/gate.py
+src/futures_rebuild/live_cockpit/execution/manual_assistant.py
 src/futures_rebuild/live_cockpit/execution/order_ledger.py
 src/futures_rebuild/live_cockpit/execution/preparation.py
 src/futures_rebuild/live_cockpit/execution/reconciliation.py
@@ -179,6 +180,7 @@ configs/master_audit_v3/invocation.example.json
 configs/master_audit_v3/stage_requirement_matrix.json
 configs/mechanical_feature_spec.json
 configs/meta_master_audit_coverage.json
+configs/mff_execution_capability_evidence.json
 configs/micro_futures_legacy_lineage.json
 configs/migration_approval_authorized.json
 configs/migration_manifest.json
@@ -186,6 +188,7 @@ configs/migration_manifest_authorized.json
 configs/offline_vault_environment.lock.json
 configs/overnight_inventory_reversal_preoutcome_correction.json
 configs/overnight_inventory_reversal_preregistration.json
+configs/prop_firm_execution_connections.json
 configs/prop_firm_execution_costs.json
 configs/prop_firm_execution_instruments.json
 configs/prop_firm_payout_policies.json
@@ -765,6 +768,7 @@ tests/test_legacy_trial_census.py
 tests/test_live_cockpit_execution.py
 tests/test_live_cockpit_offline_network.py
 tests/test_mandatory_baseline_execution.py
+tests/test_manual_execution_assistant.py
 tests/test_master_audit_v3.py
 tests/test_meta_audit.py
 tests/test_micro_alpha_acquisition.py

@@ -130,7 +130,7 @@ def test_valid_registry_loads_and_validates_current_checkout() -> None:
     validate_repository_surface(surface, repository_root=ROOT)
 
     assert surface["schema_version"] == "repository_surface/1.0.0"
-    assert len(surface["entries"]) == 183
+    assert len(surface["entries"]) == 184
 
 
 def test_unknown_classification_is_rejected() -> None:
@@ -688,7 +688,7 @@ def test_default_cli_reports_all_generated_surface_validity() -> None:
     assert report["source_of_truth_valid"] is True
     assert report["pipeline_folder_map_valid"] is True
     assert report["active_source_files_valid"] is True
-    assert report["entry_count"] == EXPECTED_REGISTRY_ENTRY_COUNT == 183
+    assert report["entry_count"] == EXPECTED_REGISTRY_ENTRY_COUNT == 184
     assert report["unresolved_entry_count"] == EXPECTED_UNRESOLVED_ENTRY_COUNT == 14
     assert report["public_command_count"] == EXPECTED_PUBLIC_COMMAND_COUNT == 7
     assert report["tracked_root_mode"] == "GIT_LS_FILES"
@@ -1222,9 +1222,9 @@ def test_active_source_excludes_every_tracked_noncurrent_classification() -> Non
         "PREPARED_NOT_EXECUTED",
         "GENERATED_OUTPUT",
         "LOCAL_RUNTIME_STATE",
-        "LOCAL_SECRET",
         "UNRESOLVED_MANUAL_REVIEW",
     } <= excluded_classifications
+    assert "LOCAL_SECRET" not in excluded_classifications
     synthetic_noncurrent = active_source_paths(
         surface,
         [

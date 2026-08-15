@@ -178,7 +178,9 @@ def test_runtime_never_constructs_or_connects_a_provider_adapter() -> None:
     assert runtime.adapter.connected is False
     assert payload["provider_connection_opened"] is False
     assert payload["account_stage"] == "sim_funded"
-    assert payload["entitlement_status"] == "UNCONFIRMED"
+    assert payload["entitlement_status"] == "UNAVAILABLE_FOR_SIMULATED_ACCOUNT"
+    assert payload["execution_capability"] == "MANUAL_ONLY"
+    assert payload["provider_api_readiness"] is False
     assert payload["exact_costs_verified"] is False
     assert payload["production_readiness"] is False
     assert payload["armed"] is False
@@ -220,11 +222,11 @@ def test_arm_state_is_memory_only_exact_and_never_restored() -> None:
     assert state.snapshot(now=NOW + timedelta(minutes=6)).armed is False
 
 
-def test_protocol_v2_rejects_unknown_secret_malformed_and_oversized_messages() -> None:
+def test_protocol_v3_rejects_unknown_secret_malformed_and_oversized_messages() -> None:
     capability = ExecutionRuntime(root=ROOT).capability_payload()
     message = event("execution_capability", capability)
     validate_event(message)
-    assert message["v"] == PROTOCOL_VERSION == 2
+    assert message["v"] == PROTOCOL_VERSION == 3
     with pytest.raises(ValueError, match="forbidden secret"):
         event("bootstrap", {"access_token": "do-not-leak"})
     for field in ("accessToken", "apiKey", "clientSecret"):
@@ -238,7 +240,7 @@ def test_protocol_v2_rejects_unknown_secret_malformed_and_oversized_messages() -
 
 def test_commands_are_enumerated_exact_and_require_a_stop() -> None:
     command = {
-        "v": 2,
+        "v": PROTOCOL_VERSION,
         "type": "PREVIEW_ORDER_INTENT",
         "payload": {
             "execution_symbol": "MES",
@@ -521,17 +523,33 @@ def test_provider_gate_requires_exact_micro_and_hash_bound_identity() -> None:
     assert "RUNTIME_IDENTITY_BINDING_MISMATCH" in wrong_runtime.blockers
 
 
-def test_ui_is_truthfully_disabled_and_has_no_order_submission_bridge() -> None:
+def test_ui_exposes_manual_preparation_without_provider_submission_bridge() -> None:
     html = (ROOT / "src/futures_rebuild/live_cockpit/assets/index.html").read_text(encoding="utf-8")
     script = (ROOT / "src/futures_rebuild/live_cockpit/assets/app.js").read_text(encoding="utf-8")
+    styles = (ROOT / "src/futures_rebuild/live_cockpit/assets/styles.css").read_text(encoding="utf-8")
     app = (ROOT / "src/futures_rebuild/live_cockpit/app.py").read_text(encoding="utf-8")
-    assert "MFF SIM FUNDED" in html
-    assert 'class="order-ticket" disabled' in html
-    assert html.count("Flatten all") == 1
+    assert "MFF SIMULATED ACCOUNT" in html
+    assert "MANUAL TRADOVATE ENTRY REQUIRED" in html
+    assert "Prepare Manual Ticket" in html
+    assert 'class="order-ticket"' in html
+    assert "NO ORDER HAS BEEN TRANSMITTED BY FUTURESLIVECOCKPIT" in html
+    assert "Provider submit unavailable" in html
+    assert "Offline demo account stage" in html
+    assert 'value="evaluation">MFF Evaluation' in html
+    assert 'value="sim_funded">MFF Rapid EOD Sim Funded' in html
+    assert 'state.mode !== "demo"' in script
+    assert "PROTECTION REQUIRED — NEW TICKETS BLOCKED" in script
+    assert "STATE UNCERTAIN • OPERATOR REPORTED • NEW TICKETS BLOCKED" in script
+    assert ".execution-status-grid dd { margin: 0; color: var(--text);" in styles
+    assert "overflow-wrap: anywhere" in styles
+    assert "#manual-cost-status { overflow: visible;" in styles
+    assert "text-overflow: clip; white-space: normal" in styles
     assert "execution_blocker_list" not in app
+    assert "prepare_manual_ticket" in app
+    assert "width=1366" in app and "height=768" in app
     assert "submit_order" not in app
     assert "accessToken" not in script and "api_key" not in script.lower()
-    assert "LOCAL SIMULATOR - SYNTHETIC ONLY" in script
+    assert "LOCAL SIMULATOR — SYNTHETIC DATA" in script
     assert '"minmax(0, 1fr) 304px"' in script
 
 

@@ -13,6 +13,7 @@ a = Analysis(
     datas=[
         (str(repo_root / 'configs' / 'alpha_tiered.yaml'), 'configs'),
         (str(repo_root / 'configs' / 'prop_firm_execution_connections.json'), 'configs'),
+        (str(repo_root / 'configs' / 'mff_execution_capability_evidence.json'), 'configs'),
         (str(repo_root / 'configs' / 'prop_firm_profiles.json'), 'configs'),
         (str(repo_root / 'configs' / 'prop_firm_execution_costs.json'), 'configs'),
         (str(repo_root / 'configs' / 'prop_firm_execution_instruments.json'), 'configs'),
@@ -37,6 +38,7 @@ a = Analysis(
         'webview',
         'webview.platforms.edgechromium',
         'futures_rebuild.live_cockpit.execution.tradovate_adapter',
+        'futures_rebuild.live_cockpit.execution.manual_assistant',
     ],
     hookspath=[],
     hooksconfig={},

@@ -199,11 +199,16 @@ to the ignored v2-local `api.env`.
 The cockpit provides search/grouping, live charts, history controls, bounded
 cache, persisted preferences, explicit provider errors, prediction abstention,
 and all 41 approved markets. It now also displays a gated MFF/Tradovate
-execution-capability panel and a disabled supervised ticket. Normal startup is
-still `OBSERVATION_ONLY`: no Tradovate client is created, execution starts
-disarmed, and entitlement, account binding, fees, compliance feeds, production
-readiness, and authorization remain false. The deterministic local simulator
-is synthetic-only and is never described as MFF execution.
+execution-capability panel and a manual order-preparation assistant. MFF
+Evaluation and Rapid EOD Sim Funded are `MANUAL_ONLY`; no Tradovate client,
+credential lookup, or provider account binding is used. The operator reconciles
+a local snapshot, prepares and copies instructions, manually enters the order,
+then reports submission, fills, protection, rejection/cancellation, exit, and
+reconciliation. Every restart makes prior manual state stale. Provider API
+readiness, automatic authorization, production readiness, and account binding
+remain false/unset. The deterministic local simulator is synthetic-only.
+
+**FuturesLiveCockpit does not transmit orders for MFF simulated accounts.**
 
 See [`docs/MFF_TRADOVATE_EXECUTION.md`](docs/MFF_TRADOVATE_EXECUTION.md) for
 execution modes, official-source distinctions, credential storage, account

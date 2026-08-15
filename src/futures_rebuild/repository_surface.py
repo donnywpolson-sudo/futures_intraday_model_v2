@@ -46,7 +46,7 @@ ACTIVE_SOURCE_HEADER = (
     "# Inclusion: CURRENT_OPERATIONAL and CURRENT_SUPPORTING.",
     "# Virtual view only; no file is moved or hidden, and this file grants no operational authority.",
 )
-EXPECTED_REGISTRY_ENTRY_COUNT = 183
+EXPECTED_REGISTRY_ENTRY_COUNT = 184
 EXPECTED_UNRESOLVED_ENTRY_COUNT = 14
 EXPECTED_PUBLIC_COMMAND_COUNT = 7
 

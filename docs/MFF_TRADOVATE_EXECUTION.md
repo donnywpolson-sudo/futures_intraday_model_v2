@@ -1,21 +1,35 @@
-# Gated MFF / Tradovate execution capability
+# MFF manual execution assistant and dormant Tradovate capability
 
-The cockpit contains an offline-testable execution domain, but actual MFF or
-Tradovate access is disabled. `Live cockpit` can mean live Databento market
-data. It does not mean that the MFF account is Live Funded or that order
-submission is authorized.
+FuturesLiveCockpit does not transmit orders for MFF simulated accounts.
+`Live cockpit` can mean live market data. It never means that an MFF account is
+an actual MFF Live account or that provider order submission is authorized.
 
 ## Current verdict
 
 - Selected implementation candidate: Tradovate.
 - Active provider/profile/stage: MyFundedFutures,
   `mff_rapid_eod_50k_2026_08_10`, `sim_funded`.
-- Active execution mode: `OBSERVATION_ONLY`.
-- Direct API entitlement for an MFF-issued user: `UNCONFIRMED`.
-- Evaluation, Sim Funded, and Live endpoint bindings: `UNCONFIRMED`.
+- Startup mode: `OBSERVATION_ONLY`; the selected simulated-stage workflow is
+  the local `MFF_MANUAL_ASSISTANT`.
+- MFF Evaluation execution capability: `MANUAL_ONLY`.
+- MFF Rapid EOD Sim Funded execution capability: `MANUAL_ONLY`.
+- MFF Live capability: `UNCONFIRMED`, pending an actual Live account and
+  Tradovate permission verification.
+- Direct API read/order access for the two simulated stages: `false`.
+- Provider API readiness: `false`.
+- Automatic execution authorization: `false`.
 - Exact account binding: `UNSET`.
 - Active official execution-cost profile: `UNSET`.
 - Execution authorization and production readiness: `false`.
+
+The user supplied a first-party MFF support response on 2026-08-12. In the
+specific context of MFF simulated accounts, the response described Tradovate
+API usage as live-account-only. The bounded durable summary is
+`configs/mff_execution_capability_evidence.json`. It supports only the manual
+classification of MFF Evaluation and Rapid EOD Sim Funded. It does not verify
+official costs, authorize a connection, establish a universal Tradovate
+policy, or establish future MFF Live access. The full transcript is excluded
+from Git and remains user-controlled outside the repository.
 
 The generic Tradovate documentation describes public REST and WebSocket
 capability. Its API-access article says API-key generation generally requires a
@@ -48,10 +62,89 @@ noted.
 | [Tradovate key permissions](https://tradovate.zendesk.com/hc/en-us/articles/4408873526547-How-Do-I-Change-My-API-Key-Permissions) | 2021-10-20 | Separate read/modify domains for account, orders, positions, and risk | Yes | No | Unconfirmed |
 | [Tradovate OAuth registration](https://tradovate.zendesk.com/hc/en-us/articles/4403100442515-How-Do-I-Register-an-OAuth-App) | 2021-12-06 | OAuth registration follows attestation/agreement | Yes | No | Unconfirmed |
 
-Material ambiguities remain fail-closed: the authentication flow supported for
-an MFF-issued user, the endpoint environment for each MFF account stage, the
-manual custom-application `isAutomated` value, current account-specific fees,
-and whether MFF permits direct custom REST/WebSocket use at each stage.
+Material ambiguities remain fail-closed: future actual MFF Live entitlement,
+the relevant endpoint for that future account, current account-specific fees,
+and the manual custom-application `isAutomated` treatment for any future API
+integration.
+
+## Capability and readiness model
+
+The provider-neutral capability vocabulary is `MANUAL_ONLY`, `READ_ONLY_API`,
+and `ORDER_API`. Unknown providers, stages, or values fail closed. Capability
+selection is explicit and never inferred from credentials, account text,
+endpoint behavior, simulator state, environment variables, or UI choices.
+
+Manual preview, manual readiness, provider API readiness, and automatic
+execution authorization are independent. A provisional ticket can be displayed
+with the conservative `mff_micro_provisional_stress_v1` policy while manual
+readiness remains false. Manual readiness requires current market/model
+records, an OOS-promoted strategy policy, operator snapshot, session, news, and
+price-limit records; verified mapping; valid risk inputs; reconciled
+positions/orders; allowed provisional costs; and every MFF/internal gate. No
+override exists for missing compliance feeds. The packaged synthetic demo may
+bind an explicitly synthetic promoted-policy record, but that is not
+production evidence.
+
+## Operator-reported workflow
+
+The local account snapshot is explicitly `OPERATOR_REPORTED`, profile/stage/
+alias bound, hashed, and short-lived. The alias is local and is not an API
+account binding; `account_binding` remains `UNSET`. A restart, state-changing
+manual event, expiry, contradiction, or corrupt state requires reconciliation.
+Submitted orders with unknown fill status are treated as worst-case exposure.
+Filled positions without operator-confirmed protection and every
+`STATE_UNCERTAIN` block new tickets.
+
+Snapshot collections have exact non-provider schemas. Open positions report
+signal root, micro symbol and contract, side, integer quantity, positive stop
+ticks, and protection status. Working entries additionally report requested
+quantity, fill status, order type, and entry price. Protective orders report
+their micro contract, side, integer quantity, stop price, and working status.
+Provider account IDs, credentials, nested secret fields, and private machine
+paths are rejected before journaling.
+
+The manual ticket supports only exact micro contract-month mappings ES to MES,
+CL to MCL, and 6E to M6E. ZN and mini/standard contracts fail closed. The
+backend authoritative MFF risk runtime determines quantity using reported open
+and working exposure, the 30-micro cap, concurrent/session risk, balance/floor
+cushion, reserve, concentration, liquidity, hedge, duplicate-order, session,
+news, and price-limit gates. Provisional costs are never described as official.
+
+The state machine is:
+
+`DRAFT`, `BLOCKED`, `VALIDATED`, `READY_FOR_MANUAL_ENTRY`,
+`OPERATOR_REPORTED_SUBMITTED`, `OPERATOR_REPORTED_PARTIALLY_FILLED`,
+`OPERATOR_REPORTED_FILLED`, `OPERATOR_CONFIRMED_PROTECTED`,
+`OPERATOR_REPORTED_REJECTED`, `OPERATOR_REPORTED_CANCELLED`,
+`OPERATOR_REPORTED_CLOSED`, `OPERATOR_RECONCILED`, `ABANDONED`, and
+`STATE_UNCERTAIN`. Invalid transitions fail. `BROKER_CONFIRMED` is reserved for
+a future supported API and is never produced in MFF manual-only mode.
+
+Copy actions produce bounded local text with the exact contract, side,
+quantity, order type, entry, stop, target, risk, provisional cost status,
+ticket ID, timestamp, and the statement `NO ORDER HAS BEEN TRANSMITTED BY
+FUTURESLIVECOCKPIT`. They do not launch or automate Tradovate.
+
+Operator-reported actuals are compared with the plan for contract, side,
+quantity and partial fills, fill price, slippage in ticks and dollars, timing,
+stop/target distance, fees, actual risk, reward/risk, aggregate exposure, exit,
+and realized result. Material mismatches remain visible, update the
+conservative local state, and can block further tickets. The cockpit never
+claims to correct an order in Tradovate.
+
+## Operator runbook
+
+1. Reconcile account state from MFF and Tradovate.
+2. Review the model setup and data freshness.
+3. Prepare the manual ticket.
+4. Verify every risk and compliance gate.
+5. Copy the manual instructions.
+6. Enter and verify the order manually in Tradovate.
+7. Mark the ticket submitted.
+8. Record actual or partial fills, rejection, or cancellation.
+9. Confirm the protective stop is working.
+10. Record the exit.
+11. Reconcile manual state.
 
 ## Architecture and modes
 
@@ -65,8 +158,10 @@ Tradovate REST/WebSocket transports, reconciliation, and the local journal.
   separately approved read-only smoke.
 - `LOCAL_EXECUTION_SIMULATOR`: deterministic, network-free lifecycle testing;
   always labeled synthetic and never represented as MFF execution.
-- `MFF_TRADOVATE_SIM_FUNDED`: blocked pending entitlement, endpoint, account,
-  costs, feeds, readiness, and approval.
+- `MFF_MANUAL_ASSISTANT`: provider-free manual preparation and operator
+  reporting for Evaluation and Sim Funded; no credential or provider client.
+- `MFF_TRADOVATE_SIM_FUNDED`: retained as dormant historic/future API mode but
+  unreachable for the current simulated stage.
 - `MFF_TRADOVATE_LIVE`: blocked separately; no activation shortcut exists.
 
 Every restart, reconnect, binding/stage/endpoint/profile/cost change, stale
@@ -82,11 +177,12 @@ are never returned to JavaScript, placed in `api.env`, logged, packaged, or
 stored in Git. Revocation deletes that Windows credential and requires API-key
 revocation through the official provider UI when entitlement exists.
 
-The ignored local binding path is
+The ignored provider API binding path is
 `state/live_cockpit/execution_binding.json`. It must name one exact account,
 stage, environment, user, profile, connection, mapping, cost profile, evidence
 reference, and binding hash. No code selects the first returned account.
-Changing any binding input disarms execution.
+Changing any binding input disarms future API execution. The manual assistant
+does not read or require this file.
 
 To return to observation-only mode, remove or quarantine the ignored binding,
 delete the credential reference, and restart. Startup still remains
