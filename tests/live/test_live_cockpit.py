@@ -133,7 +133,7 @@ def test_visual_update_state_validates_modes_and_applies_adaptive_floor() -> Non
 def test_protocol_is_versioned_and_serializes_bars() -> None:
     message = event("bar_update", {"bar": serialize_bar(_bar(datetime(2026, 7, 13, tzinfo=timezone.utc)))})
     validate_event(message)
-    assert message["v"] == 2
+    assert message["v"] == 3
     assert message["payload"]["bar"]["time"] == 1_783_900_800
 
 
