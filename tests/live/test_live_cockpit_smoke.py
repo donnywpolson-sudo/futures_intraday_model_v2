@@ -315,7 +315,13 @@ def test_late_generation_stays_ignored_with_cache_disabled() -> None:
 def _approved_execution_files(
     tmp_path: Path, executable: Path
 ) -> tuple[Path, Path, Path]:
-    plan = build_live_smoke_plan(sha256_file(executable))
+    plan = build_live_smoke_plan(
+        sha256_file(executable),
+        source_revision="b" * 40,
+        package_inputs=[
+            {"path": "src/example.py", "bytes": 7, "sha256": "c" * 64},
+        ],
+    )
     plan_path = tmp_path / "live-smoke-plan.json"
     plan_path.write_bytes(canonical_bytes(plan) + b"\n")
     locator = tmp_path / "credential-source.json"

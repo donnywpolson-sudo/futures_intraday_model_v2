@@ -2,6 +2,9 @@
 param(
     [string]$BuildRoot = '',
     [string]$CredentialFile = '',
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern('^[0-9a-fA-F]{64}$')]
+    [string]$ExpectedExecutableSha256,
     [switch]$Upgrade
 )
 
@@ -76,6 +79,11 @@ if (-not (Test-Path -LiteralPath (
 }
 if (-not (Test-Path -LiteralPath $resolvedCredentialFile -PathType Leaf)) {
     throw 'Credential file not found.'
+}
+$expectedHash = $ExpectedExecutableSha256.ToLowerInvariant()
+$sourceHash = Get-Sha256Hex -Path $sourceExe
+if ($sourceHash -ne $expectedHash) {
+    throw "Packaged executable hash mismatch: expected $expectedHash, observed $sourceHash"
 }
 
 $bundledPlan = Join-Path (
@@ -165,6 +173,11 @@ try {
     foreach ($item in Get-ChildItem -LiteralPath $resolvedBuildRoot -Force) {
         Copy-Item -LiteralPath $item.FullName -Destination $stagingPath -Recurse
     }
+    $stagedExe = Join-Path $stagingPath 'FuturesLiveCockpit.exe'
+    $stagedHash = Get-Sha256Hex -Path $stagedExe
+    if ($stagedHash -ne $expectedHash) {
+        throw "Staged executable hash mismatch: $stagedHash"
+    }
 
     $forbiddenFiles = @(
         Get-ChildItem -LiteralPath $stagingPath -Recurse -Force -File |
@@ -200,12 +213,25 @@ try {
         $utf8NoBom
     )
 
-    $stagedExe = Join-Path $stagingPath 'FuturesLiveCockpit.exe'
-    $selfCheck = Start-Process -FilePath $stagedExe `
-        -ArgumentList '--self-check' -WindowStyle Hidden -PassThru
-    if (-not $selfCheck.WaitForExit(60000)) {
-        Stop-Process -Id $selfCheck.Id -Force -ErrorAction SilentlyContinue
-        throw 'Packaged self-check exceeded 60 seconds.'
+    $isolatedSelfCheckLocalAppData = Join-Path $stagingPath '_offline_validation'
+    New-Item -ItemType Directory -Path $isolatedSelfCheckLocalAppData | Out-Null
+    $priorLocalAppData = $env:LOCALAPPDATA
+    try {
+        $env:LOCALAPPDATA = $isolatedSelfCheckLocalAppData
+        $selfCheck = Start-Process -FilePath $stagedExe `
+            -ArgumentList '--self-check' -WindowStyle Hidden -PassThru
+        if (-not $selfCheck.WaitForExit(60000)) {
+            Stop-Process -Id $selfCheck.Id -Force -ErrorAction SilentlyContinue
+            throw 'Packaged self-check exceeded 60 seconds.'
+        }
+    }
+    finally {
+        if ($null -eq $priorLocalAppData) {
+            Remove-Item Env:LOCALAPPDATA -ErrorAction SilentlyContinue
+        }
+        else {
+            $env:LOCALAPPDATA = $priorLocalAppData
+        }
     }
     if ($selfCheck.ExitCode -ne 0) {
         throw "Packaged self-check failed with exit code $($selfCheck.ExitCode)."
@@ -214,6 +240,11 @@ try {
     Move-Item -LiteralPath $stagingPath -Destination $installPath
     $stagingCreated = $false
     $finalCreated = $true
+    $preparedExe = Join-Path $installPath 'FuturesLiveCockpit.exe'
+    $preparedHash = Get-Sha256Hex -Path $preparedExe
+    if ($preparedHash -ne $expectedHash) {
+        throw "Prepared executable hash mismatch: $preparedHash"
+    }
 
     foreach ($record in $shortcutRecords) {
         $observed = Read-ShortcutRecord -Shell $shell -Path $record.Path
@@ -239,8 +270,10 @@ try {
     [pscustomobject]@{
         Action = 'Prepared'
         InstalledPath = $installPath
+        ExecutableSha256 = $preparedHash
         CredentialLocator = Join-Path $installPath 'credential-source.json'
         RollbackMetadata = Join-Path $installPath 'rollback-shortcuts.json'
+        OfflineValidationState = Join-Path $installPath '_offline_validation'
         PackagedSelfCheckExitCode = $selfCheck.ExitCode
         CredentialCopied = $false
         ShortcutsChanged = $false

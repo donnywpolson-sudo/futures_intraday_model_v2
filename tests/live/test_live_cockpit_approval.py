@@ -23,10 +23,24 @@ from futures_rebuild.live_cockpit.smoke import main as smoke_main
 from futures_rebuild.live_cockpit.smoke import run_smoke
 
 
+SOURCE_REVISION = "b" * 40
+PACKAGE_INPUTS = [
+    {"path": "src/example.py", "bytes": 7, "sha256": "c" * 64},
+]
+
+
+def _smoke_plan(executable_hash: str = "a" * 64) -> dict[str, object]:
+    return build_live_smoke_plan(
+        executable_hash,
+        source_revision=SOURCE_REVISION,
+        package_inputs=PACKAGE_INPUTS,
+    )
+
+
 def _plan_path(tmp_path: Path, executable_hash: str = "a" * 64) -> Path:
     path = tmp_path / "live-smoke-plan.json"
     path.write_bytes(
-        canonical_bytes(build_live_smoke_plan(executable_hash)) + b"\n"
+        canonical_bytes(_smoke_plan(executable_hash)) + b"\n"
     )
     return path
 
@@ -69,7 +83,7 @@ def _pending_receipt(tmp_path: Path, plan_path: Path) -> Path:
 
 
 def test_generated_plan_is_exactly_41_market_and_bounded() -> None:
-    plan = validate_live_smoke_plan(build_live_smoke_plan("a" * 64))
+    plan = validate_live_smoke_plan(_smoke_plan())
     assert len(plan["scope"]["overview_markets"]) == 41
     assert plan["scope"]["focus_market"] == "ES"
     assert plan["scope"]["required_focus_market_calendar_state"] == "OPEN"
@@ -82,6 +96,16 @@ def test_generated_plan_is_exactly_41_market_and_bounded() -> None:
         == RESULT_OUTPUT_RELATIVE
     )
     assert plan["predecessor_attempt"] == PREDECESSOR_ATTEMPT
+    assert plan["successor_binding"]["supersedes_plan_id"] == (
+        PREDECESSOR_ATTEMPT["plan_id"]
+    )
+    assert plan["successor_binding"]["predecessor_artifact_sha256"] == (
+        PREDECESSOR_ATTEMPT["artifact_sha256"]
+    )
+    assert plan["successor_binding"]["reason"] == "SOURCE_HASH_DRIFT"
+    assert plan["successor_binding"]["source_revision"] == SOURCE_REVISION
+    assert plan["successor_binding"]["package_inputs"] == PACKAGE_INPUTS
+    assert plan["successor_binding"]["candidate_executable_sha256"] == "a" * 64
     assert plan["execution_authorized"] is False
 
 
@@ -94,7 +118,7 @@ def test_prepare_only_cli_rejects_pending_execution_arguments_before_provider(
         tmp_path
         / "reports"
         / "live_cockpit"
-        / "bounded_live_smoke_result_attempt_8.json"
+        / "bounded_live_smoke_result_attempt_9.json"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
@@ -149,7 +173,7 @@ def test_exact_core_hash_receipt_is_accepted(tmp_path: Path) -> None:
 
 
 def test_plan_market_drift_is_rejected(tmp_path: Path) -> None:
-    plan = build_live_smoke_plan("a" * 64)
+    plan = _smoke_plan()
     plan["scope"]["overview_markets"][-1] = "XX"
     core = {key: value for key, value in plan.items() if key != "plan_id"}
     plan["plan_id"] = sha256_json(core)
@@ -187,10 +211,18 @@ def test_approval_receipt_cannot_survive_locator_drift(tmp_path: Path) -> None:
 
 
 def test_plan_predecessor_drift_is_rejected() -> None:
-    plan = build_live_smoke_plan("a" * 64)
+    plan = _smoke_plan()
     plan["predecessor_attempt"]["disposition"] = "PASS"
     core = {key: value for key, value in plan.items() if key != "plan_id"}
     plan["plan_id"] = sha256_json(core)
+    with pytest.raises(LiveSmokeApprovalError, match="identity is invalid"):
+        validate_live_smoke_plan(plan)
+
+
+def test_plan_package_input_tamper_is_rejected() -> None:
+    plan = _smoke_plan()
+    plan["successor_binding"]["package_inputs"][0]["bytes"] = 8
+
     with pytest.raises(LiveSmokeApprovalError, match="identity is invalid"):
         validate_live_smoke_plan(plan)
 
@@ -224,7 +256,7 @@ def test_prepare_only_cli_rejects_approved_execution_receipt_and_writes_nothing(
         tmp_path
         / "reports"
         / "live_cockpit"
-        / "bounded_live_smoke_result_attempt_8.json"
+        / "bounded_live_smoke_result_attempt_9.json"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(

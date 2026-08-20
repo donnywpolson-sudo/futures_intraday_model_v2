@@ -9,11 +9,26 @@ import pytest
 
 import futures_rebuild.live_cockpit.app as cockpit_app
 from futures_rebuild.live_cockpit.app import CockpitController, load_state, save_state
+from futures_rebuild.live_cockpit.engine import LiveCockpitEngine
+from futures_rebuild.live_cockpit.feed import chart_market_universe
 from futures_rebuild.live_cockpit.protocol import PROTOCOL_VERSION, event
 from futures_rebuild.live_cockpit.single_instance import SingleInstance
 
 
 FINGERPRINT = "a" * 64
+
+
+def test_live_engine_supports_an_explicit_one_market_canary_universe() -> None:
+    es = next(info for info in chart_market_universe() if info.symbol == "ES")
+    engine = LiveCockpitEngine(
+        cache_path=None,
+        cache_enabled=False,
+        history_enabled=False,
+        reconnect_enabled=False,
+        markets=(es,),
+    )
+
+    assert [info.symbol for info in engine.markets] == ["ES"]
 
 
 class _PolicyEngine:

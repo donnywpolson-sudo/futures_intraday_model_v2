@@ -22,7 +22,13 @@ def _fixture(tmp_path: Path) -> tuple[Path, Path, Path]:
     executable.write_bytes(b"synthetic packaged executable")
     executable_hash = sha256_file(executable)
 
-    plan = build_live_smoke_plan(executable_hash)
+    plan = build_live_smoke_plan(
+        executable_hash,
+        source_revision="b" * 40,
+        package_inputs=[
+            {"path": "src/example.py", "bytes": 7, "sha256": "c" * 64},
+        ],
+    )
     plan_path = tmp_path / "plan.json"
     plan_path.write_bytes(canonical_bytes(plan) + b"\n")
 

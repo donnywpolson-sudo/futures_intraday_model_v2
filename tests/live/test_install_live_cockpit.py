@@ -30,6 +30,17 @@ def test_existing_shortcuts_remain_owned_unchanged_and_non_startup() -> None:
     assert "Shortcut changed during preparation" in text
     assert "Refusing to proceed while an auto-start shortcut exists" in text
     assert "Unexpected auto-start shortcut was created" in text
+
+
+def test_installation_is_hash_bound_and_uses_isolated_offline_state() -> None:
+    text = INSTALLER.read_text(encoding="utf-8")
+    assert "[string]$ExpectedExecutableSha256" in text
+    assert "$sourceHash -ne $expectedHash" in text
+    assert "$stagedHash -ne $expectedHash" in text
+    assert "$preparedHash -ne $expectedHash" in text
+    assert "'_offline_validation'" in text
+    assert "$env:LOCALAPPDATA = $isolatedSelfCheckLocalAppData" in text
+    assert "ExecutableSha256 = $preparedHash" in text
     assert "ShortcutsChanged = $false" in text
     assert "AutoStartCreated = $false" in text
 

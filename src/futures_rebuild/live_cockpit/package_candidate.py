@@ -111,6 +111,7 @@ RUNTIME_OVERLAYS = (
 )
 PACKAGE_INPUTS = (
     "src/futures_rebuild/live_cockpit/package_candidate.py",
+    "src/futures_rebuild/live_cockpit/automatic_history_canary.py",
     *RUNTIME_OVERLAYS,
     "src/futures_rebuild/canonical.py",
     "src/futures_rebuild/errors.py",
@@ -993,12 +994,19 @@ def _validate_candidate(
     return files, total_bytes, private_key_scan
 
 
-def _finalize_smoke_plan(candidate: Path) -> tuple[dict[str, Any], Path]:
+def _finalize_smoke_plan(
+    candidate: Path,
+    package_plan: Mapping[str, Any],
+) -> tuple[dict[str, Any], Path]:
     executable = candidate / "FuturesLiveCockpit.exe"
     plan_path = candidate / "_internal/configs/live_cockpit_smoke_plan.json"
     if sha256_file(plan_path) != SMOKE_PLAN_PLACEHOLDER_SHA256:
         raise PackageCandidateError("packaged smoke-plan placeholder drifted")
-    plan = build_live_smoke_plan(sha256_file(executable))
+    plan = build_live_smoke_plan(
+        sha256_file(executable),
+        source_revision=str(package_plan["basis"]["head"]),
+        package_inputs=package_plan["inputs"],
+    )
     plan_path.write_bytes(canonical_bytes(plan) + b"\n")
     validate_live_smoke_plan(
         json.loads(plan_path.read_text(encoding="utf-8"))
@@ -1180,7 +1188,10 @@ def run_candidate(
             category = "BUILD_FAILED"
             raise PackageCandidateError("package build failed")
         staged_candidate = dist / "FuturesLiveCockpit"
-        smoke_plan, smoke_plan_path = _finalize_smoke_plan(staged_candidate)
+        smoke_plan, smoke_plan_path = _finalize_smoke_plan(
+            staged_candidate,
+            plan,
+        )
         files, total_bytes, private_key_scan = _validate_candidate(
             staged_candidate, root=root
         )

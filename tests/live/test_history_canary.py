@@ -297,14 +297,14 @@ def test_canary_stops_at_confirmation_without_live_or_timeseries(
     assert terminal["request_counts"] == {
         "dataset_range": 1,
         "symbology": 2,
-        "cost_estimate": 7,
+        "cost_estimate": 8,
         "timeseries_download": 0,
         "live_client": 0,
         "production_cache_write": 0,
         "provider_failure_retry": 0,
     }
     assert terminal["requested_start"] < terminal["historical_end"]
-    assert terminal["estimated_cost_usd"] == pytest.approx(0.07)
+    assert terminal["estimated_cost_usd"] == pytest.approx(0.08)
     terminal_path = tmp_path / TERMINAL_PATH_TEMPLATE.replace(
         "<PLAN_ID>", terminal["plan_id"]
     )

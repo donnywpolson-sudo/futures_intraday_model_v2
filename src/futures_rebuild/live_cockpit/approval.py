@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 import json
-import re
 from pathlib import Path
+import re
 from typing import Any, Mapping
 
 from futures_rebuild.canonical import sha256_file, sha256_json
@@ -12,35 +13,83 @@ from futures_rebuild.canonical import sha256_file, sha256_json
 from .feed import chart_market_universe
 
 
-PLAN_SCHEMA = "futures_live_cockpit_smoke_plan/1.2.0"
-APPROVAL_SCHEMA = "futures_live_cockpit_smoke_approval/1.3.0"
-OPERATION = "RUN_BOUNDED_OBSERVATION_ONLY_DATABENTO_SMOKE_ATTEMPT_8"
+PLAN_SCHEMA = "futures_live_cockpit_smoke_plan/1.3.0"
+APPROVAL_SCHEMA = "futures_live_cockpit_smoke_approval/1.4.0"
+OPERATION = "RUN_BOUNDED_OBSERVATION_ONLY_DATABENTO_SMOKE_ATTEMPT_9"
 RESULT_OUTPUT_RELATIVE = (
-    "reports/live_cockpit/bounded_live_smoke_result_attempt_8.json"
+    "reports/live_cockpit/bounded_live_smoke_result_attempt_9.json"
 )
 PREDECESSOR_ATTEMPT = {
-    "plan_id": "4d7ba2bfcd64630cd04ad13be3ccfaec43e121ecf5729fe4936a7d4d1b11e0e6",
-    "plan_sha256": "24918e2f90d87d8c221d688fbc0a96602aee05f8ca8030b689a7ced8e8d68e36",
-    "approval_receipt_id": (
-        "fad29c19acc4ecd8dfc604a10d471da1c8989c268d25d36da1c783621e81dada"
+    "plan_id": "566f80f601026a1a3183b7393f8963572026b8c288ac6d39813d6899fec68a81",
+    "artifact_sha256": (
+        "3a509681595006f6317e185432d9a49fa240e6497e8485675339391790ee5763"
     ),
-    "result_id": "c27b807d86b43bfae8136897e9497ce1245f9c0aaeee068bda12cf45f88bba08",
-    "result_sha256": (
-        "6750fea0db3fdb8f5e710659e0bdc193cc7de450dab3cdf97f93e11dfb35c350"
-    ),
-    "disposition": "PASS_SUPERSEDED_BY_CREATE_ONLY_BOUNDED_SMOKE_ENTRYPOINT",
+    "execution_authorized": False,
+    "disposition": "PENDING_UNEXECUTED_SUPERSEDED_SOURCE_HASH_DRIFT",
 }
 _HASH = re.compile(r"[0-9a-f]{64}")
+_SOURCE_REVISION = re.compile(r"[0-9a-f]{40,64}")
 _UTC_SECOND = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
+SUCCESSOR_REASON = "SOURCE_HASH_DRIFT"
+UPDATED_VALIDATION_REQUIREMENTS = {
+    "offline_cockpit_suite": "PASS_REQUIRED",
+    "deterministic_visual_states": [
+        "FIRST_LAUNCH_CHOICE",
+        "HISTORY_UPDATING",
+        "HISTORY_READY",
+        "REVIEW_NEEDED",
+        "AUTOMATIC_FAILURE",
+    ],
+    "read_only_live_feed_smoke": "PASS_AFTER_SEPARATE_APPROVAL",
+    "isolated_automatic_history_canary": "PASS_AFTER_SEPARATE_APPROVAL",
+    "release_executable_sha256": "IDENTICAL_THROUGH_ACTIVATION",
+}
 
 
 class LiveSmokeApprovalError(RuntimeError):
     """Raised before any provider client is created."""
 
 
-def build_live_smoke_plan(prepared_executable_sha256: str) -> dict[str, Any]:
+def _package_input_binding(
+    package_inputs: Sequence[Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    normalized: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for item in package_inputs:
+        if set(item) != {"path", "bytes", "sha256"}:
+            raise LiveSmokeApprovalError("package input fields are invalid")
+        path = item.get("path")
+        size = item.get("bytes")
+        digest = item.get("sha256")
+        if (
+            not isinstance(path, str)
+            or not path
+            or path in seen
+            or not isinstance(size, int)
+            or isinstance(size, bool)
+            or size < 0
+            or not isinstance(digest, str)
+            or _HASH.fullmatch(digest) is None
+        ):
+            raise LiveSmokeApprovalError("package input identity is invalid")
+        seen.add(path)
+        normalized.append({"path": path, "bytes": size, "sha256": digest})
+    if not normalized:
+        raise LiveSmokeApprovalError("package input identity is invalid")
+    return normalized
+
+
+def build_live_smoke_plan(
+    prepared_executable_sha256: str,
+    *,
+    source_revision: str,
+    package_inputs: Sequence[Mapping[str, Any]],
+) -> dict[str, Any]:
     if _HASH.fullmatch(prepared_executable_sha256) is None:
         raise LiveSmokeApprovalError("prepared executable hash is invalid")
+    if _SOURCE_REVISION.fullmatch(source_revision) is None:
+        raise LiveSmokeApprovalError("source revision is invalid")
+    bound_inputs = _package_input_binding(package_inputs)
     body: dict[str, Any] = {
         "schema_version": PLAN_SCHEMA,
         "classification": "PENDING_EXACT_HASH_BOUND_APPROVAL",
@@ -66,6 +115,24 @@ def build_live_smoke_plan(prepared_executable_sha256: str) -> dict[str, Any]:
         },
         "execution_authorized": False,
         "predecessor_attempt": dict(PREDECESSOR_ATTEMPT),
+        "successor_binding": {
+            "supersedes_plan_id": PREDECESSOR_ATTEMPT["plan_id"],
+            "predecessor_artifact_sha256": PREDECESSOR_ATTEMPT[
+                "artifact_sha256"
+            ],
+            "reason": SUCCESSOR_REASON,
+            "source_revision": source_revision,
+            "package_inputs": bound_inputs,
+            "candidate_executable_sha256": prepared_executable_sha256,
+            "updated_validation_requirements": {
+                **UPDATED_VALIDATION_REQUIREMENTS,
+                "deterministic_visual_states": list(
+                    UPDATED_VALIDATION_REQUIREMENTS[
+                        "deterministic_visual_states"
+                    ]
+                ),
+            },
+        },
     }
     body["plan_id"] = sha256_json(body)
     return body
@@ -90,6 +157,7 @@ def validate_live_smoke_plan(payload: Mapping[str, Any]) -> dict[str, Any]:
         "execution_authorized",
         "plan_id",
         "predecessor_attempt",
+        "successor_binding",
     }
     if set(payload) != expected_keys:
         raise LiveSmokeApprovalError("live-smoke plan fields are invalid")
@@ -113,9 +181,18 @@ def validate_live_smoke_plan(payload: Mapping[str, Any]) -> dict[str, Any]:
     }:
         raise LiveSmokeApprovalError("live-smoke scope fields are invalid")
     executable_hash = scope.get("prepared_executable_sha256")
-    if type(executable_hash) is not str:
+    binding = payload.get("successor_binding")
+    if type(executable_hash) is not str or type(binding) is not dict:
         raise LiveSmokeApprovalError("live-smoke plan identity is invalid")
-    expected = build_live_smoke_plan(executable_hash)
+    source_revision = binding.get("source_revision")
+    package_inputs = binding.get("package_inputs")
+    if type(source_revision) is not str or type(package_inputs) is not list:
+        raise LiveSmokeApprovalError("live-smoke plan identity is invalid")
+    expected = build_live_smoke_plan(
+        executable_hash,
+        source_revision=source_revision,
+        package_inputs=package_inputs,
+    )
     if dict(payload) != expected:
         raise LiveSmokeApprovalError("live-smoke plan identity is invalid")
     return dict(payload)

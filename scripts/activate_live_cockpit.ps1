@@ -2,7 +2,10 @@
 param(
     [Parameter(Mandatory = $true)][string]$PreparedInstallPath,
     [Parameter(Mandatory = $true)][string]$LiveSmokeResult,
-    [Parameter(Mandatory = $true)][string]$LiveSmokePlan
+    [Parameter(Mandatory = $true)][string]$LiveSmokePlan,
+    [Parameter(Mandatory = $true)]
+    [ValidatePattern('^[0-9a-fA-F]{64}$')]
+    [string]$ExpectedExecutableSha256
 )
 
 $ErrorActionPreference = 'Stop'
@@ -63,6 +66,11 @@ function Restore-ShortcutRecord {
     $shortcut.Save()
 }
 
+function Get-Sha256Hex {
+    param([Parameter(Mandatory = $true)][string]$Path)
+    return (Get-FileHash -Algorithm SHA256 -LiteralPath $Path).Hash.ToLowerInvariant()
+}
+
 $preparedPath = Assert-ChildPath -Parent $installRoot -Child (
     (Resolve-Path -LiteralPath $PreparedInstallPath).Path
 )
@@ -76,6 +84,11 @@ foreach ($required in @($preparedExe, $locatorPath, $rollbackPath)) {
     if (-not (Test-Path -LiteralPath $required -PathType Leaf)) {
         throw "Prepared installation is incomplete: $required"
     }
+}
+$expectedHash = $ExpectedExecutableSha256.ToLowerInvariant()
+$preparedHash = Get-Sha256Hex -Path $preparedExe
+if ($preparedHash -ne $expectedHash) {
+    throw "Prepared executable hash mismatch: expected $expectedHash, observed $preparedHash"
 }
 $resultPath = (Resolve-Path -LiteralPath $LiveSmokeResult).Path
 
@@ -131,6 +144,7 @@ if (-not $PSCmdlet.ShouldProcess(
         InstalledPath = $preparedPath
         LiveSmokeResult = $resultPath
         GuardEvidence = $guardOutput
+        ExecutableSha256 = $preparedHash
         AutoStartCreated = $false
     }
 }
@@ -166,12 +180,21 @@ try {
     if (Test-Path -LiteralPath $startupShortcut) {
         throw 'Unexpected auto-start shortcut was created.'
     }
+    $activatedHash = Get-Sha256Hex -Path $preparedExe
+    if ($activatedHash -ne $expectedHash) {
+        throw "Activated executable hash mismatch: $activatedHash"
+    }
     [pscustomobject]@{
         Action = 'Activated'
         InstalledPath = $preparedPath
+        ActivatedExecutable = $preparedExe
+        ExecutableSha256 = $activatedHash
         LiveSmokeResult = $resultPath
         GuardEvidence = $guardOutput
         ShortcutsUpdated = @($updated)
+        ShortcutTargets = @(
+            @($rollback.shortcuts) | ForEach-Object { $preparedExe }
+        )
         RollbackVerified = $true
         CredentialCopied = $false
         AutoStartCreated = $false

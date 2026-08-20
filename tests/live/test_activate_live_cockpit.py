@@ -30,6 +30,15 @@ def test_activation_updates_only_captured_shortcuts_and_rolls_back() -> None:
     assert "Shortcut verification failed" in text
     assert "Restore-ShortcutRecord -Shell $shell -Record $record" in text
     assert "Cutover failed and shortcut rollback verification failed" in text
+
+
+def test_activation_is_bound_to_the_exact_prepared_executable_hash() -> None:
+    text = ACTIVATOR.read_text(encoding="utf-8")
+    assert "[string]$ExpectedExecutableSha256" in text
+    assert "$preparedHash -ne $expectedHash" in text
+    assert "$activatedHash -ne $expectedHash" in text
+    assert "ExecutableSha256 = $activatedHash" in text
+    assert "ActivatedExecutable = $preparedExe" in text
     assert "RollbackVerified = $true" in text
 
 

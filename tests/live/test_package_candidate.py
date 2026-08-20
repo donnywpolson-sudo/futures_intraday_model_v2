@@ -596,10 +596,24 @@ def test_candidate_finalizes_exact_package_bound_smoke_plan(
         (root / package_candidate.SMOKE_PLAN_PLACEHOLDER).read_bytes()
     )
 
-    plan, finalized_path = package_candidate._finalize_smoke_plan(candidate)
+    package_plan = {
+        "basis": {"head": "b" * 40},
+        "inputs": [
+            {"path": "src/example.py", "bytes": 7, "sha256": "c" * 64},
+        ],
+    }
+    plan, finalized_path = package_candidate._finalize_smoke_plan(
+        candidate,
+        package_plan,
+    )
 
     assert finalized_path == plan_path
     assert plan["scope"]["prepared_executable_sha256"] == sha256_file(executable)
     assert plan["scope"]["result_output_relative"] == RESULT_OUTPUT_RELATIVE
     assert plan["predecessor_attempt"] == PREDECESSOR_ATTEMPT
+    assert plan["successor_binding"]["source_revision"] == "b" * 40
+    assert plan["successor_binding"]["package_inputs"] == package_plan["inputs"]
+    assert plan["successor_binding"]["candidate_executable_sha256"] == (
+        sha256_file(executable)
+    )
     assert plan_path.read_bytes() == canonical_bytes(plan) + b"\n"

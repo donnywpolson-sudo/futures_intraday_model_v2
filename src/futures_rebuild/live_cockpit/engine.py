@@ -27,6 +27,7 @@ from .feed import (
     EXCHANGE_TZ_NAME,
     GLOBEX_OPEN_HOUR,
     GLOBEX_OPEN_MINUTE,
+    MarketInfo,
     RTH_OPEN_HOUR,
     RTH_OPEN_MINUTE,
     ROOT,
@@ -922,8 +923,13 @@ class LiveCockpitEngine:
         cache_enabled: bool = True,
         reconnect_enabled: bool = True,
         fail_fast_provider_errors: bool = False,
+        markets: Sequence[MarketInfo] | None = None,
     ) -> None:
-        self.markets = chart_market_universe()
+        self.markets = tuple(markets) if markets is not None else chart_market_universe()
+        if not self.markets or len({info.symbol for info in self.markets}) != len(
+            self.markets
+        ):
+            raise ValueError("markets must be a non-empty unique universe")
         self._symbols = {info.symbol for info in self.markets}
         self.market = market if market in self._symbols else "ES"
         self.timeframe = normalize_timeframe(timeframe)
