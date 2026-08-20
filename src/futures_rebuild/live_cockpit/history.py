@@ -1,4 +1,4 @@
-"""Pure planning primitives for bounded all-market history cache warmup."""
+"""Pure planning primitives for bounded cockpit history cache warmup."""
 
 from __future__ import annotations
 
@@ -16,6 +16,14 @@ class HistoryBinding:
     market: str
     contract: str
     instrument_id: int
+    query_symbol: str | int | None = None
+    stype_in: str = "instrument_id"
+
+    @property
+    def request_symbol(self) -> str | int:
+        return (
+            self.instrument_id if self.query_symbol is None else self.query_symbol
+        )
 
 
 @dataclass(frozen=True)
@@ -39,6 +47,7 @@ class HistoryPlan:
     target_end: datetime
     estimated_cost_usd: float
     chunks: list[HistoryChunk]
+    range_key: str = "1W"
     confirmed: bool = False
     paused: bool = False
 
@@ -114,11 +123,14 @@ def split_newest_first(
 def group_history_chunks(
     bindings: Sequence[HistoryBinding],
     missing_by_instrument: Mapping[int, Sequence[tuple[datetime, datetime]]],
+    *,
+    max_hours: int = MAX_HISTORY_CHUNK_HOURS,
 ) -> list[HistoryChunk]:
     grouped: dict[tuple[datetime, datetime], list[HistoryBinding]] = {}
     for binding in bindings:
         for start, end in split_newest_first(
-            missing_by_instrument.get(binding.instrument_id, ())
+            missing_by_instrument.get(binding.instrument_id, ()),
+            max_hours=max_hours,
         ):
             grouped.setdefault((start, end), []).append(binding)
     return [

@@ -31,11 +31,14 @@ from .feed import (
 )
 
 from .engine import (
+    DEFAULT_CHART_RANGE,
     DEFAULT_VISUAL_UPDATE_MODE,
     VISUAL_UPDATE_HZ,
     CockpitEngine,
     DemoCockpitEngine,
     LiveCockpitEngine,
+    QUICK_CHART_MARKETS,
+    normalize_chart_range,
 )
 from .market_groups import load_alpha_tier_grouping
 from .offline_network import DemoLoopbackDenyProxy
@@ -281,6 +284,11 @@ def _automatic_history_eligibility(
 ) -> tuple[bool, str | None, Decimal | None]:
     if policy.get("mode") != "AUTO":
         return False, "AUTOMATIC_OFF", None
+    if (
+        str(history_status.get("range_key") or DEFAULT_CHART_RANGE).upper()
+        != DEFAULT_CHART_RANGE
+    ):
+        return False, "EXTENDED_RANGE_REQUIRES_REVIEW", None
     if policy.get("auto_blocked") is True:
         return False, str(policy.get("block_reason") or "AUTOMATIC_BLOCKED"), None
     last_attempt = _parse_utc_text(policy.get("last_auto_attempt_at"))
@@ -699,7 +707,12 @@ class CockpitController:
             if isinstance(raw_payload, Mapping):
                 payload = dict(raw_payload)
                 state_name = str(payload.get("state") or "").upper()
-                if state_name == "CHECKING" and self._history_planning_origin is None:
+                if (
+                    state_name == "CHECKING"
+                    and str(payload.get("range_key") or DEFAULT_CHART_RANGE).upper()
+                    == DEFAULT_CHART_RANGE
+                    and self._history_planning_origin is None
+                ):
                     if self._history_policy().get("mode") == "AUTO":
                         self._history_planning_origin = "AUTO"
                 self._record_history_terminal(payload)
@@ -768,6 +781,15 @@ class CockpitController:
         if accepted:
             selected = str(timeframe).strip().lower()
             self._mutate_state(lambda state: state.__setitem__("timeframe", selected))
+        return {"ok": accepted}
+
+    def select_chart_range(self, chart_range: str) -> dict[str, Any]:
+        normalized = str(chart_range).strip().upper()
+        accepted = self.engine.select_chart_range(normalized)
+        if accepted:
+            self._mutate_state(
+                lambda state: state.__setitem__("chart_range", normalized)
+            )
         return {"ok": accepted}
 
     def retry_history(self) -> dict[str, Any]:
@@ -978,6 +1000,9 @@ class CockpitApi:
     def select_timeframe(self, timeframe: str) -> dict[str, Any]:
         return self._controller.select_timeframe(timeframe)
 
+    def select_chart_range(self, chart_range: str) -> dict[str, Any]:
+        return self._controller.select_chart_range(chart_range)
+
     def retry_history(self) -> dict[str, Any]:
         return self._controller.retry_history()
 
@@ -1139,6 +1164,12 @@ def main(argv: list[str] | None = None) -> int:
     persisted = load_state(state_path)
     market = args.market or str(persisted.get("market", "ES")).strip().upper()
     timeframe = args.timeframe or str(persisted.get("timeframe", "1m")).strip().lower()
+    try:
+        chart_range = normalize_chart_range(
+            persisted.get("chart_range", DEFAULT_CHART_RANGE)
+        )
+    except ValueError:
+        chart_range = DEFAULT_CHART_RANGE
     symbols = {info.symbol for info in chart_market_universe()}
     if market not in symbols:
         market = "ES"
@@ -1147,17 +1178,30 @@ def main(argv: list[str] | None = None) -> int:
     state_lock = threading.RLock()
 
     def persist_selection(state: dict[str, Any]) -> None:
-        state.update({"market": market, "timeframe": timeframe})
+        if market not in QUICK_CHART_MARKETS:
+            chart_range_value = DEFAULT_CHART_RANGE
+        else:
+            chart_range_value = chart_range
+        state.update(
+            {
+                "market": market,
+                "timeframe": timeframe,
+                "chart_range": chart_range_value,
+            }
+        )
 
     mutate_state(state_path, state_lock, persist_selection)
 
     engine: CockpitEngine
     if args.demo:
-        engine = DemoCockpitEngine(market=market, timeframe=timeframe)
+        engine = DemoCockpitEngine(
+            market=market, timeframe=timeframe, chart_range=chart_range
+        )
     else:
         engine = LiveCockpitEngine(
             cache_path=root / CACHE_FILENAME,
             market=market,
             timeframe=timeframe,
+            chart_range=chart_range,
         )
     return run_desktop(engine=engine, state_path=state_path, demo=args.demo)

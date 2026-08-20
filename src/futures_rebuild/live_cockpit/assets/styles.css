@@ -435,6 +435,8 @@ a:focus-visible {
 .header-actions,
 .control-button,
 .timeframe-list,
+.chart-range-list,
+.quick-market-list,
 .quote-strip,
 .source-strip,
 .workspace-footer,
@@ -476,6 +478,11 @@ a:focus-visible {
   margin: 4px 0 0;
   color: var(--muted);
   font-size: 11px;
+}
+
+.quick-market-list {
+  gap: 3px;
+  margin-top: 7px;
 }
 
 .state-badge,
@@ -565,7 +572,17 @@ a:focus-visible {
   background: rgba(255, 255, 255, 0.018);
 }
 
-.timeframe-button {
+.chart-range-list {
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.018);
+}
+
+.timeframe-button,
+.chart-range-button,
+.quick-market-button {
   min-width: 34px;
   height: 30px;
   padding: 0 8px;
@@ -579,8 +596,15 @@ a:focus-visible {
   transition: background 120ms ease, color 120ms ease;
 }
 
-.timeframe-button:hover { color: var(--text); }
-.timeframe-button.active { background: var(--accent-soft); color: #b9d1ff; }
+.quick-market-button { min-width: 29px; height: 23px; padding: 0 6px; font-size: 9px; }
+.chart-range-button { min-width: 31px; }
+.timeframe-button:hover,
+.chart-range-button:hover,
+.quick-market-button:hover { color: var(--text); }
+.timeframe-button.active,
+.chart-range-button.active,
+.quick-market-button.active { background: var(--accent-soft); color: #b9d1ff; }
+.chart-range-button:disabled { cursor: not-allowed; opacity: 0.4; }
 
 .control-button {
   justify-content: center;

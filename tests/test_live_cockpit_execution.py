@@ -235,7 +235,7 @@ def test_protocol_v3_rejects_unknown_secret_malformed_and_oversized_messages() -
     with pytest.raises(ValueError, match="unsupported cockpit event"):
         event("provider_passthrough", {})
     with pytest.raises(ValueError, match="oversized"):
-        event("bootstrap", {"text": "x" * 5_000_000})
+        event("bootstrap", {"text": "x" * 17_000_000})
 
 
 def test_commands_are_enumerated_exact_and_require_a_stop() -> None:
@@ -575,6 +575,7 @@ def test_package_spec_includes_execution_configs_but_no_binding_or_secret() -> N
     spec = (ROOT / "FuturesLiveCockpit/_internal/FuturesLiveCockpit.spec").read_text(encoding="utf-8")
     package = (ROOT / "src/futures_rebuild/live_cockpit/package_candidate.py").read_text(encoding="utf-8")
     assert "prop_firm_execution_connections.json" in spec
+    assert "futures_rebuild.live_cockpit.smoke" in spec
     assert "execution/tradovate_adapter.py" in package
     assert "execution_binding.json" not in spec
     assert "api.env" not in spec

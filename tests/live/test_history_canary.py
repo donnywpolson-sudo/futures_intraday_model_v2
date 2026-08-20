@@ -212,6 +212,8 @@ def test_canary_plan_is_exact_metadata_only_and_bounded(tmp_path: Path) -> None:
         "dataset": "GLBX.MDP3",
         "schema": "ohlcv-1m",
         "market_count": EXPECTED_MARKET_COUNT,
+        "history_market_count": 5,
+        "history_markets": ["ES", "CL", "ZN", "6E", "NQ"],
         "requested_hours": 168,
         "expected_terminal_state": "CONFIRMATION_REQUIRED",
     }

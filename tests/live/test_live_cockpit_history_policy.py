@@ -412,7 +412,7 @@ def test_frontend_has_five_deterministic_simple_states_and_no_encoding_defect() 
     assert "Always ask me" in html
     assert 'id="history-cache-affected"' in html
     assert 'id="history-cache-interval"' in html
-    assert "total_markets: 41" in javascript
+    assert "total_markets: 5" in javascript
     assert "Deterministic 41-market demo" in javascript
     assert "33-market demo" not in javascript
     assert "Only one automatic repair attempt is allowed every 24 hours" in javascript

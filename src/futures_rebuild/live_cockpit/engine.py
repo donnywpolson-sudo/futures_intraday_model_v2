@@ -58,7 +58,6 @@ from .history import (
     HistoryPlan,
     group_history_chunks,
     missing_intervals,
-    promote_market,
     promote_market_first_request,
 )
 from .market_groups import load_alpha_tier_grouping
@@ -84,6 +83,15 @@ RENDER_INTERVAL_SECONDS_OVERRIDE: float | None = None
 FOCUS_SWITCH_DEBOUNCE_SECONDS = 0.15
 FOCUS_MAPPING_WAIT_SECONDS = 3.0
 DEFAULT_HISTORY_HOURS = 168
+QUICK_CHART_MARKETS = ("ES", "CL", "ZN", "6E", "NQ")
+CHART_RANGE_HOURS = {
+    "1W": DEFAULT_HISTORY_HOURS,
+    "2W": 14 * 24,
+    "1M": 30 * 24,
+    "3M": 90 * 24,
+}
+DEFAULT_CHART_RANGE = "1W"
+EXTENDED_HISTORY_CHUNK_HOURS = 14 * 24
 OVERVIEW_STALE_SECONDS = 150.0
 FOCUS_LIVE_TAIL_MAX_AGE_SECONDS = 150.0
 SYMBOL_REQUEST_TIMEOUT_SECONDS = 30
@@ -125,6 +133,8 @@ class CockpitEngine(Protocol):
     def select_market(self, market: str) -> bool: ...
 
     def select_timeframe(self, timeframe: str) -> bool: ...
+
+    def select_chart_range(self, chart_range: str) -> bool: ...
 
     def retry_history(self) -> bool: ...
 
@@ -277,6 +287,7 @@ def _history_plan_fingerprint(plan: HistoryPlan) -> str:
             "target_start": plan.target_start.isoformat(),
             "target_end": plan.target_end.isoformat(),
             "estimated_cost_usd": format(plan.estimated_cost_usd, ".12g"),
+            "range_key": plan.range_key,
             "chunks": [
                 {
                     "start": chunk.start.isoformat(),
@@ -286,6 +297,8 @@ def _history_plan_fingerprint(plan: HistoryPlan) -> str:
                             "market": binding.market,
                             "contract": binding.contract,
                             "instrument_id": binding.instrument_id,
+                            "query_symbol": binding.query_symbol,
+                            "stype_in": binding.stype_in,
                         }
                         for binding in chunk.bindings
                     ],
@@ -293,6 +306,36 @@ def _history_plan_fingerprint(plan: HistoryPlan) -> str:
                 for chunk in plan.chunks
             ],
         }
+    )
+
+
+def normalize_chart_range(value: object) -> str:
+    normalized = str(value).strip().upper()
+    if normalized not in CHART_RANGE_HOURS:
+        raise ValueError(
+            "chart range must be one of: " + ", ".join(CHART_RANGE_HOURS)
+        )
+    return normalized
+
+
+def continuous_cache_instrument_id(market: str) -> int:
+    """Return a stable SQLite-only identity that cannot collide with provider IDs."""
+
+    normalized = str(market).strip().upper()
+    try:
+        return -(QUICK_CHART_MARKETS.index(normalized) + 1)
+    except ValueError as exc:
+        raise ValueError(f"{normalized!r} is not a quick-chart market") from exc
+
+
+def continuous_history_binding(market: str) -> HistoryBinding:
+    normalized = str(market).strip().upper()
+    return HistoryBinding(
+        market=normalized,
+        contract=f"{normalized}{DEFAULT_CONTINUOUS_SUFFIX}",
+        instrument_id=continuous_cache_instrument_id(normalized),
+        query_symbol=f"{normalized}{DEFAULT_CONTINUOUS_SUFFIX}",
+        stype_in="continuous",
     )
 
 
@@ -432,6 +475,7 @@ def _bootstrap_payload(
     timeframe: str,
     mode: str,
     history_hours: int = DEFAULT_HISTORY_HOURS,
+    chart_range: str = DEFAULT_CHART_RANGE,
 ) -> dict[str, Any]:
     demo_mode = mode == "demo"
     symbols = [str(getattr(info, "symbol")) for info in markets]
@@ -451,6 +495,11 @@ def _bootstrap_payload(
         "selected_market": selected_market,
         "timeframe": timeframe,
         "timeframes": list(SUPPORTED_CHART_TIMEFRAMES),
+        "chart_range": chart_range,
+        "chart_ranges": list(CHART_RANGE_HOURS),
+        "quick_markets": [
+            market for market in QUICK_CHART_MARKETS if market in symbols
+        ],
         "display_tz": "local",
         "mode": mode,
         "observation_only": True,
@@ -463,7 +512,13 @@ def _bootstrap_payload(
             "enabled": not demo_mode,
             "cost_confirmation_required": not demo_mode,
             "history_hours": history_hours,
-            "market_count": len(markets),
+            "market_count": len(
+                [market for market in QUICK_CHART_MARKETS if market in symbols]
+            ),
+            "retained_markets": [
+                market for market in QUICK_CHART_MARKETS if market in symbols
+            ],
+            "max_range": "3M",
         },
         "market_grouping_capability": alpha_tiers.capability_payload(),
         "visual_update_capability": {
@@ -599,11 +654,22 @@ def _data_health_payload(
 class DemoCockpitEngine:
     """Network-free deterministic engine used for visual and integration checks."""
 
-    def __init__(self, *, market: str = "ES", timeframe: str = "1m") -> None:
+    def __init__(
+        self,
+        *,
+        market: str = "ES",
+        timeframe: str = "1m",
+        chart_range: str = DEFAULT_CHART_RANGE,
+    ) -> None:
         self.markets = chart_market_universe()
         symbols = {info.symbol for info in self.markets}
         self.market = market if market in symbols else "ES"
         self.timeframe = normalize_timeframe(timeframe)
+        self.chart_range = (
+            normalize_chart_range(chart_range)
+            if self.market in QUICK_CHART_MARKETS
+            else DEFAULT_CHART_RANGE
+        )
         self.generation = 1
         self._publish: Publish | None = None
         self._stop_event = threading.Event()
@@ -622,6 +688,7 @@ class DemoCockpitEngine:
                 selected_market=self.market,
                 timeframe=self.timeframe,
                 mode="demo",
+                chart_range=self.chart_range,
             ),
         )
 
@@ -664,13 +731,16 @@ class DemoCockpitEngine:
 
     def start(self, publish: Publish) -> None:
         self._publish = publish
+        quick_count = len(
+            [info for info in self.markets if info.symbol in QUICK_CHART_MARKETS]
+        )
         publish(
             event(
                 "history_cache_status",
                 {
                     "state": "COMPLETE",
-                    "ready_markets": len(self.markets),
-                    "total_markets": len(self.markets),
+                    "ready_markets": quick_count,
+                    "total_markets": quick_count,
                     "queued_markets": 0,
                     "active_market": None,
                     "estimated_cost_usd": None,
@@ -786,7 +856,7 @@ class DemoCockpitEngine:
                     bars=bars,
                     state=health_state,
                     history_state=history_state,
-                    requested_hours=72.0,
+                    requested_hours=float(CHART_RANGE_HOURS[self.chart_range]),
                     continuity_state=continuity_state,
                     unexpected_gap_count=unexpected_gap_count,
                     largest_gap_seconds=largest_gap_seconds,
@@ -864,6 +934,8 @@ class DemoCockpitEngine:
             if market == self.market:
                 return True
             self.market = market
+            if market not in QUICK_CHART_MARKETS:
+                self.chart_range = DEFAULT_CHART_RANGE
             self.generation += 1
             self._publish_focus_snapshot(source="demo")
         return True
@@ -878,6 +950,24 @@ class DemoCockpitEngine:
             self.timeframe = normalized
             self.generation += 1
             self._publish_focus_snapshot(source="timeframe-cache")
+        return True
+
+    def select_chart_range(self, chart_range: str) -> bool:
+        try:
+            normalized = normalize_chart_range(chart_range)
+        except ValueError:
+            return False
+        with self._lock:
+            if (
+                self.market not in QUICK_CHART_MARKETS
+                and normalized != DEFAULT_CHART_RANGE
+            ):
+                return False
+            if normalized == self.chart_range:
+                return True
+            self.chart_range = normalized
+            self.generation += 1
+            self._publish_focus_snapshot(source="range-cache")
         return True
 
     def retry_history(self) -> bool:
@@ -916,6 +1006,7 @@ class LiveCockpitEngine:
         cache_path: Path | None,
         market: str = "ES",
         timeframe: str = "1m",
+        chart_range: str = DEFAULT_CHART_RANGE,
         env: Mapping[str, str] | None = None,
         db_module: ModuleType | None = None,
         history_hours: int = DEFAULT_HISTORY_HOURS,
@@ -931,8 +1022,18 @@ class LiveCockpitEngine:
         ):
             raise ValueError("markets must be a non-empty unique universe")
         self._symbols = {info.symbol for info in self.markets}
+        self._history_symbols = tuple(
+            market for market in QUICK_CHART_MARKETS if market in self._symbols
+        )
+        if not self._history_symbols:
+            raise ValueError("markets must include at least one quick-chart market")
         self.market = market if market in self._symbols else "ES"
         self.timeframe = normalize_timeframe(timeframe)
+        self.chart_range = (
+            normalize_chart_range(chart_range)
+            if self.market in self._history_symbols
+            else DEFAULT_CHART_RANGE
+        )
         # Preserve None so the shared resolver can apply its normal runtime
         # precedence, including repo/frozen api.env files. An explicit mapping
         # remains useful for isolated tests and callers that intentionally want
@@ -969,6 +1070,8 @@ class LiveCockpitEngine:
         self._history_lock = threading.RLock()
         self._history_plan: HistoryPlan | None = None
         self._history_reestimate_requested = False
+        self._history_requested_range = DEFAULT_CHART_RANGE
+        self._history_pending_range: str | None = None
         self._history_active_chunk: HistoryChunk | None = None
         self._history_active_chunk_number: int | None = None
         self._history_cancel_after_chunk = False
@@ -1032,6 +1135,7 @@ class LiveCockpitEngine:
                 timeframe=self.timeframe,
                 mode="live",
                 history_hours=self.history_hours,
+                chart_range=self.chart_range,
             ),
         )
 
@@ -1121,7 +1225,7 @@ class LiveCockpitEngine:
             bars=aggregated,
             state=health_state,
             history_state=resolved_history_state,
-            requested_hours=float(self.history_hours),
+            requested_hours=float(self._range_hours()),
             continuity_state="NOT_EVALUATED",
             unexpected_gap_count=None,
             largest_gap_seconds=None,
@@ -1413,9 +1517,12 @@ class LiveCockpitEngine:
         *,
         now: datetime | None = None,
         available_end: datetime | None = None,
+        hours: int | None = None,
     ) -> tuple[datetime, datetime]:
         completed_minute = floor_timeframe(now or datetime.now(timezone.utc), 60)
-        requested_start = completed_minute - timedelta(hours=self.history_hours)
+        requested_start = completed_minute - timedelta(
+            hours=self.history_hours if hours is None else hours
+        )
         resolved_available_end = (
             available_end
             if available_end is not None
@@ -1427,6 +1534,81 @@ class LiveCockpitEngine:
             else completed_minute
         )
         return requested_start, historical_end
+
+    def _range_hours(self, range_key: str | None = None) -> int:
+        resolved = range_key or self.chart_range
+        return (
+            self.history_hours
+            if resolved == DEFAULT_CHART_RANGE
+            else CHART_RANGE_HOURS[resolved]
+        )
+
+    def _history_bindings_for_range(
+        self,
+        *,
+        range_key: str,
+        target_start: datetime,
+        target_end: datetime,
+    ) -> list[HistoryBinding]:
+        if range_key != DEFAULT_CHART_RANGE:
+            return [
+                continuous_history_binding(market)
+                for market in self._history_symbols
+            ]
+        return self._resolve_history_bindings(
+            target_start=target_start,
+            target_end=target_end,
+        )
+
+    def _cached_market_bars(
+        self,
+        *,
+        market: str,
+        binding: HistoryBinding,
+        range_key: str,
+        now: datetime,
+        end: datetime,
+    ) -> list[dict[str, Any]]:
+        start = now - timedelta(hours=self._range_hours(range_key))
+        cached: list[dict[str, Any]] = []
+        if self.cache is not None and range_key != DEFAULT_CHART_RANGE:
+            extended_binding = continuous_history_binding(market)
+            cached.extend(
+                self.cache.get_bars(
+                    dataset=DEFAULT_DATASET,
+                    instrument_id=extended_binding.instrument_id,
+                    start=start,
+                    end=end,
+                )
+            )
+            with self._metrics_lock:
+                self._cache_reads += 1
+        if self.cache is not None:
+            cached.extend(
+                self.cache.get_bars(
+                    dataset=DEFAULT_DATASET,
+                    instrument_id=binding.instrument_id,
+                    start=start,
+                    end=end,
+                )
+            )
+            with self._metrics_lock:
+                self._cache_reads += 1
+        by_time = {normalize_ts_event(bar["time"]): dict(bar) for bar in cached}
+        overview_bar = self._overview_latest_bars.get(market)
+        if overview_bar is not None and overview_bar[0] == binding.instrument_id:
+            overview_candle = overview_bar[1]
+            overview_time = normalize_ts_event(overview_candle["time"])
+            if overview_time <= now:
+                by_time[overview_time] = dict(overview_candle)
+        return [by_time[key] for key in sorted(by_time)]
+
+    def _coverage_binding(self, binding: HistoryBinding, range_key: str) -> HistoryBinding:
+        return (
+            continuous_history_binding(binding.market)
+            if range_key != DEFAULT_CHART_RANGE
+            else binding
+        )
 
     def _lookup_history_available_end(
         self,
@@ -1550,7 +1732,7 @@ class LiveCockpitEngine:
         payload: dict[str, Any] = {
             "state": state,
             "ready_markets": ready_markets,
-            "total_markets": len(self.markets),
+            "total_markets": len(self._history_symbols),
             "queued_markets": queued_markets,
             "affected_markets": affected_markets,
             "missing_start": (
@@ -1574,6 +1756,11 @@ class LiveCockpitEngine:
             ),
             "paused": paused,
             "message": message,
+            "range_key": (
+                current_plan.range_key
+                if current_plan is not None
+                else self._history_requested_range
+            ),
         }
         if failure_category is not None:
             payload["failure_category"] = failure_category
@@ -1634,6 +1821,11 @@ class LiveCockpitEngine:
     ) -> None:
         with self._lock:
             instrument_id = self._resolved_instrument_id
+            if (
+                self.chart_range != DEFAULT_CHART_RANGE
+                and self.market in self._history_symbols
+            ):
+                instrument_id = continuous_cache_instrument_id(self.market)
             generation = self.generation
             if (
                 instrument_id is not None
@@ -1681,7 +1873,12 @@ class LiveCockpitEngine:
     ) -> list[HistoryBinding]:
         with self._history_lock:
             known = dict(self._market_bindings)
-        missing = sorted(self._symbols - set(known))
+        known = {
+            market: binding
+            for market, binding in known.items()
+            if market in self._history_symbols
+        }
+        missing = sorted(set(self._history_symbols) - set(known))
         if not missing or self._historical is None:
             return sorted(known.values(), key=lambda item: item.market)
         symbology = getattr(self._historical, "symbology", None)
@@ -1747,14 +1944,17 @@ class LiveCockpitEngine:
             raise RuntimeError("historical cost estimator is unavailable")
         total = 0.0
         for chunk in chunks:
+            stypes = {binding.stype_in for binding in chunk.bindings}
+            if len(stypes) != 1:
+                raise ValueError("history chunk mixes provider symbol types")
             with self._metrics_lock:
                 self._history_cost_estimate_requests += 1
             total += float(
                 get_cost(
                     dataset=DEFAULT_DATASET,
                     schema=DEFAULT_HISTORICAL_SCHEMA,
-                    symbols=[binding.instrument_id for binding in chunk.bindings],
-                    stype_in=DEFAULT_STYPE_IN,
+                    symbols=[binding.request_symbol for binding in chunk.bindings],
+                    stype_in=next(iter(stypes)),
                     start=chunk.start,
                     end=chunk.end,
                 )
@@ -1763,7 +1963,7 @@ class LiveCockpitEngine:
             raise ValueError("invalid historical cost estimate")
         return total
 
-    def _prepare_history_plan(self) -> None:
+    def _prepare_history_plan(self, range_key: str | None = None) -> None:
         if (
             self._stop_event.is_set()
             or not self.history_enabled
@@ -1771,11 +1971,20 @@ class LiveCockpitEngine:
             or self._historical is None
         ):
             return
-        self._emit_history_cache_status("CHECKING", "Checking one-week cache coverage")
+        resolved_range = normalize_chart_range(
+            range_key or self._history_requested_range
+        )
+        self._history_requested_range = resolved_range
+        range_label = resolved_range.lower()
+        self._emit_history_cache_status(
+            "CHECKING", f"Checking {range_label} quick-market cache coverage"
+        )
         with self._lock:
             self._history_complete_generation = None
         completed_minute = floor_timeframe(datetime.now(timezone.utc), 60)
-        requested_start = completed_minute - timedelta(hours=self.history_hours)
+        requested_start = completed_minute - timedelta(
+            hours=self._range_hours(resolved_range)
+        )
         range_diagnostic = _history_diagnostic(
             phase="DATASET_RANGE",
             requested_start=requested_start,
@@ -1814,6 +2023,7 @@ class LiveCockpitEngine:
         target_start, target_end = self._history_target(
             now=completed_minute,
             available_end=available_end,
+            hours=self._range_hours(resolved_range),
         )
         binding_diagnostic = _history_diagnostic(
             phase="BINDING_RESOLUTION",
@@ -1821,7 +2031,8 @@ class LiveCockpitEngine:
             requested_end=target_end,
         )
         try:
-            bindings = self._resolve_history_bindings(
+            bindings = self._history_bindings_for_range(
+                range_key=resolved_range,
                 target_start=target_start,
                 target_end=target_end,
             )
@@ -1879,14 +2090,23 @@ class LiveCockpitEngine:
         with self._metrics_lock:
             self._history_failure = None
         self._publish_current_focus_health(evaluated_at=completed_minute)
-        chunks = group_history_chunks(bindings, missing_by_instrument)
+        chunks = group_history_chunks(
+            bindings,
+            missing_by_instrument,
+            max_hours=(
+                EXTENDED_HISTORY_CHUNK_HOURS
+                if resolved_range != DEFAULT_CHART_RANGE
+                else 24
+            ),
+        )
         if not chunks:
             with self._history_lock:
                 self._history_plan = None
                 self._history_retry_active = False
-            if ready == len(self.markets):
+            if ready == len(self._history_symbols):
                 self._emit_history_cache_status(
-                    "COMPLETE", "One-week history is cached for all markets"
+                    "COMPLETE",
+                    f"{resolved_range} history is cached for all quick markets",
                 )
             else:
                 self._record_history_failure(
@@ -1907,7 +2127,8 @@ class LiveCockpitEngine:
         )
         with self._lock:
             selected_market = self.market
-        chunks = promote_market_first_request(chunks, selected_market)
+        if selected_market in self._history_symbols:
+            chunks = promote_market_first_request(chunks, selected_market)
         if len(chunks) > MAX_HISTORY_COST_ESTIMATE_REQUESTS:
             with self._history_lock:
                 self._history_plan = None
@@ -1951,6 +2172,7 @@ class LiveCockpitEngine:
             target_end=target_end,
             estimated_cost_usd=estimated_cost,
             chunks=list(chunks),
+            range_key=resolved_range,
         )
         plan.fingerprint = _history_plan_fingerprint(plan)
         with self._history_lock:
@@ -1961,7 +2183,10 @@ class LiveCockpitEngine:
             self._history_retry_active = False
         self._emit_history_cache_status(
             "CONFIRMATION_REQUIRED",
-            "Confirm the estimated cost to update missing one-week history.",
+            (
+                f"Confirm the estimated cost to update missing {resolved_range} "
+                "quick-market history."
+            ),
             plan=plan,
         )
 
@@ -1994,27 +2219,86 @@ class LiveCockpitEngine:
             grouped[instrument_id].append(dict(ohlcv_record_to_candle(record)))
         return grouped
 
+    def _group_continuous_history_store(
+        self,
+        store: object,
+        *,
+        bindings: Sequence[HistoryBinding],
+    ) -> dict[int, list[dict[str, Any]]]:
+        grouped = {binding.instrument_id: [] for binding in bindings}
+        cache_id_by_market = {
+            binding.market: binding.instrument_id for binding in bindings
+        }
+        provider_to_cache: dict[int, int] = {}
+        try:
+            records = iter(store)
+        except TypeError:
+            if len(bindings) != 1:
+                raise ValueError(
+                    "multi-market continuous history response is not iterable"
+                )
+            grouped[bindings[0].instrument_id] = [
+                dict(bar) for bar in historical_store_to_candles(store)
+            ]
+            return grouped
+        for record in records:
+            mapped_market = self._mapping_symbol(record)
+            instrument_value = _record_field(record, "instrument_id")
+            if mapped_market in cache_id_by_market and instrument_value is not None:
+                try:
+                    provider_to_cache[int(instrument_value)] = cache_id_by_market[
+                        mapped_market
+                    ]
+                except (TypeError, ValueError):
+                    pass
+                continue
+            if not all(
+                hasattr(record, field)
+                for field in ("open", "high", "low", "close", "volume")
+            ):
+                continue
+            cache_id: int | None = None
+            if instrument_value is not None:
+                try:
+                    cache_id = provider_to_cache.get(int(instrument_value))
+                except (TypeError, ValueError):
+                    cache_id = None
+            if cache_id is None and len(bindings) == 1:
+                cache_id = bindings[0].instrument_id
+            if cache_id is None:
+                raise ValueError(
+                    "continuous history contained an unmapped multi-market record"
+                )
+            grouped[cache_id].append(dict(ohlcv_record_to_candle(record)))
+        return grouped
+
     def _fetch_history_chunk(
         self, chunk: HistoryChunk
     ) -> tuple[dict[int, list[dict[str, Any]]], datetime]:
         if self._historical is None:
             raise RuntimeError("historical client is unavailable")
         instrument_ids = [binding.instrument_id for binding in chunk.bindings]
+        stypes = {binding.stype_in for binding in chunk.bindings}
+        if len(stypes) != 1:
+            raise ValueError("history chunk mixes provider symbol types")
+        stype_in = next(iter(stypes))
         request: dict[str, Any] = {
             "dataset": DEFAULT_DATASET,
             "schema": DEFAULT_HISTORICAL_SCHEMA,
-            "symbols": instrument_ids,
-            "stype_in": DEFAULT_STYPE_IN,
+            "symbols": [binding.request_symbol for binding in chunk.bindings],
+            "stype_in": stype_in,
             "start": chunk.start,
             "end": chunk.end,
         }
         with self._metrics_lock:
             self._history_requests += 1
         store = self._historical.timeseries.get_range(**request)
-        return (
-            self._group_history_store(store, instrument_ids=instrument_ids),
-            chunk.end,
+        grouped = (
+            self._group_continuous_history_store(store, bindings=chunk.bindings)
+            if stype_in == "continuous"
+            else self._group_history_store(store, instrument_ids=instrument_ids)
         )
+        return grouped, chunk.end
 
     @staticmethod
     def _mapping_symbol(record: object) -> str | None:
@@ -2092,7 +2376,7 @@ class LiveCockpitEngine:
                         int(instrument_id_value),
                         candle_value,
                     )
-                    if self.cache is not None:
+                    if self.cache is not None and market in self._history_symbols:
                         pending = self._overview_pending_cache.get(int(instrument_id_value))
                         if pending is None or pending[1] != raw_symbol:
                             self._overview_pending_cache[int(instrument_id_value)] = (
@@ -2193,33 +2477,27 @@ class LiveCockpitEngine:
         generation: int,
     ) -> bool:
         now = datetime.now(timezone.utc)
-        lookback_start = now - timedelta(hours=self.history_hours)
         completed_end = floor_timeframe(now, 60)
-        cached: list[dict[str, Any]] = []
-        if self.cache is not None:
-            cached = self.cache.get_bars(
-                dataset=DEFAULT_DATASET,
-                instrument_id=binding.instrument_id,
-                start=lookback_start,
-                end=completed_end,
-            )
-            with self._metrics_lock:
-                self._cache_reads += 1
-        bars_by_time = {normalize_ts_event(bar["time"]): dict(bar) for bar in cached}
-        overview_bar = self._overview_latest_bars.get(binding.market)
-        if overview_bar is not None and overview_bar[0] == binding.instrument_id:
-            overview_candle = overview_bar[1]
-            overview_time = normalize_ts_event(overview_candle["time"])
-            if overview_time <= now:
-                bars_by_time[overview_time] = dict(overview_candle)
-        if not bars_by_time:
+        with self._lock:
+            range_key = self.chart_range
+        visible_bars = self._cached_market_bars(
+            market=binding.market,
+            binding=binding,
+            range_key=range_key,
+            now=now,
+            end=completed_end,
+        )
+        if not visible_bars:
             return False
-        visible_bars = [bars_by_time[key] for key in sorted(bars_by_time)]
-        target_start, target_end = self._history_target(now=now)
+        target_start, target_end = self._history_target(
+            now=now,
+            hours=self._range_hours(range_key),
+        )
+        coverage_binding = self._coverage_binding(binding, range_key)
         availability_known = self._history_available_end is not None
         history_missing = (
             self._missing_history(
-                binding=binding,
+                binding=coverage_binding,
                 start=target_start,
                 end=target_end,
             )
@@ -2263,6 +2541,8 @@ class LiveCockpitEngine:
                 if self._resolved_instrument_id is not None:
                     return True
             self.market = normalized
+            if normalized not in self._history_symbols:
+                self.chart_range = DEFAULT_CHART_RANGE
             self.generation += 1
             generation = self.generation
             self._contract = normalized
@@ -2282,16 +2562,6 @@ class LiveCockpitEngine:
         )
         with self._history_lock:
             known_binding = self._market_bindings.get(normalized)
-            if self._history_plan is not None:
-                if self._history_plan.confirmed:
-                    self._history_plan.chunks = promote_market(
-                        self._history_plan.chunks, normalized
-                    )
-                else:
-                    self._history_plan = None
-                    self._history_reestimate_requested = True
-                    self._history_retry_active = True
-                self._history_wakeup.set()
         if known_binding is not None and self._publish_cached_selection(
             binding=known_binding,
             generation=generation,
@@ -2333,6 +2603,52 @@ class LiveCockpitEngine:
         )
         return True
 
+    def select_chart_range(self, chart_range: str) -> bool:
+        try:
+            normalized = normalize_chart_range(chart_range)
+        except ValueError:
+            return False
+        with self._lock:
+            market = self.market
+            if (
+                market not in self._history_symbols
+                and normalized != DEFAULT_CHART_RANGE
+            ):
+                return False
+            if normalized == self.chart_range:
+                return True
+            self.chart_range = normalized
+            generation = self.generation
+            self._history_complete_generation = None
+        with self._history_lock:
+            binding = self._market_bindings.get(market)
+            active_plan = self._history_plan
+            active_or_confirmed = self._history_active_chunk is not None or (
+                active_plan is not None and active_plan.confirmed
+            )
+            if active_or_confirmed:
+                self._history_pending_range = normalized
+            else:
+                self._history_plan = None
+                self._history_requested_range = normalized
+                self._history_reestimate_requested = True
+                self._history_retry_active = True
+        if binding is not None:
+            self._publish_cached_selection(binding=binding, generation=generation)
+        self._ensure_history_worker()
+        if active_or_confirmed and active_plan is not None:
+            self._emit_history_cache_status(
+                "PAUSED" if active_plan.paused else "WARMING",
+                f"Finishing the current update; {normalized} coverage is next",
+                plan=active_plan,
+            )
+        else:
+            self._emit_history_cache_status(
+                "CHECKING", f"Checking {normalized.lower()} quick-market cache coverage"
+            )
+        self._history_wakeup.set()
+        return True
+
     def _ensure_history_worker(self) -> None:
         with self._lock:
             if self._stop_event.is_set():
@@ -2353,7 +2669,7 @@ class LiveCockpitEngine:
             return
         with self._history_lock:
             self._history_reestimate_requested = False
-        self._prepare_history_plan()
+        self._prepare_history_plan(self._history_requested_range)
         while not self._stop_event.is_set():
             with self._history_lock:
                 reestimate = self._history_reestimate_requested
@@ -2372,7 +2688,7 @@ class LiveCockpitEngine:
                     self._history_active_chunk = chunk
                     self._history_active_chunk_number = self._history_plan_chunk_number
             if reestimate:
-                self._prepare_history_plan()
+                self._prepare_history_plan(self._history_requested_range)
                 continue
             if chunk is None or plan is None:
                 self._history_wakeup.wait(0.2)
@@ -2382,7 +2698,10 @@ class LiveCockpitEngine:
             chunk_number = self._history_active_chunk_number
             self._emit_history_cache_status(
                 "WARMING",
-                "Updating missing one-week history in the background",
+                (
+                    f"Updating missing {plan.range_key} quick-market history "
+                    "in the background"
+                ),
                 plan=plan,
                 active_market=active_market,
             )
@@ -2414,12 +2733,13 @@ class LiveCockpitEngine:
                         start=chunk.start,
                         end=covered_end,
                     )
-                self._refresh_selected_from_history_chunk(
-                    chunk=chunk,
-                    grouped=grouped,
-                    covered_end=covered_end,
-                    plan=plan,
-                )
+                if plan.range_key == DEFAULT_CHART_RANGE:
+                    self._refresh_selected_from_history_chunk(
+                        chunk=chunk,
+                        grouped=grouped,
+                        covered_end=covered_end,
+                        plan=plan,
+                    )
             except Exception as exc:
                 details = _history_failure_details(exc)
                 failure_category = str(details["failure_category"])
@@ -2461,7 +2781,18 @@ class LiveCockpitEngine:
                 if canceled:
                     plan.chunks.clear()
                     self._history_cancel_after_chunk = False
-                bindings = list(self._market_bindings.values())
+                bindings = (
+                    [
+                        continuous_history_binding(market)
+                        for market in self._history_symbols
+                    ]
+                    if plan.range_key != DEFAULT_CHART_RANGE
+                    else [
+                        self._market_bindings[market]
+                        for market in self._history_symbols
+                        if market in self._market_bindings
+                    ]
+                )
             missing_by_instrument = {
                 binding.instrument_id: self._missing_history(
                     binding=binding,
@@ -2488,24 +2819,53 @@ class LiveCockpitEngine:
                     (
                         "History cache update paused"
                         if plan.paused
-                        else "Updating missing one-week history in the background"
+                        else (
+                            f"Updating missing {plan.range_key} quick-market "
+                            "history in the background"
+                        )
                     ),
                     plan=plan,
                 )
-            elif ready == len(self.markets):
+            elif ready == len(self._history_symbols):
                 self._emit_history_cache_status(
-                    "COMPLETE", "One-week history is cached for all markets"
+                    "COMPLETE",
+                    f"{plan.range_key} history is cached for all quick markets",
                 )
             else:
                 self._emit_history_cache_status(
                     "PARTIAL",
                     (
-                        "Automatic history repair stopped after the current request; review before continuing."
+                        "Automatic history repair stopped after the current "
+                        "request; review before continuing."
                         if canceled
-                        else "Some market history remains incomplete; refresh the estimate to retry."
+                        else (
+                            "Some market history remains incomplete; refresh "
+                            "the estimate to retry."
+                        )
                     ),
                 )
+            if not remaining and plan.range_key != DEFAULT_CHART_RANGE:
+                with self._lock:
+                    selected_market = self.market
+                    generation = self.generation
+                    selected_range = self.chart_range
+                with self._history_lock:
+                    selected_binding = self._market_bindings.get(selected_market)
+                if selected_range == plan.range_key and selected_binding is not None:
+                    self._publish_cached_selection(
+                        binding=selected_binding,
+                        generation=generation,
+                    )
             self._publish_current_focus_health()
+            with self._history_lock:
+                pending_range = self._history_pending_range
+                if not remaining and pending_range is not None:
+                    self._history_pending_range = None
+                    self._history_requested_range = pending_range
+                    self._history_reestimate_requested = True
+                    self._history_retry_active = True
+            if pending_range is not None and not remaining:
+                self._history_wakeup.set()
 
     def retry_history(self) -> bool:
         return self.retry_history_cache_estimate()
@@ -2513,6 +2873,8 @@ class LiveCockpitEngine:
     def retry_history_cache_estimate(self) -> bool:
         if self._stop_event.is_set() or not self.history_enabled or self.cache is None:
             return False
+        with self._lock:
+            selected_range = self.chart_range
         with self._history_lock:
             if self._history_active_chunk is not None or self._history_retry_active:
                 return False
@@ -2520,6 +2882,7 @@ class LiveCockpitEngine:
                 return False
             self._history_plan = None
             self._history_retry_active = True
+            self._history_requested_range = selected_range
             self._history_reestimate_requested = True
         self._ensure_history_worker()
         self._emit_history_cache_status("CHECKING", "Refreshing history cost estimate")
@@ -2528,8 +2891,6 @@ class LiveCockpitEngine:
 
     def confirm_history_cache(self, plan_id: str) -> bool:
         expired = False
-        with self._lock:
-            selected_market = self.market
         with self._history_lock:
             plan = self._history_plan
             if (
@@ -2543,9 +2904,6 @@ class LiveCockpitEngine:
                 self._history_plan = None
                 expired = True
             else:
-                plan.chunks = promote_market_first_request(
-                    plan.chunks, selected_market
-                )
                 if _history_plan_fingerprint(plan) != plan.fingerprint:
                     self._history_plan = None
                     return False
@@ -2571,7 +2929,10 @@ class LiveCockpitEngine:
             return False
         self._emit_history_cache_status(
             "WARMING",
-            "Updating missing one-week history in the background",
+            (
+                f"Updating missing {plan.range_key} quick-market history "
+                "in the background"
+            ),
             plan=plan,
         )
         self._history_wakeup.set()
@@ -2714,7 +3075,9 @@ class LiveCockpitEngine:
         if self._historical is None or self.db_module is None or self._api_key is None:
             return
         now = datetime.now(timezone.utc)
-        lookback_start = now - timedelta(hours=self.history_hours)
+        with self._lock:
+            range_key = self.chart_range
+        lookback_start = now - timedelta(hours=self._range_hours(range_key))
         end = floor_timeframe(now, 60)
         known_binding = self._wait_for_live_binding(market, generation)
         resolved = (
@@ -2786,28 +3149,34 @@ class LiveCockpitEngine:
             instrument_id=resolved.instrument_id,
         )
         self._remember_binding(binding)
-        cached: list[dict[str, Any]] = []
+        actual_cached: list[dict[str, Any]] = []
         if self.cache is not None:
-            cached = self.cache.get_bars(
+            actual_cached = self.cache.get_bars(
                 dataset=DEFAULT_DATASET,
                 instrument_id=resolved.instrument_id,
-                start=lookback_start,
+                start=max(
+                    lookback_start,
+                    now - timedelta(hours=LIVE_REPLAY_MAX_HOURS),
+                ),
                 end=end,
             )
             with self._metrics_lock:
                 self._cache_reads += 1
-        bars_by_time = {normalize_ts_event(bar["time"]): dict(bar) for bar in cached}
-        overview_bar = self._overview_latest_bars.get(market)
-        if overview_bar is not None and overview_bar[0] == resolved.instrument_id:
-            overview_candle = overview_bar[1]
-            overview_time = normalize_ts_event(overview_candle["time"])
-            if overview_time <= now:
-                bars_by_time[overview_time] = dict(overview_candle)
+        visible_bars = self._cached_market_bars(
+            market=market,
+            binding=binding,
+            range_key=range_key,
+            now=now,
+            end=end,
+        )
+        bars_by_time = {
+            normalize_ts_event(bar["time"]): dict(bar) for bar in visible_bars
+        }
         with self._lock:
             replay_lower_bound = self._replay_watermarks.get(resolved.instrument_id)
         replay_start = (
             _recent_gap_replay_start(
-                cached,
+                actual_cached,
                 now=now,
                 lower_bound=replay_lower_bound,
             )
@@ -2819,11 +3188,15 @@ class LiveCockpitEngine:
             self._contract = contract
             self._resolved_instrument_id = resolved.instrument_id
             timeframe = self.timeframe
-        target_start, target_end = self._history_target(now=now)
+        target_start, target_end = self._history_target(
+            now=now,
+            hours=self._range_hours(range_key),
+        )
+        coverage_binding = self._coverage_binding(binding, range_key)
         availability_known = self._history_available_end is not None
         history_missing = (
             self._missing_history(
-                binding=binding,
+                binding=coverage_binding,
                 start=target_start,
                 end=target_end,
             )
@@ -2834,7 +3207,7 @@ class LiveCockpitEngine:
             "COMPLETE"
             if availability_known and not history_missing
             else "PARTIAL"
-            if availability_known and cached
+            if availability_known and visible_bars
             else "LOADING"
         )
         if history_state == "COMPLETE":

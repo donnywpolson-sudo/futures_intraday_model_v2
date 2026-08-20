@@ -189,12 +189,11 @@ repository.
 ```
 
 The packaged application is published directly to `FuturesLiveCockpit/`. Its
-only top-level items are `FuturesLiveCockpit.exe` and `_internal/`.
-This directory is installation input, not the authenticated launch target, and
-intentionally contains no credential locator. After an approved preparation
-and activation, start normal authenticated use through the Desktop or Start
-Menu shortcut; the installed version contains only a non-secret locator back
-to the ignored v2-local `api.env`.
+only top-level items are `FuturesLiveCockpit.exe` and `_internal/`, so the
+package remains credential-free. When launched from this canonical checkout,
+the executable resolves the exact parent repository `api.env` without copying
+it. Prepared Local AppData versions continue to use only a non-secret locator
+back to the same ignored v2-local `api.env`.
 
 The cockpit provides search/grouping, live charts, history controls, bounded
 cache, persisted preferences, explicit provider errors, prediction abstention,
@@ -207,6 +206,15 @@ then reports submission, fills, protection, rejection/cancellation, exit, and
 reconciliation. Every restart makes prior manual state stale. Provider API
 readiness, automatic authorization, production readiness, and account binding
 remain false/unset. The deterministic local simulator is synthetic-only.
+
+The 41-market overview remains live, while disk history is intentionally
+limited to the five quick-chart markets `ES`, `CL`, `ZN`, `6E`, and `NQ`.
+Those markets have one-click switching on every chart interval and support
+`1W`, `2W`, `1M`, and `3M` ranges. Current-contract rows retain eight days;
+continuous quick-chart rows retain at most 95 days, and the shared SQLite cache
+is capped at 1,000,000 bars. Extended-range downloads always stop at the
+existing provider estimate for manual review; the automatic-small-repair policy
+applies only to the one-week quick-market cache.
 
 **FuturesLiveCockpit does not transmit orders for MFF simulated accounts.**
 

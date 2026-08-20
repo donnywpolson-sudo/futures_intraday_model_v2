@@ -9,9 +9,9 @@ from typing import Any, Mapping
 
 
 PROTOCOL_VERSION = 3
-# One-week minute snapshots are intentionally large; execution/control payloads
-# remain far smaller and entity collections have their own strict cap.
-MAX_MESSAGE_BYTES = 4_194_304
+# Three-month minute snapshots are intentionally large; execution/control
+# payloads remain far smaller and entity collections have their own strict cap.
+MAX_MESSAGE_BYTES = 16_777_216
 MAX_EXECUTION_ENTITIES = 500
 SECRET_FIELD_SUFFIXES = frozenset(
     {"token", "password", "secret", "authorization", "apikey"}
@@ -137,6 +137,7 @@ HISTORY_CACHE_FAILURE_CATEGORIES = frozenset(
         "CACHE_UNAVAILABLE",
     }
 )
+HISTORY_RANGE_KEYS = frozenset({"1W", "2W", "1M", "3M"})
 DATA_HEALTH_REASON_CODES = frozenset(
     {
         "HISTORY_LOADING",
@@ -734,6 +735,9 @@ def validate_history_cache_payload(payload: Mapping[str, Any]) -> None:
     state = payload.get("state")
     if state not in HISTORY_CACHE_STATES:
         raise ValueError("unsupported history-cache state")
+    range_key = payload.get("range_key")
+    if range_key is not None and range_key not in HISTORY_RANGE_KEYS:
+        raise ValueError("unsupported history-cache range")
     ready_markets = _nonnegative_int(payload.get("ready_markets"), name="ready_markets")
     total_markets = _nonnegative_int(payload.get("total_markets"), name="total_markets")
     queued_markets = _nonnegative_int(payload.get("queued_markets"), name="queued_markets")

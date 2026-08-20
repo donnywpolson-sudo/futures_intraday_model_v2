@@ -58,10 +58,15 @@
                 <span id="focus-state" class="state-badge waiting">WAITING</span>
               </div>
               <p id="instrument-meta">Continuous front contract · Computer local time</p>
+              <div id="quick-market-list" class="quick-market-list" aria-label="Quick markets"></div>
             </div>
           </section>
 
           <section class="header-actions">
+            <div class="interval-control">
+              <span class="control-label">Range</span>
+              <div id="chart-range-list" class="chart-range-list" aria-label="Chart range"></div>
+            </div>
             <div class="interval-control">
               <span class="control-label">Interval</span>
               <div id="timeframe-list" class="timeframe-list" aria-label="Chart interval"></div>
@@ -211,16 +216,16 @@
               <button id="history-cache-toggle" class="history-cache-toggle" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="history-cache-popover">
                 <span id="history-cache-dot" class="status-dot waiting"></span>
                 <span>History cache</span>
-                <strong id="history-cache-count">0/41</strong>
+                <strong id="history-cache-count">0/5</strong>
               </button>
               <section id="history-cache-popover" class="history-cache-popover" role="dialog" aria-label="History cache update" hidden>
                 <header>
-                  <div><small>ONE-WEEK DISK CACHE</small><strong id="history-cache-title">Checking coverage</strong></div>
+                  <div><small>FIVE-MARKET DISK CACHE</small><strong id="history-cache-title">Checking coverage</strong></div>
                   <button id="history-cache-close" type="button" aria-label="Close history cache details">&times;</button>
                 </header>
                 <p id="history-cache-message">The chart remains usable while coverage is checked.</p>
                 <dl>
-                  <div><dt>Full week ready</dt><dd id="history-cache-ready">0 of 41</dd></div>
+                  <div><dt>Selected range ready</dt><dd id="history-cache-ready">0 of 5</dd></div>
                   <div><dt>Queued</dt><dd id="history-cache-queued">0 markets</dd></div>
                   <div><dt>Affected</dt><dd id="history-cache-affected">&mdash;</dd></div>
                   <div><dt>Missing interval</dt><dd id="history-cache-interval">&mdash;</dd></div>
@@ -238,7 +243,7 @@
                   <button id="history-policy-auto" type="button">Automatic small repairs</button>
                   <button id="history-policy-manual" type="button">Always ask</button>
                 </div>
-                <small>Automatic repairs run at most once per 24 hours when the provider estimate is $0.05 or less. Larger or failed updates require review.</small>
+                <small>Automatic repairs apply only to 1W and run at most once per 24 hours when the provider estimate is $0.05 or less. The 2W, 1M, and 3M ranges always stop for review.</small>
               </section>
             </div>
             <span id="observation-footer-pill" class="observation-pill">OBSERVATION ONLY &middot; NO ORDERS</span>

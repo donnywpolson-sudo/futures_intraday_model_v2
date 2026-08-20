@@ -11,6 +11,8 @@
     "4h": 14400,
     "1d": 86400,
   };
+  const DEFAULT_QUICK_MARKETS = ["ES", "CL", "ZN", "6E", "NQ"];
+  const DEFAULT_CHART_RANGES = ["1W", "2W", "1M", "3M"];
   const FAMILY_ORDER = [
     "Equity Index",
     "Energy",
@@ -22,9 +24,10 @@
     "Other",
   ];
   const ALPHA_TIER_LABELS = {
-    tier_1_core: "Tier 1 · Core",
-    tier_2_additions: "Tier 2 · Additions",
-    tier_3_additions: "Tier 3 · Additions",
+    tier_1_core: "Tier 1 · Core confirmation",
+    tier_2_additions: "Tier 2 · Balanced additions",
+    tier_3_traditional_additions: "Tier 3 · Traditional additions",
+    tier_3_satellites: "Tier 3 · Satellite stress",
   };
   const VISUAL_UPDATE_HZ = { efficient: 5, smooth: 10, high: 15 };
   const DEFAULT_VISUAL_UPDATE_MODE = "smooth";
@@ -66,6 +69,9 @@
     selectedMarket: "ES",
     timeframe: "1m",
     timeframes: Object.keys(TIMEFRAME_SECONDS),
+    chartRange: "1W",
+    chartRanges: DEFAULT_CHART_RANGES,
+    quickMarkets: DEFAULT_QUICK_MARKETS,
     generation: 0,
     chart: null,
     candleSeries: null,
@@ -97,13 +103,13 @@
     historyCache: {
       state: "CHECKING",
       ready_markets: 0,
-      total_markets: 41,
+      total_markets: 5,
       queued_markets: 0,
       paused: false,
       plan_id: null,
       estimated_cost_usd: null,
       estimate_expires_at: null,
-      message: "Checking one-week cache coverage",
+      message: "Checking quick-market cache coverage",
     },
     historyPolicy: {
       policy_version: 1,
@@ -157,6 +163,8 @@
     instrumentMeta: document.getElementById("instrument-meta"),
     focusState: document.getElementById("focus-state"),
     timeframeList: document.getElementById("timeframe-list"),
+    chartRangeList: document.getElementById("chart-range-list"),
+    quickMarketList: document.getElementById("quick-market-list"),
     fitChart: document.getElementById("fit-chart"),
     fullscreenToggle: document.getElementById("fullscreen-toggle"),
     layersToggle: document.getElementById("layers-toggle"),
@@ -634,7 +642,7 @@
     if (cacheState === "CONFIRMATION_REQUIRED") {
       elements.dataHealthExplanation.textContent = `Showing cached data only (${range}). No history download has started. Review the estimate and approve the update to load missing recent days; the newest loaded bar is ${age}.`;
     } else if (["WARMING", "PAUSED"].includes(cacheState)) {
-      elements.dataHealthExplanation.textContent = `Showing ${range} while missing one-week history is ${cacheState === "PAUSED" ? "paused" : "updated in the background"}.`;
+      elements.dataHealthExplanation.textContent = `Showing ${range} while missing ${state.chartRange} history is ${cacheState === "PAUSED" ? "paused" : "updated in the background"}.`;
     } else if (healthState === "CURRENT") {
       elements.dataHealthExplanation.textContent = `The focused stream and requested history are current. Loaded range: ${range}.`;
     } else if (health) {
@@ -847,6 +855,38 @@
     });
   }
 
+  function renderChartRanges() {
+    elements.chartRangeList.replaceChildren();
+    const enabled = state.quickMarkets.includes(state.selectedMarket);
+    state.chartRanges.forEach((chartRange) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `chart-range-button${chartRange === state.chartRange ? " active" : ""}`;
+      button.textContent = chartRange;
+      button.disabled = !enabled && chartRange !== "1W";
+      button.title = enabled
+        ? `Show ${chartRange} of ${state.selectedMarket}`
+        : "Extended history is retained only for the five quick markets";
+      button.setAttribute("aria-pressed", String(chartRange === state.chartRange));
+      button.addEventListener("click", () => chooseChartRange(chartRange));
+      elements.chartRangeList.appendChild(button);
+    });
+  }
+
+  function renderQuickMarkets() {
+    elements.quickMarketList.replaceChildren();
+    state.quickMarkets.forEach((market, index) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `quick-market-button${market === state.selectedMarket ? " active" : ""}`;
+      button.textContent = market;
+      button.title = `${market} quick chart · Alt+${index + 1}`;
+      button.setAttribute("aria-pressed", String(market === state.selectedMarket));
+      button.addEventListener("click", () => chooseMarket(market));
+      elements.quickMarketList.appendChild(button);
+    });
+  }
+
   function familyRank(family) {
     const normalized = String(family || "Other");
     const index = FAMILY_ORDER.findIndex((candidate) => normalized.toLowerCase().includes(candidate.toLowerCase()));
@@ -876,7 +916,8 @@
   function marketGroupDetails(market, mode = activeGroupingMode()) {
     if (mode === "alpha_tier") {
       const id = normalizeGroupId(market.alpha_tier_group);
-      return { id, label: ALPHA_TIER_LABELS[id] || "Alpha tier unavailable" };
+      const configured = state.alphaTierGroups.find((group) => normalizeGroupId(group?.id) === id);
+      return { id, label: configured?.label || ALPHA_TIER_LABELS[id] || "Alpha tier unavailable" };
     }
     const label = market.family || "Other";
     return { id: normalizeGroupId(label), label };
@@ -900,7 +941,9 @@
       if (mode === "sector") return familyRank(left.family) - familyRank(right.family);
       const leftId = marketGroupDetails(left, mode).id;
       const rightId = marketGroupDetails(right, mode).id;
-      return Object.keys(ALPHA_TIER_LABELS).indexOf(leftId) - Object.keys(ALPHA_TIER_LABELS).indexOf(rightId);
+      const configuredOrder = state.alphaTierGroups.map((group) => normalizeGroupId(group?.id));
+      const order = configuredOrder.length ? configuredOrder : Object.keys(ALPHA_TIER_LABELS);
+      return order.indexOf(leftId) - order.indexOf(rightId);
     });
     const groups = new Map();
     sorted.forEach((market) => {
@@ -1108,6 +1151,8 @@
       "recent-replay": "History + live",
       "live-only": "Live bars",
       "timeframe-cache": "Cached + live",
+      "range-cache": "Range cache + live",
+      "checking range cache": "Checking range cache",
       demo: "Demo history",
       "browser demo": "Demo history",
     };
@@ -1121,7 +1166,7 @@
     const range = state.barCount > 0 ? ` · ${loadedChartRange()}` : "";
     const base = state.source === "waiting"
       ? label
-      : `${label} · ${state.barCount.toLocaleString()} ${state.timeframe} ${barWord}${range}`;
+      : `${label} · ${state.chartRange} · ${state.barCount.toLocaleString()} ${state.timeframe} ${barWord}${range}`;
     elements.sourceState.className = "source-state";
     elements.sourceState.title = "";
     elements.retryHistory.hidden = true;
@@ -1434,6 +1479,7 @@
     if (!market || market === state.selectedMarket) return;
     const previousMarket = state.selectedMarket;
     const previousContract = state.contract;
+    const previousChartRange = state.chartRange;
     const previousGeneration = state.generation;
     const hasVisibleChart = state.barCount > 0;
     const previousHistory = {
@@ -1445,7 +1491,10 @@
       historyCategory: state.historyCategory,
     };
     state.selectedMarket = market;
+    if (!state.quickMarkets.includes(market)) state.chartRange = "1W";
     state.generation += 1;
+    renderQuickMarkets();
+    renderChartRanges();
     elements.instrumentSymbol.textContent = market;
     elements.instrumentContract.textContent = hasVisibleChart
       ? `Loading ${market} · showing ${previousContract || previousMarket}`
@@ -1475,6 +1524,7 @@
     } catch (error) {
       state.selectedMarket = previousMarket;
       state.contract = previousContract;
+      state.chartRange = previousChartRange;
       state.generation = previousGeneration;
       Object.assign(state, previousHistory);
       elements.instrumentSymbol.textContent = previousMarket;
@@ -1483,6 +1533,8 @@
       renderSourceState();
       updateQuote(state.latestBar);
       renderMarkets();
+      renderQuickMarkets();
+      renderChartRanges();
       setFocusStatus("ERROR", String(error));
     }
   }
@@ -1503,6 +1555,29 @@
       const result = await window.pywebview.api.select_timeframe(timeframe);
       if (!result || !result.ok) throw new Error("timeframe was not accepted");
     } catch (error) {
+      setFocusStatus("ERROR", String(error));
+    }
+  }
+
+  async function chooseChartRange(chartRange) {
+    if (!state.chartRanges.includes(chartRange) || chartRange === state.chartRange) return;
+    if (!state.quickMarkets.includes(state.selectedMarket) && chartRange !== "1W") return;
+    const previousRange = state.chartRange;
+    state.chartRange = chartRange;
+    clearSelectionContext();
+    renderChartRanges();
+    state.source = "checking range cache";
+    renderSourceState();
+    if (state.browserDemo) {
+      browserDemoSnapshot(state.selectedMarket, state.timeframe);
+      return;
+    }
+    try {
+      const result = await window.pywebview.api.select_chart_range(chartRange);
+      if (!result || !result.ok) throw new Error("chart range was not accepted");
+    } catch (error) {
+      state.chartRange = previousRange;
+      renderChartRanges();
       setFocusStatus("ERROR", String(error));
     }
   }
@@ -1566,6 +1641,10 @@
     state.selectedMarket = payload.selected_market || "ES";
     state.timeframe = payload.timeframe || "1m";
     state.timeframes = Array.isArray(payload.timeframes) ? payload.timeframes : Object.keys(TIMEFRAME_SECONDS);
+    state.quickMarkets = Array.isArray(payload.quick_markets) ? payload.quick_markets : DEFAULT_QUICK_MARKETS;
+    state.chartRanges = Array.isArray(payload.chart_ranges) ? payload.chart_ranges : DEFAULT_CHART_RANGES;
+    state.chartRange = state.chartRanges.includes(payload.chart_range) ? payload.chart_range : "1W";
+    if (!state.quickMarkets.includes(state.selectedMarket)) state.chartRange = "1W";
     state.mode = payload.mode || "live";
     state.historyPolicy = {
       ...state.historyPolicy,
@@ -1589,6 +1668,8 @@
     resetHistoryState();
     applyUiPreferences(payload.ui_preferences || {});
     clearSelectionContext();
+    renderQuickMarkets();
+    renderChartRanges();
     renderTimeframes();
     renderMarkets();
     renderHistoryPolicy();
@@ -1834,7 +1915,8 @@
   const DEMO_ALPHA_TIER_GROUPS = {
     tier_1_core: ["ES", "CL", "ZN", "6E"],
     tier_2_additions: ["NQ", "NG", "RB", "GC", "HG", "SR3", "ZB", "6J", "ZC", "ZS", "LE", "HE"],
-    tier_3_additions: ["RTY", "YM", "HO", "SI", "PL", "SR1", "ZQ", "TN", "ZT", "ZF", "UB", "6A", "6B", "6C", "6M", "6N", "6S", "ZL", "ZM", "ZW", "KE", "GF", "BTC", "ETH", "PA"],
+    tier_3_traditional_additions: ["RTY", "YM", "HO", "SI", "PL", "SR1", "ZQ", "TN", "ZT", "ZF", "UB", "6A", "6B", "6C", "6M", "6N", "6S", "ZL", "ZM", "ZW", "KE", "GF"],
+    tier_3_satellites: ["BTC", "ETH", "PA"],
   };
 
   function demoAlphaTierGroup(symbol) {
@@ -2031,6 +2113,9 @@
         selected_market: "ES",
         timeframe: "1m",
         timeframes: Object.keys(TIMEFRAME_SECONDS),
+        chart_range: "1W",
+        chart_ranges: DEFAULT_CHART_RANGES,
+        quick_markets: DEFAULT_QUICK_MARKETS,
         display_tz: "local",
         mode: "demo",
         history_update_policy: {
@@ -2065,34 +2150,34 @@
     const demoMissingStart = demoNow - 24 * 60 * 60;
     const scenarioStatus = {
       consent: {
-        state: "CONFIRMATION_REQUIRED", ready_markets: 39, queued_markets: 2,
+        state: "CONFIRMATION_REQUIRED", ready_markets: 3, queued_markets: 2,
         estimated_cost_usd: 0.012, estimate_expires_at: Math.floor(Date.now() / 1000) + 600,
         plan_id: "c".repeat(64), plan_fingerprint: "c".repeat(64),
         affected_markets: ["ES", "NQ"], missing_start: demoMissingStart, missing_end: demoNow,
         message: "A small history repair is ready after you choose an update preference.",
       },
       updating: {
-        state: "WARMING", ready_markets: 40, queued_markets: 1,
+        state: "WARMING", ready_markets: 4, queued_markets: 1,
         estimated_cost_usd: 0.012, estimate_expires_at: Math.floor(Date.now() / 1000) + 600,
         plan_id: "d".repeat(64), plan_fingerprint: "d".repeat(64),
         affected_markets: ["ES"], missing_start: demoMissingStart, missing_end: demoNow,
         message: "Updating the selected market first.", update_origin: "AUTO",
       },
       ready: {
-        state: "COMPLETE", ready_markets: 41, queued_markets: 0,
+        state: "COMPLETE", ready_markets: 5, queued_markets: 0,
         estimated_cost_usd: null, estimate_expires_at: null, plan_id: null, plan_fingerprint: null,
         affected_markets: [], missing_start: null, missing_end: null,
         message: "Demo cache ready",
       },
       review: {
-        state: "CONFIRMATION_REQUIRED", ready_markets: 38, queued_markets: 3,
+        state: "CONFIRMATION_REQUIRED", ready_markets: 2, queued_markets: 3,
         estimated_cost_usd: 0.08, estimate_expires_at: Math.floor(Date.now() / 1000) + 600,
         plan_id: "e".repeat(64), plan_fingerprint: "e".repeat(64),
         affected_markets: ["ES", "NQ", "CL"], missing_start: demoMissingStart, missing_end: demoNow,
         message: "This update is above the automatic $0.05 limit.", automatic_reason: "ABOVE_CAP",
       },
       failure: {
-        state: "ERROR", ready_markets: 38, queued_markets: 0,
+        state: "ERROR", ready_markets: 2, queued_markets: 0,
         estimated_cost_usd: null, estimate_expires_at: null, plan_id: null, plan_fingerprint: null,
         affected_markets: ["ES", "NQ", "CL"], missing_start: demoMissingStart, missing_end: demoNow,
         message: "Automatic history repair timed out. Review before trying again.",
@@ -2103,7 +2188,8 @@
       v: PROTOCOL_VERSION,
       type: "history_cache_status",
       payload: {
-        total_markets: 41,
+        total_markets: 5,
+        range_key: "1W",
         active_market: null,
         paused: false,
         policy_mode: state.demoScenario === "consent" ? "UNDECIDED" : "AUTO",
@@ -2227,6 +2313,14 @@
     }
   });
   document.addEventListener("keydown", (event) => {
+    if (event.altKey && /^[1-5]$/.test(event.key)) {
+      const market = state.quickMarkets[Number(event.key) - 1];
+      if (market) {
+        event.preventDefault();
+        chooseMarket(market);
+      }
+      return;
+    }
     if (event.key === "F11") {
       event.preventDefault();
       toggleFullscreen();

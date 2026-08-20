@@ -19,6 +19,7 @@ from .engine import (
     DEFAULT_HISTORY_HOURS,
     HISTORY_REQUEST_TIMEOUT_SECONDS,
     MAX_HISTORY_COST_ESTIMATE_REQUESTS,
+    QUICK_CHART_MARKETS,
     SYMBOL_REQUEST_TIMEOUT_SECONDS,
     LiveCockpitEngine,
     _history_failure_details,
@@ -32,6 +33,7 @@ CONFIRMATION_SCHEMA = "live_cockpit_history_canary_confirmation/2.0.0"
 TERMINAL_SCHEMA = "live_cockpit_history_canary_terminal/1.0.0"
 OPERATION = "RUN_METADATA_ONLY_HISTORY_CANARY"
 EXPECTED_MARKET_COUNT = 41
+EXPECTED_HISTORY_MARKETS = QUICK_CHART_MARKETS
 MAX_DATASET_RANGE_CALLS = 2
 MAX_SYMBOLOGY_CALLS = 2
 MAX_COST_CALLS = 8
@@ -159,6 +161,8 @@ def build_plan(
             "dataset": DEFAULT_DATASET,
             "schema": DEFAULT_HISTORICAL_SCHEMA,
             "market_count": EXPECTED_MARKET_COUNT,
+            "history_market_count": len(EXPECTED_HISTORY_MARKETS),
+            "history_markets": list(EXPECTED_HISTORY_MARKETS),
             "requested_hours": DEFAULT_HISTORY_HOURS,
             "expected_terminal_state": "CONFIRMATION_REQUIRED",
         },
@@ -402,11 +406,11 @@ def run_canary(
                 for chunk in history_plan.chunks
                 for binding in chunk.bindings
             }
-            if planned_markets != {market.symbol for market in engine.markets}:
+            if planned_markets != set(EXPECTED_HISTORY_MARKETS):
                 terminal_state = "ERROR"
                 category = "UNAVAILABLE"
                 raise CanaryContractError(
-                    "canary plan does not cover the exact market universe"
+                    "canary plan does not cover the exact history market universe"
                 )
         elif isinstance(status.get("diagnostic"), Mapping):
             requested_start = status["diagnostic"].get("requested_start")

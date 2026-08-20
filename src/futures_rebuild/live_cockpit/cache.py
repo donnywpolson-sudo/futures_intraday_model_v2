@@ -12,7 +12,8 @@ from .feed import normalize_ts_event
 
 
 DEFAULT_RETENTION_DAYS = 8
-DEFAULT_MAX_ROWS = 500_000
+DEFAULT_EXTENDED_RETENTION_DAYS = 95
+DEFAULT_MAX_ROWS = 1_000_000
 
 
 class BarCache:
@@ -21,14 +22,20 @@ class BarCache:
         path: Path,
         *,
         retention_days: int = DEFAULT_RETENTION_DAYS,
+        extended_retention_days: int = DEFAULT_EXTENDED_RETENTION_DAYS,
         max_rows: int = DEFAULT_MAX_ROWS,
     ) -> None:
         if retention_days <= 0:
             raise ValueError("retention_days must be positive")
+        if extended_retention_days < retention_days:
+            raise ValueError(
+                "extended_retention_days must not be shorter than retention_days"
+            )
         if max_rows <= 0:
             raise ValueError("max_rows must be positive")
         self.path = path
         self.retention_days = retention_days
+        self.extended_retention_days = extended_retention_days
         self.max_rows = max_rows
         self._lock = threading.RLock()
         self._connection = self._open_or_recover()
@@ -351,20 +358,40 @@ class BarCache:
 
     def _prune_locked(self, *, now: datetime | None = None) -> None:
         current = now or datetime.now(timezone.utc)
-        cutoff_ns = int(
+        standard_cutoff_ns = int(
             (current - timedelta(days=self.retention_days)).timestamp() * 1_000_000_000
         )
-        self._connection.execute("DELETE FROM bars WHERE ts_event_ns < ?", (cutoff_ns,))
-        self._connection.execute(
-            "DELETE FROM history_coverage WHERE end_ns <= ?", (cutoff_ns,)
+        extended_cutoff_ns = int(
+            (current - timedelta(days=self.extended_retention_days)).timestamp()
+            * 1_000_000_000
         )
         self._connection.execute(
-            "DELETE FROM market_bindings WHERE session_start_ns < ?", (cutoff_ns,)
+            "DELETE FROM bars WHERE instrument_id >= 0 AND ts_event_ns < ?",
+            (standard_cutoff_ns,),
+        )
+        self._connection.execute(
+            "DELETE FROM bars WHERE instrument_id < 0 AND ts_event_ns < ?",
+            (extended_cutoff_ns,),
+        )
+        self._connection.execute(
+            "DELETE FROM history_coverage "
+            "WHERE (instrument_id >= 0 AND end_ns <= ?) "
+            "OR (instrument_id < 0 AND end_ns <= ?)",
+            (standard_cutoff_ns, extended_cutoff_ns),
+        )
+        self._connection.execute(
+            "DELETE FROM market_bindings WHERE session_start_ns < ?",
+            (standard_cutoff_ns,),
         )
         self._connection.execute(
             "UPDATE history_coverage SET start_ns = ? "
-            "WHERE start_ns < ? AND end_ns > ?",
-            (cutoff_ns, cutoff_ns, cutoff_ns),
+            "WHERE instrument_id >= 0 AND start_ns < ? AND end_ns > ?",
+            (standard_cutoff_ns, standard_cutoff_ns, standard_cutoff_ns),
+        )
+        self._connection.execute(
+            "UPDATE history_coverage SET start_ns = ? "
+            "WHERE instrument_id < 0 AND start_ns < ? AND end_ns > ?",
+            (extended_cutoff_ns, extended_cutoff_ns, extended_cutoff_ns),
         )
         row_count = int(self._connection.execute("SELECT COUNT(*) FROM bars").fetchone()[0])
         excess = row_count - self.max_rows
