@@ -160,19 +160,51 @@ def test_package_candidate_paths_preserve_windows_headroom() -> None:
     assert max(projected.values()) <= package_candidate.MAX_WINDOWS_PACKAGE_PATH
 
 
-def test_isolated_archive_includes_every_packaged_runtime_config() -> None:
+def test_isolated_archive_contains_only_observation_runtime_configs() -> None:
     required = {
         "configs/alpha_tiered.yaml",
+        "configs/live_cockpit_smoke_plan.json",
+    }
+    forbidden = {
         "configs/prop_firm_execution_connections.json",
         "configs/prop_firm_profiles.json",
         "configs/prop_firm_execution_costs.json",
         "configs/prop_firm_execution_instruments.json",
         "configs/prop_firm_strategy_risk_policies.json",
         "configs/prop_firm_payout_policies.json",
-        "configs/live_cockpit_smoke_plan.json",
     }
 
     assert required <= set(package_candidate.ARCHIVE_PATHS)
+    assert forbidden.isdisjoint(package_candidate.ARCHIVE_PATHS)
+    assert forbidden.isdisjoint(package_candidate.PACKAGE_INPUTS)
+    assert all("/execution/" not in path for path in package_candidate.RUNTIME_OVERLAYS)
+
+
+def test_packaged_archive_rejects_execution_modules() -> None:
+    safe = "futures_rebuild.live_cockpit.engine\npyarrow.compute\n"
+    rejected = (
+        safe
+        + "futures_rebuild.live_cockpit.execution\n"
+        + "futures_rebuild.live_cockpit.execution.tradovate_adapter\n"
+    )
+
+    assert package_candidate._forbidden_archive_members(safe) == []
+    assert package_candidate._forbidden_archive_members(rejected) == [
+        "futures_rebuild.live_cockpit.execution",
+        "futures_rebuild.live_cockpit.execution.tradovate_adapter",
+    ]
+
+
+def test_packaging_spec_excludes_execution_runtime() -> None:
+    spec = (ROOT / "FuturesLiveCockpit/_internal/FuturesLiveCockpit.spec").read_text(
+        encoding="utf-8"
+    )
+
+    assert "futures_rebuild.live_cockpit.execution'" in spec
+    assert "execution.tradovate_adapter" not in spec
+    assert "execution.manual_assistant" not in spec
+    assert "prop_firm_execution" not in spec
+    assert "mff_execution" not in spec
 
 
 def test_package_candidate_validation_rejects_input_drift(
@@ -579,6 +611,7 @@ def test_candidate_receipt_records_structured_private_key_scan() -> None:
         "live_cockpit_package_candidate_receipt/1.2.0"
     )
     assert '"private_key_scan": private_key_scan' in source
+    assert '"execution_surface_scan": execution_surface_scan' in source
     assert 'category = "PRIVATE_KEY_SCAN_REJECTED"' in source
 
 

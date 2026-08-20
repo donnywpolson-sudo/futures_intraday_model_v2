@@ -79,23 +79,6 @@ RUNTIME_OVERLAYS = (
     "src/futures_rebuild/live_cockpit/cutover_guard.py",
     "src/futures_rebuild/live_cockpit/databento_auth.py",
     "src/futures_rebuild/live_cockpit/engine.py",
-    "src/futures_rebuild/live_cockpit/execution/__init__.py",
-    "src/futures_rebuild/live_cockpit/execution/adapter.py",
-    "src/futures_rebuild/live_cockpit/execution/arm_state.py",
-    "src/futures_rebuild/live_cockpit/execution/config.py",
-    "src/futures_rebuild/live_cockpit/execution/credential_store.py",
-    "src/futures_rebuild/live_cockpit/execution/domain.py",
-    "src/futures_rebuild/live_cockpit/execution/errors.py",
-    "src/futures_rebuild/live_cockpit/execution/fake.py",
-    "src/futures_rebuild/live_cockpit/execution/gate.py",
-    "src/futures_rebuild/live_cockpit/execution/manual_assistant.py",
-    "src/futures_rebuild/live_cockpit/execution/order_ledger.py",
-    "src/futures_rebuild/live_cockpit/execution/reconciliation.py",
-    "src/futures_rebuild/live_cockpit/execution/runtime.py",
-    "src/futures_rebuild/live_cockpit/execution/tradovate_adapter.py",
-    "src/futures_rebuild/live_cockpit/execution/tradovate_auth.py",
-    "src/futures_rebuild/live_cockpit/execution/tradovate_rest.py",
-    "src/futures_rebuild/live_cockpit/execution/tradovate_websocket.py",
     "src/futures_rebuild/live_cockpit/feed.py",
     "src/futures_rebuild/live_cockpit/history.py",
     "src/futures_rebuild/live_cockpit/market_groups.py",
@@ -106,8 +89,6 @@ RUNTIME_OVERLAYS = (
     "src/futures_rebuild/live_cockpit/smoke.py",
     "src/futures_rebuild/live_cockpit/single_instance.py",
     "FuturesLiveCockpit/_internal/FuturesLiveCockpit.spec",
-    "configs/prop_firm_execution_connections.json",
-    "configs/mff_execution_capability_evidence.json",
 )
 PACKAGE_INPUTS = (
     "src/futures_rebuild/live_cockpit/package_candidate.py",
@@ -117,13 +98,7 @@ PACKAGE_INPUTS = (
     "src/futures_rebuild/errors.py",
     "FuturesLiveCockpit/_internal/futures_live_cockpit.py",
     "configs/alpha_tiered.yaml",
-    "configs/prop_firm_profiles.json",
-    "configs/prop_firm_execution_costs.json",
-    "configs/prop_firm_execution_instruments.json",
-    "configs/prop_firm_strategy_risk_policies.json",
-    "configs/prop_firm_payout_policies.json",
     "configs/live_cockpit_smoke_plan.json",
-    "configs/source_contract.json",
     "configs/dependency_lock_receipt.json",
     "configs/environment.lock.json",
     "configs/offline_vault_environment.lock.json",
@@ -143,12 +118,6 @@ ARCHIVE_PATHS = (
     "FuturesLiveCockpit/_internal/FuturesLiveCockpit.spec",
     "FuturesLiveCockpit/_internal/futures_live_cockpit.py",
     "configs/alpha_tiered.yaml",
-    "configs/prop_firm_execution_connections.json",
-    "configs/prop_firm_profiles.json",
-    "configs/prop_firm_execution_costs.json",
-    "configs/prop_firm_execution_instruments.json",
-    "configs/prop_firm_strategy_risk_policies.json",
-    "configs/prop_firm_payout_policies.json",
     "configs/live_cockpit_smoke_plan.json",
     "THIRD_PARTY_NOTICES.md",
 )
@@ -158,7 +127,17 @@ FORBIDDEN_PACKAGE_NAMES = frozenset(
         "databento.env",
         "credential-source.json",
         ".env",
+        "mff_execution_capability_evidence.json",
+        "prop_firm_execution_connections.json",
+        "prop_firm_execution_costs.json",
+        "prop_firm_execution_instruments.json",
+        "prop_firm_payout_policies.json",
+        "prop_firm_profiles.json",
+        "prop_firm_strategy_risk_policies.json",
     }
+)
+FORBIDDEN_ARCHIVE_MODULE_PREFIXES = (
+    "futures_rebuild.live_cockpit.execution",
 )
 FORBIDDEN_PACKAGE_PATH_PARTS = frozenset(
     {
@@ -471,6 +450,54 @@ def _inventory(candidate: Path) -> tuple[list[dict[str, Any]], int]:
         total_bytes += size
         files.append({"path": relative, "bytes": size, "sha256": sha256_file(path)})
     return files, total_bytes
+
+
+def _forbidden_archive_members(listing: str) -> list[str]:
+    members = [line.strip() for line in listing.splitlines() if line.strip()]
+    return sorted(
+        member
+        for member in members
+        if any(
+            member.lower() == prefix
+            or member.lower().startswith(f"{prefix}.")
+            for prefix in FORBIDDEN_ARCHIVE_MODULE_PREFIXES
+        )
+    )
+
+
+def _scan_execution_surface(candidate: Path, *, root: Path) -> dict[str, Any]:
+    viewer = root / ".venv/Scripts/pyi-archive_viewer.exe"
+    executable = candidate / "FuturesLiveCockpit.exe"
+    if not viewer.is_file():
+        raise PackageCandidateError("PyInstaller archive viewer is unavailable")
+    try:
+        result = subprocess.run(
+            [str(viewer), "-r", "-b", str(executable)],
+            cwd=root,
+            check=False,
+            capture_output=True,
+            shell=False,
+            timeout=SELF_CHECK_TIMEOUT_SECONDS,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise PackageCandidateError("execution-surface scan timed out") from exc
+    if result.returncode:
+        raise PackageCandidateError("execution-surface scan failed")
+    listing = result.stdout.decode("utf-8", errors="replace")
+    forbidden = _forbidden_archive_members(listing)
+    if forbidden:
+        raise PackageCandidateError(
+            "candidate contains forbidden broker, order, or execution modules"
+        )
+    return {
+        "scanner": "pyinstaller-recursive-archive-list/1.0.0",
+        "result": "PASS",
+        "archive_member_count": len(
+            [line for line in listing.splitlines() if line.strip()]
+        ),
+        "listing_sha256": hashlib.sha256(result.stdout).hexdigest(),
+        "forbidden_module_count": 0,
+    }
 
 
 def _all_offsets(value: bytes, marker: bytes) -> list[int]:
@@ -1192,8 +1219,13 @@ def run_candidate(
             staged_candidate,
             plan,
         )
+        category = "PACKAGE_CONTENT_REJECTED"
         files, total_bytes, private_key_scan = _validate_candidate(
             staged_candidate, root=root
+        )
+        execution_surface_scan = _scan_execution_surface(
+            staged_candidate,
+            root=root,
         )
         self_check_code, self_stdout_sha, self_stderr_sha = _run_process(
             [str(staged_candidate / "FuturesLiveCockpit.exe"), "--self-check"],
@@ -1239,6 +1271,7 @@ def run_candidate(
             "total_bytes": total_bytes,
             "self_check": "PASS",
             "private_key_scan": private_key_scan,
+            "execution_surface_scan": execution_surface_scan,
             "provider_connection_opened": False,
             "credential_source_read": False,
             "install_ready": False,
@@ -1259,6 +1292,7 @@ def run_candidate(
                 "file_count": len(files),
                 "total_bytes": total_bytes,
                 "private_key_scan": private_key_scan,
+                "execution_surface_scan": execution_surface_scan,
             }
         )
         existing_hash = sha256_file(

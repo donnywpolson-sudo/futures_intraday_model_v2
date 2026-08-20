@@ -39,9 +39,6 @@ from .engine import (
 )
 from .market_groups import load_alpha_tier_grouping
 from .offline_network import DemoLoopbackDenyProxy
-from .protocol import PROTOCOL_VERSION, validate_command
-from .execution.runtime import ExecutionRuntime
-from .execution.fake import LocalExecutionSimulator
 from .single_instance import SingleInstance
 
 
@@ -436,7 +433,6 @@ def self_check(*, env: Mapping[str, str] | None = None) -> dict[str, Any]:
         and all(imports.values())
         and cache_writeable
     )
-    execution_runtime = ExecutionRuntime(root=ROOT, state_root=state_root)
     return {
         "status": "PASS" if core_pass and webview2_runtime else "FAIL",
         "provider_connection_opened": False,
@@ -455,7 +451,7 @@ def self_check(*, env: Mapping[str, str] | None = None) -> dict[str, Any]:
         "credential_locator_present": locator_present,
         "credential_locator_valid": None,
         "credential_error": None,
-        "execution": execution_runtime.self_check_payload(),
+        "observation_only": True,
     }
 
 
@@ -465,7 +461,6 @@ class CockpitController:
         engine: CockpitEngine,
         *,
         state_path: Path,
-        execution_runtime: ExecutionRuntime | None = None,
     ) -> None:
         self.engine = engine
         self.state_path = state_path
@@ -482,7 +477,6 @@ class CockpitController:
         self._history_planning_origin: str | None = None
         self._active_history_origin: str | None = None
         self._active_history_plan_id: str | None = None
-        self.execution_runtime = execution_runtime
         self._recover_interrupted_history_update()
 
     def _mutate_state(self, mutation: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
@@ -681,10 +675,6 @@ class CockpitController:
                         sanitize_history_update_policy(
                             persisted.get("history_update_policy")
                         )
-                    )
-                if self.execution_runtime is not None:
-                    payload["execution_capability"] = (
-                        self.execution_runtime.capability_payload()
                     )
             if not self._started:
                 self._started = True
@@ -945,48 +935,6 @@ class CockpitController:
             self._fullscreen = not current
             return {"ok": True, "fullscreen": self._fullscreen}
 
-    def preview_order_intent(self, payload: object) -> dict[str, Any]:
-        if self.execution_runtime is None or not isinstance(payload, Mapping):
-            return {
-                "ok": False,
-                "authoritative_maximum": 0,
-                "blockers": ["EXECUTION_RUNTIME_UNAVAILABLE"],
-            }
-        return self.execution_runtime.preview_order(payload)
-
-    def record_operator_account_snapshot(self, payload: object) -> dict[str, Any]:
-        return self._manual_command("RECORD_OPERATOR_ACCOUNT_SNAPSHOT", payload)
-
-    def prepare_manual_ticket(self, payload: object) -> dict[str, Any]:
-        return self._manual_command("PREPARE_MANUAL_TICKET", payload)
-
-    def transition_manual_ticket(self, payload: object) -> dict[str, Any]:
-        return self._manual_command("TRANSITION_MANUAL_TICKET", payload)
-
-    def compare_manual_ticket(self, payload: object) -> dict[str, Any]:
-        return self._manual_command("COMPARE_MANUAL_TICKET", payload)
-
-    def _manual_command(self, command_type: str, payload: object) -> dict[str, Any]:
-        if self.execution_runtime is None or not isinstance(payload, Mapping):
-            return {"ok": False, "error": "MANUAL_ASSISTANT_UNAVAILABLE"}
-        try:
-            validate_command({"v": PROTOCOL_VERSION, "type": command_type, "payload": dict(payload)})
-            if command_type == "RECORD_OPERATOR_ACCOUNT_SNAPSHOT":
-                confirmation = str(payload["confirmation"])
-                snapshot = {key: value for key, value in payload.items() if key != "confirmation"}
-                return self.execution_runtime.record_operator_snapshot(snapshot, confirmation=confirmation)
-            if command_type == "PREPARE_MANUAL_TICKET":
-                return self.execution_runtime.prepare_manual_ticket(payload)
-            if command_type == "TRANSITION_MANUAL_TICKET":
-                return self.execution_runtime.transition_manual_ticket(
-                    str(payload["ticket_id"]), str(payload["target"]), payload["report"]
-                )
-            return self.execution_runtime.compare_manual_ticket(
-                str(payload["ticket_id"]), payload["report"]
-            )
-        except Exception:
-            return {"ok": False, "error": "MANUAL_ASSISTANT_REQUEST_REJECTED"}
-
     def request_stop(self, *_args: object) -> None:
         with self._lock:
             if self._stop_started:
@@ -1002,8 +950,6 @@ class CockpitController:
         try:
             self.engine.stop()
         finally:
-            if self.execution_runtime is not None:
-                self.execution_runtime.shutdown()
             self._stop_complete.set()
 
     def stop(self, *_args: object) -> None:
@@ -1059,22 +1005,6 @@ class CockpitApi:
     def toggle_fullscreen(self) -> dict[str, bool]:
         return self._controller.toggle_fullscreen()
 
-    def preview_order_intent(self, payload: object) -> dict[str, Any]:
-        return self._controller.preview_order_intent(payload)
-
-    def record_operator_account_snapshot(self, payload: object) -> dict[str, Any]:
-        return self._controller.record_operator_account_snapshot(payload)
-
-    def prepare_manual_ticket(self, payload: object) -> dict[str, Any]:
-        return self._controller.prepare_manual_ticket(payload)
-
-    def transition_manual_ticket(self, payload: object) -> dict[str, Any]:
-        return self._controller.transition_manual_ticket(payload)
-
-    def compare_manual_ticket(self, payload: object) -> dict[str, Any]:
-        return self._controller.compare_manual_ticket(payload)
-
-
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Observation-only Windows futures chart cockpit."
@@ -1120,15 +1050,9 @@ def run_desktop(*, engine: CockpitEngine, state_path: Path, demo: bool) -> int:
     controller: CockpitController | None = None
     try:
         asset_target = desktop_asset_target(demo=demo)
-        execution_runtime = ExecutionRuntime(
-            root=ROOT,
-            state_root=state_path.parent,
-            adapter=LocalExecutionSimulator() if demo else None,
-        )
         controller = CockpitController(
             engine,
             state_path=state_path,
-            execution_runtime=execution_runtime,
         )
         api = CockpitApi(controller)
         window = webview.create_window(

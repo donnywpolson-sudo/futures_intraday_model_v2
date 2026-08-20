@@ -2671,6 +2671,7 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     html = (assets_dir() / "index.html").read_text(encoding="utf-8")
     javascript = (assets_dir() / "app.js").read_text(encoding="utf-8")
     stylesheet = (assets_dir() / "styles.css").read_text(encoding="utf-8")
+    app_source = Path(cockpit_app.__file__).read_text(encoding="utf-8")
     time_format = (assets_dir() / "time-format.js").read_text(encoding="utf-8")
     vendor = (assets_dir() / "lightweight-charts.standalone.production.js").read_text(
         encoding="utf-8"
@@ -2727,6 +2728,11 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "Direction entropy" not in html
     assert 'id="prediction-entropy"' not in html
     assert "Display only &mdash; no orders" in html
+    assert "Manual execution assistant" not in html
+    assert "executionCapability" not in javascript
+    assert "prepare_manual_ticket" not in javascript
+    assert "preview_order_intent" not in app_source
+    assert "live_cockpit.execution" not in app_source
     assert "Market watch" in html
     assert "confirm_history_cache(planId)" in javascript
     assert "set_history_cache_paused(paused)" in javascript

@@ -124,9 +124,6 @@
     prediction: null,
     predictionMarkers: null,
     dataHealth: null,
-    executionCapability: null,
-    manualTicketId: null,
-    manualTicketState: "BLOCKED",
     alphaTierGroupingAvailable: false,
     alphaTierGroups: [],
     draggedMarketGroup: null,
@@ -241,329 +238,8 @@
     historyPolicyDialog: document.getElementById("history-policy-dialog"),
     historyPolicyChoiceAuto: document.getElementById("history-policy-choice-auto"),
     historyPolicyChoiceManual: document.getElementById("history-policy-choice-manual"),
-    executionBanner: document.getElementById("execution-banner"),
-    executionArmState: document.getElementById("execution-arm-state"),
-    manualDemoStageControl: document.getElementById("manual-demo-stage-control"),
-    manualDemoStage: document.getElementById("manual-demo-stage"),
-    executionMode: document.getElementById("execution-mode"),
-    executionOrigin: document.getElementById("execution-origin"),
-    executionProfile: document.getElementById("execution-profile"),
-    executionStage: document.getElementById("execution-stage"),
-    executionConnection: document.getElementById("execution-connection"),
-    executionEntitlement: document.getElementById("execution-entitlement"),
-    executionAccount: document.getElementById("execution-account"),
-    executionCosts: document.getElementById("execution-costs"),
-    executionBrokerAge: document.getElementById("execution-broker-age"),
-    executionMarketAge: document.getElementById("execution-market-age"),
-    executionNewsAge: document.getElementById("execution-news-age"),
-    executionSessionAge: document.getElementById("execution-session-age"),
-    executionLimitAge: document.getElementById("execution-limit-age"),
-    executionBalance: document.getElementById("execution-balance"),
-    executionFloor: document.getElementById("execution-floor"),
-    executionFloorDistance: document.getElementById("execution-floor-distance"),
-    executionPositionCount: document.getElementById("execution-position-count"),
-    executionOrderCount: document.getElementById("execution-order-count"),
-    executionFillCount: document.getElementById("execution-fill-count"),
-    executionBlockerList: document.getElementById("execution-blocker-list"),
-    executionMaxQuantity: document.getElementById("execution-max-quantity"),
-    executionFooterPill: document.getElementById("execution-footer-pill"),
-    manualPreviewReadiness: document.getElementById("manual-preview-readiness"),
-    manualAssistantReadiness: document.getElementById("manual-assistant-readiness"),
-    providerApiReadiness: document.getElementById("provider-api-readiness"),
-    automaticExecutionStatus: document.getElementById("automatic-execution-status"),
-    manualAccountAlias: document.getElementById("manual-account-alias"),
-    manualBalance: document.getElementById("manual-balance"),
-    manualFloor: document.getElementById("manual-floor"),
-    manualSessionPnl: document.getElementById("manual-session-pnl"),
-    manualFloorLock: document.getElementById("manual-floor-lock"),
-    manualOpenPositions: document.getElementById("manual-open-positions"),
-    manualWorkingOrders: document.getElementById("manual-working-orders"),
-    manualProtectiveOrders: document.getElementById("manual-protective-orders"),
-    manualReconcile: document.getElementById("manual-reconcile"),
-    manualReconcileStatus: document.getElementById("manual-reconcile-status"),
-    executionSymbol: document.getElementById("execution-symbol"),
-    executionSide: document.getElementById("execution-side"),
-    executionOrderType: document.getElementById("execution-order-type"),
-    executionQuantity: document.getElementById("execution-quantity"),
-    executionEntryPrice: document.getElementById("execution-entry-price"),
-    executionStopPrice: document.getElementById("execution-stop-price"),
-    executionTargetPrice: document.getElementById("execution-target-price"),
-    manualPrepareTicket: document.getElementById("manual-prepare-ticket"),
-    manualPlannedRisk: document.getElementById("manual-planned-risk"),
-    manualCostStatus: document.getElementById("manual-cost-status"),
-    manualAggregateMicros: document.getElementById("manual-aggregate-micros"),
-    manualCopyText: document.getElementById("manual-copy-text"),
-    manualCopyOrder: document.getElementById("manual-copy-order"),
-    manualMarkSubmitted: document.getElementById("manual-mark-submitted"),
-    manualRecordPartial: document.getElementById("manual-record-partial"),
-    manualRecordFill: document.getElementById("manual-record-fill"),
-    manualConfirmProtection: document.getElementById("manual-confirm-protection"),
-    manualRecordRejection: document.getElementById("manual-record-rejection"),
-    manualRecordCancellation: document.getElementById("manual-record-cancellation"),
-    manualRecordExit: document.getElementById("manual-record-exit"),
-    manualReconcileTicket: document.getElementById("manual-reconcile-ticket"),
-    manualStateUncertain: document.getElementById("manual-state-uncertain"),
-    manualAbandon: document.getElementById("manual-abandon"),
-    manualTicketState: document.getElementById("manual-ticket-state"),
-    manualActualContract: document.getElementById("manual-actual-contract"),
-    manualActualSide: document.getElementById("manual-actual-side"),
-    manualActualFill: document.getElementById("manual-actual-fill"),
-    manualActualQuantity: document.getElementById("manual-actual-quantity"),
-    manualActualStop: document.getElementById("manual-actual-stop"),
-    manualActualTarget: document.getElementById("manual-actual-target"),
-    manualActualFees: document.getElementById("manual-actual-fees"),
-    manualActualExit: document.getElementById("manual-actual-exit"),
-    manualCompare: document.getElementById("manual-compare"),
-    manualComparison: document.getElementById("manual-comparison"),
   };
 
-  function executionLabel(value) {
-    return String(value || "UNKNOWN").replaceAll("_", " ");
-  }
-
-  function renderExecution() {
-    const capability = state.executionCapability;
-    if (!capability) return;
-    const simulator = capability.mode === "LOCAL_EXECUTION_SIMULATOR";
-    const stageLabel = executionLabel(capability.account_stage);
-    elements.executionBanner.textContent = simulator
-      ? "LOCAL SIMULATOR — SYNTHETIC DATA / OPERATOR WORKFLOW DEMO"
-      : `MFF ${stageLabel} — MANUAL TRADOVATE ENTRY REQUIRED`;
-    elements.executionBanner.classList.toggle("simulator", simulator);
-    elements.executionArmState.textContent = capability.armed ? "ARMED" : "DISARMED";
-    elements.executionMode.textContent = executionLabel(capability.mode);
-    elements.executionOrigin.textContent = executionLabel(capability.origin);
-    elements.executionProfile.textContent = capability.profile_id;
-    elements.executionStage.textContent = stageLabel;
-    elements.manualDemoStageControl.hidden = state.mode !== "demo";
-    if (state.mode === "demo") elements.manualDemoStage.value = capability.account_stage === "evaluation" ? "evaluation" : "sim_funded";
-    elements.executionConnection.textContent = capability.provider_connection_opened ? "CONNECTED" : "NOT CONNECTED";
-    elements.executionEntitlement.textContent = capability.entitlement_status;
-    elements.executionAccount.textContent = capability.account_binding_present ? capability.account_binding_id : "UNSET";
-    elements.executionCosts.textContent = capability.exact_costs_verified ? capability.cost_profile_id : "UNSET / UNVERIFIED";
-    elements.executionBrokerAge.textContent = "NOT AVAILABLE";
-    elements.executionMarketAge.textContent = state.dataHealth?.last_bar_time ? relativeTime(state.dataHealth.last_bar_time) : "WAITING";
-    elements.executionNewsAge.textContent = "NOT BOUND";
-    elements.executionSessionAge.textContent = "NOT BOUND";
-    elements.executionLimitAge.textContent = "NOT BOUND";
-    elements.executionMaxQuantity.textContent = "0";
-    elements.manualPreviewReadiness.textContent = capability.manual_ticket_preview_available ? "AVAILABLE — NOT ENTRY READY" : "FALSE";
-    elements.manualAssistantReadiness.textContent = capability.manual_assistant_readiness ? "TRUE" : "FALSE";
-    elements.providerApiReadiness.textContent = capability.provider_api_readiness ? "TRUE" : "FALSE";
-    elements.automaticExecutionStatus.textContent = capability.automatic_execution_authorized ? "AUTHORIZED" : "DISABLED";
-    elements.executionFooterPill.textContent = `${executionLabel(capability.execution_capability)} — NO TRANSMISSION`;
-    const blockers = Array.isArray(capability.blockers) ? capability.blockers : [];
-    elements.executionBlockerList.replaceChildren(...blockers.map((reason) => {
-      const item = document.createElement("li");
-      item.textContent = executionLabel(reason);
-      return item;
-    }));
-  }
-
-  function manualNumber(element) {
-    const value = Number(element.value);
-    return Number.isFinite(value) ? value : null;
-  }
-
-  function manualSignalRoot(contract) {
-    if (contract.startsWith("MES")) return "ES";
-    if (contract.startsWith("MCL")) return "CL";
-    if (contract.startsWith("M6E")) return "6E";
-    return "ZN";
-  }
-
-  function manualJsonList(element, name) {
-    let value;
-    try {
-      value = JSON.parse(element.value);
-    } catch (_error) {
-      throw new Error(`${name} must be valid JSON`);
-    }
-    if (!Array.isArray(value)) throw new Error(`${name} must be a JSON list`);
-    return value;
-  }
-
-  function manualTicketPayload() {
-    const capability = state.executionCapability || {};
-    return {
-      profile_id: capability.profile_id || "mff_rapid_eod_50k_2026_08_10",
-      stage: capability.account_stage === "evaluation" ? "evaluation" : "sim_funded",
-      account_alias: elements.manualAccountAlias.value.trim(),
-      signal_instrument: manualSignalRoot(elements.executionSymbol.value.trim().toUpperCase()),
-      execution_contract: elements.executionSymbol.value.trim().toUpperCase(),
-      side: elements.executionSide.value,
-      order_type: elements.executionOrderType.value,
-      entry_price: manualNumber(elements.executionEntryPrice),
-      stop_price: manualNumber(elements.executionStopPrice),
-      target_price: manualNumber(elements.executionTargetPrice),
-      quantity: Math.trunc(manualNumber(elements.executionQuantity) || 0),
-      strategy_candidate_id: "coarse-3",
-    };
-  }
-
-  function renderManualTicketResult(result) {
-    if (!result?.ok || !result.ticket) {
-      state.manualTicketId = null;
-      state.manualTicketState = "BLOCKED";
-      elements.manualTicketState.textContent = `BLOCKED • ${executionLabel(result?.error || "INVALID MANUAL TICKET")}`;
-      renderManualControls();
-      return;
-    }
-    const ticket = result.ticket;
-    state.manualTicketId = ticket.ticket_id;
-    state.manualTicketState = ticket.state;
-    elements.manualActualContract.value = ticket.execution_contract || elements.executionSymbol.value;
-    elements.manualActualSide.value = ticket.side || elements.executionSide.value;
-    elements.executionMaxQuantity.textContent = String(ticket.authoritative_maximum_quantity ?? 0);
-    elements.manualPreviewReadiness.textContent = ticket.manual_ticket_preview_available ? "AVAILABLE" : "FALSE";
-    elements.manualAssistantReadiness.textContent = ticket.manual_assistant_readiness ? "TRUE" : "FALSE";
-    elements.manualPlannedRisk.textContent = `${ticket.planned_stop_risk_usd ?? "—"} USD`;
-    elements.manualAggregateMicros.textContent = `${ticket.projected_micro_equivalents ?? "—"} / 30 micros`;
-    elements.manualCostStatus.textContent = "PROVISIONAL / NOT OFFICIAL";
-    elements.manualCopyText.textContent = result.copy_text || "NO ORDER HAS BEEN TRANSMITTED BY FUTURESLIVECOCKPIT";
-    elements.manualTicketState.textContent = `${executionLabel(ticket.state)} • ${executionLabel(ticket.authority)} • OPERATOR ENTRY REQUIRED`;
-    const blockers = ticket.blocker_reason_codes || [];
-    elements.executionBlockerList.replaceChildren(...(
-      blockers.length ? blockers : ["NO_CURRENT_MANUAL_ENTRY_BLOCKER_PROVIDER_API_REMAINS_DISABLED"]
-    ).map((reason) => {
-        const item = document.createElement("li"); item.textContent = executionLabel(reason); return item;
-      }));
-    renderManualControls();
-  }
-
-  function renderManualControls() {
-    const current = state.manualTicketState;
-    const allowed = {
-      copy: current === "READY_FOR_MANUAL_ENTRY",
-      submitted: current === "READY_FOR_MANUAL_ENTRY",
-      partial: current === "OPERATOR_REPORTED_SUBMITTED",
-      filled: ["OPERATOR_REPORTED_SUBMITTED", "OPERATOR_REPORTED_PARTIALLY_FILLED"].includes(current),
-      protected: current === "OPERATOR_REPORTED_FILLED",
-      rejected: current === "OPERATOR_REPORTED_SUBMITTED",
-      cancelled: current === "OPERATOR_REPORTED_SUBMITTED",
-      closed: current === "OPERATOR_CONFIRMED_PROTECTED",
-      reconciled: ["OPERATOR_REPORTED_REJECTED", "OPERATOR_REPORTED_CANCELLED", "OPERATOR_REPORTED_CLOSED", "STATE_UNCERTAIN"].includes(current),
-      uncertain: ["BLOCKED", "READY_FOR_MANUAL_ENTRY", "OPERATOR_REPORTED_SUBMITTED", "OPERATOR_REPORTED_PARTIALLY_FILLED", "OPERATOR_REPORTED_FILLED", "OPERATOR_CONFIRMED_PROTECTED", "OPERATOR_REPORTED_CLOSED"].includes(current),
-      abandoned: ["BLOCKED", "READY_FOR_MANUAL_ENTRY"].includes(current),
-      compare: ["OPERATOR_REPORTED_PARTIALLY_FILLED", "OPERATOR_REPORTED_FILLED", "OPERATOR_CONFIRMED_PROTECTED", "OPERATOR_REPORTED_CLOSED", "STATE_UNCERTAIN"].includes(current),
-    };
-    elements.manualCopyOrder.disabled = !allowed.copy;
-    elements.manualMarkSubmitted.disabled = !allowed.submitted;
-    elements.manualRecordPartial.disabled = !allowed.partial;
-    elements.manualRecordFill.disabled = !allowed.filled;
-    elements.manualConfirmProtection.disabled = !allowed.protected;
-    elements.manualRecordRejection.disabled = !allowed.rejected;
-    elements.manualRecordCancellation.disabled = !allowed.cancelled;
-    elements.manualRecordExit.disabled = !allowed.closed;
-    elements.manualReconcileTicket.disabled = !allowed.reconciled;
-    elements.manualStateUncertain.disabled = !allowed.uncertain;
-    elements.manualAbandon.disabled = !allowed.abandoned;
-    elements.manualCompare.disabled = !allowed.compare;
-  }
-
-  async function reconcileManualState() {
-    const alias = elements.manualAccountAlias.value.trim();
-    let openPositions;
-    let workingOrders;
-    let protectiveOrders;
-    try {
-      openPositions = manualJsonList(elements.manualOpenPositions, "Open positions");
-      workingOrders = manualJsonList(elements.manualWorkingOrders, "Working entries");
-      protectiveOrders = manualJsonList(elements.manualProtectiveOrders, "Protective orders");
-    } catch (error) {
-      elements.manualReconcileStatus.textContent = `STATE UNCERTAIN • ${String(error.message || error)}`;
-      return;
-    }
-    const payload = {
-      profile_id: state.executionCapability?.profile_id || "mff_rapid_eod_50k_2026_08_10",
-      stage: state.executionCapability?.account_stage === "evaluation" ? "evaluation" : "sim_funded",
-      account_alias: alias, nominal_plan_size_usd: 50000,
-      realized_balance_usd: manualNumber(elements.manualBalance),
-      active_eod_floor_usd: manualNumber(elements.manualFloor),
-      floor_lock_status: elements.manualFloorLock.value, current_session_realized_pnl_usd: manualNumber(elements.manualSessionPnl),
-      open_positions: openPositions, working_entry_orders: workingOrders, protective_orders: protectiveOrders, payout_state: "NOT_REPORTED",
-      reconciliation_notes: "Operator reviewed MFF and Tradovate manual state.", confirmation: `RECONCILE ${alias}`,
-    };
-    const result = state.bridgeReady
-      ? await window.pywebview.api.record_operator_account_snapshot(payload)
-      : { ok: false, error: "DESKTOP_BRIDGE_REQUIRED" };
-    elements.manualReconcileStatus.textContent = result.ok
-      ? "OPERATOR REPORTED • CURRENT UNTIL STATE CHANGE OR RESTART"
-      : `STATE UNCERTAIN • ${executionLabel(result.error)}`;
-    if (result.ok) {
-      const balance = manualNumber(elements.manualBalance);
-      const floor = manualNumber(elements.manualFloor);
-      elements.executionBalance.textContent = `${balance} USD • OPERATOR REPORTED`;
-      elements.executionFloor.textContent = `${floor} USD • OPERATOR REPORTED`;
-      elements.executionFloorDistance.textContent = `${balance - floor} USD`;
-      elements.executionPositionCount.textContent = String(openPositions.length);
-      elements.executionOrderCount.textContent = String(workingOrders.length + protectiveOrders.length);
-    }
-  }
-
-  async function prepareManualTicket() {
-    const payload = manualTicketPayload();
-    const result = state.bridgeReady
-      ? await window.pywebview.api.prepare_manual_ticket(payload)
-      : { ok: false, error: "DESKTOP_BRIDGE_REQUIRED" };
-    renderManualTicketResult(result);
-  }
-
-  async function manualTransition(target, report = {}) {
-    if (!state.manualTicketId) {
-      elements.manualTicketState.textContent = "BLOCKED • PREPARE A MANUAL TICKET FIRST";
-      return;
-    }
-    const result = state.bridgeReady
-      ? await window.pywebview.api.transition_manual_ticket({ ticket_id: state.manualTicketId, target, report })
-      : { ok: false, error: "DESKTOP_BRIDGE_REQUIRED" };
-    if (result.ok) {
-      state.manualTicketState = result.state;
-      if (result.state === "OPERATOR_REPORTED_FILLED") {
-        elements.manualTicketState.textContent = "OPERATOR REPORTED FILLED • OPERATOR REPORTED • PROTECTION REQUIRED — NEW TICKETS BLOCKED • NOT BROKER CONFIRMED";
-      } else if (result.state === "STATE_UNCERTAIN") {
-        elements.manualTicketState.textContent = "STATE UNCERTAIN • OPERATOR REPORTED • NEW TICKETS BLOCKED • NOT BROKER CONFIRMED";
-      } else {
-        elements.manualTicketState.textContent = `${executionLabel(result.state)} • ${executionLabel(result.authority)} • NOT BROKER CONFIRMED`;
-      }
-      renderManualControls();
-      if (["OPERATOR_REPORTED_PARTIALLY_FILLED", "OPERATOR_REPORTED_FILLED"].includes(result.state)) {
-        elements.executionFillCount.textContent = "1";
-      }
-      elements.manualReconcileStatus.textContent = "STALE — RECONCILIATION REQUIRED • OPERATOR REPORTED";
-    } else {
-      elements.manualTicketState.textContent = `STATE UNCERTAIN • ${executionLabel(result.error)}`;
-    }
-  }
-
-  async function compareManualActual() {
-    if (!state.manualTicketId) return;
-    const report = {
-      actual_contract: elements.manualActualContract.value.trim().toUpperCase(),
-      actual_side: elements.manualActualSide.value,
-      actual_quantity: Math.trunc(manualNumber(elements.manualActualQuantity) || 0),
-      actual_fill_price: manualNumber(elements.manualActualFill),
-      actual_stop: manualNumber(elements.manualActualStop),
-      actual_target: manualNumber(elements.manualActualTarget),
-      actual_fees: manualNumber(elements.manualActualFees),
-    };
-    if (!state.bridgeReady) {
-      elements.manualComparison.textContent = "STATE UNCERTAIN • DESKTOP BRIDGE REQUIRED";
-      return;
-    }
-    const result = await window.pywebview.api.compare_manual_ticket({ ticket_id: state.manualTicketId, report });
-    if (result?.ok && result.comparison?.resulting_state) {
-      state.manualTicketState = result.comparison.resulting_state;
-      if (state.manualTicketState === "STATE_UNCERTAIN") {
-        elements.manualTicketState.textContent = "STATE UNCERTAIN • OPERATOR REPORTED • NEW TICKETS BLOCKED • NOT BROKER CONFIRMED";
-        elements.manualReconcileStatus.textContent = "STALE — RECONCILIATION REQUIRED • OPERATOR REPORTED";
-      }
-      renderManualControls();
-    }
-    elements.manualComparison.textContent = result.ok
-      ? `OPERATOR REPORTED • Slippage ${result.comparison.entry_slippage_ticks} ticks • Alerts: ${(result.comparison.alerts || []).map(executionLabel).join(", ") || "none"}`
-      : `STATE UNCERTAIN • ${executionLabel(result.error)}`;
-  }
 
   function statusClass(value) {
     return STATUS_CLASS[String(value || "WAITING").toUpperCase()] || "waiting";
@@ -1895,7 +1571,6 @@
       ...state.historyPolicy,
       ...(payload.history_update_policy || {}),
     };
-    state.executionCapability = payload.execution_capability || state.executionCapability;
     state.predictionCapability = payload.prediction_capability || {
       mode: "offline",
       synthetic: false,
@@ -1915,7 +1590,6 @@
     applyUiPreferences(payload.ui_preferences || {});
     clearSelectionContext();
     renderTimeframes();
-    renderExecution();
     renderMarkets();
     renderHistoryPolicy();
     initializeChart();
@@ -2071,10 +1745,6 @@
     else if (message.type === "data_health") applyDataHealth(message.payload);
     else if (message.type === "prediction_update") applyPrediction(message.payload);
     else if (message.type === "history_cache_status") applyHistoryCacheStatus(message.payload);
-    else if (message.type === "execution_capability" || message.type === "execution_readiness") {
-      state.executionCapability = message.payload;
-      renderExecution();
-    }
   }
 
   function newestCurrentBarEventAge(messages, nowMs) {
@@ -2389,19 +2059,6 @@
           adaptive_floor_hz: VISUAL_UPDATE_HZ.efficient,
         },
         ui_preferences: {},
-        execution_capability: {
-          mode: "LOCAL_EXECUTION_SIMULATOR", origin: "LOCAL_SIMULATOR", simulated: true,
-          provider_id: "LOCAL_EXECUTION_SIMULATOR", platform_id: "LOCAL_FAKE_BROKER", profile_id: "mff_rapid_eod_50k_2026_08_10",
-          account_stage: "sim_funded", connection_id: "LOCAL-SIMULATOR", connection_hash: "0".repeat(64),
-          entitlement_status: "NOT_APPLICABLE_LOCAL_SIMULATOR", account_binding_present: false, account_binding_id: null,
-          execution_capability: "MANUAL_ONLY", direct_api_read_access: false, direct_api_order_access: false,
-          manual_ticket_preview_available: true, manual_assistant_readiness: false,
-          provider_api_readiness: false, automatic_execution_authorized: false, operator_reported_state: true,
-          cost_profile_id: "mff_micro_provisional_stress_v1", exact_costs_verified: false, production_readiness: false,
-          execution_authorized: false, order_paths_reachable: false, provider_connection_opened: false, armed: false,
-          arm_expires_at: null, blockers: ["LOCAL_SIMULATOR_NOT_PROVIDER_EXECUTION", "SYNTHETIC_MANUAL_WORKFLOW_DEMO", "NO_PROVIDER_ORDER_TRANSMISSION"],
-          verified_micro_mappings: ["MES", "MCL", "M6E"], disabled_signal_roots: ["ZN"],
-        },
       },
     });
     const demoNow = Math.floor(Date.now() / 1000);
@@ -2505,63 +2162,6 @@
   elements.historyPolicyManual.addEventListener("click", () => chooseHistoryUpdateMode("MANUAL"));
   elements.historyPolicyChoiceAuto.addEventListener("click", () => chooseHistoryUpdateMode("AUTO"));
   elements.historyPolicyChoiceManual.addEventListener("click", () => chooseHistoryUpdateMode("MANUAL"));
-  elements.manualReconcile.addEventListener("click", reconcileManualState);
-  elements.manualDemoStage.addEventListener("change", () => {
-    if (state.mode !== "demo" || !state.executionCapability) return;
-    state.executionCapability = {
-      ...state.executionCapability,
-      account_stage: elements.manualDemoStage.value,
-      entitlement_status: "UNAVAILABLE_FOR_SIMULATED_ACCOUNT",
-      provider_api_readiness: false,
-      automatic_execution_authorized: false,
-      blockers: [
-        "MANUAL_ENTRY_REQUIRED",
-        "OPERATOR_ACCOUNT_SNAPSHOT_REQUIRED",
-        "SESSION_RECORD_NOT_BOUND",
-        "NEWS_RECORD_NOT_BOUND",
-        "PRICE_LIMIT_RECORD_NOT_BOUND",
-        "OFFICIAL_EXECUTION_COSTS_UNVERIFIED",
-      ],
-    };
-    state.manualTicketId = null;
-    state.manualTicketState = "BLOCKED";
-    elements.manualTicketState.textContent = "BLOCKED • MODEL CALCULATED • PREPARE A STAGE-BOUND TICKET";
-    elements.manualReconcileStatus.textContent = "STALE — RECONCILIATION REQUIRED • OPERATOR REPORTED";
-    renderManualControls();
-    renderExecution();
-  });
-  elements.manualPrepareTicket.addEventListener("click", prepareManualTicket);
-  elements.manualCopyOrder.addEventListener("click", async () => {
-    const text = elements.manualCopyText.textContent || "";
-    try {
-      await navigator.clipboard.writeText(text);
-      elements.manualTicketState.textContent = `${executionLabel(state.manualTicketState)} • COPIED LOCALLY • NO TRANSMISSION`;
-    } catch (_error) {
-      elements.manualTicketState.textContent = `${executionLabel(state.manualTicketState)} • COPY FAILED — SELECT TEXT MANUALLY`;
-    }
-  });
-  elements.manualMarkSubmitted.addEventListener("click", () => manualTransition("OPERATOR_REPORTED_SUBMITTED", { actual_submission_time: new Date().toISOString() }));
-  elements.manualRecordPartial.addEventListener("click", () => manualTransition("OPERATOR_REPORTED_PARTIALLY_FILLED", {
-    partial_fills: [{ quantity: Math.max(1, Math.trunc(manualNumber(elements.manualActualQuantity) || 1)), price: manualNumber(elements.manualActualFill), time: new Date().toISOString() }],
-  }));
-  elements.manualRecordFill.addEventListener("click", () => manualTransition("OPERATOR_REPORTED_FILLED", {
-    actual_contract: elements.manualActualContract.value.trim().toUpperCase(),
-    actual_side: elements.manualActualSide.value,
-    actual_quantity: Math.trunc(manualNumber(elements.manualActualQuantity) || 0),
-    actual_fill_price: manualNumber(elements.manualActualFill),
-    actual_stop: manualNumber(elements.manualActualStop), actual_target: manualNumber(elements.manualActualTarget),
-    actual_fill_time: new Date().toISOString(), actual_fees: manualNumber(elements.manualActualFees),
-  }));
-  elements.manualConfirmProtection.addEventListener("click", () => manualTransition("OPERATOR_CONFIRMED_PROTECTED", {
-    actual_stop: manualNumber(elements.manualActualStop), confirmed_at: new Date().toISOString(),
-  }));
-  elements.manualRecordRejection.addEventListener("click", () => manualTransition("OPERATOR_REPORTED_REJECTED", { actual_rejection_reason: "Operator reported rejection" }));
-  elements.manualRecordCancellation.addEventListener("click", () => manualTransition("OPERATOR_REPORTED_CANCELLED", { cancelled_at: new Date().toISOString() }));
-  elements.manualRecordExit.addEventListener("click", () => manualTransition("OPERATOR_REPORTED_CLOSED", { actual_exit_price: manualNumber(elements.manualActualExit), actual_exit_time: new Date().toISOString(), actual_fees: manualNumber(elements.manualActualFees) }));
-  elements.manualReconcileTicket.addEventListener("click", () => manualTransition("OPERATOR_RECONCILED", { reconciliation_notes: "Operator reconciled final manual state" }));
-  elements.manualStateUncertain.addEventListener("click", () => manualTransition("STATE_UNCERTAIN", { operator_notes: "Operator cannot determine current order or position state" }));
-  elements.manualAbandon.addEventListener("click", () => manualTransition("ABANDONED", { operator_notes: "Operator abandoned local ticket" }));
-  elements.manualCompare.addEventListener("click", compareManualActual);
   elements.fitChart.addEventListener("click", resetChartView);
   elements.fullscreenToggle.addEventListener("click", toggleFullscreen);
   elements.predictionPanelToggle.addEventListener("click", () => {
