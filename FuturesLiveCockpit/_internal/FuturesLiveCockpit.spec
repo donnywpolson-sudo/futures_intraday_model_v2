@@ -37,6 +37,7 @@ a = Analysis(
         'yaml',
         'webview',
         'webview.platforms.edgechromium',
+        'futures_rebuild.live_cockpit.smoke',
         'futures_rebuild.live_cockpit.execution.tradovate_adapter',
         'futures_rebuild.live_cockpit.execution.manual_assistant',
     ],

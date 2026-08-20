@@ -11,8 +11,10 @@ import threading
 import time
 import uuid
 from contextlib import contextmanager
+from datetime import datetime, timedelta, timezone
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
-from typing import Any, Iterator, Mapping
+from typing import Any, Callable, Iterator, Mapping
 
 from .credentials import (
     default_credential_locator_path,
@@ -74,6 +76,13 @@ MARKET_GROUPING_MODES = frozenset({"sector", "alpha_tier"})
 MAX_PERSISTED_GROUP_IDS = 32
 WEBVIEW2_BROWSER_ARGUMENTS_ENV = "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS"
 DEMO_WEBVIEW2_BACKGROUND_ARGUMENT = "--disable-background-networking"
+HISTORY_POLICY_VERSION = 1
+HISTORY_POLICY_MODES = frozenset({"UNDECIDED", "MANUAL", "AUTO"})
+HISTORY_AUTO_INTERVAL = timedelta(hours=24)
+HISTORY_AUTO_MAX_ESTIMATED_COST_USD = Decimal("0.05")
+HISTORY_AUTO_OUTCOMES = frozenset(
+    {"STARTED", "COMPLETE", "ERROR", "PARTIAL", "REJECTED", "INTERRUPTED"}
+)
 
 
 @contextmanager
@@ -130,12 +139,180 @@ def load_state(path: Path) -> dict[str, Any]:
 
 def save_state(path: Path, state: Mapping[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_suffix(f"{path.suffix}.tmp")
-    temporary.write_text(
-        json.dumps(dict(state), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
+    temporary = path.with_name(f"{path.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(dict(state), indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, path)
+    finally:
+        try:
+            temporary.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def mutate_state(
+    path: Path,
+    lock: threading.RLock,
+    mutation: Callable[[dict[str, Any]], None],
+) -> dict[str, Any]:
+    """Serialize one read-modify-write state update within the cockpit process."""
+
+    with lock:
+        state = load_state(path)
+        mutation(state)
+        save_state(path, state)
+        return state
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _utc_text(value: datetime) -> str:
+    return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _parse_utc_text(value: object) -> datetime | None:
+    if value is None:
+        return None
+    if not isinstance(value, str) or not value.strip():
+        raise ValueError("history policy timestamp is malformed")
+    parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("history policy timestamp lacks a timezone")
+    return parsed.astimezone(timezone.utc)
+
+
+def default_history_update_policy() -> dict[str, Any]:
+    return {
+        "policy_version": HISTORY_POLICY_VERSION,
+        "mode": "UNDECIDED",
+        "last_auto_attempt_at": None,
+        "last_auto_estimate_usd": None,
+        "last_auto_outcome": None,
+        "last_auto_plan_fingerprint": None,
+        "auto_blocked": False,
+        "block_reason": None,
+        "last_result_at": None,
+    }
+
+
+def _malformed_history_update_policy() -> dict[str, Any]:
+    policy = default_history_update_policy()
+    policy.update(
+        {
+            "mode": "MANUAL",
+            "auto_blocked": True,
+            "block_reason": "MALFORMED_POLICY",
+        }
     )
-    os.replace(temporary, path)
+    return policy
+
+
+def sanitize_history_update_policy(value: object) -> dict[str, Any]:
+    if value is None:
+        return default_history_update_policy()
+    if not isinstance(value, Mapping):
+        return _malformed_history_update_policy()
+    if value.get("policy_version") != HISTORY_POLICY_VERSION:
+        return default_history_update_policy()
+    try:
+        mode = str(value.get("mode") or "").upper()
+        if mode not in HISTORY_POLICY_MODES:
+            raise ValueError("invalid history policy mode")
+        last_attempt = _parse_utc_text(value.get("last_auto_attempt_at"))
+        last_result = _parse_utc_text(value.get("last_result_at"))
+        estimate_value = value.get("last_auto_estimate_usd")
+        estimate: str | None = None
+        if estimate_value is not None:
+            parsed_estimate = Decimal(str(estimate_value))
+            if not parsed_estimate.is_finite() or parsed_estimate < 0:
+                raise ValueError("invalid history estimate")
+            estimate = format(parsed_estimate, "f")
+        outcome = value.get("last_auto_outcome")
+        if outcome is not None and outcome not in HISTORY_AUTO_OUTCOMES:
+            raise ValueError("invalid history outcome")
+        fingerprint = value.get("last_auto_plan_fingerprint")
+        if fingerprint is not None and (
+            not isinstance(fingerprint, str)
+            or len(fingerprint) != 64
+            or any(character not in "0123456789abcdef" for character in fingerprint)
+        ):
+            raise ValueError("invalid history plan fingerprint")
+        blocked = value.get("auto_blocked")
+        if not isinstance(blocked, bool):
+            raise ValueError("invalid history block flag")
+        reason = value.get("block_reason")
+        if reason is not None and (
+            not isinstance(reason, str)
+            or not reason
+            or len(reason) > 64
+            or any(character not in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_" for character in reason)
+        ):
+            raise ValueError("invalid history block reason")
+    except (InvalidOperation, ValueError, TypeError, OverflowError):
+        return _malformed_history_update_policy()
+    return {
+        "policy_version": HISTORY_POLICY_VERSION,
+        "mode": mode,
+        "last_auto_attempt_at": _utc_text(last_attempt) if last_attempt else None,
+        "last_auto_estimate_usd": estimate,
+        "last_auto_outcome": outcome,
+        "last_auto_plan_fingerprint": fingerprint,
+        "auto_blocked": blocked,
+        "block_reason": reason,
+        "last_result_at": _utc_text(last_result) if last_result else None,
+    }
+
+
+def _public_history_policy(policy: Mapping[str, Any]) -> dict[str, Any]:
+    return {
+        **dict(policy),
+        "automatic_limit_usd": format(HISTORY_AUTO_MAX_ESTIMATED_COST_USD, "f"),
+        "automatic_interval_hours": int(HISTORY_AUTO_INTERVAL.total_seconds() // 3600),
+    }
+
+
+def _automatic_history_eligibility(
+    policy: Mapping[str, Any],
+    history_status: Mapping[str, Any],
+    *,
+    now: datetime,
+) -> tuple[bool, str | None, Decimal | None]:
+    if policy.get("mode") != "AUTO":
+        return False, "AUTOMATIC_OFF", None
+    if policy.get("auto_blocked") is True:
+        return False, str(policy.get("block_reason") or "AUTOMATIC_BLOCKED"), None
+    last_attempt = _parse_utc_text(policy.get("last_auto_attempt_at"))
+    if last_attempt is not None and now - last_attempt < HISTORY_AUTO_INTERVAL:
+        return False, "RECENT_ATTEMPT", None
+    if str(history_status.get("state") or "").upper() != "CONFIRMATION_REQUIRED":
+        return False, "PLAN_NOT_READY", None
+    try:
+        estimate = Decimal(str(history_status.get("estimated_cost_usd")))
+    except (InvalidOperation, ValueError, TypeError):
+        return False, "ESTIMATE_INVALID", None
+    if not estimate.is_finite() or estimate < 0:
+        return False, "ESTIMATE_INVALID", None
+    if estimate > HISTORY_AUTO_MAX_ESTIMATED_COST_USD:
+        return False, "ABOVE_CAP", estimate
+    plan_id = history_status.get("plan_id")
+    fingerprint = history_status.get("plan_fingerprint")
+    expires_at = history_status.get("estimate_expires_at")
+    if (
+        not isinstance(plan_id, str)
+        or not plan_id
+        or not isinstance(fingerprint, str)
+        or len(fingerprint) != 64
+        or any(character not in "0123456789abcdef" for character in fingerprint)
+        or not isinstance(expires_at, int)
+        or expires_at <= int(now.timestamp())
+    ):
+        return False, "PLAN_INVALID", estimate
+    return True, None, estimate
 
 
 def _sanitize_group_ids(value: object) -> list[str] | None:
@@ -300,7 +477,183 @@ class CockpitController:
         self._stop_complete = threading.Event()
         self._pending: list[dict[str, Any]] = []
         self._lock = threading.RLock()
+        self._state_lock = threading.RLock()
+        self._last_history_cache_status: dict[str, Any] = {}
+        self._history_planning_origin: str | None = None
+        self._active_history_origin: str | None = None
+        self._active_history_plan_id: str | None = None
         self.execution_runtime = execution_runtime
+        self._recover_interrupted_history_update()
+
+    def _mutate_state(self, mutation: Callable[[dict[str, Any]], None]) -> dict[str, Any]:
+        return mutate_state(self.state_path, self._state_lock, mutation)
+
+    def _history_policy(self) -> dict[str, Any]:
+        with self._state_lock:
+            state = load_state(self.state_path)
+        return sanitize_history_update_policy(state.get("history_update_policy"))
+
+    def _write_history_policy(self, policy: Mapping[str, Any]) -> dict[str, Any]:
+        sanitized = sanitize_history_update_policy(policy)
+
+        def update(state: dict[str, Any]) -> None:
+            state["history_update_policy"] = sanitized
+
+        self._mutate_state(update)
+        return sanitized
+
+    def _recover_interrupted_history_update(self) -> None:
+        policy = self._history_policy()
+        if policy.get("last_auto_outcome") != "STARTED":
+            return
+        policy.update(
+            {
+                "last_auto_outcome": "INTERRUPTED",
+                "auto_blocked": True,
+                "block_reason": "INTERRUPTED",
+                "last_result_at": _utc_text(_utc_now()),
+            }
+        )
+        self._write_history_policy(policy)
+
+    def _decorate_history_status(
+        self,
+        payload: Mapping[str, Any],
+        *,
+        now: datetime | None = None,
+    ) -> dict[str, Any]:
+        policy = self._history_policy()
+        evaluated_at = now or _utc_now()
+        eligible, reason, _estimate = _automatic_history_eligibility(
+            policy,
+            payload,
+            now=evaluated_at,
+        )
+        last_attempt = _parse_utc_text(policy.get("last_auto_attempt_at"))
+        return {
+            **dict(payload),
+            "policy_mode": policy["mode"],
+            "automatic_eligible": eligible,
+            "automatic_blocked": policy["auto_blocked"],
+            "automatic_reason": reason,
+            "automatic_limit_usd": float(HISTORY_AUTO_MAX_ESTIMATED_COST_USD),
+            "automatic_interval_hours": int(
+                HISTORY_AUTO_INTERVAL.total_seconds() // 3600
+            ),
+            "last_auto_attempt_at": (
+                int(last_attempt.timestamp()) if last_attempt is not None else None
+            ),
+            "last_auto_estimate_usd": (
+                float(policy["last_auto_estimate_usd"])
+                if policy.get("last_auto_estimate_usd") is not None
+                else None
+            ),
+            "last_auto_outcome": policy.get("last_auto_outcome"),
+            "update_origin": self._active_history_origin,
+        }
+
+    def _record_history_terminal(self, payload: Mapping[str, Any]) -> None:
+        terminal_state = str(payload.get("state") or "").upper()
+        if terminal_state not in {"COMPLETE", "PARTIAL", "ERROR"}:
+            return
+        origin = self._active_history_origin
+        policy = self._history_policy()
+        now_text = _utc_text(_utc_now())
+        reviewed_retry_completed = self._history_planning_origin == "AUTO_REVIEWED"
+        if terminal_state == "COMPLETE" and (
+            origin in {"AUTO", "MANUAL"} or reviewed_retry_completed
+        ):
+            if origin == "AUTO":
+                policy["last_auto_outcome"] = "COMPLETE"
+            policy.update(
+                {
+                    "auto_blocked": False,
+                    "block_reason": None,
+                    "last_result_at": now_text,
+                }
+            )
+        elif terminal_state != "COMPLETE" and (origin == "AUTO" or (
+            origin is None
+            and self._history_planning_origin in {"AUTO", "AUTO_REVIEWED"}
+            and policy.get("mode") == "AUTO"
+        )):
+            user_disabled = policy.get("block_reason") == "USER_DISABLED"
+            if policy.get("last_auto_attempt_at") is None:
+                policy["last_auto_attempt_at"] = now_text
+                policy["last_auto_estimate_usd"] = None
+                policy["last_auto_plan_fingerprint"] = None
+            policy.update(
+                {
+                    "last_auto_outcome": (
+                        "INTERRUPTED" if user_disabled else terminal_state
+                    ),
+                    "auto_blocked": True,
+                    "block_reason": (
+                        "USER_DISABLED"
+                        if user_disabled
+                        else "AUTO_PARTIAL"
+                        if terminal_state == "PARTIAL"
+                        else f"AUTO_{str(payload.get('failure_category') or 'ERROR').upper()}"
+                    ),
+                    "last_result_at": now_text,
+                }
+            )
+        if origin in {"AUTO", "MANUAL"} or reviewed_retry_completed or (
+            terminal_state != "COMPLETE"
+            and self._history_planning_origin in {"AUTO", "AUTO_REVIEWED"}
+        ):
+            self._write_history_policy(policy)
+        self._active_history_origin = None
+        self._active_history_plan_id = None
+        self._history_planning_origin = None
+
+    def _reserve_automatic_confirmation(
+        self,
+        payload: Mapping[str, Any],
+    ) -> str | None:
+        now = _utc_now()
+        eligible, _reason, _estimate = _automatic_history_eligibility(
+            self._history_policy(),
+            payload,
+            now=now,
+        )
+        if not eligible:
+            return None
+        reservation: dict[str, str] = {}
+
+        def reserve(state: dict[str, Any]) -> None:
+            policy = sanitize_history_update_policy(state.get("history_update_policy"))
+            eligible, _reason, estimate = _automatic_history_eligibility(
+                policy,
+                payload,
+                now=now,
+            )
+            if not eligible or estimate is None:
+                return
+            plan_id = str(payload["plan_id"])
+            fingerprint = str(payload["plan_fingerprint"])
+            policy.update(
+                {
+                    "last_auto_attempt_at": _utc_text(now),
+                    "last_auto_estimate_usd": format(estimate, "f"),
+                    "last_auto_outcome": "STARTED",
+                    "last_auto_plan_fingerprint": fingerprint,
+                    "auto_blocked": False,
+                    "block_reason": None,
+                    "last_result_at": None,
+                }
+            )
+            state["history_update_policy"] = policy
+            reservation.update({"plan_id": plan_id, "fingerprint": fingerprint})
+
+        self._mutate_state(reserve)
+        plan_id = reservation.get("plan_id")
+        if plan_id is None:
+            return None
+        self._active_history_origin = "AUTO"
+        self._active_history_plan_id = plan_id
+        self._history_planning_origin = None
+        return plan_id
 
     def attach_window(self, window: object) -> None:
         self.window = window
@@ -311,13 +664,24 @@ class CockpitController:
             bootstrap = self.engine.bootstrap_event()
             payload = bootstrap.get("payload")
             if isinstance(payload, dict):
-                persisted = load_state(self.state_path)
+                with self._state_lock:
+                    persisted = load_state(self.state_path)
                 preferences = sanitize_ui_preferences(persisted.get("ui_preferences"))
                 visual_mode = str(
                     preferences.get("visual_update_mode", DEFAULT_VISUAL_UPDATE_MODE)
                 )
                 self.engine.set_visual_update_mode(visual_mode)
                 payload["ui_preferences"] = preferences
+                history_capability = payload.get("history_cache_capability")
+                if (
+                    isinstance(history_capability, Mapping)
+                    and history_capability.get("enabled") is True
+                ):
+                    payload["history_update_policy"] = _public_history_policy(
+                        sanitize_history_update_policy(
+                            persisted.get("history_update_policy")
+                        )
+                    )
                 if self.execution_runtime is not None:
                     payload["execution_capability"] = (
                         self.execution_runtime.capability_payload()
@@ -339,6 +703,19 @@ class CockpitController:
         self.engine.start(self.publish)
 
     def publish(self, message: dict[str, Any]) -> None:
+        auto_confirm_plan: str | None = None
+        if message.get("type") == "history_cache_status":
+            raw_payload = message.get("payload")
+            if isinstance(raw_payload, Mapping):
+                payload = dict(raw_payload)
+                state_name = str(payload.get("state") or "").upper()
+                if state_name == "CHECKING" and self._history_planning_origin is None:
+                    if self._history_policy().get("mode") == "AUTO":
+                        self._history_planning_origin = "AUTO"
+                self._record_history_terminal(payload)
+                self._last_history_cache_status = dict(payload)
+                auto_confirm_plan = self._reserve_automatic_confirmation(payload)
+                message = {**message, "payload": self._decorate_history_status(payload)}
         with self._lock:
             if message.get("type") == "bar_update":
                 payload = message.get("payload")
@@ -364,6 +741,20 @@ class CockpitController:
                     ]
             self._pending.append(message)
             self._pending = self._pending[-500:]
+        if auto_confirm_plan is not None:
+            if not self.engine.confirm_history_cache(auto_confirm_plan):
+                policy = self._history_policy()
+                policy.update(
+                    {
+                        "last_auto_outcome": "REJECTED",
+                        "auto_blocked": True,
+                        "block_reason": "CONFIRMATION_REJECTED",
+                        "last_result_at": _utc_text(_utc_now()),
+                    }
+                )
+                self._write_history_policy(policy)
+                self._active_history_origin = None
+                self._active_history_plan_id = None
 
     def poll_events(self, limit: int = 100) -> list[dict[str, Any]]:
         bounded_limit = max(1, min(int(limit), 200))
@@ -375,9 +766,8 @@ class CockpitController:
     def select_market(self, market: str) -> dict[str, Any]:
         accepted = self.engine.select_market(str(market).strip().upper())
         if accepted:
-            state = load_state(self.state_path)
-            state["market"] = str(market).strip().upper()
-            save_state(self.state_path, state)
+            selected = str(market).strip().upper()
+            self._mutate_state(lambda state: state.__setitem__("market", selected))
         return {
             "ok": accepted,
             "generation": int(getattr(self.engine, "generation", 0)),
@@ -386,9 +776,8 @@ class CockpitController:
     def select_timeframe(self, timeframe: str) -> dict[str, Any]:
         accepted = self.engine.select_timeframe(str(timeframe).strip().lower())
         if accepted:
-            state = load_state(self.state_path)
-            state["timeframe"] = str(timeframe).strip().lower()
-            save_state(self.state_path, state)
+            selected = str(timeframe).strip().lower()
+            self._mutate_state(lambda state: state.__setitem__("timeframe", selected))
         return {"ok": accepted}
 
     def retry_history(self) -> dict[str, Any]:
@@ -399,7 +788,14 @@ class CockpitController:
         }
 
     def confirm_history_cache(self, plan_id: str) -> dict[str, bool]:
-        return {"ok": self.engine.confirm_history_cache(str(plan_id))}
+        normalized = str(plan_id)
+        self._active_history_origin = "MANUAL"
+        self._active_history_plan_id = normalized
+        accepted = self.engine.confirm_history_cache(normalized)
+        if not accepted:
+            self._active_history_origin = None
+            self._active_history_plan_id = None
+        return {"ok": accepted}
 
     def set_history_cache_paused(self, paused: object) -> dict[str, bool]:
         if not isinstance(paused, bool):
@@ -407,15 +803,122 @@ class CockpitController:
         return {"ok": self.engine.set_history_cache_paused(paused)}
 
     def retry_history_cache_estimate(self) -> dict[str, bool]:
-        return {"ok": self.engine.retry_history_cache_estimate()}
+        self._history_planning_origin = "MANUAL"
+        accepted = self.engine.retry_history_cache_estimate()
+        if not accepted:
+            self._history_planning_origin = None
+        return {"ok": accepted}
+
+    def set_history_update_mode(self, mode: object) -> dict[str, Any]:
+        normalized = str(mode).strip().upper()
+        if normalized not in {"AUTO", "MANUAL"}:
+            return {"ok": False, "error": "INVALID_MODE"}
+        policy = self._history_policy()
+        if normalized == "AUTO" and policy.get("auto_blocked"):
+            return {
+                "ok": False,
+                "error": "REVIEW_REQUIRED",
+                "history_update_policy": _public_history_policy(policy),
+            }
+        policy.update({"mode": normalized})
+        if normalized == "MANUAL" and self._active_history_origin == "AUTO":
+            cancel = getattr(
+                self.engine, "cancel_history_cache_after_current_request", None
+            )
+            if callable(cancel):
+                cancel()
+            else:
+                self.engine.set_history_cache_paused(True)
+            policy.update(
+                {
+                    "auto_blocked": True,
+                    "block_reason": "USER_DISABLED",
+                    "last_auto_outcome": "INTERRUPTED",
+                    "last_result_at": _utc_text(_utc_now()),
+                }
+            )
+        self._write_history_policy(policy)
+        accepted = True
+        if normalized == "AUTO":
+            self._history_planning_origin = "AUTO"
+            plan_id = self._reserve_automatic_confirmation(
+                self._last_history_cache_status
+            )
+            if plan_id is not None:
+                accepted = self.engine.confirm_history_cache(plan_id)
+                if not accepted:
+                    policy = self._history_policy()
+                    policy.update(
+                        {
+                            "last_auto_outcome": "REJECTED",
+                            "auto_blocked": True,
+                            "block_reason": "CONFIRMATION_REJECTED",
+                            "last_result_at": _utc_text(_utc_now()),
+                        }
+                    )
+                    self._write_history_policy(policy)
+                    self._active_history_origin = None
+                    self._active_history_plan_id = None
+            elif str(self._last_history_cache_status.get("state") or "").upper() in {
+                "ERROR",
+                "PARTIAL",
+            }:
+                accepted = self.engine.retry_history_cache_estimate()
+                if not accepted:
+                    self._history_planning_origin = None
+        return {
+            "ok": accepted,
+            "history_update_policy": _public_history_policy(self._history_policy()),
+        }
+
+    def retry_automatic_history(self) -> dict[str, Any]:
+        policy = self._history_policy()
+        now = _utc_now()
+        last_attempt = _parse_utc_text(policy.get("last_auto_attempt_at"))
+        if last_attempt is not None and now - last_attempt < HISTORY_AUTO_INTERVAL:
+            return {
+                "ok": False,
+                "error": "RECENT_ATTEMPT",
+                "history_update_policy": _public_history_policy(policy),
+            }
+        policy.update(
+            {
+                "mode": "AUTO",
+                "auto_blocked": False,
+                "block_reason": None,
+            }
+        )
+        self._write_history_policy(policy)
+        self._history_planning_origin = "AUTO_REVIEWED"
+        accepted = self.engine.retry_history_cache_estimate()
+        if not accepted:
+            self._history_planning_origin = None
+            policy = self._history_policy()
+            policy.update(
+                {
+                    "auto_blocked": True,
+                    "block_reason": "AUTO_RETRY_NOT_STARTED",
+                    "last_auto_outcome": "REJECTED",
+                    "last_result_at": _utc_text(now),
+                }
+            )
+            self._write_history_policy(policy)
+        return {
+            "ok": accepted,
+            "history_update_policy": _public_history_policy(self._history_policy()),
+        }
 
     def set_ui_preferences(self, preferences: object) -> dict[str, Any]:
         sanitized = sanitize_ui_preferences(preferences)
-        state = load_state(self.state_path)
-        current = sanitize_ui_preferences(state.get("ui_preferences"))
-        current.update(sanitized)
-        state["ui_preferences"] = current
-        save_state(self.state_path, state)
+        current: dict[str, Any] = {}
+
+        def update(state: dict[str, Any]) -> None:
+            nonlocal current
+            current = sanitize_ui_preferences(state.get("ui_preferences"))
+            current.update(sanitized)
+            state["ui_preferences"] = current
+
+        self._mutate_state(update)
         visual_mode = sanitized.get("visual_update_mode")
         if isinstance(visual_mode, str):
             self.engine.set_visual_update_mode(visual_mode)
@@ -541,6 +1044,12 @@ class CockpitApi:
     def retry_history_cache_estimate(self) -> dict[str, bool]:
         return self._controller.retry_history_cache_estimate()
 
+    def set_history_update_mode(self, mode: object) -> dict[str, Any]:
+        return self._controller.set_history_update_mode(mode)
+
+    def retry_automatic_history(self) -> dict[str, Any]:
+        return self._controller.retry_automatic_history()
+
     def set_ui_preferences(self, preferences: object) -> dict[str, Any]:
         return self._controller.set_ui_preferences(preferences)
 
@@ -585,6 +1094,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Describe the bounded provider smoke; this command never runs it.",
     )
+    parser.add_argument(
+        "--run-approved-live-smoke",
+        action="store_true",
+        help=argparse.SUPPRESS,
+    )
+    parser.add_argument("--smoke-plan", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--smoke-approval", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--smoke-credential-locator", type=Path, help=argparse.SUPPRESS)
+    parser.add_argument("--smoke-result-output", type=Path, help=argparse.SUPPRESS)
     return parser
 
 
@@ -635,9 +1153,41 @@ def run_desktop(*, engine: CockpitEngine, state_path: Path, demo: bool) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_arg_parser().parse_args(argv)
-    selected_modes = sum((args.self_check, args.demo, args.prepare_live_smoke))
+    selected_modes = sum(
+        (
+            args.self_check,
+            args.demo,
+            args.prepare_live_smoke,
+            args.run_approved_live_smoke,
+        )
+    )
     if selected_modes > 1:
-        raise SystemExit("--self-check, --demo, and --prepare-live-smoke are mutually exclusive")
+        raise SystemExit(
+            "--self-check, --demo, --prepare-live-smoke, and the approved smoke task are mutually exclusive"
+        )
+    smoke_paths = (
+        args.smoke_plan,
+        args.smoke_approval,
+        args.smoke_credential_locator,
+        args.smoke_result_output,
+    )
+    if args.run_approved_live_smoke:
+        if any(path is None for path in smoke_paths):
+            raise SystemExit(
+                "approved smoke task requires plan, approval, credential locator, and result paths"
+            )
+        if args.market is not None or args.timeframe is not None:
+            raise SystemExit("approved smoke task does not accept market or timeframe overrides")
+        from .smoke import execute_approved_smoke
+
+        return execute_approved_smoke(
+            plan_path=args.smoke_plan,
+            approval_path=args.smoke_approval,
+            credential_locator=args.smoke_credential_locator,
+            result_output=args.smoke_result_output,
+        )
+    if any(path is not None for path in smoke_paths):
+        raise SystemExit("smoke task paths require the approved smoke task mode")
     if args.self_check:
         result = self_check()
         # PyInstaller's windowed bootloader sets stdout to None. The exit code
@@ -659,6 +1209,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 0
     root = app_data_dir()
+    if args.demo:
+        root = root / "demo"
     state_path = root / STATE_FILENAME
     persisted = load_state(state_path)
     market = args.market or str(persisted.get("market", "ES")).strip().upper()
@@ -668,7 +1220,12 @@ def main(argv: list[str] | None = None) -> int:
         market = "ES"
     if timeframe not in SUPPORTED_CHART_TIMEFRAMES:
         timeframe = "1m"
-    save_state(state_path, {**persisted, "market": market, "timeframe": timeframe})
+    state_lock = threading.RLock()
+
+    def persist_selection(state: dict[str, Any]) -> None:
+        state.update({"market": market, "timeframe": timeframe})
+
+    mutate_state(state_path, state_lock, persist_selection)
 
     engine: CockpitEngine
     if args.demo:

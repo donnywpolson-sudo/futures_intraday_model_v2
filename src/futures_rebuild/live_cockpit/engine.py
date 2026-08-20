@@ -16,6 +16,8 @@ from types import SimpleNamespace
 from typing import Any, Protocol
 from zoneinfo import ZoneInfo
 
+from futures_rebuild.canonical import sha256_json
+
 from .feed import (
     DEFAULT_CONTINUOUS_SUFFIX,
     DEFAULT_DATASET,
@@ -56,6 +58,7 @@ from .history import (
     group_history_chunks,
     missing_intervals,
     promote_market,
+    promote_market_first_request,
 )
 from .market_groups import load_alpha_tier_grouping
 from .predictions import (
@@ -127,6 +130,8 @@ class CockpitEngine(Protocol):
     def confirm_history_cache(self, plan_id: str) -> bool: ...
 
     def set_history_cache_paused(self, paused: bool) -> bool: ...
+
+    def cancel_history_cache_after_current_request(self) -> bool: ...
 
     def retry_history_cache_estimate(self) -> bool: ...
 
@@ -259,6 +264,35 @@ def _history_diagnostic(
         ),
         "download_began": download_began,
     }
+
+
+def _history_plan_fingerprint(plan: HistoryPlan) -> str:
+    """Bind the exact estimated requests without exposing provider responses."""
+
+    return sha256_json(
+        {
+            "created_at": plan.created_at.isoformat(),
+            "expires_at": plan.expires_at.isoformat(),
+            "target_start": plan.target_start.isoformat(),
+            "target_end": plan.target_end.isoformat(),
+            "estimated_cost_usd": format(plan.estimated_cost_usd, ".12g"),
+            "chunks": [
+                {
+                    "start": chunk.start.isoformat(),
+                    "end": chunk.end.isoformat(),
+                    "bindings": [
+                        {
+                            "market": binding.market,
+                            "contract": binding.contract,
+                            "instrument_id": binding.instrument_id,
+                        }
+                        for binding in chunk.bindings
+                    ],
+                }
+                for chunk in plan.chunks
+            ],
+        }
+    )
 
 
 def _merge_completed_history(
@@ -854,6 +888,9 @@ class DemoCockpitEngine:
     def set_history_cache_paused(self, paused: bool) -> bool:
         return False
 
+    def cancel_history_cache_after_current_request(self) -> bool:
+        return False
+
     def retry_history_cache_estimate(self) -> bool:
         return False
 
@@ -928,6 +965,7 @@ class LiveCockpitEngine:
         self._history_reestimate_requested = False
         self._history_active_chunk: HistoryChunk | None = None
         self._history_active_chunk_number: int | None = None
+        self._history_cancel_after_chunk = False
         self._history_plan_chunk_number = 0
         self._history_ready_markets = 0
         self._history_dataset_range_requests = 0
@@ -1481,12 +1519,40 @@ class LiveCockpitEngine:
                 if current_plan is not None
                 else 0
             )
+            affected_markets = (
+                sorted(
+                    {
+                        binding.market
+                        for chunk in current_plan.chunks
+                        for binding in chunk.bindings
+                    }
+                )
+                if current_plan is not None
+                else []
+            )
+            missing_start = (
+                min(chunk.start for chunk in current_plan.chunks)
+                if current_plan is not None and current_plan.chunks
+                else None
+            )
+            missing_end = (
+                max(chunk.end for chunk in current_plan.chunks)
+                if current_plan is not None and current_plan.chunks
+                else None
+            )
             paused = bool(current_plan.paused) if current_plan is not None else False
         payload: dict[str, Any] = {
             "state": state,
             "ready_markets": ready_markets,
             "total_markets": len(self.markets),
             "queued_markets": queued_markets,
+            "affected_markets": affected_markets,
+            "missing_start": (
+                timestamp_seconds(missing_start) if missing_start is not None else None
+            ),
+            "missing_end": (
+                timestamp_seconds(missing_end) if missing_end is not None else None
+            ),
             "active_market": active_market,
             "estimated_cost_usd": (
                 current_plan.estimated_cost_usd if current_plan is not None else None
@@ -1497,6 +1563,9 @@ class LiveCockpitEngine:
                 else None
             ),
             "plan_id": current_plan.plan_id if current_plan is not None else None,
+            "plan_fingerprint": (
+                current_plan.fingerprint if current_plan is not None else None
+            ),
             "paused": paused,
             "message": message,
         }
@@ -1830,6 +1899,9 @@ class LiveCockpitEngine:
             requested_start=target_start,
             requested_end=target_end,
         )
+        with self._lock:
+            selected_market = self.market
+        chunks = promote_market_first_request(chunks, selected_market)
         if len(chunks) > MAX_HISTORY_COST_ESTIMATE_REQUESTS:
             with self._history_lock:
                 self._history_plan = None
@@ -1866,6 +1938,7 @@ class LiveCockpitEngine:
         created_at = datetime.now(timezone.utc)
         plan = HistoryPlan(
             plan_id=uuid.uuid4().hex,
+            fingerprint="",
             created_at=created_at,
             expires_at=created_at + timedelta(minutes=PLAN_EXPIRY_MINUTES),
             target_start=target_start,
@@ -1873,6 +1946,7 @@ class LiveCockpitEngine:
             estimated_cost_usd=estimated_cost,
             chunks=list(chunks),
         )
+        plan.fingerprint = _history_plan_fingerprint(plan)
         with self._history_lock:
             if self._stop_event.is_set():
                 return
@@ -2202,10 +2276,15 @@ class LiveCockpitEngine:
         )
         with self._history_lock:
             known_binding = self._market_bindings.get(normalized)
-            if self._history_plan is not None and self._history_plan.confirmed:
-                self._history_plan.chunks = promote_market(
-                    self._history_plan.chunks, normalized
-                )
+            if self._history_plan is not None:
+                if self._history_plan.confirmed:
+                    self._history_plan.chunks = promote_market(
+                        self._history_plan.chunks, normalized
+                    )
+                else:
+                    self._history_plan = None
+                    self._history_reestimate_requested = True
+                    self._history_retry_active = True
                 self._history_wakeup.set()
         if known_binding is not None and self._publish_cached_selection(
             binding=known_binding,
@@ -2348,6 +2427,7 @@ class LiveCockpitEngine:
                 with self._history_lock:
                     self._history_active_chunk = None
                     self._history_active_chunk_number = None
+                    self._history_cancel_after_chunk = False
                     if self._history_plan is plan:
                         self._history_plan = None
                     self._history_retry_active = False
@@ -2371,6 +2451,10 @@ class LiveCockpitEngine:
             with self._history_lock:
                 self._history_active_chunk = None
                 self._history_active_chunk_number = None
+                canceled = self._history_cancel_after_chunk
+                if canceled:
+                    plan.chunks.clear()
+                    self._history_cancel_after_chunk = False
                 bindings = list(self._market_bindings.values())
             missing_by_instrument = {
                 binding.instrument_id: self._missing_history(
@@ -2394,8 +2478,12 @@ class LiveCockpitEngine:
                 self._history_failure = None
             if remaining:
                 self._emit_history_cache_status(
-                    "WARMING",
-                    "Updating missing one-week history in the background",
+                    "PAUSED" if plan.paused else "WARMING",
+                    (
+                        "History cache update paused"
+                        if plan.paused
+                        else "Updating missing one-week history in the background"
+                    ),
                     plan=plan,
                 )
             elif ready == len(self.markets):
@@ -2405,7 +2493,11 @@ class LiveCockpitEngine:
             else:
                 self._emit_history_cache_status(
                     "PARTIAL",
-                    "Some market history remains incomplete; refresh the estimate to retry.",
+                    (
+                        "Automatic history repair stopped after the current request; review before continuing."
+                        if canceled
+                        else "Some market history remains incomplete; refresh the estimate to retry."
+                    ),
                 )
             self._publish_current_focus_health()
 
@@ -2430,6 +2522,8 @@ class LiveCockpitEngine:
 
     def confirm_history_cache(self, plan_id: str) -> bool:
         expired = False
+        with self._lock:
+            selected_market = self.market
         with self._history_lock:
             plan = self._history_plan
             if (
@@ -2443,6 +2537,12 @@ class LiveCockpitEngine:
                 self._history_plan = None
                 expired = True
             else:
+                plan.chunks = promote_market_first_request(
+                    plan.chunks, selected_market
+                )
+                if _history_plan_fingerprint(plan) != plan.fingerprint:
+                    self._history_plan = None
+                    return False
                 plan.confirmed = True
                 plan.paused = False
                 self._history_plan_confirmations += 1
@@ -2489,6 +2589,30 @@ class LiveCockpitEngine:
                 else "History cache update resumed"
             ),
             plan=plan,
+        )
+        self._history_wakeup.set()
+        return True
+
+    def cancel_history_cache_after_current_request(self) -> bool:
+        with self._history_lock:
+            plan = self._history_plan
+            if plan is None or not plan.confirmed:
+                return False
+            active = self._history_active_chunk is not None
+            plan.paused = True
+            self._history_cancel_after_chunk = active
+            if not active:
+                plan.chunks.clear()
+                self._history_plan = None
+                self._history_retry_active = False
+        self._emit_history_cache_status(
+            "PAUSED" if active else "PARTIAL",
+            (
+                "Automatic history repair will stop after the current request"
+                if active
+                else "Automatic history repair stopped; review before continuing"
+            ),
+            plan=plan if active else None,
         )
         self._history_wakeup.set()
         return True

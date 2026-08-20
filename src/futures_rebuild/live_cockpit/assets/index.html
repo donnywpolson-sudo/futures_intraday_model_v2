@@ -44,7 +44,7 @@
             <span id="overview-dot" class="status-dot waiting"></span>
             <span id="overview-label">Overview waiting</span>
           </div>
-          <span id="market-count">33 markets</span>
+          <span id="market-count">41 markets</span>
         </footer>
       </aside>
 
@@ -118,7 +118,8 @@
               <span><small>Volume</small><strong id="quote-volume">—</strong></span>
             </div>
             <div class="source-strip">
-              <span id="data-health-pill" class="data-health-pill unknown" aria-live="polite">Data unknown</span>
+              <span id="history-health-pill" class="data-health-pill unknown" aria-live="polite">History incomplete</span>
+              <span id="data-health-pill" class="data-health-pill unknown" aria-live="polite">Analysis paused</span>
               <span id="source-state" class="source-state">Waiting for chart data</span>
               <button id="retry-history" class="history-retry-button" type="button" hidden>Retry history</button>
             </div>
@@ -320,7 +321,7 @@
               <button id="history-cache-toggle" class="history-cache-toggle" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="history-cache-popover">
                 <span id="history-cache-dot" class="status-dot waiting"></span>
                 <span>History cache</span>
-                <strong id="history-cache-count">0/33</strong>
+                <strong id="history-cache-count">0/41</strong>
               </button>
               <section id="history-cache-popover" class="history-cache-popover" role="dialog" aria-label="History cache update" hidden>
                 <header>
@@ -329,17 +330,25 @@
                 </header>
                 <p id="history-cache-message">The chart remains usable while coverage is checked.</p>
                 <dl>
-                  <div><dt>Full week ready</dt><dd id="history-cache-ready">0 of 33</dd></div>
+                  <div><dt>Full week ready</dt><dd id="history-cache-ready">0 of 41</dd></div>
                   <div><dt>Queued</dt><dd id="history-cache-queued">0 markets</dd></div>
+                  <div><dt>Affected</dt><dd id="history-cache-affected">&mdash;</dd></div>
+                  <div><dt>Missing interval</dt><dd id="history-cache-interval">&mdash;</dd></div>
                   <div><dt>Estimate</dt><dd id="history-cache-cost">&mdash;</dd></div>
                   <div><dt>Expires</dt><dd id="history-cache-expiry">&mdash;</dd></div>
+                  <div><dt>Update mode</dt><dd id="history-policy-mode">Choose once</dd></div>
+                  <div><dt>Last automatic attempt</dt><dd id="history-policy-last-attempt">Never</dd></div>
                 </dl>
                 <div class="history-cache-actions">
                   <button id="history-cache-confirm" class="primary" type="button" hidden>Approve estimate &amp; update markets</button>
                   <button id="history-cache-pause" type="button" hidden>Pause</button>
                   <button id="history-cache-retry" type="button" hidden>Refresh estimate</button>
                 </div>
-                <small>Historical downloads only run after confirmation. Live feeds stay connected.</small>
+                <div class="history-policy-actions" role="group" aria-label="History update preference">
+                  <button id="history-policy-auto" type="button">Automatic small repairs</button>
+                  <button id="history-policy-manual" type="button">Always ask</button>
+                </div>
+                <small>Automatic repairs run at most once per 24 hours when the provider estimate is $0.05 or less. Larger or failed updates require review.</small>
               </section>
             </div>
             <span id="execution-footer-pill" class="observation-pill">OBSERVATION ONLY &middot; DISARMED</span>
@@ -350,6 +359,25 @@
         </footer>
       </main>
     </div>
+
+    <section id="history-policy-dialog" class="history-policy-dialog" role="dialog" aria-modal="true" aria-labelledby="history-policy-title" hidden>
+      <div class="history-policy-card">
+        <small>HISTORY UPDATES</small>
+        <h2 id="history-policy-title">How should small history gaps be handled?</h2>
+        <p>The cockpit cannot collect historical bars while it is closed. It can repair small gaps when you return.</p>
+        <ul>
+          <li>Automatic repairs run at most once every 24 hours.</li>
+          <li>The provider estimate must be $0.05 or less.</li>
+          <li>Larger, unknown, or failed updates always stop for review.</li>
+          <li>The estimate is not guaranteed final billing.</li>
+        </ul>
+        <div class="history-policy-choice-actions">
+          <button id="history-policy-choice-auto" class="primary" type="button">Repair small gaps automatically</button>
+          <button id="history-policy-choice-manual" type="button">Always ask me</button>
+        </div>
+        <small>You can change this later from History cache.</small>
+      </div>
+    </section>
 
     <script src="lightweight-charts.standalone.production.js"></script>
     <script src="time-format.js"></script>

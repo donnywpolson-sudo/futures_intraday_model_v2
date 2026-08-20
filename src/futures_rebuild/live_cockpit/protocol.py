@@ -739,6 +739,26 @@ def validate_history_cache_payload(payload: Mapping[str, Any]) -> None:
     queued_markets = _nonnegative_int(payload.get("queued_markets"), name="queued_markets")
     if total_markets <= 0 or ready_markets > total_markets or queued_markets > total_markets:
         raise ValueError("invalid history-cache market counts")
+    affected_markets = payload.get("affected_markets")
+    if affected_markets is not None and (
+        not isinstance(affected_markets, list)
+        or len(affected_markets) > total_markets
+        or any(
+            not isinstance(market, str) or not market or len(market) > 12
+            for market in affected_markets
+        )
+        or len(set(affected_markets)) != len(affected_markets)
+    ):
+        raise ValueError("invalid affected history-cache markets")
+    missing_start = payload.get("missing_start")
+    missing_end = payload.get("missing_end")
+    if (missing_start is None) != (missing_end is None):
+        raise ValueError("history-cache missing interval must be complete")
+    if missing_start is not None and (
+        _nonnegative_int(missing_start, name="missing_start")
+        >= _nonnegative_int(missing_end, name="missing_end")
+    ):
+        raise ValueError("history-cache missing interval must increase")
     if not isinstance(payload.get("paused"), bool):
         raise ValueError("history-cache paused must be a boolean")
     message = payload.get("message")
@@ -754,6 +774,13 @@ def validate_history_cache_payload(payload: Mapping[str, Any]) -> None:
         not isinstance(plan_id, str) or not plan_id or len(plan_id) > 80
     ):
         raise ValueError("invalid history-cache plan id")
+    plan_fingerprint = payload.get("plan_fingerprint")
+    if plan_fingerprint is not None and (
+        not isinstance(plan_fingerprint, str)
+        or len(plan_fingerprint) != 64
+        or any(character not in "0123456789abcdef" for character in plan_fingerprint)
+    ):
+        raise ValueError("invalid history-cache plan fingerprint")
     estimated_cost = payload.get("estimated_cost_usd")
     if estimated_cost is not None and _finite_number(
         estimated_cost, name="estimated_cost_usd"
@@ -766,6 +793,50 @@ def validate_history_cache_payload(payload: Mapping[str, Any]) -> None:
         plan_id is None or estimated_cost is None or expires_at is None
     ):
         raise ValueError("confirmation-required cache status needs an estimate plan")
+    policy_mode = payload.get("policy_mode")
+    if policy_mode is not None and policy_mode not in {"UNDECIDED", "MANUAL", "AUTO"}:
+        raise ValueError("unsupported history-update policy mode")
+    for field in ("automatic_eligible", "automatic_blocked"):
+        if field in payload and not isinstance(payload.get(field), bool):
+            raise ValueError(f"history-cache {field} must be a boolean")
+    automatic_reason = payload.get("automatic_reason")
+    if automatic_reason is not None and (
+        not isinstance(automatic_reason, str)
+        or not automatic_reason
+        or len(automatic_reason) > 64
+    ):
+        raise ValueError("invalid automatic-history reason")
+    update_origin = payload.get("update_origin")
+    if update_origin is not None and update_origin not in {"AUTO", "MANUAL"}:
+        raise ValueError("invalid history-update origin")
+    automatic_limit = payload.get("automatic_limit_usd")
+    if automatic_limit is not None and _finite_number(
+        automatic_limit, name="automatic_limit_usd"
+    ) < 0.0:
+        raise ValueError("automatic-history limit cannot be negative")
+    automatic_interval = payload.get("automatic_interval_hours")
+    if automatic_interval is not None and _nonnegative_int(
+        automatic_interval, name="automatic_interval_hours"
+    ) <= 0:
+        raise ValueError("automatic-history interval must be positive")
+    last_attempt = payload.get("last_auto_attempt_at")
+    if last_attempt is not None:
+        _nonnegative_int(last_attempt, name="last_auto_attempt_at")
+    last_estimate = payload.get("last_auto_estimate_usd")
+    if last_estimate is not None and _finite_number(
+        last_estimate, name="last_auto_estimate_usd"
+    ) < 0.0:
+        raise ValueError("last automatic estimate cannot be negative")
+    last_outcome = payload.get("last_auto_outcome")
+    if last_outcome is not None and last_outcome not in {
+        "STARTED",
+        "COMPLETE",
+        "ERROR",
+        "PARTIAL",
+        "REJECTED",
+        "INTERRUPTED",
+    }:
+        raise ValueError("invalid automatic-history outcome")
     failure_category = payload.get("failure_category")
     if state == "ERROR":
         if failure_category not in HISTORY_CACHE_FAILURE_CATEGORIES:

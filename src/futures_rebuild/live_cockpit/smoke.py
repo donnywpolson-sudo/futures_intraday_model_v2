@@ -18,6 +18,7 @@ from typing import Any, Mapping, TextIO
 from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
 
 from .feed import (
+    API_KEY_ENV,
     DEFAULT_CONTINUOUS_SUFFIX,
     DEFAULT_DATASET,
     DEFAULT_HISTORICAL_SCHEMA,
@@ -150,6 +151,63 @@ def _verify_package_runtime(plan: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def execute_approved_smoke(
+    *,
+    plan_path: Path,
+    approval_path: Path,
+    credential_locator: Path,
+    result_output: Path,
+) -> int:
+    """Execute one package-bound smoke from an already approved Codex task."""
+
+    plan = validate_live_smoke_plan(
+        json.loads(plan_path.read_text(encoding="utf-8"))
+    )
+    approval_receipt_id = verify_live_smoke_approval(
+        plan_path=plan_path,
+        approval_path=approval_path,
+        credential_locator=credential_locator,
+    )
+    runtime = _verify_package_runtime(plan)
+    expected_output = (
+        Path.cwd() / plan["scope"]["result_output_relative"]
+    ).resolve()
+    resolved_output = result_output.resolve()
+    if resolved_output != expected_output:
+        raise LiveSmokeApprovalError(
+            "provider-backed cockpit smoke result path differs from the approved plan"
+        )
+    if resolved_output.exists():
+        raise LiveSmokeApprovalError(
+            "provider-backed cockpit smoke result already exists"
+        )
+    result = run_smoke(
+        approval_receipt_id=approval_receipt_id,
+        locator_path=credential_locator,
+    )
+    completed_at = _utc_text()
+    envelope: dict[str, Any] = {
+        "schema_version": RESULT_SCHEMA,
+        "status": result.status,
+        "completed_at": completed_at,
+        "plan_id": plan["plan_id"],
+        "plan_sha256": sha256_file(plan_path),
+        "approval_receipt_id": approval_receipt_id,
+        "result_output_relative": plan["scope"]["result_output_relative"],
+        "summary": {**result.summary, "runtime": runtime},
+    }
+    envelope["result_id"] = sha256_json(envelope)
+    resolved_output.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with resolved_output.open("xb") as stream:
+            stream.write(canonical_bytes(envelope) + b"\n")
+    except FileExistsError as exc:
+        raise LiveSmokeApprovalError(
+            "provider-backed cockpit smoke result already exists"
+        ) from exc
+    return result.exit_code
+
+
 def run_smoke(
     *,
     env: Mapping[str, str] | None = None,
@@ -158,6 +216,7 @@ def run_smoke(
     temp_root: Path | None = None,
     poll_seconds: float = 0.05,
     approval_receipt_id: str | None = None,
+    locator_path: Path | None = None,
 ) -> SmokeResult:
     """Run one bounded verification; duration override is test-only."""
 
@@ -168,8 +227,23 @@ def run_smoke(
     active_env = dict(os.environ if env is None else env)
     resolution_env = None if env is None else active_env
     try:
-        key_resolution = resolve_cockpit_api_key_source(resolution_env)
-    except CredentialLocatorError:
+        if locator_path is None:
+            key_resolution = resolve_cockpit_api_key_source(resolution_env)
+        else:
+            key_resolution = resolve_cockpit_api_key_source(
+                resolution_env,
+                locator_path=locator_path,
+            )
+            resolution_env = (
+                {API_KEY_ENV: key_resolution.key}
+                if key_resolution is not None
+                else {}
+            )
+    except CredentialLocatorError as exc:
+        if locator_path is not None:
+            raise LiveSmokeApprovalError(
+                "approved credential locator could not resolve DATABENTO_API_KEY"
+            ) from exc
         key_resolution = None
     secrets = [key_resolution.key] if key_resolution is not None else []
     log_path = _temporary_log_path(env=active_env, temp_root=temp_root)

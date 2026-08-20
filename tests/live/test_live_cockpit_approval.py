@@ -17,6 +17,7 @@ from futures_rebuild.live_cockpit.approval import (
     validate_live_smoke_plan,
     verify_live_smoke_approval,
 )
+import futures_rebuild.live_cockpit.app as cockpit_app
 import futures_rebuild.live_cockpit.smoke as cockpit_smoke
 from futures_rebuild.live_cockpit.smoke import main as smoke_main
 from futures_rebuild.live_cockpit.smoke import run_smoke
@@ -30,8 +31,10 @@ def _plan_path(tmp_path: Path, executable_hash: str = "a" * 64) -> Path:
     return path
 
 
-def _approved_receipt(tmp_path: Path, plan_path: Path) -> Path:
+def _approved_receipt(tmp_path: Path, plan_path: Path) -> tuple[Path, Path]:
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    credential_locator = tmp_path / "credential-source.json"
+    credential_locator.write_text("{}", encoding="utf-8")
     core = {
         "schema_version": APPROVAL_SCHEMA,
         "status": "APPROVED",
@@ -40,11 +43,13 @@ def _approved_receipt(tmp_path: Path, plan_path: Path) -> Path:
         "plan_sha256": sha256_file(plan_path),
         "approved_at": "2026-07-25T00:00:00Z",
         "user_authorization_id": "1" * 64,
+        "credential_locator_path": str(credential_locator.resolve()),
+        "credential_locator_sha256": sha256_file(credential_locator),
     }
     payload = {**core, "approval_receipt_id": sha256_json(core)}
     path = tmp_path / "approved-live-smoke.json"
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    return path
+    return path, credential_locator
 
 
 def _pending_receipt(tmp_path: Path, plan_path: Path) -> Path:
@@ -89,7 +94,7 @@ def test_prepare_only_cli_rejects_pending_execution_arguments_before_provider(
         tmp_path
         / "reports"
         / "live_cockpit"
-        / "bounded_live_smoke_result_attempt_7.json"
+        / "bounded_live_smoke_result_attempt_8.json"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
@@ -132,9 +137,11 @@ def test_prepare_only_cli_emits_confirmation_without_provider_execution(
 
 def test_exact_core_hash_receipt_is_accepted(tmp_path: Path) -> None:
     plan_path = _plan_path(tmp_path)
-    approval_path = _approved_receipt(tmp_path, plan_path)
+    approval_path, credential_locator = _approved_receipt(tmp_path, plan_path)
     receipt_id = verify_live_smoke_approval(
-        plan_path=plan_path, approval_path=approval_path
+        plan_path=plan_path,
+        approval_path=approval_path,
+        credential_locator=credential_locator,
     )
     assert receipt_id == json.loads(
         approval_path.read_text(encoding="utf-8")
@@ -148,6 +155,35 @@ def test_plan_market_drift_is_rejected(tmp_path: Path) -> None:
     plan["plan_id"] = sha256_json(core)
     with pytest.raises(LiveSmokeApprovalError, match="identity is invalid"):
         validate_live_smoke_plan(plan)
+
+
+def test_approval_receipt_cannot_be_reused_with_another_locator(
+    tmp_path: Path,
+) -> None:
+    plan_path = _plan_path(tmp_path)
+    approval_path, _credential_locator = _approved_receipt(tmp_path, plan_path)
+    other_locator = tmp_path / "other-credential-source.json"
+    other_locator.write_text("{}", encoding="utf-8")
+
+    with pytest.raises(LiveSmokeApprovalError, match="lacks exact hash-bound approval"):
+        verify_live_smoke_approval(
+            plan_path=plan_path,
+            approval_path=approval_path,
+            credential_locator=other_locator,
+        )
+
+
+def test_approval_receipt_cannot_survive_locator_drift(tmp_path: Path) -> None:
+    plan_path = _plan_path(tmp_path)
+    approval_path, credential_locator = _approved_receipt(tmp_path, plan_path)
+    credential_locator.write_text('{"changed":true}', encoding="utf-8")
+
+    with pytest.raises(LiveSmokeApprovalError, match="lacks exact hash-bound approval"):
+        verify_live_smoke_approval(
+            plan_path=plan_path,
+            approval_path=approval_path,
+            credential_locator=credential_locator,
+        )
 
 
 def test_plan_predecessor_drift_is_rejected() -> None:
@@ -166,14 +202,16 @@ def test_direct_provider_smoke_requires_verified_receipt() -> None:
 
 def test_receipt_cannot_survive_plan_tamper(tmp_path: Path) -> None:
     plan_path = _plan_path(tmp_path)
-    approval_path = _approved_receipt(tmp_path, plan_path)
+    approval_path, credential_locator = _approved_receipt(tmp_path, plan_path)
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
     plan["scope"]["duration_seconds"] = 121
     tampered_plan = tmp_path / "tampered-plan.json"
     tampered_plan.write_text(json.dumps(plan, indent=2) + "\n", encoding="utf-8")
     with pytest.raises(LiveSmokeApprovalError):
         verify_live_smoke_approval(
-            plan_path=tampered_plan, approval_path=approval_path
+            plan_path=tampered_plan,
+            approval_path=approval_path,
+            credential_locator=credential_locator,
         )
 
 
@@ -181,12 +219,12 @@ def test_prepare_only_cli_rejects_approved_execution_receipt_and_writes_nothing(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     plan_path = _plan_path(tmp_path)
-    approval_path = _approved_receipt(tmp_path, plan_path)
+    approval_path, _credential_locator = _approved_receipt(tmp_path, plan_path)
     result_path = (
         tmp_path
         / "reports"
         / "live_cockpit"
-        / "bounded_live_smoke_result_attempt_7.json"
+        / "bounded_live_smoke_result_attempt_8.json"
     )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(
@@ -207,3 +245,56 @@ def test_prepare_only_cli_rejects_approved_execution_receipt_and_writes_nothing(
         smoke_main(args, stdout=None)
     assert caught.value.code == 2
     assert not result_path.exists()
+
+
+def test_frozen_smoke_entrypoint_requires_all_task_paths_before_provider(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        cockpit_smoke,
+        "execute_approved_smoke",
+        lambda **_kwargs: pytest.fail("provider smoke was called"),
+    )
+
+    with pytest.raises(
+        SystemExit,
+        match="requires plan, approval, credential locator, and result paths",
+    ):
+        cockpit_app.main(["--run-approved-live-smoke"])
+
+
+def test_frozen_smoke_entrypoint_delegates_only_complete_task_paths(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[dict[str, Path]] = []
+    monkeypatch.setattr(
+        cockpit_smoke,
+        "execute_approved_smoke",
+        lambda **kwargs: calls.append(kwargs) or 3,
+    )
+    plan = tmp_path / "plan.json"
+    approval = tmp_path / "approval.json"
+    locator = tmp_path / "credential-source.json"
+    result = tmp_path / "result.json"
+
+    assert cockpit_app.main(
+        [
+            "--run-approved-live-smoke",
+            "--smoke-plan",
+            str(plan),
+            "--smoke-approval",
+            str(approval),
+            "--smoke-credential-locator",
+            str(locator),
+            "--smoke-result-output",
+            str(result),
+        ]
+    ) == 3
+    assert calls == [
+        {
+            "plan_path": plan,
+            "approval_path": approval,
+            "credential_locator": locator,
+            "result_output": result,
+        }
+    ]

@@ -13,22 +13,22 @@ from .feed import chart_market_universe
 
 
 PLAN_SCHEMA = "futures_live_cockpit_smoke_plan/1.2.0"
-APPROVAL_SCHEMA = "futures_live_cockpit_smoke_approval/1.2.0"
-OPERATION = "RUN_BOUNDED_OBSERVATION_ONLY_DATABENTO_SMOKE_ATTEMPT_7"
+APPROVAL_SCHEMA = "futures_live_cockpit_smoke_approval/1.3.0"
+OPERATION = "RUN_BOUNDED_OBSERVATION_ONLY_DATABENTO_SMOKE_ATTEMPT_8"
 RESULT_OUTPUT_RELATIVE = (
-    "reports/live_cockpit/bounded_live_smoke_result_attempt_7.json"
+    "reports/live_cockpit/bounded_live_smoke_result_attempt_8.json"
 )
 PREDECESSOR_ATTEMPT = {
-    "plan_id": "a48d467f49e8f668a69dfa421a54fa87e89c93c4dfa19b119f451d63605083bd",
-    "plan_sha256": "d1783ac245baeb6c6012f614ecbd22611d8689e87976d05d23ac7958535e3cb6",
+    "plan_id": "4d7ba2bfcd64630cd04ad13be3ccfaec43e121ecf5729fe4936a7d4d1b11e0e6",
+    "plan_sha256": "24918e2f90d87d8c221d688fbc0a96602aee05f8ca8030b689a7ced8e8d68e36",
     "approval_receipt_id": (
-        "21a9a5c743900aa36750578575134f4815cdba7e835cdf5089fe83bcad733353"
+        "fad29c19acc4ecd8dfc604a10d471da1c8989c268d25d36da1c783621e81dada"
     ),
-    "result_id": "e4a17604a3818a9d50ccd330375d81407688398ebb902ccde8f44d78cce01fa4",
+    "result_id": "c27b807d86b43bfae8136897e9497ce1245f9c0aaeee068bda12cf45f88bba08",
     "result_sha256": (
-        "8efd57b5fdcb95c055f9114e0e4ac3c26f092c8828f9f86d47e7dbdf7f5fd085"
+        "6750fea0db3fdb8f5e710659e0bdc193cc7de450dab3cdf97f93e11dfb35c350"
     ),
-    "disposition": "PASS_SUPERSEDED_BY_CREDENTIAL_EXISTENCE_ONLY_RUNTIME",
+    "disposition": "PASS_SUPERSEDED_BY_CREATE_ONLY_BOUNDED_SMOKE_ENTRYPOINT",
 }
 _HASH = re.compile(r"[0-9a-f]{64}")
 _UTC_SECOND = re.compile(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z")
@@ -122,10 +122,20 @@ def validate_live_smoke_plan(payload: Mapping[str, Any]) -> dict[str, Any]:
 
 
 def verify_live_smoke_approval(
-    *, plan_path: Path, approval_path: Path
+    *, plan_path: Path, approval_path: Path, credential_locator: Path
 ) -> str:
     plan = validate_live_smoke_plan(_load_object(plan_path, "live-smoke plan"))
     approval = _load_object(approval_path, "live-smoke approval")
+    try:
+        resolved_locator = credential_locator.resolve(strict=True)
+    except OSError as exc:
+        raise LiveSmokeApprovalError(
+            "provider-backed cockpit smoke credential locator is unavailable"
+        ) from exc
+    if not resolved_locator.is_file():
+        raise LiveSmokeApprovalError(
+            "provider-backed cockpit smoke credential locator is unavailable"
+        )
     approved_at = approval.get("approved_at")
     user_authorization_id = approval.get("user_authorization_id")
     core = {
@@ -136,6 +146,8 @@ def verify_live_smoke_approval(
         "plan_sha256": sha256_file(plan_path),
         "approved_at": approved_at,
         "user_authorization_id": user_authorization_id,
+        "credential_locator_path": str(resolved_locator),
+        "credential_locator_sha256": sha256_file(resolved_locator),
     }
     if (
         set(approval) != {*core, "approval_receipt_id"}

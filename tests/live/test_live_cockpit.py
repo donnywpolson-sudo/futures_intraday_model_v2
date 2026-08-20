@@ -1299,8 +1299,9 @@ def test_history_backfill_does_not_block_focus_start_or_next_switch(
         )
         assert _FakeTimeseries.calls == []
         assert _FakeMetadata.range_calls == [{"dataset": "GLBX.MDP3"}]
-        assert len(_FakeMetadata.calls) == 7
-        assert all(len(call["symbols"]) == 41 for call in _FakeMetadata.calls)
+        assert len(_FakeMetadata.calls) == 8
+        assert _FakeMetadata.calls[0]["symbols"] == [101]
+        assert len(_FakeMetadata.calls[1]["symbols"]) == 40
         _wait_until(
             lambda: any(
                 item.subscription.get("schema") == "trades"
@@ -1308,15 +1309,35 @@ def test_history_backfill_does_not_block_focus_start_or_next_switch(
                 for item in _FakeLive.instances
             )
         )
-        plan_id = next(
-            message["payload"]["plan_id"]
+        plan_status = next(
+            message["payload"]
             for message in messages
             if message["type"] == "history_cache_status"
             and message["payload"]["state"] == "CONFIRMATION_REQUIRED"
         )
+        plan_id = plan_status["plan_id"]
+        assert len(plan_status["affected_markets"]) == 41
+        assert "ES" in plan_status["affected_markets"]
+        assert plan_status["missing_start"] < plan_status["missing_end"]
         assert engine.select_market("NQ") is True
-        assert engine.confirm_history_cache(plan_id) is True
         assert engine.confirm_history_cache(plan_id) is False
+        _wait_until(
+            lambda: any(
+                message["type"] == "history_cache_status"
+                and message["payload"].get("state") == "CONFIRMATION_REQUIRED"
+                and message["payload"].get("plan_id") != plan_id
+                for message in messages
+            )
+        )
+        current_plan_id = next(
+            message["payload"]["plan_id"]
+            for message in reversed(messages)
+            if message["type"] == "history_cache_status"
+            and message["payload"].get("state") == "CONFIRMATION_REQUIRED"
+        )
+        assert _FakeMetadata.calls[8]["symbols"] == [202]
+        assert engine.confirm_history_cache(current_plan_id) is True
+        assert engine.confirm_history_cache(current_plan_id) is False
         assert history_started.wait(timeout=2.0)
         assert engine.select_market("CL") is True
         _wait_until(
@@ -1498,7 +1519,7 @@ def test_history_failure_keeps_live_connected_and_manual_retry_merges_completed_
         assert bars[int(minute.timestamp())]["close"] == 101.0
         assert len(_FakeLive.instances) == live_instances
         assert _FakeLive.max_active == 2
-        assert engine.runtime_metrics()["history_requests"] == 8
+        assert engine.runtime_metrics()["history_requests"] == 9
         assert engine.runtime_metrics()["history_plan_confirmations"] == 2
         assert engine.runtime_metrics()["history_failure"] is None
     finally:
@@ -1645,7 +1666,7 @@ def test_history_availability_end_equal_to_completed_minute(
             assert all(
                 chunk.end <= completed_minute for chunk in engine._history_plan.chunks
             )
-        assert len(_FakeMetadata.calls) == 7
+        assert len(_FakeMetadata.calls) == 8
         assert _FakeTimeseries.calls == []
     finally:
         engine.stop()
@@ -1716,7 +1737,7 @@ def test_history_availability_boundary_clamps_cost_and_download_without_retry(
                 chunk.end <= available_end for chunk in engine._history_plan.chunks
             )
         assert len(_FakeMetadata.range_calls) == 1
-        assert len(_FakeMetadata.calls) == 7
+        assert len(_FakeMetadata.calls) == 8
         assert all(call["end"] <= available_end for call in _FakeMetadata.calls)
         assert _FakeTimeseries.calls == []
         assert engine.confirm_history_cache(plan_id) is True
@@ -1727,14 +1748,14 @@ def test_history_availability_boundary_clamps_cost_and_download_without_retry(
                 for message in messages
             )
         )
-        assert len(_FakeTimeseries.calls) == 7
+        assert len(_FakeTimeseries.calls) == 8
         assert all(call["end"] <= available_end for call in _FakeTimeseries.calls)
         assert not any(
             message["type"] == "history_cache_status"
             and message["payload"].get("state") == "ERROR"
             for message in messages
         )
-        assert engine.runtime_metrics()["history_requests"] == 7
+        assert engine.runtime_metrics()["history_requests"] == 8
         assert engine.runtime_metrics()["history_dataset_range_requests"] == 1
         assert engine.runtime_metrics()["history_failure"] is None
     finally:
@@ -2048,12 +2069,15 @@ def test_history_cache_daily_advancement_estimates_only_new_delta(
             assert second_plan.plan_id != first_plan_id
             assert second_plan.confirmed is False
             assert second_plan.target_end == second_end
-            assert len(second_plan.chunks) == 1
+            assert len(second_plan.chunks) == 2
             assert second_plan.chunks[0].start == first_end
             assert second_plan.chunks[0].end == second_end
-            assert len(second_plan.chunks[0].bindings) == 41
+            assert [binding.market for binding in second_plan.chunks[0].bindings] == ["ES"]
+            assert second_plan.chunks[1].start == first_end
+            assert second_plan.chunks[1].end == second_end
+            assert len(second_plan.chunks[1].bindings) == 40
         assert len(_FakeMetadata.range_calls) == 2
-        assert len(_FakeMetadata.calls) == 8
+        assert len(_FakeMetadata.calls) == 10
         assert _FakeTimeseries.calls == []
     finally:
         engine.stop()
@@ -2772,7 +2796,7 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "Approve estimate &amp; update markets" in html
     assert "No history download has started" in javascript
     assert "Missing recent history—approval required" in javascript
-    assert "Review & approve update" in javascript
+    assert "Review history" in javascript
     assert "loadedChartRange" in javascript
     assert "Â" not in javascript
     assert ".control-button" in stylesheet

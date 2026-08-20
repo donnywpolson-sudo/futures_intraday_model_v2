@@ -160,6 +160,21 @@ def test_package_candidate_paths_preserve_windows_headroom() -> None:
     assert max(projected.values()) <= package_candidate.MAX_WINDOWS_PACKAGE_PATH
 
 
+def test_isolated_archive_includes_every_packaged_runtime_config() -> None:
+    required = {
+        "configs/alpha_tiered.yaml",
+        "configs/prop_firm_execution_connections.json",
+        "configs/prop_firm_profiles.json",
+        "configs/prop_firm_execution_costs.json",
+        "configs/prop_firm_execution_instruments.json",
+        "configs/prop_firm_strategy_risk_policies.json",
+        "configs/prop_firm_payout_policies.json",
+        "configs/live_cockpit_smoke_plan.json",
+    }
+
+    assert required <= set(package_candidate.ARCHIVE_PATHS)
+
+
 def test_package_candidate_validation_rejects_input_drift(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

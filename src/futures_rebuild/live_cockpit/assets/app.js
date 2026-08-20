@@ -97,7 +97,7 @@
     historyCache: {
       state: "CHECKING",
       ready_markets: 0,
-      total_markets: 33,
+      total_markets: 41,
       queued_markets: 0,
       paused: false,
       plan_id: null,
@@ -105,6 +105,18 @@
       estimate_expires_at: null,
       message: "Checking one-week cache coverage",
     },
+    historyPolicy: {
+      policy_version: 1,
+      mode: "UNDECIDED",
+      last_auto_attempt_at: null,
+      last_auto_estimate_usd: null,
+      last_auto_outcome: null,
+      auto_blocked: false,
+      block_reason: null,
+      automatic_limit_usd: "0.05",
+      automatic_interval_hours: 24,
+    },
+    demoScenario: "ready",
     fullscreen: false,
     mode: "live",
     contract: "",
@@ -167,6 +179,7 @@
     chartEmptyDetail: document.getElementById("chart-empty-detail"),
     retryFocus: document.getElementById("retry-focus"),
     retryHistory: document.getElementById("retry-history"),
+    historyHealthPill: document.getElementById("history-health-pill"),
     dataHealthPill: document.getElementById("data-health-pill"),
     sourceState: document.getElementById("source-state"),
     footerDot: document.getElementById("footer-dot"),
@@ -214,11 +227,20 @@
     historyCacheMessage: document.getElementById("history-cache-message"),
     historyCacheReady: document.getElementById("history-cache-ready"),
     historyCacheQueued: document.getElementById("history-cache-queued"),
+    historyCacheAffected: document.getElementById("history-cache-affected"),
+    historyCacheInterval: document.getElementById("history-cache-interval"),
     historyCacheCost: document.getElementById("history-cache-cost"),
     historyCacheExpiry: document.getElementById("history-cache-expiry"),
     historyCacheConfirm: document.getElementById("history-cache-confirm"),
     historyCachePause: document.getElementById("history-cache-pause"),
     historyCacheRetry: document.getElementById("history-cache-retry"),
+    historyPolicyMode: document.getElementById("history-policy-mode"),
+    historyPolicyLastAttempt: document.getElementById("history-policy-last-attempt"),
+    historyPolicyAuto: document.getElementById("history-policy-auto"),
+    historyPolicyManual: document.getElementById("history-policy-manual"),
+    historyPolicyDialog: document.getElementById("history-policy-dialog"),
+    historyPolicyChoiceAuto: document.getElementById("history-policy-choice-auto"),
+    historyPolicyChoiceManual: document.getElementById("history-policy-choice-manual"),
     executionBanner: document.getElementById("execution-banner"),
     executionArmState: document.getElementById("execution-arm-state"),
     manualDemoStageControl: document.getElementById("manual-demo-stage-control"),
@@ -901,10 +923,11 @@
   function renderDataHealth() {
     const health = state.dataHealth;
     const healthState = String(health?.state || "UNKNOWN").toUpperCase();
-    const healthClass = healthState.toLowerCase();
-    elements.dataHealthPill.textContent = `Data ${healthState.toLowerCase()}`;
+    const analysisReady = healthState === "CURRENT";
+    const healthClass = analysisReady ? "current" : "degraded";
+    elements.dataHealthPill.textContent = `Analysis ${analysisReady ? "ready" : "paused"}`;
     elements.dataHealthPill.className = `data-health-pill ${healthClass}`;
-    elements.healthState.textContent = healthState;
+    elements.healthState.textContent = analysisReady ? "READY" : "PAUSED";
     elements.healthState.className = healthClass;
     elements.healthContract.textContent = health?.contract || state.contract || "—";
     elements.healthLastBar.textContent = health && health.last_bar_time !== null && health.last_bar_time !== undefined && Number.isFinite(Number(health.last_bar_time))
@@ -939,7 +962,7 @@
     } else if (healthState === "CURRENT") {
       elements.dataHealthExplanation.textContent = `The focused stream and requested history are current. Loaded range: ${range}.`;
     } else if (health) {
-      elements.dataHealthExplanation.textContent = `The chart is not current. Loaded range: ${range}; newest bar: ${age}. History state: ${String(history?.state || "unknown").replaceAll("_", " ").toLowerCase()}.`;
+      elements.dataHealthExplanation.textContent = `Analysis is paused. Loaded range: ${range}; newest bar: ${age}. History state: ${String(history?.state || "unknown").replaceAll("_", " ").toLowerCase()}.`;
     } else {
       elements.dataHealthExplanation.textContent = "Waiting for chart coverage details.";
     }
@@ -1438,7 +1461,7 @@
     if (cacheState === "CONFIRMATION_REQUIRED") {
       elements.sourceState.textContent = `${base} · Missing recent history—approval required`;
       elements.retryHistory.hidden = false;
-      elements.retryHistory.textContent = "Review & approve update";
+      elements.retryHistory.textContent = "Review history";
       elements.sourceState.title = elements.sourceState.textContent;
       return;
     }
@@ -1510,11 +1533,32 @@
     return `$${cost.toFixed(4)}`;
   }
 
+  function renderHistoryPolicy() {
+    const policy = state.historyPolicy || {};
+    const mode = String(policy.mode || "UNDECIDED").toUpperCase();
+    elements.historyPolicyMode.textContent = mode === "AUTO"
+      ? "Automatic small repairs"
+      : mode === "MANUAL"
+        ? "Always ask"
+        : "Choose once";
+    const hasLastAttempt = policy.last_auto_attempt_at !== null
+      && policy.last_auto_attempt_at !== undefined
+      && policy.last_auto_attempt_at !== "";
+    elements.historyPolicyLastAttempt.textContent = hasLastAttempt && Number.isFinite(Number(policy.last_auto_attempt_at))
+      ? `${new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(Number(policy.last_auto_attempt_at) * 1000))}${policy.last_auto_outcome ? ` (${String(policy.last_auto_outcome).toLowerCase()})` : ""}`
+      : "Never";
+    elements.historyPolicyAuto.classList.toggle("active", mode === "AUTO");
+    elements.historyPolicyManual.classList.toggle("active", mode === "MANUAL");
+    elements.historyPolicyDialog.hidden = state.mode === "demo"
+      ? state.demoScenario !== "consent"
+      : mode !== "UNDECIDED";
+  }
+
   function renderHistoryCache() {
     const cache = state.historyCache || {};
     const cacheState = String(cache.state || "CHECKING").toUpperCase();
     const ready = Math.max(0, Number(cache.ready_markets || 0));
-    const total = Math.max(1, Number(cache.total_markets || state.markets.length || 33));
+    const total = Math.max(1, Number(cache.total_markets || state.markets.length || 41));
     const queued = Math.max(0, Number(cache.queued_markets || 0));
     const titles = {
       CHECKING: "Checking coverage",
@@ -1525,24 +1569,51 @@
       PARTIAL: "History incomplete",
       ERROR: "History update unavailable",
     };
+    const simpleHistory = cacheState === "COMPLETE"
+      ? { label: "History ready", className: "current" }
+      : ["CHECKING", "WARMING"].includes(cacheState)
+        ? { label: "History updating", className: "unknown" }
+        : ["CONFIRMATION_REQUIRED", "ERROR"].includes(cacheState)
+          ? { label: "History review needed", className: "degraded" }
+          : { label: "History incomplete", className: "degraded" };
+    elements.historyHealthPill.textContent = simpleHistory.label;
+    elements.historyHealthPill.className = `data-health-pill ${simpleHistory.className}`;
     elements.historyCacheCount.textContent = `${ready}/${total}`;
     elements.historyCacheReady.textContent = `${ready} of ${total}`;
     elements.historyCacheQueued.textContent = `${queued} ${queued === 1 ? "market" : "markets"}`;
+    const affectedMarkets = Array.isArray(cache.affected_markets) ? cache.affected_markets : [];
+    elements.historyCacheAffected.textContent = affectedMarkets.length
+      ? affectedMarkets.join(", ")
+      : "—";
+    const hasMissingInterval = cache.missing_start !== null && cache.missing_start !== undefined
+      && cache.missing_end !== null && cache.missing_end !== undefined;
+    const missingStart = Number(cache.missing_start);
+    const missingEnd = Number(cache.missing_end);
+    elements.historyCacheInterval.textContent = hasMissingInterval && Number.isFinite(missingStart) && Number.isFinite(missingEnd)
+      ? `${new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(missingStart * 1000))} – ${new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(missingEnd * 1000))}`
+      : "—";
     elements.historyCacheTitle.textContent = titles[cacheState] || "History cache";
     elements.historyCacheMessage.textContent = cacheState === "CONFIRMATION_REQUIRED"
-      ? `${cache.message || "A history update is available."} No download has started. The chart remains on ${loadedChartRange()} until you approve the displayed estimate.`
+      ? `${cache.message || "A history update is available."} No download has started. The current chart remains available until you approve the displayed estimate.`
       : cache.message || "History cache status unavailable.";
     elements.historyCacheCost.textContent = formatHistoryCost(cache.estimated_cost_usd);
-    elements.historyCacheExpiry.textContent = Number.isFinite(Number(cache.estimate_expires_at))
+    const hasExpiry = cache.estimate_expires_at !== null
+      && cache.estimate_expires_at !== undefined
+      && cache.estimate_expires_at !== "";
+    elements.historyCacheExpiry.textContent = hasExpiry && Number.isFinite(Number(cache.estimate_expires_at))
       ? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(Number(cache.estimate_expires_at) * 1000))
       : "—";
     setDot(elements.historyCacheDot, cacheState);
     elements.historyCacheConfirm.hidden = cacheState !== "CONFIRMATION_REQUIRED";
-    elements.historyCacheConfirm.textContent = `Approve estimate & update ${total} markets`;
+    elements.historyCacheConfirm.textContent = `Update ${queued} ${queued === 1 ? "market" : "markets"}`;
     elements.historyCachePause.hidden = !["WARMING", "PAUSED"].includes(cacheState);
     elements.historyCachePause.textContent = cacheState === "PAUSED" ? "Resume" : "Pause";
     elements.historyCacheRetry.hidden = !["ERROR", "PARTIAL"].includes(cacheState);
+    elements.historyCacheRetry.textContent = cache.automatic_blocked
+      ? "Try automatic again"
+      : "Refresh estimate";
     elements.historyCacheToggle.title = cache.message || titles[cacheState] || "History cache";
+    renderHistoryPolicy();
     renderSourceState();
     renderDataHealth();
   }
@@ -1550,6 +1621,17 @@
   function applyHistoryCacheStatus(payload) {
     const previousPlan = state.historyCache?.plan_id;
     state.historyCache = { ...state.historyCache, ...payload };
+    state.historyPolicy = {
+      ...state.historyPolicy,
+      mode: payload.policy_mode ?? state.historyPolicy.mode,
+      last_auto_attempt_at: payload.last_auto_attempt_at ?? state.historyPolicy.last_auto_attempt_at,
+      last_auto_estimate_usd: payload.last_auto_estimate_usd ?? state.historyPolicy.last_auto_estimate_usd,
+      last_auto_outcome: payload.last_auto_outcome ?? state.historyPolicy.last_auto_outcome,
+      auto_blocked: payload.automatic_blocked ?? state.historyPolicy.auto_blocked,
+      block_reason: payload.automatic_reason ?? state.historyPolicy.block_reason,
+      automatic_limit_usd: payload.automatic_limit_usd ?? state.historyPolicy.automatic_limit_usd,
+      automatic_interval_hours: payload.automatic_interval_hours ?? state.historyPolicy.automatic_interval_hours,
+    };
     renderHistoryCache();
     if (
       payload.state === "CONFIRMATION_REQUIRED" &&
@@ -1591,10 +1673,84 @@
     if (state.browserDemo) return;
     elements.historyCacheRetry.disabled = true;
     try {
-      const result = await window.pywebview.api.retry_history_cache_estimate();
-      if (!result?.ok) throw new Error("estimate refresh was not accepted");
+      const result = state.historyCache?.automatic_blocked
+        ? await window.pywebview.api.retry_automatic_history()
+        : await window.pywebview.api.retry_history_cache_estimate();
+      if (result?.history_update_policy) {
+        state.historyPolicy = { ...state.historyPolicy, ...result.history_update_policy };
+        renderHistoryPolicy();
+      }
+      if (!result?.ok) {
+        const reasons = {
+          RECENT_ATTEMPT: "Only one automatic repair attempt is allowed every 24 hours. Review the update manually or try again later.",
+          REVIEW_REQUIRED: "Automatic repair is blocked. Review the failure and fresh estimate before trying again.",
+        };
+        state.historyCache = {
+          ...state.historyCache,
+          message: reasons[result?.error] || "History review is still required. No download started.",
+        };
+        renderHistoryCache();
+      }
+    } catch (_error) {
+      state.historyCache = {
+        ...state.historyCache,
+        message: "History review is still required. No download started.",
+      };
+      renderHistoryCache();
     } finally {
       elements.historyCacheRetry.disabled = false;
+    }
+  }
+
+  async function chooseHistoryUpdateMode(mode) {
+    const normalized = String(mode || "").toUpperCase();
+    if (!["AUTO", "MANUAL"].includes(normalized)) return;
+    if (state.browserDemo) {
+      state.historyPolicy = {
+        ...state.historyPolicy,
+        mode: normalized,
+        auto_blocked: false,
+        block_reason: null,
+      };
+      state.demoScenario = "ready";
+      state.historyCache = {
+        ...state.historyCache,
+        state: "COMPLETE",
+        ready_markets: state.markets.length || 41,
+        total_markets: state.markets.length || 41,
+        queued_markets: 0,
+        affected_markets: [],
+        missing_start: null,
+        missing_end: null,
+        estimated_cost_usd: null,
+        estimate_expires_at: null,
+        plan_id: null,
+        plan_fingerprint: null,
+        message: "Demo cache ready",
+      };
+      if (state.dataHealth) {
+        state.dataHealth = {
+          ...state.dataHealth,
+          state: "CURRENT",
+          history: { ...state.dataHealth.history, state: "COMPLETE" },
+          reason_codes: [],
+        };
+      }
+      renderHistoryCache();
+      return;
+    }
+    const result = await window.pywebview.api.set_history_update_mode(normalized);
+    if (result?.history_update_policy) {
+      state.historyPolicy = { ...state.historyPolicy, ...result.history_update_policy };
+    }
+    renderHistoryPolicy();
+    if (!result?.ok && result?.error === "REVIEW_REQUIRED") {
+      state.historyCache = {
+        ...state.historyCache,
+        message: "Automatic repair is blocked. Review the failure before changing this setting.",
+      };
+      renderHistoryCache();
+      setHistoryCachePopover(true);
     }
   }
 
@@ -1700,8 +1856,9 @@
 
   function setFocusStatus(feedState, message) {
     const normalized = String(feedState || "WAITING").toUpperCase();
-    elements.focusState.textContent = normalized.replaceAll("_", " ");
-    elements.focusState.className = `state-badge ${statusClass(normalized)}`;
+    const simpleState = normalized === "LIVE" ? "connected" : normalized === "ERROR" ? "error" : "waiting";
+    elements.focusState.textContent = `Feed ${simpleState}`;
+    elements.focusState.className = `state-badge ${simpleState === "connected" ? "live" : simpleState}`;
     elements.footerStatus.textContent = message || normalized;
     elements.retryFocus.hidden = normalized !== "ERROR";
     setDot(elements.footerDot, normalized);
@@ -1734,6 +1891,10 @@
     state.timeframe = payload.timeframe || "1m";
     state.timeframes = Array.isArray(payload.timeframes) ? payload.timeframes : Object.keys(TIMEFRAME_SECONDS);
     state.mode = payload.mode || "live";
+    state.historyPolicy = {
+      ...state.historyPolicy,
+      ...(payload.history_update_policy || {}),
+    };
     state.executionCapability = payload.execution_capability || state.executionCapability;
     state.predictionCapability = payload.prediction_capability || {
       mode: "offline",
@@ -1756,6 +1917,7 @@
     renderTimeframes();
     renderExecution();
     renderMarkets();
+    renderHistoryPolicy();
     initializeChart();
     if (state.startupWatchdog) window.clearTimeout(state.startupWatchdog);
     state.startupWatchdog = window.setTimeout(() => {
@@ -1992,15 +2154,17 @@
     ["ES", "Equity Index"], ["NQ", "Equity Index"], ["RTY", "Equity Index"], ["YM", "Equity Index"],
     ["CL", "Energy"], ["NG", "Energy"], ["RB", "Energy"], ["HO", "Energy"],
     ["GC", "Metals"], ["SI", "Metals"], ["HG", "Metals"],
-    ["SR3", "Rates"], ["SR1", "Rates"], ["TN", "Rates"], ["ZT", "Rates"], ["ZF", "Rates"], ["ZN", "Rates"], ["ZB", "Rates"], ["UB", "Rates"],
-    ["6A", "FX"], ["6B", "FX"], ["6C", "FX"], ["6E", "FX"], ["6J", "FX"], ["6M", "FX"],
+    ["PA", "Metals"], ["PL", "Metals"],
+    ["SR3", "Rates"], ["SR1", "Rates"], ["ZQ", "Rates"], ["TN", "Rates"], ["ZT", "Rates"], ["ZF", "Rates"], ["ZN", "Rates"], ["ZB", "Rates"], ["UB", "Rates"],
+    ["6A", "FX"], ["6B", "FX"], ["6C", "FX"], ["6E", "FX"], ["6J", "FX"], ["6M", "FX"], ["6N", "FX"], ["6S", "FX"],
     ["ZC", "Agriculture"], ["ZS", "Agriculture"], ["ZL", "Agriculture"], ["ZM", "Agriculture"], ["ZW", "Agriculture"], ["KE", "Agriculture"],
-    ["LE", "Livestock"], ["HE", "Livestock"],
+    ["LE", "Livestock"], ["HE", "Livestock"], ["GF", "Livestock"],
+    ["BTC", "Crypto"], ["ETH", "Crypto"],
   ];
   const DEMO_ALPHA_TIER_GROUPS = {
     tier_1_core: ["ES", "CL", "ZN", "6E"],
-    tier_2_additions: ["NQ", "NG", "GC", "HG", "SR3", "ZB", "6J", "6B", "ZC", "ZS", "LE"],
-    tier_3_additions: ["RTY", "YM", "RB", "HO", "SI", "SR1", "TN", "ZT", "ZF", "UB", "6A", "6C", "6M", "ZL", "ZM", "ZW", "KE", "HE"],
+    tier_2_additions: ["NQ", "NG", "RB", "GC", "HG", "SR3", "ZB", "6J", "ZC", "ZS", "LE", "HE"],
+    tier_3_additions: ["RTY", "YM", "HO", "SI", "PL", "SR1", "ZQ", "TN", "ZT", "ZF", "UB", "6A", "6B", "6C", "6M", "6N", "6S", "ZL", "ZM", "ZW", "KE", "GF", "BTC", "ETH", "PA"],
   };
 
   function demoAlphaTierGroup(symbol) {
@@ -2112,7 +2276,11 @@
     let unexpectedGapCount = 0;
     let largestGapSeconds = 0;
     let reasonCodes = [];
-    if (market === "RTY") {
+    if (["consent", "updating", "review", "failure"].includes(state.demoScenario)) {
+      healthState = "DEGRADED";
+      historyState = state.demoScenario === "failure" ? "UNAVAILABLE" : "PARTIAL";
+      reasonCodes = [state.demoScenario === "failure" ? "HISTORY_UNAVAILABLE" : "HISTORY_PARTIAL"];
+    } else if (market === "RTY") {
       healthState = "DEGRADED";
       historyState = "PARTIAL";
       reasonCodes = ["HISTORY_PARTIAL"];
@@ -2167,6 +2335,10 @@
   function startBrowserDemo() {
     if (state.bridgeReady) return;
     state.browserDemo = true;
+    const requestedScenario = new URLSearchParams(window.location.search).get("scenario") || "ready";
+    state.demoScenario = ["consent", "updating", "ready", "review", "failure"].includes(requestedScenario)
+      ? requestedScenario
+      : "ready";
     const markets = DEMO_MARKETS.map(([symbol, family], index) => {
       const bars = demoBars(symbol);
       const latest = bars.at(-1);
@@ -2191,6 +2363,17 @@
         timeframes: Object.keys(TIMEFRAME_SECONDS),
         display_tz: "local",
         mode: "demo",
+        history_update_policy: {
+          policy_version: 1,
+          mode: state.demoScenario === "consent" ? "UNDECIDED" : "AUTO",
+          last_auto_attempt_at: state.demoScenario === "failure" ? Math.floor(Date.now() / 1000) - 90 : null,
+          last_auto_estimate_usd: state.demoScenario === "failure" ? 0.012 : null,
+          last_auto_outcome: state.demoScenario === "failure" ? "ERROR" : null,
+          auto_blocked: state.demoScenario === "failure",
+          block_reason: state.demoScenario === "failure" ? "AUTO_TIMEOUT" : null,
+          automatic_limit_usd: "0.05",
+          automatic_interval_hours: 24,
+        },
         prediction_capability: { mode: "synthetic_demo", synthetic: true, observation_only: true },
         market_grouping_capability: {
           alpha_tiers_available: true,
@@ -2221,23 +2404,63 @@
         },
       },
     });
+    const demoNow = Math.floor(Date.now() / 1000);
+    const demoMissingStart = demoNow - 24 * 60 * 60;
+    const scenarioStatus = {
+      consent: {
+        state: "CONFIRMATION_REQUIRED", ready_markets: 39, queued_markets: 2,
+        estimated_cost_usd: 0.012, estimate_expires_at: Math.floor(Date.now() / 1000) + 600,
+        plan_id: "c".repeat(64), plan_fingerprint: "c".repeat(64),
+        affected_markets: ["ES", "NQ"], missing_start: demoMissingStart, missing_end: demoNow,
+        message: "A small history repair is ready after you choose an update preference.",
+      },
+      updating: {
+        state: "WARMING", ready_markets: 40, queued_markets: 1,
+        estimated_cost_usd: 0.012, estimate_expires_at: Math.floor(Date.now() / 1000) + 600,
+        plan_id: "d".repeat(64), plan_fingerprint: "d".repeat(64),
+        affected_markets: ["ES"], missing_start: demoMissingStart, missing_end: demoNow,
+        message: "Updating the selected market first.", update_origin: "AUTO",
+      },
+      ready: {
+        state: "COMPLETE", ready_markets: 41, queued_markets: 0,
+        estimated_cost_usd: null, estimate_expires_at: null, plan_id: null, plan_fingerprint: null,
+        affected_markets: [], missing_start: null, missing_end: null,
+        message: "Demo cache ready",
+      },
+      review: {
+        state: "CONFIRMATION_REQUIRED", ready_markets: 38, queued_markets: 3,
+        estimated_cost_usd: 0.08, estimate_expires_at: Math.floor(Date.now() / 1000) + 600,
+        plan_id: "e".repeat(64), plan_fingerprint: "e".repeat(64),
+        affected_markets: ["ES", "NQ", "CL"], missing_start: demoMissingStart, missing_end: demoNow,
+        message: "This update is above the automatic $0.05 limit.", automatic_reason: "ABOVE_CAP",
+      },
+      failure: {
+        state: "ERROR", ready_markets: 38, queued_markets: 0,
+        estimated_cost_usd: null, estimate_expires_at: null, plan_id: null, plan_fingerprint: null,
+        affected_markets: ["ES", "NQ", "CL"], missing_start: demoMissingStart, missing_end: demoNow,
+        message: "Automatic history repair timed out. Review before trying again.",
+        failure_category: "TIMEOUT", automatic_blocked: true, automatic_reason: "AUTO_TIMEOUT", update_origin: "AUTO",
+      },
+    }[state.demoScenario];
     receive({
       v: PROTOCOL_VERSION,
       type: "history_cache_status",
       payload: {
-        state: "COMPLETE",
-        ready_markets: 33,
-        total_markets: 33,
-        queued_markets: 0,
+        total_markets: 41,
         active_market: null,
-        estimated_cost_usd: null,
-        estimate_expires_at: null,
-        plan_id: null,
         paused: false,
-        message: "Demo cache ready",
+        policy_mode: state.demoScenario === "consent" ? "UNDECIDED" : "AUTO",
+        automatic_eligible: state.demoScenario === "consent" || state.demoScenario === "updating",
+        automatic_blocked: state.demoScenario === "failure",
+        automatic_limit_usd: 0.05,
+        automatic_interval_hours: 24,
+        last_auto_attempt_at: state.demoScenario === "failure" ? Math.floor(Date.now() / 1000) - 90 : null,
+        last_auto_estimate_usd: state.demoScenario === "failure" ? 0.012 : null,
+        last_auto_outcome: state.demoScenario === "failure" ? "ERROR" : null,
+        ...scenarioStatus,
       },
     });
-    setOverviewStatus("LIVE", "Deterministic 33-market demo");
+    setOverviewStatus("LIVE", "Deterministic 41-market demo");
     browserDemoSnapshot("ES", "1m");
   }
 
@@ -2278,6 +2501,10 @@
   elements.historyCacheConfirm.addEventListener("click", confirmHistoryCache);
   elements.historyCachePause.addEventListener("click", toggleHistoryCachePause);
   elements.historyCacheRetry.addEventListener("click", refreshHistoryCacheEstimate);
+  elements.historyPolicyAuto.addEventListener("click", () => chooseHistoryUpdateMode("AUTO"));
+  elements.historyPolicyManual.addEventListener("click", () => chooseHistoryUpdateMode("MANUAL"));
+  elements.historyPolicyChoiceAuto.addEventListener("click", () => chooseHistoryUpdateMode("AUTO"));
+  elements.historyPolicyChoiceManual.addEventListener("click", () => chooseHistoryUpdateMode("MANUAL"));
   elements.manualReconcile.addEventListener("click", reconcileManualState);
   elements.manualDemoStage.addEventListener("change", () => {
     if (state.mode !== "demo" || !state.executionCapability) return;

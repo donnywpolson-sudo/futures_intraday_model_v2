@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from types import SimpleNamespace
@@ -8,8 +9,16 @@ import pytest
 
 import futures_rebuild.live_cockpit.engine as cockpit_engine
 import futures_rebuild.live_cockpit.smoke as cockpit_smoke
+from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
+from futures_rebuild.live_cockpit.approval import (
+    APPROVAL_SCHEMA,
+    OPERATION,
+    RESULT_OUTPUT_RELATIVE,
+    LiveSmokeApprovalError,
+    build_live_smoke_plan,
+)
 from futures_rebuild.live_cockpit.engine import LiveCockpitEngine, provider_control_message
-from futures_rebuild.live_cockpit.smoke import run_smoke
+from futures_rebuild.live_cockpit.smoke import SmokeResult, execute_approved_smoke, run_smoke
 
 
 _SMOKE_MINUTE = datetime.now(timezone.utc).replace(second=0, microsecond=0)
@@ -189,6 +198,27 @@ def test_default_smoke_preserves_file_aware_credential_resolution(
     assert resolver_calls == [None, None]
 
 
+def test_explicit_invalid_locator_fails_before_provider_or_environment_fallback(
+    tmp_path: Path,
+) -> None:
+    locator = tmp_path / "credential-source.json"
+    locator.write_text("not-json", encoding="utf-8")
+
+    with pytest.raises(
+        LiveSmokeApprovalError,
+        match="approved credential locator could not resolve DATABENTO_API_KEY",
+    ):
+        run_smoke(
+            env={"DATABENTO_API_KEY": "db-stale-environment-key"},
+            db_module=_Db,
+            duration_seconds=0.01,
+            temp_root=tmp_path,
+            approval_receipt_id="approved",
+            locator_path=locator,
+        )
+    assert _Live.instances == []
+
+
 @pytest.mark.parametrize("code", range(1, 8))
 def test_all_databento_error_codes_fail_fast_and_retain_redacted_log(
     tmp_path: Path, code: int
@@ -280,3 +310,98 @@ def test_late_generation_stays_ignored_with_cache_disabled() -> None:
         assert engine._pending_update is None
     finally:
         engine.stop()
+
+
+def _approved_execution_files(
+    tmp_path: Path, executable: Path
+) -> tuple[Path, Path, Path]:
+    plan = build_live_smoke_plan(sha256_file(executable))
+    plan_path = tmp_path / "live-smoke-plan.json"
+    plan_path.write_bytes(canonical_bytes(plan) + b"\n")
+    locator = tmp_path / "credential-source.json"
+    locator.write_text("{}", encoding="utf-8")
+    core = {
+        "schema_version": APPROVAL_SCHEMA,
+        "status": "APPROVED",
+        "operation": OPERATION,
+        "plan_id": plan["plan_id"],
+        "plan_sha256": sha256_file(plan_path),
+        "approved_at": "2026-08-12T09:00:00Z",
+        "user_authorization_id": "8" * 64,
+        "credential_locator_path": str(locator.resolve()),
+        "credential_locator_sha256": sha256_file(locator),
+    }
+    approval = {**core, "approval_receipt_id": sha256_json(core)}
+    approval_path = tmp_path / "live-smoke-approval.json"
+    approval_path.write_bytes(canonical_bytes(approval) + b"\n")
+    return plan_path, approval_path, locator
+
+
+def test_approved_frozen_entrypoint_writes_one_create_only_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executable = tmp_path / "FuturesLiveCockpit.exe"
+    executable.write_bytes(b"frozen successor")
+    plan_path, approval_path, locator = _approved_execution_files(
+        tmp_path, executable
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cockpit_smoke.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(cockpit_smoke.sys, "executable", str(executable))
+    monkeypatch.setattr(
+        cockpit_smoke,
+        "run_smoke",
+        lambda **kwargs: SmokeResult(
+            status="PASS",
+            exit_code=0,
+            summary={"approval_receipt_id": kwargs["approval_receipt_id"]},
+        ),
+    )
+    result_output = tmp_path / RESULT_OUTPUT_RELATIVE
+
+    assert execute_approved_smoke(
+        plan_path=plan_path,
+        approval_path=approval_path,
+        credential_locator=locator,
+        result_output=result_output,
+    ) == 0
+    payload = json.loads(result_output.read_text(encoding="utf-8"))
+    assert payload["status"] == "PASS"
+    assert payload["result_output_relative"] == RESULT_OUTPUT_RELATIVE
+    assert payload["summary"]["runtime"] == {
+        "frozen": True,
+        "executable_sha256": sha256_file(executable),
+    }
+    assert payload["result_id"] == sha256_json(
+        {key: value for key, value in payload.items() if key != "result_id"}
+    )
+
+
+def test_approved_frozen_entrypoint_refuses_existing_result_before_provider(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executable = tmp_path / "FuturesLiveCockpit.exe"
+    executable.write_bytes(b"frozen successor")
+    plan_path, approval_path, locator = _approved_execution_files(
+        tmp_path, executable
+    )
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(cockpit_smoke.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(cockpit_smoke.sys, "executable", str(executable))
+    monkeypatch.setattr(
+        cockpit_smoke,
+        "run_smoke",
+        lambda **_kwargs: pytest.fail("provider smoke was called"),
+    )
+    result_output = tmp_path / RESULT_OUTPUT_RELATIVE
+    result_output.parent.mkdir(parents=True)
+    result_output.write_text("preserve", encoding="utf-8")
+
+    with pytest.raises(LiveSmokeApprovalError, match="result already exists"):
+        execute_approved_smoke(
+            plan_path=plan_path,
+            approval_path=approval_path,
+            credential_locator=locator,
+            result_output=result_output,
+        )
+    assert result_output.read_text(encoding="utf-8") == "preserve"

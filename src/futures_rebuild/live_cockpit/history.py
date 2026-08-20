@@ -32,6 +32,7 @@ class HistoryChunk:
 @dataclass
 class HistoryPlan:
     plan_id: str
+    fingerprint: str
     created_at: datetime
     expires_at: datetime
     target_start: datetime
@@ -147,3 +148,28 @@ def promote_market(
         if others:
             remaining.append(HistoryChunk(chunk.start, chunk.end, others))
     return promoted + remaining
+
+
+def promote_market_first_request(
+    chunks: Sequence[HistoryChunk], market: str, *, max_chunks: int = 8
+) -> list[HistoryChunk]:
+    """Make the selected market the first request with at most one extra chunk."""
+
+    result = list(chunks)
+    for index, chunk in enumerate(result):
+        selected = tuple(binding for binding in chunk.bindings if binding.market == market)
+        if not selected:
+            continue
+        others = tuple(binding for binding in chunk.bindings if binding.market != market)
+        if len(result) >= max_chunks:
+            prioritized = HistoryChunk(
+                chunk.start,
+                chunk.end,
+                selected + others,
+            )
+            return [prioritized] + result[:index] + result[index + 1 :]
+        promoted = [HistoryChunk(chunk.start, chunk.end, selected)]
+        if others:
+            promoted.append(HistoryChunk(chunk.start, chunk.end, others))
+        return promoted + result[:index] + result[index + 1 :]
+    return result
