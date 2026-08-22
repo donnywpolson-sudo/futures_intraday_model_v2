@@ -4,18 +4,14 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
 from futures_rebuild.boundary import RepoBoundary
-from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
-from futures_rebuild.closure_workflow.policy import (
-    WorkflowError,
-    canonical_repo_root,
-    git_identity,
-)
+from futures_rebuild.canonical import canonical_bytes, is_linklike, sha256_file, sha256_json
 from futures_rebuild.exchange_calendar import (
     CME_TIMEZONE,
     load_active_calendar_index,
@@ -41,6 +37,56 @@ AUTHORITIES = {
     "ATOMIC_LOCAL_STAGE_AND_COMMIT",
     "SEPARATELY_APPROVED_HIGH_RISK",
 }
+EXPECTED_PROJECT = "futures-intraday-model-v2"
+REQUIRED_ROOT_FILES = (
+    "AGENTS.md",
+    "PROJECT_OUTLINE.md",
+    "pyproject.toml",
+    "configs/source_contract.json",
+)
+
+
+class WorkflowError(ContractError):
+    """A live-cockpit workflow contract was not satisfied."""
+
+
+def _run_git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        ["git", *args], cwd=repo, check=False, capture_output=True, text=True
+    )
+    if result.returncode:
+        raise WorkflowError(result.stderr.strip() or f"git {' '.join(args)} failed")
+    return result
+
+
+def canonical_repo_root(start: Path) -> Path:
+    root = Path(_run_git(start, "rev-parse", "--show-toplevel").stdout.strip()).resolve()
+    if is_linklike(root):
+        raise WorkflowError(f"repository root is link-like: {root}")
+    if not (root / ".git").is_dir():
+        raise WorkflowError(f"repository is not a primary worktree: {root}")
+    for relative in REQUIRED_ROOT_FILES:
+        if not (root / relative).is_file():
+            raise WorkflowError(f"required root file is absent: {relative}")
+    pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
+    if f'name = "{EXPECTED_PROJECT}"' not in pyproject:
+        raise WorkflowError("pyproject project identity mismatch")
+    return root
+
+
+def git_identity(repo: Path) -> dict[str, Any]:
+    status = _run_git(repo, "status", "--short", "--untracked-files=all").stdout
+    return {
+        "branch": _run_git(repo, "branch", "--show-current").stdout.strip(),
+        "head": _run_git(repo, "rev-parse", "HEAD").stdout.strip(),
+        "status_lines": status.splitlines(),
+        "staged_paths": [
+            line
+            for line in _run_git(repo, "diff", "--cached", "--name-only")
+            .stdout.splitlines()
+            if line
+        ],
+    }
 
 
 def _read_object(path: Path, name: str) -> dict[str, Any]:

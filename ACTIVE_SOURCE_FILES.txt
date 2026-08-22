@@ -118,7 +118,6 @@ configs/causal_active_pilot_approval_v6.json
 configs/causal_active_price_policy_approval.json
 configs/causal_market_year_materialization_approval.json
 configs/causal_price_research_policy.json
-configs/closure_workflow_policy.json
 configs/cme_calendar_41_product_schedule_capture_approval.json
 configs/cme_calendar_activation_approval.json
 configs/cme_calendar_activation_bf261f90_approval.json
@@ -182,7 +181,6 @@ configs/live_cockpit_smoke_approval_attempt_5.json
 configs/live_cockpit_smoke_approval_attempt_6.json
 configs/live_cockpit_smoke_approval_attempt_7.json
 configs/mechanical_feature_spec.json
-configs/meta_master_audit_coverage.json
 configs/mff_execution_capability_evidence.json
 configs/micro_contract_universe_v1.json
 configs/micro_futures_legacy_lineage.json
@@ -478,14 +476,6 @@ src/futures_rebuild/cash_open_source_compatibility_census_v2.py
 src/futures_rebuild/cash_open_source_compatibility_correction.py
 src/futures_rebuild/causal_market_year_materialization.py
 src/futures_rebuild/clock.py
-src/futures_rebuild/closure_workflow/__init__.py
-src/futures_rebuild/closure_workflow/__main__.py
-src/futures_rebuild/closure_workflow/cli.py
-src/futures_rebuild/closure_workflow/commit.py
-src/futures_rebuild/closure_workflow/engine.py
-src/futures_rebuild/closure_workflow/lifecycle.py
-src/futures_rebuild/closure_workflow/policy.py
-src/futures_rebuild/closure_workflow/snapshot.py
 src/futures_rebuild/cme_calendar_source_adequacy.py
 src/futures_rebuild/cme_calendar_successor.py
 src/futures_rebuild/cme_contract_economics.py
@@ -746,8 +736,6 @@ tests/test_cash_open_source_compatibility_census_v2.py
 tests/test_causal_market_year_materialization.py
 tests/test_causal_source_closure.py
 tests/test_certified_research_gateway.py
-tests/test_closure_workflow.py
-tests/test_closure_workflow_v2_successor.py
 tests/test_cme_calendar_source_adequacy.py
 tests/test_cme_contract_economics.py
 tests/test_contract_economics_audit.py

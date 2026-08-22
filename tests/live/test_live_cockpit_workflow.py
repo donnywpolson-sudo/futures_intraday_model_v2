@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
-from futures_rebuild.closure_workflow.policy import WorkflowError
 from futures_rebuild.live_cockpit import workflow
+from futures_rebuild.live_cockpit.workflow import WorkflowError
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -30,7 +30,6 @@ def _repo(tmp_path: Path) -> Path:
     for relative, text in {
         "AGENTS.md": "rules\n",
         "PROJECT_OUTLINE.md": "outline\n",
-        "CODEX_HANDOFF.md": "handoff\n",
         "pyproject.toml": '[project]\nname = "futures-intraday-model-v2"\n',
         "configs/source_contract.json": "{}\n",
     }.items():

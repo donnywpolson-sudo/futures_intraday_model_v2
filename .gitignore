@@ -143,7 +143,6 @@ manifests/workflow/phase8/
 manifests/phase3_inputs/
 reports/active_data_view/
 reports/audits/causal_active_*/
-reports/audits/closure_workflow/
 reports/live_cockpit/history_canary/
 reports/live_cockpit/installation/
 reports/live_cockpit/package_candidate/

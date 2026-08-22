@@ -19,9 +19,6 @@
 
 # Root operational contracts.
 AGENTS.md text eol=lf
-CODEX_HANDOFF.md text eol=lf
-MASTER_AUDIT.md text eol=lf
-META_MASTER_AUDIT.md text eol=lf
 PROJECT_OUTLINE.md text eol=lf
 README.md text eol=lf
 

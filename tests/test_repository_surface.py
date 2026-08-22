@@ -390,6 +390,30 @@ def test_public_command_targets_are_explicitly_current() -> None:
         assert entry["classification"] in {"CURRENT_OPERATIONAL", "CURRENT_SUPPORTING"}
 
 
+def test_retired_closure_and_master_audit_surfaces_are_not_current() -> None:
+    surface = _surface()
+    historical_test = _entry(surface, "tests/test_closure_workflow_v2_successor.py")
+    assert historical_test["classification"] == "HISTORICAL_HASH_BOUND"
+    assert historical_test["authority_role"] == "HISTORICAL_CLOSURE_EVIDENCE_TEST"
+
+    obsolete = (
+        "configs/closure_workflow_policy.json",
+        "configs/meta_master_audit_coverage.json",
+        "src/futures_rebuild/closure_workflow",
+        "tests/test_closure_workflow.py",
+    )
+    for relative in obsolete:
+        assert not (ROOT / relative).exists()
+    assert not any(
+        str(entry["path_or_pattern"]).startswith("src/futures_rebuild/closure_workflow")
+        for entry in surface["entries"]
+    )
+
+    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
+    for retired in ("CODEX_HANDOFF.md", "MASTER_AUDIT.md", "META_MASTER_AUDIT.md"):
+        assert retired not in attributes
+
+
 def test_public_command_targeting_retired_surface_is_rejected(tmp_path: Path) -> None:
     module = tmp_path / "src" / "futures_rebuild" / "micro_alpha_publication.py"
     module.parent.mkdir(parents=True)
