@@ -16,10 +16,6 @@ from .errors import ContractError
 
 
 SCHEMA_VERSION = "standalone_retirement_audit/1.0.0"
-EXPECTED_DBNS = 4491
-EXPECTED_SIDECARS = 4491
-EXPECTED_FILES = 8982
-EXPECTED_BYTES = 25_592_717_852
 EXPECTED_MARKETS = 41
 PROHIBITED_PUBLIC_SCRIPTS = frozenset(
     {
@@ -207,15 +203,25 @@ def scan_retirement_readiness(repository_root: Path) -> dict[str, Any]:
     inventory = _load_object(inventory_path, "legacy retirement inventory")
     checks: list[dict[str, Any]] = []
 
-    source_release = source.get("canonical_dbn_release")
+    active_source = source.get("active_canonical_source")
+    complete_inventory = source.get("complete_inventory")
+    source_authority = source.get("authority")
     source_ready = (
-        source.get("legacy_repository") is None
-        and source.get("external_repository_access") == "FORBIDDEN"
-        and type(source_release) is dict
-        and source_release.get("dbn_files") == EXPECTED_DBNS
-        and source_release.get("sidecar_files") == EXPECTED_SIDECARS
-        and source_release.get("combined_files") == EXPECTED_FILES
-        and source_release.get("combined_bytes") == EXPECTED_BYTES
+        source.get("schema_version") == "canonical_dbn_source_contract/4.0.0"
+        and source.get("status")
+        == "CURRENT_SUCCESSOR_NON_AUTHORIZING_ACTIVE_ONLY_AT_EXACT_ALIAS"
+        and type(active_source) is dict
+        and active_source.get("canonical_root") == "data/dbn"
+        and type(active_source.get("release_id")) is str
+        and len(active_source["release_id"]) == 64
+        and type(complete_inventory) is dict
+        and active_source.get("complete_root_file_count")
+        == complete_inventory.get("file_count")
+        and active_source.get("complete_root_total_bytes")
+        == complete_inventory.get("total_bytes")
+        and type(source_authority) is dict
+        and source_authority.get("provider") is False
+        and source_authority.get("row_read") is False
     )
     checks.append(
         _check(
@@ -223,9 +229,9 @@ def scan_retirement_readiness(repository_root: Path) -> dict[str, Any]:
             source_ready,
             evidence=["configs/source_contract.json"],
             reason=(
-                "SUCCESSOR_SOURCE_IS_V2_LOCAL_AND_EXTERNAL_ACCESS_FORBIDDEN"
+                "CURRENT_SOURCE_IS_LOCAL_AND_PROVIDER_ROW_READ_FORBIDDEN"
                 if source_ready
-                else "SUCCESSOR_SOURCE_OR_EXTERNAL_ACCESS_CLOSURE_INCOMPLETE"
+                else "CURRENT_SOURCE_IDENTITY_OR_NO_READ_BOUNDARY_INCOMPLETE"
             ),
         )
     )

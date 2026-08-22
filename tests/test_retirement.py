@@ -81,14 +81,19 @@ def test_synthetic_complete_repo_can_be_classified_without_external_root(
     _write_json(
         tmp_path / "configs" / "source_contract.json",
         {
-            "legacy_repository": None,
-            "external_repository_access": "FORBIDDEN",
-            "canonical_dbn_release": {
-                "dbn_files": 4491,
-                "sidecar_files": 4491,
-                "combined_files": 8982,
-                "combined_bytes": 25_592_717_852,
+            "schema_version": "canonical_dbn_source_contract/4.0.0",
+            "status": "CURRENT_SUCCESSOR_NON_AUTHORIZING_ACTIVE_ONLY_AT_EXACT_ALIAS",
+            "active_canonical_source": {
+                "canonical_root": "data/dbn",
+                "release_id": "b" * 64,
+                "complete_root_file_count": 10900,
+                "complete_root_total_bytes": 23_428_263_920,
             },
+            "complete_inventory": {
+                "file_count": 10900,
+                "total_bytes": 23_428_263_920,
+            },
+            "authority": {"provider": False, "row_read": False},
         },
     )
     markets = [f"M{index:02d}" for index in range(41)]
