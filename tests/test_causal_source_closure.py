@@ -1,0 +1,138 @@
+from __future__ import annotations
+
+import ast
+import json
+from pathlib import Path
+
+import pytest
+
+from futures_rebuild.canonical import sha256_file
+from futures_rebuild.causal_source_closure import (
+    reject_unlisted_source_path,
+    select_standard_dbn_paths,
+    validate_source_contract_metadata,
+)
+from futures_rebuild.errors import UnauthorizedOperation
+from futures_rebuild.foundation_operation_firewall import (
+    CURRENT_SOURCE_CLOSURE_OPERATION,
+    issue_current_source_closure_context,
+)
+
+
+REPO = Path(__file__).resolve().parents[1]
+CONTRACT = REPO / "configs" / "source_contract.json"
+VERSIONED = REPO / "configs" / "source_contract_v4.json"
+RUNNER = REPO / "scripts" / "run_dual_resolution_tier01_foundation.py"
+pytestmark = pytest.mark.current
+
+
+def _json(path: Path) -> dict[str, object]:
+    value = json.loads(path.read_text(encoding="utf-8"))
+    assert isinstance(value, dict)
+    return value
+
+
+def _context():
+    return issue_current_source_closure_context(REPO, contract_path=CONTRACT)
+
+
+def test_installed_root_and_current_paths_are_repository_relative() -> None:
+    assert REPO == Path(__file__).resolve().parents[1]
+    assert CONTRACT == REPO / "configs/source_contract.json"
+    assert RUNNER == REPO / "scripts/run_dual_resolution_tier01_foundation.py"
+
+
+def test_current_contract_metadata_closure_and_context_are_exact() -> None:
+    result = validate_source_contract_metadata(
+        REPO,
+        operation_context=_context(),
+        contract_path=CONTRACT,
+    )
+    assert result == {
+        "contract_id": _json(CONTRACT)["contract_id"],
+        "content_inventory_sha256": "77ee7abd00b9dd610c44751588a40bf1ff3fec7a74c29013643be7dddd672abb",
+        "deferred_micro_root_count": 17,
+        "file_count": 10900,
+        "payload_files_opened": 0,
+        "release_id": "9867aedac9cfe732d015489fc4093ffc4aaab5ad698b75a5fa00ca7e1f457995",
+        "row_reads": 0,
+        "standard_root_count": 41,
+        "total_bytes": 23428263920,
+        "valid": True,
+    }
+    assert _context().operation == CURRENT_SOURCE_CLOSURE_OPERATION
+    assert CONTRACT.read_bytes() == VERSIONED.read_bytes()
+
+
+def test_exact_standard_selection_rejects_micro_and_unlisted_paths() -> None:
+    context = _context()
+    selected = select_standard_dbn_paths(
+        REPO,
+        operation_context=context,
+        market="ES",
+        family="ohlcv_1m",
+        contract_path=CONTRACT,
+    )
+    assert selected and selected == tuple(sorted(selected))
+    assert all(path.startswith("data/dbn/ohlcv_1m/ES/") for path in selected)
+    with pytest.raises(UnauthorizedOperation, match="standard source lane"):
+        select_standard_dbn_paths(
+            REPO,
+            operation_context=context,
+            market="MES",
+            family="ohlcv_1m",
+            contract_path=CONTRACT,
+        )
+    with pytest.raises(UnauthorizedOperation, match="exact admitted current source"):
+        reject_unlisted_source_path(
+            REPO,
+            "data/causally_gated_normalized/ES/2024/2024.parquet",
+            operation_context=context,
+            contract_path=CONTRACT,
+        )
+
+
+def test_missing_or_forged_context_fails_closed() -> None:
+    with pytest.raises(TypeError):
+        validate_source_contract_metadata(REPO, contract_path=CONTRACT)  # type: ignore[call-arg]
+    with pytest.raises(UnauthorizedOperation, match="context"):
+        validate_source_contract_metadata(
+            REPO,
+            operation_context=object(),  # type: ignore[arg-type]
+            contract_path=CONTRACT,
+        )
+
+
+def test_reconciliation_and_retirement_bindings_are_current() -> None:
+    contract = _json(CONTRACT)
+    reconciliation = _json(REPO / str(contract["unbound_reconciliation"]["path"]))
+    retirement = _json(REPO / str(contract["retirement_contract"]["path"]))
+    counts: dict[str, int] = {}
+    for entry in reconciliation["entries"]:
+        counts[str(entry["classification"])] = counts.get(str(entry["classification"]), 0) + 1
+    assert counts == {
+        "EXPECTED_ACTIVE_CANONICAL_ARTIFACT": 675,
+        "REQUIRED_CANONICAL_SIDECAR": 675,
+    }
+    assert reconciliation["unregistered_extra_count"] == 0
+    assert reconciliation["unresolved_integrity_issue_count"] == 0
+    assert retirement["enforcement"]["historical_runner_sha256"] == sha256_file(RUNNER)
+
+
+def test_current_selector_has_no_legacy_import_or_fallback() -> None:
+    source = (REPO / "src/futures_rebuild/causal_source_closure.py").read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    modules = {
+        alias.name
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Import)
+        for alias in node.names
+    }
+    modules.update(node.module or "" for node in ast.walk(tree) if isinstance(node, ast.ImportFrom))
+    assert not any("dual_resolution" in name for name in modules)
+    assert "runpy" not in modules
+    assert "subprocess" not in modules
+    assert "glob(" not in source
+    assert "rglob(" not in source
+    assert "newest" not in source
+    assert "latest" not in source

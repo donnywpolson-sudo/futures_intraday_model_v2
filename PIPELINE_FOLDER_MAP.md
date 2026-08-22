@@ -95,9 +95,9 @@ The counts below use only the canonical classification vocabulary and count regi
 
 | Classification | Entry count |
 | --- | --- |
-| `CURRENT_OPERATIONAL` | 38 |
-| `CURRENT_SUPPORTING` | 39 |
-| `HISTORICAL_HASH_BOUND` | 59 |
+| `CURRENT_OPERATIONAL` | 41 |
+| `CURRENT_SUPPORTING` | 41 |
+| `HISTORICAL_HASH_BOUND` | 61 |
 | `HISTORICAL_UNBOUND` | 3 |
 | `PREPARED_NOT_EXECUTED` | 6 |
 | `GENERATED_OUTPUT` | 10 |

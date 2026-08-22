@@ -131,7 +131,7 @@ def test_valid_registry_loads_and_validates_current_checkout() -> None:
 
     assert surface["schema_version"] == "repository_surface/1.0.0"
     assert len(surface["entries"]) == (
-        203 if surface.get("current_direct_authority_registry_id") else 189
+        210 if surface.get("current_direct_authority_registry_id") else 189
     )
 
 
@@ -155,10 +155,10 @@ def test_final_evaluation_successor_surface_entries_are_exact() -> None:
     assert selected["tests/test_final_evaluation_recalibration.py"]["classification"] == "CURRENT_SUPPORTING"
 
 
-@pytest.mark.parametrize("successor_count", [202, 204])
-def test_direct_authority_registry_count_rejects_non_203(successor_count: int) -> None:
+@pytest.mark.parametrize("successor_count", [209, 211])
+def test_direct_authority_registry_count_rejects_non_210(successor_count: int) -> None:
     surface = _surface()
-    if successor_count == 202:
+    if successor_count == 209:
         surface["entries"] = [
             entry
             for entry in surface["entries"]
@@ -171,7 +171,7 @@ def test_direct_authority_registry_count_rejects_non_203(successor_count: int) -
         extra["tracked_expected"] = "ABSENT_EXPECTED"
         surface["entries"].append(extra)
     assert len(surface["entries"]) == successor_count
-    with pytest.raises(RepositorySurfaceError, match="registry entry count must remain 203"):
+    with pytest.raises(RepositorySurfaceError, match="registry entry count must remain 210"):
         expected_pipeline_folder_map_bytes(surface, ROOT)
 
 
@@ -738,7 +738,7 @@ def test_default_cli_reports_all_generated_surface_validity() -> None:
     assert report["pipeline_folder_map_valid"] is True
     assert report["active_source_files_valid"] is True
     expected_entry_count = (
-        203 if _surface().get("current_direct_authority_registry_id") else 189
+        210 if _surface().get("current_direct_authority_registry_id") else 189
     )
     assert report["entry_count"] == expected_entry_count
     assert report["unresolved_entry_count"] == EXPECTED_UNRESOLVED_ENTRY_COUNT == 14

@@ -9,14 +9,18 @@ CURRENT_WORKFLOW.md
 FuturesLiveCockpit/_internal/FuturesLiveCockpit.spec
 FuturesLiveCockpit/_internal/futures_live_cockpit.py
 configs/active_alpha_research_ladder.json
+configs/source_contract.json
+configs/source_contract_v4.json
 pyproject.toml
 scripts/build_live_cockpit.ps1
 scripts/install_live_cockpit.ps1
 src/futures_rebuild/audit/__main__.py
+src/futures_rebuild/causal_source_closure.py
 src/futures_rebuild/certified_research_gateway.py
 src/futures_rebuild/current_research_surface.py
 src/futures_rebuild/dbn_catalog.py
 src/futures_rebuild/final_evaluation_recalibration.py
+src/futures_rebuild/foundation_operation_firewall.py
 src/futures_rebuild/high_risk.py
 src/futures_rebuild/live_cockpit/__init__.py
 src/futures_rebuild/live_cockpit/__main__.py
@@ -220,7 +224,6 @@ configs/schemas/local_commit_plan-1.0.0.json
 configs/schemas/workflow_delta-1.0.0.json
 configs/schemas/workflow_snapshot-1.0.0.json
 configs/session_policy.json
-configs/source_contract.json
 configs/statistics_foundation_roles.json
 configs/status_research_scope_policy.json
 configs/synthetic_research_engine.json
@@ -500,6 +503,7 @@ src/futures_rebuild/contract_economics_audit.py
 src/futures_rebuild/data_layout.py
 src/futures_rebuild/dbn_flat_cutover.py
 src/futures_rebuild/dbn_flat_layout.py
+src/futures_rebuild/dual_resolution_foundation.py
 src/futures_rebuild/durable_windows_task_transport.py
 src/futures_rebuild/economics.py
 src/futures_rebuild/errors.py
@@ -750,6 +754,7 @@ tests/test_cash_open_impulse_readiness.py
 tests/test_cash_open_source_compatibility.py
 tests/test_cash_open_source_compatibility_census_v2.py
 tests/test_causal_market_year_materialization.py
+tests/test_causal_source_closure.py
 tests/test_certified_research_gateway.py
 tests/test_closure_workflow.py
 tests/test_closure_workflow_v2_successor.py
@@ -775,6 +780,7 @@ tests/test_foundation_historical_observability.py
 tests/test_foundation_market_state.py
 tests/test_foundation_orchestrator.py
 tests/test_foundation_resources.py
+tests/test_foundation_retirement_firewall.py
 tests/test_foundation_successor.py
 tests/test_generic_naming_policy.py
 tests/test_high_risk_prepare.py

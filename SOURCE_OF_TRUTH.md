@@ -127,7 +127,7 @@ Neither `SOURCE_OF_TRUTH.md` nor the registry authorizes deletion, movement or r
 
 Exact current identities
 
-- source contract: `configs/source_contract_v3.json` (also installed at `configs/source_contract.json`), SHA-256 `9301babf45421754e9a7d343b69af773f2d446b72abf54f68ec23230672db18c`;
+- source contract: `configs/source_contract_v4.json` (active alias `configs/source_contract.json`), ID `47ad7a1c100bec86494f3c1eb1e78ba56a4d35c6be993da6ded8e2e7f925823f`, SHA-256 `35f1aba25c9cfe2a28fbd2657c6d0c0caf34581cdeec1249dbebd3eb5cf4c926`;
 - layout contract: `configs/data_layout_contract_v3.json` (also installed at `configs/data_layout_contract.json`), SHA-256 `52590d8d1c3b2a240bea72784523956707a21fd2f684634206f9e7f43dbf86ef`;
 - data-surface registry: `configs/data_surface_registry_v3.json`, ID `613ffe158c89ee2f4faf59b0ffa636809d7bbe627b43cc9c37c4ec56d4ed7ac6`;
 - standard catalog: `data/active/catalog.json`, ID `fd7fcf9c51fb15997c443f2c5e766ccceb0c0a4cc3063add71c19ea38efd040f`, file SHA-256 `73c31aac9b19078872bbb7abd97667ada6c018715eaf75dab7b08cc59c780ce7`;
