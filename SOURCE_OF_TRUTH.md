@@ -15,8 +15,6 @@
 - `PROJECT_OUTLINE.md` is the detailed research runbook.
 - `PIPELINE_FOLDER_MAP.md` is a topology and reference guide, not authority.
 - `docs/LEGACY_WORKFLOWS.md` classifies retired workflow material.
-- `MASTER_AUDIT.md` and `META_MASTER_AUDIT.md` are audit specifications, not current-state dashboards.
-- `CODEX_HANDOFF.md` is continuation context only and grants no authority.
 - `PUBLIC_SNAPSHOT.md` is not an operational workflow authority.
 
 ## Start here
@@ -47,8 +45,6 @@ The exact public command mapping comes from `[project.scripts]` in `pyproject.to
 | --- | --- |
 | `futures-dbn-catalog` | `futures_rebuild.dbn_catalog:main` |
 | `futures-high-risk-prepare` | `futures_rebuild.high_risk:main` |
-| `futures-master-audit` | `futures_rebuild.audit.__main__:main` |
-| `futures-meta-audit` | `futures_rebuild.meta_audit:main` |
 | `futures-pipeline` | `futures_rebuild.pipeline:main` |
 | `futures-readiness` | `futures_rebuild.readiness:main` |
 | `futures-retirement-audit` | `futures_rebuild.retirement:main` |

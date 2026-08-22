@@ -24,7 +24,9 @@ preservation/rollback boundary. Replying `Approve` is sufficient.
 
 The project uses one research-selection-pristine **Final Sealed 252-Session Holdout**: trade dates 2025-07-14 through 2026-07-13, manifest `0ff48f99d8b6d3a262ddf0a060bea8e733fc95aa7c4b4d43f19a0f78b107d4d1`. Development ends exclusively at 2025-07-13T22:00:00Z and forward monitoring begins at 2026-07-14T00:00:00Z. The manifest is purpose-limited, grants no row or evaluation access, creates no market-specific or micro holdout, and is not a general exchange calendar. Complete 2018-cutoff project-session continuity remains unresolved for portions of 2023-2024 and is not claimed.
 
-The user-facing pipeline is: Canonical Source Foundation; Research Design and Mechanism Freeze; Tier 0 Engineering and ES Qualification; Tier 1 Four-Market Confirmation; Tier 2 Balanced 16-Market Replication; Tier 3 Full 41-Market Replication; Final Project-Level 252-Session Evaluation; Post-Cutoff Forward Monitoring. Existing Phase 1A-11 labels remain internal synthetic/capability terminology only. The previous counted mechanism remains closed after Tier-0 ES failure, and the next mechanism is not started.
+`PROJECT_OUTLINE.md` is the practical current pipeline reference. The previous
+counted mechanism remains closed after Tier 0 ES failure, the new mechanism is
+not started, and the causal-observation contract audit is the next stage.
 
 Real research still needs its durable trial declaration and immutable evidence.
 Before registration, every row-dependent sample, fold, feature, execution,
@@ -141,20 +143,22 @@ it a current execution route; their historical operation names fail closed.
 
 ## Working state
 
-`CODEX_HANDOFF.md` is optional context for an interrupted or high-risk task. It
-does not grant authority. Preserve unrelated work; never use broad staging, and
-report only the decision or blocker that needs attention.
+Preserve unrelated work; never use broad staging, and report only the decision
+or blocker that needs attention.
 
-<!-- rlac_20260814T0642492268888Z_0b571482:CURRENT_DIRECT_AUTHORITY -->
-## Current data gate after rlac_20260814T0642492268888Z_0b571482
+## Current data boundary
 
-This section supersedes earlier data-authority and alpha-gateway descriptions in this current document. Those retained earlier bytes are HISTORICAL / SUPERSEDED / NON-AUTHORITATIVE context; they grant no current data or research access.
+Canonical source closure is complete and active. The canonical DBN source is
+frozen and validated, but the new clean-restart 41-market causal observation
+release is not built. Raw DBN cannot feed features, models, WFA, or backtests
+directly; it may feed only an approved development-only causal builder.
 
-- Direct DBN-to-causal authority cutover: COMPLETE after independent validation.
-- Former materialized raw layer: all 3,792 Wave E payload targets are permanently absent, with 15,000 total completed-deletion absences. Preserved empty parent directories are evidence only; rollback to the former raw payload is permanently unavailable.
-- Provider source and certified causal foundation: hash-verified and unchanged.
-- Tier 0/Tier 1 dual-resolution foundation: certified under `4d68f69d910a584df2fc0bc8ac10b82214ac451dd7eb262cfb8ee388710be9b6` with its existing caveats.
-- Research and alpha authority: NOT AUTHORIZED. Sealed 2025/2026 rows and trades remain inaccessible.
-- exact next permitted phase: design, implement, and independently certify the shared feature/label/split/transform research successor for full-size and micro Tier 0/Tier 1. That work still requires its own authority and may not begin as part of this cutover.
+Old derived releases and the retired foundation runner remain no-read. Row
+access requires separate approval, and the Final Sealed 252-Session Holdout and
+forward values remain inaccessible. The next permitted task is to audit and
+freeze the 41-market development-only causal observation foundation contract.
 
-The minimum active runtime set is not the minimum permanent custody set. Source custody, future-tier DBNs, sealed data, certification evidence, and rollback assets remain protected.
+When a milestone changes the active stage, status, or next goal, check
+`PROJECT_OUTLINE.md`, `CURRENT_WORKFLOW.md`, and `README.md`; update only
+affected files or record `NO_CHANGE` in the task report. Change `AGENTS.md`
+only when durable policy changes.

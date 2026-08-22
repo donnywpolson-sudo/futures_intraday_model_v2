@@ -47,9 +47,9 @@ ACTIVE_SOURCE_HEADER = (
     "# Virtual view only; no file is moved or hidden, and this file grants no operational authority.",
 )
 EXPECTED_REGISTRY_ENTRY_COUNT = 189
-DIRECT_AUTHORITY_REGISTRY_ENTRY_COUNT = 210
+DIRECT_AUTHORITY_REGISTRY_ENTRY_COUNT = 204
 EXPECTED_UNRESOLVED_ENTRY_COUNT = 14
-EXPECTED_PUBLIC_COMMAND_COUNT = 7
+EXPECTED_PUBLIC_COMMAND_COUNT = 5
 
 SOURCE_OF_TRUTH_SECTIONS = (
     "Purpose and authority",
@@ -1039,8 +1039,6 @@ def render_source_of_truth(
         "- `PROJECT_OUTLINE.md` is the detailed research runbook.",
         "- `PIPELINE_FOLDER_MAP.md` is a topology and reference guide, not authority.",
         "- `docs/LEGACY_WORKFLOWS.md` classifies retired workflow material.",
-        "- `MASTER_AUDIT.md` and `META_MASTER_AUDIT.md` are audit specifications, not current-state dashboards.",
-        "- `CODEX_HANDOFF.md` is continuation context only and grants no authority.",
         "- `PUBLIC_SNAPSHOT.md` is not an operational workflow authority.",
         "",
         "## Start here",

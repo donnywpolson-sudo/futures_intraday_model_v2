@@ -59,8 +59,6 @@ This is the exact deterministic `[project.scripts]` mapping from `pyproject.toml
 | --- | --- |
 | `futures-dbn-catalog` | `futures_rebuild.dbn_catalog:main` |
 | `futures-high-risk-prepare` | `futures_rebuild.high_risk:main` |
-| `futures-master-audit` | `futures_rebuild.audit.__main__:main` |
-| `futures-meta-audit` | `futures_rebuild.meta_audit:main` |
 | `futures-pipeline` | `futures_rebuild.pipeline:main` |
 | `futures-readiness` | `futures_rebuild.readiness:main` |
 | `futures-retirement-audit` | `futures_rebuild.retirement:main` |
@@ -95,13 +93,13 @@ The counts below use only the canonical classification vocabulary and count regi
 
 | Classification | Entry count |
 | --- | --- |
-| `CURRENT_OPERATIONAL` | 41 |
-| `CURRENT_SUPPORTING` | 41 |
+| `CURRENT_OPERATIONAL` | 39 |
+| `CURRENT_SUPPORTING` | 39 |
 | `HISTORICAL_HASH_BOUND` | 61 |
-| `HISTORICAL_UNBOUND` | 3 |
+| `HISTORICAL_UNBOUND` | 2 |
 | `PREPARED_NOT_EXECUTED` | 6 |
 | `GENERATED_OUTPUT` | 10 |
-| `REGENERABLE_CACHE` | 17 |
+| `REGENERABLE_CACHE` | 16 |
 | `LOCAL_RUNTIME_STATE` | 7 |
 | `LOCAL_SECRET` | 8 |
 | `MIXED_PACKAGING_SOURCE_OUTPUT` | 2 |

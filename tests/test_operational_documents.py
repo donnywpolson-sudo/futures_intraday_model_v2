@@ -130,45 +130,17 @@ def _markdown_headings(text: str) -> set[str]:
 def _assert_project_outline_heading_disposition_contract() -> None:
     outline = _text("PROJECT_OUTLINE.md")
     current_headings = _markdown_headings(outline)
-
-    snapshot_bytes = (ROOT / PROJECT_OUTLINE_SNAPSHOT_PATH).read_bytes()
-    marker_with_lf = (PROJECT_OUTLINE_BODY_MARKER + "\n").encode("utf-8")
-    assert snapshot_bytes.count(marker_with_lf) == 1
-    _, preserved_body = snapshot_bytes.split(marker_with_lf, 1)
-    former_headings = _markdown_headings(preserved_body.decode("utf-8"))
-
-    retained = PROJECT_OUTLINE_RETAINED_HEADINGS
-    condensed = PROJECT_OUTLINE_CONDENSED_HEADINGS
-    delegated = PROJECT_OUTLINE_DELEGATED_HEADINGS
-    unresolved = PROJECT_OUTLINE_UNRESOLVED_HEADINGS
-
-    assert len(retained) == 5
-    assert len(condensed) == 13
-    assert len(delegated) == 4
-    assert len(unresolved) == 0
-
-    classified = [former for former, _ in retained]
-    classified.extend(former for former, _ in condensed)
-    classified.extend(former for former, _, _ in delegated)
-    classified.extend(unresolved)
-    assert len(classified) == 22
-    assert len(classified) == len(set(classified))
-    assert set(classified) == PROJECT_OUTLINE_EXPECTED_FORMER_HEADINGS
-    assert PROJECT_OUTLINE_EXPECTED_FORMER_HEADINGS <= former_headings
-
-    for former, current in retained + condensed:
-        assert former
-        assert current
-        assert former in former_headings
-        assert current in current_headings
-
-    for former, destination, durable_pointer in delegated:
-        assert former
-        assert destination
-        assert durable_pointer
-        assert former in former_headings
-        assert (ROOT / destination).is_file()
-        assert durable_pointer in outline
+    assert current_headings == {
+        "Futures Intraday Research Pipeline",
+        "1. Purpose and authority",
+        "2. Current status",
+        "3. Full pipeline",
+        "4. Stage table",
+        "5. Next-stage requirements",
+        "6. Universe, tiers, and time boundaries",
+        "7. Core anti-bias rules",
+        "8. Evidence and history",
+    }
 
 
 def _assert_project_outline_historical_snapshot_contract() -> None:
@@ -590,32 +562,18 @@ def _assert_project_outline_is_concise_current_runbook() -> None:
     assert len(outline.splitlines()) <= 450
 
     for required in (
-        "Futures intraday research runbook",
+        "Futures Intraday Research Pipeline",
         "CURRENT_WORKFLOW.md",
         "AGENTS.md",
-        "SOURCE_OF_TRUTH.md",
-        "configs/repository_surface.json",
         "docs/LEGACY_WORKFLOWS.md",
-        PROJECT_OUTLINE_SNAPSHOT_PATH,
-        PROJECT_OUTLINE_SNAPSHOT_MANIFEST_PATH,
-        "MASTER_AUDIT.md",
-        "META_MASTER_AUDIT.md",
-        "CURRENT_WORKFLOW.md controls normal work",
-        "historical chronology",
-        "standard/full-contract Alpha lane",
-        "Micro-source lane",
-        "Micro source selection does not grant research or trading authority",
-        "CertifiedResearchGateway",
-        "only current real-history registration and economic-execution boundary",
-        "futures-pipeline` is synthetic-only",
-        "Directory presence",
-        "Current phase map",
-        "Purpose and current entry point",
-        "Principal output",
-        "Gate or stop condition",
-        "Authority boundary",
-        "Research invariants",
-        "Stop conditions",
+        "CURRENT_WORKFLOW.md` controls procedure and approvals",
+        "Causal observation release",
+        "NOT BUILT",
+        "Direct DBN use by features, models, WFA, or backtests is forbidden",
+        "No clean-restart DBN row read has occurred",
+        "Final Sealed 252-Session Holdout",
+        "SEALED / PRISTINE / UNREAD",
+        "AUDIT AND FREEZE THE 41-MARKET DEVELOPMENT-ONLY CAUSAL OBSERVATION FOUNDATION CONTRACT",
     ):
         assert required.lower() in lowered
 
@@ -632,7 +590,8 @@ def _assert_project_outline_is_concise_current_runbook() -> None:
     assert "AppData\\Local\\Temp" not in outline
     assert re.search(r"(?i)(api[_-]?key|password|token)\s*[:=]\s*\S+", outline) is None
     assert re.search(r"\b[0-9a-f]{40}\b", outline) is None
-    assert re.search(r"\b20\d{2}-\d{2}-\d{2}[T ]\d{2}:\d{2}", outline) is None
+    timestamps = re.findall(r"\b20\d{2}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", outline)
+    assert timestamps == ["2025-07-13T22:00:00Z", "2026-07-14T00:00:00Z"]
     for mutable_status in (
         "current head",
         "branch:",
@@ -641,11 +600,8 @@ def _assert_project_outline_is_concise_current_runbook() -> None:
     ):
         assert mutable_status not in lowered
 
-    pyproject = tomllib.loads(_text("pyproject.toml"))
-    public_commands = set(pyproject["project"]["scripts"])
     named_commands = set(re.findall(r"\bfutures-[a-z0-9-]+\b", outline))
-    assert named_commands
-    assert named_commands <= public_commands
+    assert not named_commands
     for retired in (
         "futures-live-cockpit",
         "futures-closure-workflow",
@@ -709,32 +665,6 @@ def test_project_outline_is_current_runbook_not_historical_ledger() -> None:
 
 def test_project_outline_heading_dispositions_are_complete_and_resolved() -> None:
     _assert_project_outline_heading_disposition_contract()
-
-
-def test_handoff_describes_the_active_alpha_ladder_and_next_boundary(
-    local_evidence_root: Path,
-) -> None:
-    handoff = (local_evidence_root / "CODEX_HANDOFF.md").read_text(encoding="utf-8")
-
-    for required in (
-        "53252c8d...362815",
-        "cfefe8ce...563dc3",
-        "CertifiedResearchGateway",
-        "a6ae7b...c82bc",
-        "SEALED_UNPUBLISHED_ECONOMIC_SCREEN_COMPLETE",
-        "aeff50fa...23ff9",
-        "CONCLUSIVE_PILOT_ECONOMIC_REJECTION_ZERO_TRADABLE_SIGNALS",
-        "Tier 1 advancement is forbidden",
-        "26bbde28...4e71",
-        "c82f91b...b902d",
-        "7bbaefec...9defd",
-        "R and the emergency reserve",
-        "remain\nunset",
-        "synthetic row-loader injection hook",
-    ):
-        assert required.lower() in handoff.lower()
-    assert "codex/tier1-phase8-economics" not in handoff
-    assert "103 and 852" not in handoff
 
 
 def test_current_workflow_names_one_certified_real_history_surface() -> None:

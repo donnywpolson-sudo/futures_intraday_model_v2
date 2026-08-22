@@ -74,7 +74,6 @@ def test_governing_documents_do_not_require_copied_approval_lines() -> None:
     agents = (REPO / "AGENTS.md").read_text(encoding="utf-8")
     current = (REPO / "CURRENT_WORKFLOW.md").read_text(encoding="utf-8")
     outline = (REPO / "PROJECT_OUTLINE.md").read_text(encoding="utf-8")
-    handoff = (REPO / "CODEX_HANDOFF.md").read_text(encoding="utf-8")
     assert "Do not ask the user to copy a plan ID, hash, command, approval line" in agents
     assert "two-tier workflow" in outline
 
@@ -84,8 +83,3 @@ def test_governing_documents_do_not_require_copied_approval_lines() -> None:
         re.findall(r"[a-z0-9]+", normal_work)
     )
     assert not re.search(r"\b(?:must|shall) copy\b|\brequired to copy\b", normal_work)
-
-    handoff_intro = _normalized(handoff.split("\n## ", 1)[0])
-    assert "current_workflow.md" in handoff_intro
-    assert re.search(r"\bcontrols? normal work\b", handoff_intro)
-    assert re.search(r"\bgrants? no authority\b", handoff_intro)

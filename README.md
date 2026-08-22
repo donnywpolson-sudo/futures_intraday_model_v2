@@ -22,14 +22,16 @@ plain-language confirmation required before high-risk work.
 ```
 
 `CURRENT_WORKFLOW.md` is the workflow authority. This README is setup and
-operator orientation; `PROJECT_OUTLINE.md` describes the research pipeline;
-`CODEX_HANDOFF.md` is optional interrupted-task context.
+operator orientation; `PROJECT_OUTLINE.md` describes the research pipeline.
 
 ## Certified final-evaluation boundary
 
 The project uses one research-selection-pristine **Final Sealed 252-Session Holdout**: trade dates 2025-07-14 through 2026-07-13, manifest `0ff48f99d8b6d3a262ddf0a060bea8e733fc95aa7c4b4d43f19a0f78b107d4d1`. Development ends exclusively at 2025-07-13T22:00:00Z and forward monitoring begins at 2026-07-14T00:00:00Z. The manifest is purpose-limited, grants no row or evaluation access, creates no market-specific or micro holdout, and is not a general exchange calendar. Complete 2018-cutoff project-session continuity remains unresolved for portions of 2023-2024 and is not claimed.
 
-The user-facing pipeline is: Canonical Source Foundation; Research Design and Mechanism Freeze; Tier 0 Engineering and ES Qualification; Tier 1 Four-Market Confirmation; Tier 2 Balanced 16-Market Replication; Tier 3 Full 41-Market Replication; Final Project-Level 252-Session Evaluation; Post-Cutoff Forward Monitoring. Existing Phase 1A-11 labels remain internal synthetic/capability terminology only. The previous counted mechanism remains closed after Tier-0 ES failure, and the next mechanism is not started.
+The canonical source and clean-restart baseline are complete, but the new
+41-market causal observation release is not built. The next goal is to audit
+and freeze its development-only causal-observation contract. See
+`PROJECT_OUTLINE.md` for the current pipeline and status.
 
 ## Repository map
 
@@ -96,8 +98,7 @@ admission authority is `configs/research_universe_contract.json`.
 
 The default Phase 1A-11 interface is synthetic mechanics only and has no
 provider, real-history, prediction, candidate, holdout, or order authority.
-See `PROJECT_OUTLINE.md` for every phase command, output class, gate, and stop
-condition.
+See `PROJECT_OUTLINE.md` for the current stages, outputs, gates, and status.
 
 ## Phase 8 economics
 
@@ -166,23 +167,12 @@ activated CME calendar remains authoritative for current/forward cockpit
 scheduling. Publishing the schema-7 historical-observability foundation is a
 high-risk action and needs one plain-language Codex confirmation.
 
-## Master audits
-
-Root `MASTER_AUDIT.md` is the canonical non-authorizing state audit. Run it with
-a frozen invocation:
+## Retirement audit
 
 ```powershell
-.\.venv\Scripts\futures-master-audit.exe --invocation configs/master_audit_v3/invocation.example.json
-.\.venv\Scripts\python.exe -m pytest -q --junitxml=.pytest_tmp/full-suite.xml
-.\.venv\Scripts\futures-meta-audit.exe --junitxml .pytest_tmp/full-suite.xml --suite-evidence-output .pytest_tmp/full-suite-evidence.json
 .\.venv\Scripts\futures-retirement-audit.exe
 ```
 
-The example intentionally fails closed because it omits the exact universe
-approval-receipt evidence and required subcheck results.
-`META_MASTER_AUDIT.md` defines the independent blind-first review of the Master
-Audit itself. `futures-meta-audit` checks its frozen threat coverage against the
-Master, stage matrix, executable test nodes, and an exact full-suite receipt.
 `futures-retirement-audit` proves standalone closure without opening an external
 repository.
 
@@ -239,8 +229,6 @@ shortcuts for rollback.
 - `CURRENT_WORKFLOW.md`: the single day-to-day workflow guide.
 - `AGENTS.md`: durable safety and research-integrity rules.
 - `PROJECT_OUTLINE.md`: Phase 1A-11 research runbook.
-- `CODEX_HANDOFF.md`: optional context for interrupted or high-risk work.
-- `MASTER_AUDIT.md` / `META_MASTER_AUDIT.md`: state and audit-quality controls.
 - `configs/source_contract.json`: accepted source boundary.
 - `manifests/**`: immutable release and approval evidence.
 - `docs/LEGACY_WORKFLOWS.md`: retained historic plans, approval artifacts, and
