@@ -130,7 +130,49 @@ def test_valid_registry_loads_and_validates_current_checkout() -> None:
     validate_repository_surface(surface, repository_root=ROOT)
 
     assert surface["schema_version"] == "repository_surface/1.0.0"
-    assert len(surface["entries"]) == 184
+    assert len(surface["entries"]) == (
+        203 if surface.get("current_direct_authority_registry_id") else 189
+    )
+
+
+FINAL_EVALUATION_SUCCESSOR_SURFACE_PATHS = {
+    "scripts/prepare_final_252_pipeline_successor_v1.py",
+    "src/futures_rebuild/final_evaluation_recalibration.py",
+    "tests/test_final_evaluation_recalibration.py",
+}
+
+
+def test_final_evaluation_successor_surface_entries_are_exact() -> None:
+    surface = _surface()
+    selected = {
+        entry["path_or_pattern"]: entry
+        for entry in surface["entries"]
+        if entry["path_or_pattern"] in FINAL_EVALUATION_SUCCESSOR_SURFACE_PATHS
+    }
+    assert set(selected) == FINAL_EVALUATION_SUCCESSOR_SURFACE_PATHS
+    assert selected["src/futures_rebuild/final_evaluation_recalibration.py"]["classification"] == "CURRENT_OPERATIONAL"
+    assert selected["scripts/prepare_final_252_pipeline_successor_v1.py"]["classification"] == "CURRENT_SUPPORTING"
+    assert selected["tests/test_final_evaluation_recalibration.py"]["classification"] == "CURRENT_SUPPORTING"
+
+
+@pytest.mark.parametrize("successor_count", [202, 204])
+def test_direct_authority_registry_count_rejects_non_203(successor_count: int) -> None:
+    surface = _surface()
+    if successor_count == 202:
+        surface["entries"] = [
+            entry
+            for entry in surface["entries"]
+            if entry["path_or_pattern"] != "tests/test_final_evaluation_recalibration.py"
+        ]
+    else:
+        extra = copy.deepcopy(_entry(surface, "README.md"))
+        extra["path_or_pattern"] = "docs/nonexistent-final-252-count-sentinel.md"
+        extra["authority_role"] = "FINAL_252_COUNT_SENTINEL"
+        extra["tracked_expected"] = "ABSENT_EXPECTED"
+        surface["entries"].append(extra)
+    assert len(surface["entries"]) == successor_count
+    with pytest.raises(RepositorySurfaceError, match="registry entry count must remain 203"):
+        expected_pipeline_folder_map_bytes(surface, ROOT)
 
 
 def test_unknown_classification_is_rejected() -> None:
@@ -519,7 +561,14 @@ def test_source_of_truth_section_order_is_stable() -> None:
     text = SOURCE_OF_TRUTH_PATH.read_text(encoding="utf-8")
     headings = [line[3:] for line in text.splitlines() if line.startswith("## ")]
 
-    assert headings == list(SOURCE_OF_TRUTH_SECTIONS)
+    expected_headings = list(SOURCE_OF_TRUTH_SECTIONS)
+    direct_documentation = _surface().get("current_direct_authority_documentation")
+    if isinstance(direct_documentation, dict):
+        direct_section = direct_documentation.get("source_of_truth_section")
+        if isinstance(direct_section, str):
+            expected_headings.append(direct_section.splitlines()[0][3:])
+
+    assert headings == expected_headings
 
 
 def test_source_of_truth_public_commands_are_sorted_and_complete() -> None:
@@ -688,7 +737,10 @@ def test_default_cli_reports_all_generated_surface_validity() -> None:
     assert report["source_of_truth_valid"] is True
     assert report["pipeline_folder_map_valid"] is True
     assert report["active_source_files_valid"] is True
-    assert report["entry_count"] == EXPECTED_REGISTRY_ENTRY_COUNT == 184
+    expected_entry_count = (
+        203 if _surface().get("current_direct_authority_registry_id") else 189
+    )
+    assert report["entry_count"] == expected_entry_count
     assert report["unresolved_entry_count"] == EXPECTED_UNRESOLVED_ENTRY_COUNT == 14
     assert report["public_command_count"] == EXPECTED_PUBLIC_COMMAND_COUNT == 7
     assert report["tracked_root_mode"] == "GIT_LS_FILES"
@@ -807,7 +859,14 @@ def test_pipeline_folder_map_format_sections_and_limits_are_stable() -> None:
 
     assert b"\r" not in document
     assert document.endswith(b"\n") and not document.endswith(b"\n\n")
-    assert headings == list(PIPELINE_FOLDER_MAP_SECTIONS)
+    expected_headings = list(PIPELINE_FOLDER_MAP_SECTIONS)
+    direct_documentation = _surface().get("current_direct_authority_documentation")
+    if isinstance(direct_documentation, dict):
+        direct_section = direct_documentation.get("pipeline_folder_map_section")
+        if isinstance(direct_section, str):
+            expected_headings.append(direct_section.splitlines()[0][3:])
+
+    assert headings == expected_headings
     assert len(text.split()) <= PIPELINE_FOLDER_MAP_MAX_WORDS
     assert len(document) <= PIPELINE_FOLDER_MAP_MAX_BYTES
     assert table_rows <= PIPELINE_FOLDER_MAP_MAX_TABLE_ROWS

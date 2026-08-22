@@ -117,3 +117,26 @@ Resolve currentness through `CURRENT_WORKFLOW.md`, `AGENTS.md`, `configs/reposit
 ## What this document does not authorize
 
 Neither `SOURCE_OF_TRUTH.md` nor the registry authorizes deletion, movement or renaming, provider access, credential access, market-data reads, real-history research, holdout or forward access, prediction publication, candidate sealing, active-data mutation, publication, installation, activation, live smoke, trading, order placement, staging, commit, or push.
+
+## Current precedence after rlac_20260814T0642492268888Z_0b571482
+
+1. Current machine-readable policies and exact catalogs/pointers.
+2. Certified foundation registry and release manifests.
+3. Current source-of-truth and workflow documentation.
+4. HISTORICAL, SUPERSEDED, ROLLBACK_ONLY, QUARANTINED, or NON-AUTHORITATIVE reports and plans.
+
+Exact current identities
+
+- source contract: `configs/source_contract_v3.json` (also installed at `configs/source_contract.json`), SHA-256 `9301babf45421754e9a7d343b69af773f2d446b72abf54f68ec23230672db18c`;
+- layout contract: `configs/data_layout_contract_v3.json` (also installed at `configs/data_layout_contract.json`), SHA-256 `52590d8d1c3b2a240bea72784523956707a21fd2f684634206f9e7f43dbf86ef`;
+- data-surface registry: `configs/data_surface_registry_v3.json`, ID `613ffe158c89ee2f4faf59b0ffa636809d7bbe627b43cc9c37c4ec56d4ed7ac6`;
+- standard catalog: `data/active/catalog.json`, ID `fd7fcf9c51fb15997c443f2c5e766ccceb0c0a4cc3063add71c19ea38efd040f`, file SHA-256 `73c31aac9b19078872bbb7abd97667ada6c018715eaf75dab7b08cc59c780ce7`;
+- micro catalog: `data/active/catalogs/apex_micro.json`, ID `57121c187e71d761637ab4e2664bd48f48098b4ef0baa099025e859935e648c0`, file SHA-256 `11ae80324d827c9240b66f80dfbeb461a330e18d65f27ced91dc2ec6f07cf3ab`;
+- micro pointer: `configs/active_micro_alpha_research_ladder.json`, ID `50e61517f1f37f51867faf0981163748a683739c3cf72147b4331a89a323ee4e`, file SHA-256 `d0c9863eacbd19211f39f3e86e93be29b0d345584362f15c88d116fb460735c1`;
+- dual-resolution foundation ID: `4d68f69d910a584df2fc0bc8ac10b82214ac451dd7eb262cfb8ee388710be9b6`;
+- direct-authority policy: `configs/direct_dbn_causal_authority_v1.json`, policy ID `ab033bfaed9c9bce57f2125df0acb6226e4568c3be5597fdec4a3918a6c32440`, registry ID `fe97223ff2712a28b615aaee13cbedd4e93d6016778e2ab867680cc231d56f27`;
+- retention policy: `configs/data_retention_policy_v1.json`, ID `e999b13cb13c88d715f0f9ed9b106126fe9630d624bc2a2c280c02f2d830e439`;
+- post-Wave-E closure: `configs/data_phase_closed_v3.json`, ID `13cc8bc005d1525d3353f8289a253abf7788c42b14f2506275bdbc8b87c6bc2a`, with 15,000 completed-deletion absences and no raw rollback authority;
+- raw-layer retirement certificate: `reports/raw_layer_authority_cutover/rlac_20260814T0642492268888Z_0b571482/14_INDEPENDENT_RETIREMENT_CERTIFICATION.json`.
+
+Predecessor hashes `da8f5b9afa8584db94dfaac1415d10da7945adac413a8a767526b8fc7e0894da`, `9ecc6708cf37993441c805a3f40c396f55b2248884ba016a992c3767dd7b684a`, `243170c72638c1ad60cf66ee1cd3b6a50ed025662cd5964f3f3ff92a23d40f72`, `7dbfe0bb29e598345a3be0f8e9b1d3520d3199579635e6612b0e493d26a47b67`, and `5eba4fd5e88c58b12de14cf748b9a9e567a4ec9023f2f3a43b9b55303c64a40d` are rollback evidence, not current selection authority.

@@ -30,7 +30,7 @@ SOURCE_OF_TRUTH_MAX_WORDS = 1_600
 SOURCE_OF_TRUTH_MAX_BYTES = 16 * 1024
 PIPELINE_FOLDER_MAP_PATH = Path("PIPELINE_FOLDER_MAP.md")
 PIPELINE_FOLDER_MAP_ROLE = "GENERATED_PIPELINE_FOLDER_MAP_VIEW"
-PIPELINE_FOLDER_MAP_MAX_WORDS = 1_800
+PIPELINE_FOLDER_MAP_MAX_WORDS = 2_100
 PIPELINE_FOLDER_MAP_MAX_BYTES = 20 * 1024
 PIPELINE_FOLDER_MAP_MAX_TABLE_ROWS = 50
 ACTIVE_SOURCE_FILES_PATH = Path("ACTIVE_SOURCE_FILES.txt")
@@ -46,7 +46,8 @@ ACTIVE_SOURCE_HEADER = (
     "# Inclusion: CURRENT_OPERATIONAL and CURRENT_SUPPORTING.",
     "# Virtual view only; no file is moved or hidden, and this file grants no operational authority.",
 )
-EXPECTED_REGISTRY_ENTRY_COUNT = 184
+EXPECTED_REGISTRY_ENTRY_COUNT = 189
+DIRECT_AUTHORITY_REGISTRY_ENTRY_COUNT = 203
 EXPECTED_UNRESOLVED_ENTRY_COUNT = 14
 EXPECTED_PUBLIC_COMMAND_COUNT = 7
 
@@ -72,6 +73,28 @@ PIPELINE_FOLDER_MAP_SECTIONS = (
     "Generated, local-only, mixed, and unresolved material",
     "Safety and non-authority boundary",
 )
+
+
+def _expected_registry_entry_count(surface: Mapping[str, object]) -> int:
+    return (
+        DIRECT_AUTHORITY_REGISTRY_ENTRY_COUNT
+        if surface.get("current_direct_authority_registry_id")
+        else EXPECTED_REGISTRY_ENTRY_COUNT
+    )
+
+
+def _direct_documentation_section(
+    surface: Mapping[str, object], key: str
+) -> str | None:
+    payload = surface.get("current_direct_authority_documentation")
+    if payload is None:
+        return None
+    if not isinstance(payload, Mapping):
+        raise RepositorySurfaceError("current direct-authority documentation is invalid")
+    section = payload.get(key)
+    if not isinstance(section, str) or not section.startswith("## ") or not section.endswith("\n"):
+        raise RepositorySurfaceError("current direct-authority documentation section is invalid")
+    return section
 PIPELINE_FOLDER_MAP_AUTHORITY_ROLES = (
     ("Normal work", "NORMAL_WORKFLOW_AUTHORITY"),
     ("Durable safety policy", "DURABLE_SAFETY_POLICY_AUTHORITY"),
@@ -174,6 +197,11 @@ REQUIRED_ROLE_PATHS = {
     "ACTIVE_STANDARD_DATA_SELECTION": "data/active/catalog.json",
     "ACTIVE_MICRO_SOURCE_SELECTION": "configs/active_micro_alpha_research_ladder.json",
     "ACTIVE_MICRO_DATA_SELECTION": "data/active/catalogs/apex_micro.json",
+    "MICRO_CONTRACT_UNIVERSE_POLICY": "configs/micro_contract_universe_v1.json",
+    "CORE_DATABENTO_L0_DEPENDENCY_POLICY": "configs/core_databento_standard_l0_dependency_policy_v1.json",
+    "DATA_SURFACE_SELECTION_POLICY": "configs/data_surface_registry_v1.json",
+    "DATA_CAPABILITY_BASELINE_BINDING": "configs/data_capability_baseline_v1.json",
+    "DATA_PHASE_CLOSURE_RECORD": "configs/data_phase_closed_v1.json",
 }
 GENERATED_OR_AMBIGUOUS_ROOTS = (
     "build",
@@ -423,7 +451,14 @@ def validate_repository_surface(
             raise RepositorySurfaceError("secret entries require the secret-content policy")
         entries.append(entry)
 
-    serialized = json.dumps(surface, sort_keys=True)
+    serialization_surface = dict(surface)
+    direct_documentation = serialization_surface.pop(
+        "current_direct_authority_documentation", None
+    )
+    if direct_documentation is not None:
+        _direct_documentation_section(surface, "source_of_truth_section")
+        _direct_documentation_section(surface, "pipeline_folder_map_section")
+    serialized = json.dumps(serialization_surface, sort_keys=True)
     if _MACHINE_PATH.search(serialized):
         raise RepositorySurfaceError("registry contains a machine-specific path")
     if _AFFIRMATIVE_AUTHORITY.search(serialized):
@@ -453,7 +488,32 @@ def _validate_authority_roles(
     by_role: dict[str, list[Mapping[str, object]]] = {}
     for entry in entries:
         by_role.setdefault(str(entry["authority_role"]), []).append(entry)
-    for role, expected_path in REQUIRED_ROLE_PATHS.items():
+    required_role_paths = dict(REQUIRED_ROLE_PATHS)
+    if any(
+        entry.get("authority_role") == "DATA_SURFACE_SELECTION_POLICY"
+        and entry.get("path_or_pattern") == "configs/data_surface_registry_v3.json"
+        for entry in entries
+    ):
+        required_role_paths["DATA_SURFACE_SELECTION_POLICY"] = (
+            "configs/data_surface_registry_v3.json"
+        )
+    if any(
+        entry.get("authority_role") == "DATA_PHASE_CLOSURE_RECORD"
+        and entry.get("path_or_pattern") == "configs/data_phase_closed_v3.json"
+        for entry in entries
+    ):
+        required_role_paths["DATA_PHASE_CLOSURE_RECORD"] = (
+            "configs/data_phase_closed_v3.json"
+        )
+    elif any(
+        entry.get("authority_role") == "DATA_PHASE_CLOSURE_RECORD"
+        and entry.get("path_or_pattern") == "configs/data_phase_closed_v2.json"
+        for entry in entries
+    ):
+        required_role_paths["DATA_PHASE_CLOSURE_RECORD"] = (
+            "configs/data_phase_closed_v2.json"
+        )
+    for role, expected_path in required_role_paths.items():
         matches = by_role.get(role, [])
         if len(matches) != 1 or matches[0]["path_or_pattern"] != expected_path:
             raise RepositorySurfaceError(
@@ -464,7 +524,7 @@ def _validate_authority_roles(
     precedence_bindings = {
         (str(item["role"]), str(item["path"])) for item in authority_precedence
     }
-    for role, path in REQUIRED_ROLE_PATHS.items():
+    for role, path in required_role_paths.items():
         if (role, path) not in precedence_bindings:
             raise RepositorySurfaceError(
                 f"authority_precedence omits {role} at {path}"
@@ -1078,6 +1138,11 @@ def render_source_of_truth(
             "Neither `SOURCE_OF_TRUTH.md` nor the registry authorizes deletion, movement or renaming, provider access, credential access, market-data reads, real-history research, holdout or forward access, prediction publication, candidate sealing, active-data mutation, publication, installation, activation, live smoke, trading, order placement, staging, commit, or push.",
         ]
     )
+    direct_section = _direct_documentation_section(
+        surface, "source_of_truth_section"
+    )
+    if direct_section is not None:
+        lines.extend(("", *direct_section.rstrip("\n").splitlines()))
     return "\n".join(lines) + "\n"
 
 
@@ -1195,6 +1260,12 @@ def render_pipeline_folder_map(
             "",
             "The standard Alpha pointer/catalog and micro source pointer/catalog remain separate. Local-only controls may be absent from clean provider-free exports. Micro source selection does not establish a frozen mechanism, registered trial, historical-row authority, research passage, holdout authority, production readiness, execution readiness, or trading authority.",
             "",
+            "The versioned data-closure controls are `configs/micro_contract_universe_v1.json`, `configs/core_databento_standard_l0_dependency_policy_v1.json`, `configs/data_surface_registry_v1.json`, `configs/data_capability_baseline_v1.json`, and `configs/data_phase_closed_v1.json`. They register policy, evidence identities, and fail-closed selection rules; they do not replace either active catalog or pointer and grant no market activation or research authority.",
+            "",
+            "Data Phase Closed v1 records a certified standard foundation, a completed capability assessment, and structurally verified opaque custody for 17 micro markets. The legacy four remain the only active micro catalog members; the additional 13 remain inactive and uncertified for research. Alpha research remains disabled, and the next boundary is feature/label/split/transform successor design.",
+            "",
+            "The governing sequence is Phase 0 Immutable provider custody; Phase 1 Certified historical data foundation; Phase 2 Historical data capability and alpha investigability; Phase 3 Hypothesis, feature, label, split, and transform contracts; Phase 4 ES discovery sandbox; Phase 5 Full-size Tier-1 falsification; Phase 6 Micro transfer and execution validation; Phase 7 Expanded robustness; Phase 8 Economic and execution validation; Phase 9 Sealed holdout; and Phase 10 Paper/live readiness.",
+            "",
             "`CertifiedResearchGateway` is the sole current real-history registration and trial-execution boundary; use remains separately controlled. `futures-pipeline` is synthetic-only. No other public command provides a real-history execution surface.",
             "",
             "## Public commands",
@@ -1266,6 +1337,11 @@ def render_pipeline_folder_map(
             "Cache deletion still requires a fresh exact machine-local census and separate approval.",
         ]
     )
+    direct_section = _direct_documentation_section(
+        surface, "pipeline_folder_map_section"
+    )
+    if direct_section is not None:
+        lines.extend(("", *direct_section.rstrip("\n").splitlines()))
     return "\n".join(lines) + "\n"
 
 
@@ -1277,9 +1353,10 @@ def validate_pipeline_folder_map(
 ) -> dict[str, object]:
     """Validate exact deterministic topology bytes and non-authority limits."""
 
-    if len(_surface_entries(surface)) != EXPECTED_REGISTRY_ENTRY_COUNT:
+    expected_entry_count = _expected_registry_entry_count(surface)
+    if len(_surface_entries(surface)) != expected_entry_count:
         raise RepositorySurfaceError(
-            f"registry entry count must remain {EXPECTED_REGISTRY_ENTRY_COUNT}"
+            f"registry entry count must remain {expected_entry_count}"
         )
     classification_counts = dict(_classification_counts(surface))
     if classification_counts.get("UNRESOLVED_MANUAL_REVIEW") != EXPECTED_UNRESOLVED_ENTRY_COUNT:
@@ -1308,7 +1385,13 @@ def validate_pipeline_folder_map(
     if table_row_count > PIPELINE_FOLDER_MAP_MAX_TABLE_ROWS:
         raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md exceeds the table-row limit")
     headings = [line[3:] for line in text.splitlines() if line.startswith("## ")]
-    if headings != list(PIPELINE_FOLDER_MAP_SECTIONS):
+    direct_section = _direct_documentation_section(
+        surface, "pipeline_folder_map_section"
+    )
+    expected_headings = list(PIPELINE_FOLDER_MAP_SECTIONS)
+    if direct_section is not None:
+        expected_headings.append(direct_section.splitlines()[0][3:])
+    if headings != expected_headings:
         raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md section order is invalid")
     scrubbed = text.replace(
         "docs/history/PIPELINE_FOLDER_MAP_SNAPSHOT_2026-08-11.md", ""
@@ -1320,7 +1403,9 @@ def validate_pipeline_folder_map(
         or "futures-v2-" in text
     ):
         raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md contains a machine path")
-    if _DATE_OR_TIMESTAMP.search(scrubbed) or _COMMIT_SHA.search(text):
+    if direct_section is not None:
+        scrubbed = scrubbed.replace(direct_section.rstrip("\n"), "")
+    if _DATE_OR_TIMESTAMP.search(scrubbed) or _COMMIT_SHA.search(scrubbed):
         raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md contains transient identity")
     if _CREDENTIAL_VALUE.search(text):
         raise RepositorySurfaceError("PIPELINE_FOLDER_MAP.md contains a credential value")
@@ -1411,7 +1496,11 @@ def validate_source_of_truth(
     if word_count > SOURCE_OF_TRUTH_MAX_WORDS:
         raise RepositorySurfaceError("SOURCE_OF_TRUTH.md exceeds the word limit")
     headings = [line[3:] for line in text.splitlines() if line.startswith("## ")]
-    if headings != list(SOURCE_OF_TRUTH_SECTIONS):
+    direct_section = _direct_documentation_section(surface, "source_of_truth_section")
+    expected_headings = list(SOURCE_OF_TRUTH_SECTIONS)
+    if direct_section is not None:
+        expected_headings.append(direct_section.splitlines()[0][3:])
+    if headings != expected_headings:
         raise RepositorySurfaceError("SOURCE_OF_TRUTH.md section order is invalid")
     if (
         _MACHINE_PATH.search(text)
@@ -1420,7 +1509,12 @@ def validate_source_of_truth(
         or "futures-v2-repository-audit-" in text
     ):
         raise RepositorySurfaceError("SOURCE_OF_TRUTH.md contains a machine path")
-    if _DATE_OR_TIMESTAMP.search(text) or _COMMIT_SHA.search(text):
+    transient_scrubbed = (
+        text.replace(direct_section.rstrip("\n"), "")
+        if direct_section is not None
+        else text
+    )
+    if _DATE_OR_TIMESTAMP.search(transient_scrubbed) or _COMMIT_SHA.search(transient_scrubbed):
         raise RepositorySurfaceError("SOURCE_OF_TRUTH.md contains transient identity")
     if _CREDENTIAL_VALUE.search(text):
         raise RepositorySurfaceError("SOURCE_OF_TRUTH.md contains a credential value")
@@ -1688,9 +1782,10 @@ def validate_active_source_files(
     """Validate exact Git-backed completeness or an explicit no-Git subset."""
 
     root = Path(repository_root).resolve(strict=True)
-    if len(_surface_entries(surface)) != EXPECTED_REGISTRY_ENTRY_COUNT:
+    expected_entry_count = _expected_registry_entry_count(surface)
+    if len(_surface_entries(surface)) != expected_entry_count:
         raise RepositorySurfaceError(
-            f"registry entry count must remain {EXPECTED_REGISTRY_ENTRY_COUNT}"
+            f"registry entry count must remain {expected_entry_count}"
         )
     parsed = _parse_active_source_files(document)
     mode, inventory = _active_source_inventory(

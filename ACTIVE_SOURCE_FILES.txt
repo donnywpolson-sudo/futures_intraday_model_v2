@@ -16,6 +16,7 @@ src/futures_rebuild/audit/__main__.py
 src/futures_rebuild/certified_research_gateway.py
 src/futures_rebuild/current_research_surface.py
 src/futures_rebuild/dbn_catalog.py
+src/futures_rebuild/final_evaluation_recalibration.py
 src/futures_rebuild/high_risk.py
 src/futures_rebuild/live_cockpit/__init__.py
 src/futures_rebuild/live_cockpit/__main__.py
@@ -27,6 +28,7 @@ src/futures_rebuild/live_cockpit/assets/index.html
 src/futures_rebuild/live_cockpit/assets/lightweight-charts.standalone.production.js
 src/futures_rebuild/live_cockpit/assets/styles.css
 src/futures_rebuild/live_cockpit/assets/time-format.js
+src/futures_rebuild/live_cockpit/automatic_history_canary.py
 src/futures_rebuild/live_cockpit/cache.py
 src/futures_rebuild/live_cockpit/credentials.py
 src/futures_rebuild/live_cockpit/cutover_guard.py
@@ -87,6 +89,7 @@ configs/active_cash_open_impulse_historical_calendar.json
 configs/active_data_transport_canary_approval_v1.json
 configs/active_data_transport_canary_approval_v2.json
 configs/active_data_view_contract.json
+configs/active_dbn_congruence_release_v1.json
 configs/active_exchange_calendar.json
 configs/active_tier1_trial.json
 configs/apex_tradovate_50k_eod_risk_policy.json
@@ -149,6 +152,8 @@ configs/cme_semantic_search_product_discovery_recovery_approval.json
 configs/contract_economics_rules.json
 configs/contract_economics_signature_exceptions.json
 configs/controlled_rebuild_authorization.json
+configs/core_databento_standard_l0_dependency_policy_v1.json
+configs/data_capability_baseline_v1.json
 configs/data_layout_contract.json
 configs/data_layout_migration_approval.json
 configs/dbn_flat_layout_cutover_approval.json
@@ -181,6 +186,7 @@ configs/master_audit_v3/stage_requirement_matrix.json
 configs/mechanical_feature_spec.json
 configs/meta_master_audit_coverage.json
 configs/mff_execution_capability_evidence.json
+configs/micro_contract_universe_v1.json
 configs/micro_futures_legacy_lineage.json
 configs/migration_approval_authorized.json
 configs/migration_manifest.json
@@ -328,7 +334,9 @@ scripts/prepare_cash_open_calendar_grid_successor.py
 scripts/prepare_cash_open_impulse_41_market_source_compatibility_census.py
 scripts/prepare_cash_open_source_compatibility_correction.py
 scripts/prepare_cash_open_source_compatibility_remediation.py
+scripts/prepare_final_252_pipeline_successor_v1.py
 scripts/prepare_micro_futures_catalog_migration_v1.py
+scripts/prepare_ohlcv_58_completion_v3.py
 scripts/prepare_reported_bar_fixed_horizon_protocol.py
 scripts/prepare_reported_bar_fixed_horizon_protocol_correction.py
 scripts/prepare_reported_bar_fixed_horizon_source_census_plan.py
@@ -344,6 +352,7 @@ scripts/publish_tier1_authoritative_certified_lifecycle.py
 scripts/publish_tier1_authoritative_terminal_lifecycle.py
 scripts/publish_tier1_authoritative_valid_rejection.py
 scripts/publish_tier1_historical_checkpoint_calendar_v5.py
+scripts/quote_ohlcv_1d_1h_backfill.py
 scripts/reconcile_active_data_transport_canary.ps1
 scripts/run_active_causal_timing_alignment.py
 scripts/run_active_data_transport_canary.ps1
@@ -367,6 +376,7 @@ scripts/run_alpha_ladder_reported_trade_exit_readiness_census.py
 scripts/run_cash_open_41_market_calendar_source_adequacy.py
 scripts/run_cash_open_41_market_source_compatibility_census.py
 scripts/run_cash_open_41_market_source_compatibility_census_v2.py
+scripts/run_ohlcv_1d_1h_backfill.py
 scripts/run_overnight_inventory_reversal_fold_census.py
 scripts/run_overnight_inventory_reversal_fold_census_v2.py
 scripts/run_reported_bar_fixed_horizon_source_census.py
@@ -563,6 +573,12 @@ src/futures_rebuild/micro_alpha_product_effective_dates.py
 src/futures_rebuild/micro_futures_catalog_migration.py
 src/futures_rebuild/migration.py
 src/futures_rebuild/monitoring.py
+src/futures_rebuild/ohlcv_completion_campaign.py
+src/futures_rebuild/ohlcv_completion_publication.py
+src/futures_rebuild/ohlcv_completion_publication_certifier.py
+src/futures_rebuild/ohlcv_historical_backfill.py
+src/futures_rebuild/ohlcv_historical_backfill_v3.py
+src/futures_rebuild/ohlcv_msf_1d_publication_successor.py
 src/futures_rebuild/overnight_inventory_reversal_closure_publication.py
 src/futures_rebuild/overnight_inventory_reversal_execution.py
 src/futures_rebuild/overnight_inventory_reversal_historical_execution.py
@@ -646,6 +662,7 @@ tests/__init__.py
 tests/conftest.py
 tests/helpers/hard_kill_migration_worker.py
 tests/live/test_activate_live_cockpit.py
+tests/live/test_automatic_history_canary.py
 tests/live/test_databento_auth.py
 tests/live/test_history_canary.py
 tests/live/test_install_live_cockpit.py
@@ -654,6 +671,7 @@ tests/live/test_live_cockpit_approval.py
 tests/live/test_live_cockpit_build_script.py
 tests/live/test_live_cockpit_credentials.py
 tests/live/test_live_cockpit_cutover.py
+tests/live/test_live_cockpit_history_policy.py
 tests/live/test_live_cockpit_smoke.py
 tests/live/test_live_cockpit_workflow.py
 tests/live/test_package_candidate.py
@@ -749,6 +767,7 @@ tests/test_dependency_lock.py
 tests/test_durable_windows_task_transport.py
 tests/test_economics_provenance.py
 tests/test_exchange_calendar.py
+tests/test_final_evaluation_recalibration.py
 tests/test_foundation_calendar_successor.py
 tests/test_foundation_dbn_causality.py
 tests/test_foundation_decoder_aggregation.py
@@ -830,6 +849,11 @@ tests/test_micro_alpha_product_effective_dates.py
 tests/test_micro_alpha_publication_v1.py
 tests/test_micro_futures_catalog_migration.py
 tests/test_migration_resume.py
+tests/test_ohlcv_completion_campaign.py
+tests/test_ohlcv_completion_publication.py
+tests/test_ohlcv_historical_backfill.py
+tests/test_ohlcv_historical_backfill_v3.py
+tests/test_ohlcv_msf_1d_publication_successor.py
 tests/test_operational_documents.py
 tests/test_overnight_inventory_reversal_closure_publication.py
 tests/test_overnight_inventory_reversal_execution.py

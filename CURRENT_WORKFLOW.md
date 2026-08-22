@@ -20,6 +20,12 @@ holdout/forward access, trading/order access, or push, Codex will ask once in
 plain language. The request states the scope, impact or cost, outputs, and
 preservation/rollback boundary. Replying `Approve` is sufficient.
 
+## Certified final-evaluation boundary
+
+The project uses one research-selection-pristine **Final Sealed 252-Session Holdout**: trade dates 2025-07-14 through 2026-07-13, manifest `0ff48f99d8b6d3a262ddf0a060bea8e733fc95aa7c4b4d43f19a0f78b107d4d1`. Development ends exclusively at 2025-07-13T22:00:00Z and forward monitoring begins at 2026-07-14T00:00:00Z. The manifest is purpose-limited, grants no row or evaluation access, creates no market-specific or micro holdout, and is not a general exchange calendar. Complete 2018-cutoff project-session continuity remains unresolved for portions of 2023-2024 and is not claimed.
+
+The user-facing pipeline is: Canonical Source Foundation; Research Design and Mechanism Freeze; Tier 0 Engineering and ES Qualification; Tier 1 Four-Market Confirmation; Tier 2 Balanced 16-Market Replication; Tier 3 Full 41-Market Replication; Final Project-Level 252-Session Evaluation; Post-Cutoff Forward Monitoring. Existing Phase 1A-11 labels remain internal synthetic/capability terminology only. The previous counted mechanism remains closed after Tier-0 ES failure, and the next mechanism is not started.
+
 Real research still needs its durable trial declaration and immutable evidence.
 Before registration, every row-dependent sample, fold, feature, execution,
 baseline, cost, risk, metric, and promotion requirement needs a source-bound
@@ -44,18 +50,26 @@ source and readiness censuses remain separate operations and cannot fit,
 predict, evaluate, register, or promote a trial.
 The gateway also requires one active, hash-bound Alpha research ladder. With no
 active ladder pointer, all new real-history registration and execution fails
-closed. A ladder-bound mechanism progresses in order from synthetic Tier 0 to
-one ES pilot, Tier 1, Tier 2, Tier 3, one project-level 2025 holdout, and then
-forward monitoring. The mechanism hash cannot change between stages; the
-pilot's evaluation sessions are excluded from every later market; and Tier 3
-requires independent traditional-market passage with satellite results unable
-to rescue failure.
-The pilot boundary is deliberately stricter than an ES-only source check. Its
-registration must bind the immutable frozen mechanism, its passing Tier 0
-synthetic certificate, the exact ES 504/63 row certificate and session
+closed. A ladder-bound mechanism progresses in order through Tier 0, Tier 1,
+Tier 2, Tier 3, the Final Sealed 252-Session Holdout, and then forward monitoring.
+Tier 0 is one visible level with two mandatory gates in order: synthetic ES
+engineering, followed by one row-certified ES pilot with 504 training sessions
+and 63 evaluation sessions. Both gates must pass for Tier 0 to pass. The pilot
+is a go/no-go qualification, not multi-market alpha confirmation.
+The two Tier 0 gates retain separate evidence and authority boundaries.
+Synthetic success cannot authorize or substitute for the real-history pilot.
+The Tier 0 pilot registration must bind the immutable frozen mechanism, its
+passing synthetic certificate, the exact ES 504/63 row certificate and session
 manifest, and a separate passing four-market Tier 1 row certificate and
-session manifest that already exclude the pilot sessions. This prevents a
-pilot attempt from being spent on a mechanism that cannot advance to Tier 1.
+session manifest that already exclude the pilot sessions. This prevents the
+single pilot attempt from being spent on a mechanism that cannot advance to
+Tier 1. Immutable operational artifacts continue to use `tier_0` for the
+synthetic gate and `pilot` for the ES gate; `pilot` is an internal gate
+identifier, not a separate ladder level.
+The mechanism hash cannot change between gates or levels; the pilot's
+evaluation sessions are excluded from every later market; and Tier 3 requires
+independent traditional-market passage with satellite results unable to rescue
+failure.
 Economic PASS decisions are recomputed against the immutable mechanism's
 stage-specific stress, baseline, trade-count, breadth, drawdown, subgroup, and
 formal-test gates; a bare PASS label is never sufficient.
@@ -130,3 +144,17 @@ it a current execution route; their historical operation names fail closed.
 `CODEX_HANDOFF.md` is optional context for an interrupted or high-risk task. It
 does not grant authority. Preserve unrelated work; never use broad staging, and
 report only the decision or blocker that needs attention.
+
+<!-- rlac_20260814T0642492268888Z_0b571482:CURRENT_DIRECT_AUTHORITY -->
+## Current data gate after rlac_20260814T0642492268888Z_0b571482
+
+This section supersedes earlier data-authority and alpha-gateway descriptions in this current document. Those retained earlier bytes are HISTORICAL / SUPERSEDED / NON-AUTHORITATIVE context; they grant no current data or research access.
+
+- Direct DBN-to-causal authority cutover: COMPLETE after independent validation.
+- Former materialized raw layer: all 3,792 Wave E payload targets are permanently absent, with 15,000 total completed-deletion absences. Preserved empty parent directories are evidence only; rollback to the former raw payload is permanently unavailable.
+- Provider source and certified causal foundation: hash-verified and unchanged.
+- Tier 0/Tier 1 dual-resolution foundation: certified under `4d68f69d910a584df2fc0bc8ac10b82214ac451dd7eb262cfb8ee388710be9b6` with its existing caveats.
+- Research and alpha authority: NOT AUTHORIZED. Sealed 2025/2026 rows and trades remain inaccessible.
+- exact next permitted phase: design, implement, and independently certify the shared feature/label/split/transform research successor for full-size and micro Tier 0/Tier 1. That work still requires its own authority and may not begin as part of this cutover.
+
+The minimum active runtime set is not the minimum permanent custody set. Source custody, future-tier DBNs, sealed data, certification evidence, and rollback assets remain protected.

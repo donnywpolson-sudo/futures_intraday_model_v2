@@ -43,6 +43,12 @@ Rows below resolve from canonical registry roles. Directory or file presence nev
 
 The standard Alpha pointer/catalog and micro source pointer/catalog remain separate. Local-only controls may be absent from clean provider-free exports. Micro source selection does not establish a frozen mechanism, registered trial, historical-row authority, research passage, holdout authority, production readiness, execution readiness, or trading authority.
 
+The versioned data-closure controls are `configs/micro_contract_universe_v1.json`, `configs/core_databento_standard_l0_dependency_policy_v1.json`, `configs/data_surface_registry_v1.json`, `configs/data_capability_baseline_v1.json`, and `configs/data_phase_closed_v1.json`. They register policy, evidence identities, and fail-closed selection rules; they do not replace either active catalog or pointer and grant no market activation or research authority.
+
+Data Phase Closed v1 records a certified standard foundation, a completed capability assessment, and structurally verified opaque custody for 17 micro markets. The legacy four remain the only active micro catalog members; the additional 13 remain inactive and uncertified for research. Alpha research remains disabled, and the next boundary is feature/label/split/transform successor design.
+
+The governing sequence is Phase 0 Immutable provider custody; Phase 1 Certified historical data foundation; Phase 2 Historical data capability and alpha investigability; Phase 3 Hypothesis, feature, label, split, and transform contracts; Phase 4 ES discovery sandbox; Phase 5 Full-size Tier-1 falsification; Phase 6 Micro transfer and execution validation; Phase 7 Expanded robustness; Phase 8 Economic and execution validation; Phase 9 Sealed holdout; and Phase 10 Paper/live readiness.
+
 `CertifiedResearchGateway` is the sole current real-history registration and trial-execution boundary; use remains separately controlled. `futures-pipeline` is synthetic-only. No other public command provides a real-history execution surface.
 
 ## Public commands
@@ -89,9 +95,9 @@ The counts below use only the canonical classification vocabulary and count regi
 
 | Classification | Entry count |
 | --- | --- |
-| `CURRENT_OPERATIONAL` | 27 |
-| `CURRENT_SUPPORTING` | 34 |
-| `HISTORICAL_HASH_BOUND` | 56 |
+| `CURRENT_OPERATIONAL` | 38 |
+| `CURRENT_SUPPORTING` | 39 |
+| `HISTORICAL_HASH_BOUND` | 59 |
 | `HISTORICAL_UNBOUND` | 3 |
 | `PREPARED_NOT_EXECUTED` | 6 |
 | `GENERATED_OUTPUT` | 10 |
@@ -118,3 +124,21 @@ The registry currently contains 14 `UNRESOLVED_MANUAL_REVIEW` entries. They requ
 Neither this generated map nor the registry authorizes deletion, movement or renaming, provider access, credential access, market-data reads, historical-row access, holdout or forward access, research execution, prediction publication, candidate sealing, active-data mutation, publication, installation, activation, live smoke, trading, order placement, staging, commit, or push.
 
 Cache deletion still requires a fresh exact machine-local census and separate approval.
+
+## Exact installed data paths after rlac_20260814T0642492268888Z_0b571482
+
+- Original Databento DBN custody: `data/dbn` (immutable provider source).
+- Provider receipts and support files: `data/dbn` and `manifests/data_releases/dbn` (permanent provider evidence).
+- Provider job, condition, request, and lifecycle evidence: `reports/overnight_data_phase_orchestrator/odpo_20260813T1345290300316Z_0b571482`.
+- Standard certified causal 1m: `data/active/causally_gated_normalized` (exact catalog-selected payload vault).
+- Tier 0/Tier 1 certified causal 1s: `data/vault/releases/dual_resolution_tier01/drt01_20260813T2333053884139Z_0b571482/causal_1s`.
+- Tier 0/Tier 1 certified causal 1m: `data/vault/releases/dual_resolution_tier01/drt01_20260813T2333053884139Z_0b571482/causal_1m`.
+- Tier 0/Tier 1 causal reference metadata: `data/vault/releases/dual_resolution_tier01/drt01_20260813T2333053884139Z_0b571482/causal_reference_metadata`.
+- Full-size DBN-native reference authority: `data/vault/releases/direct_causal_authority/rlac_20260814T0642492268888Z_0b571482/causal_reference_metadata`.
+- Active catalogs and pointers: `data/active` and `configs/active_micro_alpha_research_ladder.json` (lightweight authority only).
+- Sealed 2025/2026 causal custody: `data/causally_gated_normalized` (year-partitioned custody outside current catalog selection; no row access).
+- Sealed source and trades custody: `data/dbn` (immutable DBNs and manifests, including `trades`; no row access).
+- Former materialized raw payload: all 3,792 Wave E targets are permanently absent; preserved empty parent directories are evidence only and provide no rollback or data authority.
+- Cutover reports and certification: `reports/raw_layer_authority_cutover/rlac_20260814T0642492268888Z_0b571482` (certification evidence outside runtime payload roots).
+
+No conceptual placeholder in this table grants path authority. Exact catalogs, manifests, policies, and receipt hashes control selection.

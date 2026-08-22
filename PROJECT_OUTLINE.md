@@ -42,6 +42,12 @@ preserved in
 `docs/history/PROJECT_OUTLINE_SNAPSHOT_2026-08-11.json`. Those records are
 historical, exact-byte evidence and do not control current work.
 
+## Certified final-evaluation boundary
+
+The project uses one research-selection-pristine **Final Sealed 252-Session Holdout**: trade dates 2025-07-14 through 2026-07-13, manifest `0ff48f99d8b6d3a262ddf0a060bea8e733fc95aa7c4b4d43f19a0f78b107d4d1`. Development ends exclusively at 22:00 UTC on 13 July 2025 and forward monitoring begins at 00:00 UTC on 14 July 2026. The manifest is purpose-limited, grants no row or evaluation access, creates no market-specific or micro holdout, and is not a general exchange calendar. Complete 2018-cutoff project-session continuity remains unresolved for portions of 2023-2024 and is not claimed.
+
+The user-facing pipeline is: Canonical Source Foundation; Research Design and Mechanism Freeze; Tier 0 Engineering and ES Qualification; Tier 1 Four-Market Confirmation; Tier 2 Balanced 16-Market Replication; Tier 3 Full 41-Market Replication; Final Project-Level 252-Session Evaluation; Post-Cutoff Forward Monitoring. Existing Phase 1A-11 labels remain internal synthetic/capability terminology only. The previous counted mechanism remains closed after Tier-0 ES failure, and the next mechanism is not started.
+
 ## Current source-of-truth inputs
 
 Currentness comes from declared roles and explicit pointers, not from filenames,
@@ -60,6 +66,18 @@ version suffixes, timestamps, or directory presence.
   machine-local micro source lineage when present.
 - `data/active/catalogs/apex_micro.json` is that lineage's machine-local source
   catalog when present.
+- `configs/micro_contract_universe_v1.json` is the definitive cumulative micro
+  policy universe; membership grants no activation or research authority.
+- `configs/core_databento_standard_l0_dependency_policy_v1.json` fixes the
+  core historical dependency at Databento `GLBX.MDP3`, CME Standard access,
+  and certified L0-only design.
+- `configs/data_surface_registry_v1.json` is the data-specific role and
+  fail-closed selection registry subordinate to
+  `configs/repository_surface.json`.
+- `configs/data_capability_baseline_v1.json` binds the completed capability
+  assessment and bounded micro delta without creating new observability.
+- `configs/data_phase_closed_v1.json` is the versioned logical data-phase
+  closure record.
 - `pyproject.toml` defines the package and public command surface.
 
 The standard pointer/catalog and the micro pointer/catalog have separate roles
@@ -157,6 +175,35 @@ source pointer, catalog, market family, or contract scale grants provider
 access, historical-row access, holdout access, execution readiness, or trading
 authority.
 
+### Data Phase Closed v1 boundary
+
+The standard/full-size Tier-1 historical foundation is certified with its
+recorded caveats, and the historical capability assessment is complete. The
+17-market micro policy universe has complete, structurally verified opaque
+source custody across five L0 schemas. The active micro catalog remains the
+legacy four (`MES`, `MCL`, `MGC`, `M6E`); the other 13 markets remain inactive,
+not research-certified, and unauthorized for research. Tier membership is a
+planning policy only, not an authority grant.
+
+Logical data-phase closure does not require full conversion of the 13
+additional micro markets. Unknown provider normalization generations and
+preserved degraded provider dates remain fail-closed pending bounded
+intended-use certification. Legacy-four provider-package receipt completeness
+is only partially established, same-volume hardlinks are not backups, and no
+independent off-machine disaster-recovery copy is claimed.
+
+Future years, markets, schemas, and reference or external extensions are added
+through new immutable custody, canonical receipts, source hash and epoch
+classification, bounded intended-use certification, an immutable successor,
+and explicit activation. Accepted source bytes are never replaced in place.
+Classified stale physical material may remain when it is proved unselectable;
+file presence, newest-directory selection, modification time, and broad globs
+never establish currentness or activation.
+
+The next permitted boundary is **Design and certify the research
+feature/label/split/transform successor**. Alpha research remains disabled, and
+that successor phase is not started by data closure.
+
 ### Synthetic mechanics lane
 
 `futures-pipeline` is synthetic-only. It exercises phase mechanics and
@@ -180,25 +227,23 @@ synthetic-testable only. Their detailed lineage belongs in
 
 ## Current phase map
 
-The established Phase 1A-11 taxonomy remains the conceptual research sequence.
-The `futures-pipeline` subcommands below are synthetic mechanics entry points;
-real-history work must pass through the certified gateway and its separate
-authority boundary.
+The governing conceptual pipeline is below. Existing `futures-pipeline`
+subcommands remain synthetic mechanics entry points and do not independently
+grant the real-history authority represented by these phases.
 
 | Phase | Purpose and current entry point | Principal input | Principal output | Gate or stop condition | Authority boundary |
 | --- | --- | --- | --- | --- | --- |
-| 1A | Preflight and acquisition mechanics through `futures-pipeline phase1a` | Exact source request and admission contracts | Source release manifests and acquisition evidence | Source identity, sidecar, hash, or provenance mismatch | Synthetic execution grants no provider or row-read authority |
-| 1B | Decode and reconcile accepted source mechanics through `futures-pipeline phase1b` | Admitted immutable source release | Immutable raw release and reconciliation report | Schema, definition, row, sidecar, or byte mismatch | Real decoding requires separately authorized source access |
-| 2 | Construct causal observations through `futures-pipeline phase2` | Actual decoded rows and causal policies | Immutable causal foundation release | Identity, availability, session, missingness, or trainability failure | No synthetic gap filling or retrospective calendar authority |
-| 3 | Construct outcomes through `futures-pipeline phase3` | Declared outcome-source capability | Separate immutable outcome release | Entry, horizon, maturity, or unresolved-state failure | Outcomes remain inaccessible to feature construction |
-| 4 | Build causal features through `futures-pipeline phase4` | Causal foundation only | Immutable feature release | Availability, lookback, warmup, join, or leakage failure | No outcome, prediction, or evaluation reads |
-| 5 | Freeze validation through `futures-pipeline phase5` | Registered trial and eligible feature/outcome identities | Immutable chronological split plan | Temporal order, purge, embargo, or training-only-fit failure | No holdout-driven selection |
-| 6 | Materialize OOS predictions through `futures-pipeline phase6` | Frozen mechanism, split plan, approved training inputs | Sealed OOS prediction release | Identity, budget, coverage, or preregistration drift | Real fitting and prediction need gateway authority |
-| 7 | Audit predictions through `futures-pipeline phase7` | Saved immutable predictions | Prediction-integrity and signal-quality evidence | Identity, coverage, abstention, or conservation failure | Audit does not grant promotion |
-| 8 | Evaluate net economics through `futures-pipeline phase8` | Audited OOS predictions and explicit economics | Model-selection, portfolio, risk, and prop-firm preparation evidence | Baseline, net-cost, breadth, drawdown, concentration, or rule failure | Evaluation does not grant production or trading readiness |
-| 9 | Test robustness through `futures-pipeline phase9` | Registered candidate evidence | Research-audit and adversarial evidence | Negative control, multiplicity, stability, or dependence failure | Bounded tests cannot widen the registered trial |
-| 10 | Seal a candidate through `futures-pipeline phase10` | Fully passing frozen candidate and evidence graph | Immutable candidate bundle and receipt | Missing gate, identity drift, or destination conflict | Publication and activation remain separate |
-| 11 | Guard holdout or forward evaluation through `futures-pipeline phase11` | Exact sealed bundle and one authorized boundary | Guarded evaluation evidence | Missing authority, prior use, drift, or cohort leakage | One controlled access does not authorize production or orders |
+| 0 | Immutable provider custody; completed evidence is the current entry point | Declared source request and custody contract | Immutable bytes, receipts, hashes, and epoch evidence | Identity, hash, condition, or pending-job mismatch | New provider use remains separately controlled |
+| 1 | Certified historical data foundation; certified standard foundation is current | Accepted immutable source releases | Intended-use foundation certification | Source, identity, timing, missingness, or certification failure | Certification does not grant Alpha research |
+| 2 | Historical data capability and alpha investigability; completed assessment is current | Certified observability and declared constraints | Bounded capability and investigability assessment | Unsupported field, schema, source, or Alpha claim | Assessment grants no trial or row-read authority |
+| 3 | Hypothesis, feature, label, split, and transform contracts; this is the next unstarted boundary | Closed data architecture and capability limits | Immutable preregistration and separated causal contracts | Leakage, timing, dependency, split, transform, or authority failure | Requires separate real-history research authority |
+| 4 | ES discovery sandbox | Registered Phase 3 contracts and approved ES inputs | Bounded discovery evidence | Budget, preregistration, leakage, or holdout failure | Discovery cannot promote or open holdout |
+| 5 | Full-size Tier-1 falsification | Frozen discovery candidate and full-size certified inputs | Cross-market falsification evidence | Baseline, breadth, stability, or frozen-identity failure | No micro or production activation follows automatically |
+| 6 | Micro transfer and execution validation | Separately certified and explicitly activated micro inputs | Transfer and execution evidence | Certification, transfer, fill, cost, or identity failure | Current inactive custody grants no Phase 6 authority |
+| 7 | Expanded robustness | Passing frozen cross-scale candidate | Dependence-aware robustness evidence | Negative control, multiplicity, breadth, or stability failure | Robustness cannot widen the registered mechanism |
+| 8 | Economic and execution validation | Audited predictions and explicit execution economics | Net economic, capacity, portfolio, and risk evidence | Cost, drawdown, concentration, capacity, or rule failure | Evaluation does not grant production or trading readiness |
+| 9 | Sealed holdout | Fully passing frozen candidate and one explicit access authority | Single-use guarded holdout evidence | Missing authority, prior use, drift, or cohort leakage | One holdout use grants no production or order authority |
+| 10 | Paper/live readiness | Passing sealed candidate and separate operational evidence | Paper, publication, and live-readiness receipts | Operational, safety, publication, or readiness failure | Trading and order paths remain separately controlled |
 
 Synthetic success at any phase proves mechanics only. It cannot substitute for
 certified source, registered real-history evaluation, or a later authority
@@ -317,3 +362,58 @@ Use `docs/LEGACY_WORKFLOWS.md` for retired module and workflow classification,
 and `PIPELINE_FOLDER_MAP.md` for the existing detailed topology reference.
 Historical descriptions remain evidence, not instructions or authority for new
 work.
+
+<!-- rlac_20260814T0642492268888Z_0b571482:CURRENT_DIRECT_AUTHORITY -->
+## Current governing data architecture — rlac_20260814T0642492268888Z_0b571482
+
+This section supersedes earlier data-architecture descriptions in this current document. Those retained earlier bytes are HISTORICAL / SUPERSEDED / NON-AUTHORITATIVE context and do not select data.
+
+### PHASE 0 — IMMUTABLE PROVIDER CUSTODY
+
+Databento GLBX.MDP3 DBNs and provider metadata/support files are the canonical immutable source.
+
+Core source schemas:
+
+- `ohlcv-1s`
+- `ohlcv-1m`
+- `definition`
+- `statistics`
+- `status`
+
+Trades remain separately sealed and are not a core foundation input. No provider source file is modified or overwritten.
+
+### PHASE 1 — CERTIFIED CAUSAL FOUNDATION
+
+Permanent current transformation:
+
+```text
+Databento DBN
+    -> certified causal 1s
+    -> certified causal 1m
+    -> certified causal reference metadata
+```
+
+The materialized legacy layer formerly installed at `data/raw` is QUARANTINED, HISTORICAL, and NON-AUTHORITATIVE after this cutover. Temporary decoded chunks may exist only beneath task-owned staging and must not become permanent authority.
+
+### PHASE 1A — CROSS-RESOLUTION CERTIFICATION
+
+```text
+Databento ohlcv-1s
+    -> temporary one-minute reconstruction
+    -> exact comparison with Databento ohlcv-1m
+    -> compact certification receipt
+```
+
+Temporary reconstructed bars are not retained as a permanent data layer.
+
+### PHASE 1B — ACTIVE AUTHORITY
+
+`data/active` contains lightweight exact catalogs and pointers only. Authority is determined through exact DBN source hashes, exact certified causal release IDs, exact manifests, exact policies, and exact certification receipts.
+
+Newest-folder authority, broad-glob authority, file-existence activation, implicit fallback selection, and unregistered-path research access are prohibited.
+
+### PHASE 1C — LEGACY RETIREMENT
+
+The legacy materialized layer is quarantined only after direct DBN-to-causal authority is proved, every current dependency is zero, post-quarantine validation passes, and rollback is prepared. The historical path string `data/raw` appears here only as QUARANTINED / HISTORICAL / NON-AUTHORITATIVE lineage. Permanent deletion requires a later separately authorized gate.
+
+The minimum active runtime set is not the minimum permanent custody set. Original source, future-tier custody, sealed data, certification evidence, and rollback assets remain required even when not selected by current runtime authority.
