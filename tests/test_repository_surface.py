@@ -601,7 +601,7 @@ def test_source_of_truth_public_commands_are_sorted_and_complete() -> None:
 
     assert list(commands) == sorted(commands)
     assert rendered_rows == expected_rows
-    assert len(rendered_rows) == len(commands) == 7
+    assert len(rendered_rows) == len(commands) == 5
 
 
 def test_source_of_truth_active_pointer_paths_are_exact_and_complete() -> None:
