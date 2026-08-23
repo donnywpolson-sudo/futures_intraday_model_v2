@@ -106,11 +106,14 @@ remained `UNKNOWN_FAIL_CLOSED`; one ES roll discontinuity was recorded, and
 cadence comparisons never overwrote source evidence. No real negative-price
 row appeared, so negative-price support remains synthetic-test proven.
 
-The non-public full development builder processes one market-year at a time
-and creates independently verified, inactive monthly candidates. Only after
-that runner is committed, pushed, and remotely verified may an immutable full
-development row-read packet be prepared for separate approval. This document
-grants no row-read, publication, or activation authority.
+The remotely recoverable non-public full development builder processes one
+market-year at a time and creates independently verified, inactive monthly
+candidates. A V3 row-read packet was prepared against the preceding code
+commit but remains unexecuted and must not be reused after this documentation
+transaction. After these documents are remotely verified, its exact scope must
+be rebound to the new commit with a fresh one-use authorization for separate
+approval. This document grants no row-read, publication, or activation
+authority.
 
 ## 6. Universe, tiers, and time boundaries
 
@@ -174,4 +177,4 @@ Current contracts hold detailed evidence requirements. Git history and
 foundation releases remain evidence only and do not override active pointers,
 contracts, or closure.
 
-NEXT GATE AFTER RUNNER COMMIT AND PUSH: FULL DEVELOPMENT BUILD PACKET PREPARATION
+NEXT GATE AFTER DOCUMENTATION COMMIT AND PUSH: REBOUND FULL DEVELOPMENT BUILD PACKET PREPARATION

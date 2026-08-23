@@ -573,7 +573,7 @@ def _assert_project_outline_is_concise_current_runbook() -> None:
         "seven-market development canary ran once under consumed authority",
         "Final Sealed 252-Session Holdout",
         "SEALED / PRISTINE / UNREAD",
-        "NEXT GATE AFTER RUNNER COMMIT AND PUSH: FULL DEVELOPMENT BUILD PACKET PREPARATION",
+        "NEXT GATE AFTER DOCUMENTATION COMMIT AND PUSH: REBOUND FULL DEVELOPMENT BUILD PACKET PREPARATION",
     ):
         assert required.lower() in lowered
 
