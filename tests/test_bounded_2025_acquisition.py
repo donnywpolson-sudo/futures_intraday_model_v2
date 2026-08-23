@@ -10,8 +10,12 @@ import pytest
 
 from futures_rebuild import bounded_2025_acquisition as acquisition
 from futures_rebuild.canonical import canonical_bytes, sha256_file
-from futures_rebuild.errors import IntegrityError
+from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 from futures_rebuild.micro_alpha_acquisition import DownloadProviderApis
+from futures_rebuild.research_gateway_policy import (
+    PREPARATORY_REAL_HISTORY_OPERATIONS,
+    require_current_real_history_operation,
+)
 
 
 ROOTS = [
@@ -24,6 +28,19 @@ MICROS = [
     "M2K", "M6A", "M6B", "M6E", "MBT", "MCD", "MCL", "MES", "MET",
     "MGC", "MHG", "MJY", "MNG", "MNQ", "MSF", "MYM", "SIL",
 ]
+
+
+def test_exact_acquisition_operation_is_allowed_and_aliases_fail_closed() -> None:
+    assert acquisition.OPERATION in PREPARATORY_REAL_HISTORY_OPERATIONS
+    require_current_real_history_operation(acquisition.OPERATION, {})
+
+    for operation in (
+        f"{acquisition.OPERATION}_V2",
+        acquisition.OPERATION.removesuffix("_ONCE"),
+        "ACQUIRE_BOUNDED_2025_DEVELOPMENT_DBN",
+    ):
+        with pytest.raises(UnauthorizedOperation, match="retired outside"):
+            require_current_real_history_operation(operation, {})
 
 
 def _write_json(path: Path, value: dict[str, object]) -> None:
