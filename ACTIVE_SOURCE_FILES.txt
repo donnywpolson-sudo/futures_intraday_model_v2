@@ -102,6 +102,7 @@ configs/apex_tradovate_50k_eod_risk_policy.json
 configs/archived_cme_holiday_gap_index_discovery_approval.json
 configs/archived_cme_holiday_gap_index_discovery_recovery_approval.json
 configs/archived_cme_holiday_gap_raw_diagnostic_approval.json
+configs/bounded_2025_development_acquisition_v1.json
 configs/cash_open_41_market_source_compatibility_spec.json
 configs/cash_open_41_market_source_compatibility_spec_v2.json
 configs/cash_open_impulse_pre_registration_protocol.json
@@ -332,6 +333,7 @@ scripts/prepare_alpha_ladder_reported_trade_exit_readiness_census_plan.py
 scripts/prepare_alpha_ladder_reported_trade_exit_successor.py
 scripts/prepare_alpha_ladder_source_compatible_successor.py
 scripts/prepare_alpha_research_ladder.py
+scripts/prepare_bounded_2025_acquisition.py
 scripts/prepare_cash_open_41_market_calendar_successor.py
 scripts/prepare_cash_open_41_market_source_compatibility_census_plan.py
 scripts/prepare_cash_open_41_market_source_compatibility_census_v2_plan.py
@@ -452,6 +454,7 @@ src/futures_rebuild/archive.py
 src/futures_rebuild/audit/__init__.py
 src/futures_rebuild/audit/contract.py
 src/futures_rebuild/boundary.py
+src/futures_rebuild/bounded_2025_acquisition.py
 src/futures_rebuild/bundle.py
 src/futures_rebuild/calendar_archived_cme_gap_diagnostic.py
 src/futures_rebuild/calendar_archived_cme_gap_discovery.py
@@ -731,6 +734,7 @@ tests/test_alpha_ladder_source_compatible_successor.py
 tests/test_alpha_research_ladder.py
 tests/test_apex_tradovate_eod_risk.py
 tests/test_authoritative_valid_rejection.py
+tests/test_bounded_2025_acquisition.py
 tests/test_calendar_archived_cme_gap_diagnostic.py
 tests/test_calendar_archived_cme_gap_discovery.py
 tests/test_calendar_archived_cme_gap_discovery_recovery.py
