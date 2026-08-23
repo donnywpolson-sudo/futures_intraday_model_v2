@@ -245,7 +245,7 @@ class ProviderBar:
         if self.publisher_id <= 0 or self.instrument_id <= 0:
             raise ContractError("bar IDs must be positive")
         prices = tuple(
-            nanounits(value, f"bar.{name}", positive=True)
+            nanounits(value, f"bar.{name}")
             for name, value in (
                 ("open", self.open_nano),
                 ("high", self.high_nano),
@@ -280,7 +280,7 @@ class ProviderBar:
     @property
     def prices(self) -> tuple[Decimal, Decimal, Decimal, Decimal]:
         return tuple(
-            nanounits(value, f"bar.{name}", positive=True)
+            nanounits(value, f"bar.{name}")
             for name, value in (
                 ("open", self.open_nano),
                 ("high", self.high_nano),

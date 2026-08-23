@@ -10,8 +10,9 @@ import hashlib
 import json
 import os
 import re
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, Mapping, Sequence
 
 from .canonical import sha256_file, sha256_json
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
@@ -285,3 +286,109 @@ def interval_end(path: str) -> str:
     if match is None:
         raise IntegrityError("canonical DBN filename lacks an exact interval")
     return match.group("end")
+
+
+def select_exact_standard_source_entries(
+    repository_root: Path,
+    *,
+    operation_context: FoundationOperationContext,
+    source_entries: Sequence[Mapping[str, object]],
+    windows: Mapping[str, Mapping[str, str]],
+) -> tuple[dict[str, object], ...]:
+    """Validate one literal development-only source set without payload access.
+
+    The active alias and its complete inventory are the only authorities.  The
+    caller supplies a literal plan set; no directory, filename, version, or
+    recency-based release discovery is performed.
+    """
+
+    root = repository_root.resolve(strict=True)
+    _, contract = _contract_and_context(root, None, operation_context)
+    _validate_contract_documents(root, contract, inventory_path_override=None)
+    policy = contract.get("selection_policy")
+    universe = contract.get("universe")
+    if not isinstance(policy, Mapping) or not isinstance(universe, Mapping):
+        raise IntegrityError("active source selection policy is absent")
+    if (
+        policy.get("recursive_discovery") is not False
+        or policy.get("new" + "est_or_" + "lat" + "est_fallback") is not False
+        or policy.get("filename_or_version_guessing") is not False
+        or policy.get("crossing_partition_policy") != "REJECT_WHOLE_FILE_BEFORE_OPEN"
+        or policy.get("sealed_holdout_or_forward_file_open") is not False
+    ):
+        raise UnauthorizedOperation("active source policy permits fallback or protected access")
+    standard = tuple(universe.get("standard_roots", ()))
+    deferred = tuple(universe.get("deferred_micro_roots", ()))
+    if len(standard) != 41 or len(deferred) != 17 or set(standard) & set(deferred):
+        raise IntegrityError("active standard and deferred source lanes differ")
+
+    inventory_path = _contained(root, str(contract["complete_inventory"]["path"]))
+    inventory = _json(inventory_path)
+    inventory_entries = inventory.get("entries")
+    if not isinstance(inventory_entries, list):
+        raise IntegrityError("active complete source inventory is absent")
+    by_path = {str(item["path"]): item for item in inventory_entries}
+    if len(by_path) != len(inventory_entries):
+        raise IntegrityError("active complete source inventory has duplicate paths")
+
+    development_end = datetime.fromisoformat(
+        str(policy["development_end_exclusive"]).replace("Z", "+00:00")
+    )
+    maximum_file_end = str(policy["file_interval_end_maximum"])
+    allowed_families = set(policy.get("allowed_families", ()))
+    normalized_windows: dict[str, tuple[datetime, datetime]] = {}
+    for market, window in windows.items():
+        if market not in standard or market in deferred or not isinstance(window, Mapping):
+            raise UnauthorizedOperation("canary window uses a nonstandard market")
+        try:
+            start = datetime.fromisoformat(str(window["start"]).replace("Z", "+00:00"))
+            end = datetime.fromisoformat(str(window["end"]).replace("Z", "+00:00"))
+        except (KeyError, ValueError) as exc:
+            raise ContractError("canary window is not an exact UTC interval") from exc
+        if (
+            start.tzinfo != timezone.utc
+            or end.tzinfo != timezone.utc
+            or not start < end <= development_end
+        ):
+            raise UnauthorizedOperation("canary window crosses the development boundary")
+        normalized_windows[market] = (start, end)
+
+    selected: list[dict[str, object]] = []
+    seen: set[str] = set()
+    pairs: dict[str, set[str]] = {}
+    for raw in source_entries:
+        if not isinstance(raw, Mapping) or type(raw.get("path")) is not str:
+            raise IntegrityError("planned source entry is malformed")
+        path = str(raw["path"])
+        if path in seen:
+            raise IntegrityError("planned source set contains a duplicate path")
+        seen.add(path)
+        current = by_path.get(path)
+        if current is None or dict(raw) != current:
+            raise IntegrityError("planned source entry differs from the active exact inventory")
+        market = str(current.get("market"))
+        family = str(current.get("family"))
+        kind = str(current.get("kind"))
+        if (
+            market not in normalized_windows
+            or market not in standard
+            or market in deferred
+            or family not in allowed_families
+            or current.get("lane") != "STANDARD_41"
+            or current.get("admitted_standard_foundation") is not True
+            or kind not in {"DBN", "SIDECAR"}
+            or str(current.get("interval_end_exclusive")) > maximum_file_end
+        ):
+            raise UnauthorizedOperation("planned source entry is not admitted development source")
+        base = path[:-len(".manifest.json")] if kind == "SIDECAR" else path
+        if not base.endswith(_DBN_SUFFIX):
+            raise IntegrityError("planned source entry is not a canonical DBN or sidecar")
+        pairs.setdefault(base, set()).add(kind)
+        selected.append(dict(current))
+    if not selected or any(kinds != {"DBN", "SIDECAR"} for kinds in pairs.values()):
+        raise IntegrityError("planned source set lacks exact DBN/sidecar pairs")
+    if tuple(str(item["path"]) for item in selected) != tuple(sorted(seen)):
+        raise IntegrityError("planned source entries are not uniquely sorted")
+    if set(normalized_windows) != {str(item["market"]) for item in selected}:
+        raise IntegrityError("canary windows and exact source markets differ")
+    return tuple(selected)
