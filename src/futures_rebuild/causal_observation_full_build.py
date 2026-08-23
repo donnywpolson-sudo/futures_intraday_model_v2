@@ -26,12 +26,15 @@ from .causal_observation_canary import (
     _CanaryStageCreator,
     _build_market_candidate_with_state,
     _decode_selected_sources,
+    _load_economics_rulebook,
 )
 from .causal_observation_foundation import (
     ACTIVE_CANONICAL_RELEASE_ID,
     ACTIVE_SOURCE_CONTRACT_ID,
     CAUSAL_OBSERVATION_CONTRACT_ID,
     CausalObservationOperationContext,
+    ECONOMICS_RULEBOOK_PATH,
+    ECONOMICS_RULEBOOK_SHA256,
     authorize_full_build_row_read,
     prepared_inventory,
 )
@@ -41,10 +44,11 @@ from .data_layout import STAGING_ROOT
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
 from .locking import FileLease
 from .foundation_operation_firewall import issue_current_source_closure_context
+from .foundation.economics import EconomicsRuleBook
 from .research_gateway_policy import CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
 
 
-PLAN_SCHEMA = "development_causal_observation_full_build_plan/1.0.0"
+PLAN_SCHEMA = "development_causal_observation_full_build_plan/1.1.0"
 RESULT_SCHEMA = "development_causal_observation_full_build_result/1.0.0"
 FAILURE_SCHEMA = "development_causal_observation_full_build_failure/1.0.0"
 EXPECTED_ENTRY_COUNT = 7_932
@@ -111,10 +115,18 @@ def _validate_plan(root: Path, plan: Mapping[str, object]) -> None:
     execution = plan.get("execution")
     storage = plan.get("storage")
     authority = plan.get("authority")
+    economics = plan.get("economics")
     if (
         plan.get("schema_version") != PLAN_SCHEMA
         or plan.get("operation") != CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
         or plan.get("causal_contract_id") != CAUSAL_OBSERVATION_CONTRACT_ID
+        or economics
+        != {
+            "rulebook_path": ECONOMICS_RULEBOOK_PATH,
+            "rulebook_sha256": ECONOMICS_RULEBOOK_SHA256,
+            "provider_null_fallback_only": True,
+            "negative_or_contradictory_provider_value": "FAIL_CLOSED",
+        }
         or plan.get("development_end_exclusive") != "2025-07-13T22:00:00Z"
         or plan.get("holdout_allowed") is not False
         or plan.get("forward_allowed") is not False
@@ -319,10 +331,15 @@ def validate_reusable_partition(
     stage: Path,
     manifest: object,
     expected_release_id: str,
+    economics_rulebook: EconomicsRuleBook,
 ) -> dict[str, object]:
     """Accept reuse only after independent verification and exact identity."""
 
-    certificate = verify_observation_candidate(stage=stage, manifest=manifest)  # type: ignore[arg-type]
+    certificate = verify_observation_candidate(
+        stage=stage,
+        manifest=manifest,  # type: ignore[arg-type]
+        economics_rulebook=economics_rulebook,
+    )
     if certificate.get("release_id") != expected_release_id:
         raise IntegrityError("reusable causal partition identity differs")
     return certificate
@@ -336,6 +353,8 @@ def _execute(
     plan_sha256: str,
     context: CausalObservationOperationContext,
     selected: Sequence[Mapping[str, object]],
+    economics_rulebook: EconomicsRuleBook,
+    progress: dict[str, object],
     started: float,
 ) -> FullBuildRunResult:
     output = _contained(root, plan["output_staging_path"])
@@ -355,6 +374,16 @@ def _execute(
             "start": f"{year:04d}-01-01T00:00:00Z",
             "end": f"{year + 1:04d}-01-01T00:00:00Z",
         }
+        unit_dbns = tuple(item for item in unit_entries if item["kind"] == "DBN")
+        progress.update(
+            {
+                "current_market": market,
+                "current_year": year,
+                "current_work_unit_dbn_count": len(unit_dbns),
+                "current_work_unit_dbn_bytes": sum(int(item["size_bytes"]) for item in unit_dbns),
+                "current_work_unit_decode_state": "STARTED",
+            }
+        )
         decoded = _decode_selected_sources(
             root=root,
             selected=unit_entries,
@@ -362,7 +391,13 @@ def _execute(
             source_contract=source_contract,
             maximum_decoded_records=int(plan["limits"]["maximum_decoded_records"]),
         )[market]
+        progress["current_work_unit_decode_state"] = "COMPLETE"
+        progress["dbn_files_opened"] = int(progress["dbn_files_opened"]) + len(unit_dbns)
+        progress["dbn_payload_bytes_opened"] = int(progress["dbn_payload_bytes_opened"]) + sum(
+            int(item["size_bytes"]) for item in unit_dbns
+        )
         decoded_records += decoded.decoded_record_count
+        progress["decoded_record_count"] = decoded_records
         if decoded_records > int(plan["limits"]["maximum_decoded_records"]):
             raise UnauthorizedOperation("full development decoded-record ceiling exceeded")
         for start_ns, end_ns, interval, month_window in _month_windows(year):
@@ -386,11 +421,13 @@ def _execute(
                 window=month_window,
                 decoded=month,
                 allowed_roots=standard_roots,
+                economics_rulebook=economics_rulebook,
                 prior_observation=prior_observation.get(market),
             )
             certificate = verify_observation_candidate(
                 stage=built.prepared.stage,
                 manifest=built.prepared.manifest,
+                economics_rulebook=economics_rulebook,
             )
             inventory = prepared_inventory(built.prepared)
             partition_bytes = sum(int(item["size"]) for item in inventory["files"])
@@ -407,6 +444,8 @@ def _execute(
                     "stage": built.prepared.stage.relative_to(root).as_posix(),
                 }
             )
+            progress["complete_partition_count"] = len(partitions)
+            progress["output_bytes"] = output_bytes
             prior_observation[market] = built.last_observation
             last_bar_end = int(built.last_observation["bar_end_ns"])
             carried_support[market] = tuple(
@@ -472,6 +511,7 @@ def run_authorized_full_build(
     plan = _json(path)
     plan_sha = sha256_file(path)
     _validate_plan(root, plan)
+    economics_rulebook = _load_economics_rulebook(root)
     selected = _load_exact_source_entries(root, plan)
     closure_context = issue_current_source_closure_context(root)
     selected = select_exact_standard_source_entries(
@@ -497,6 +537,18 @@ def run_authorized_full_build(
         plan_sha256=plan_sha,
     )
     started = time.monotonic()
+    progress: dict[str, object] = {
+        "current_market": None,
+        "current_year": None,
+        "current_work_unit_dbn_count": 0,
+        "current_work_unit_dbn_bytes": 0,
+        "current_work_unit_decode_state": "NOT_STARTED",
+        "dbn_files_opened": 0,
+        "dbn_payload_bytes_opened": 0,
+        "decoded_record_count": 0,
+        "complete_partition_count": 0,
+        "output_bytes": 0,
+    }
     try:
         with FileLease(global_lock), FileLease(run_lock):
             return _execute(
@@ -506,6 +558,8 @@ def run_authorized_full_build(
                 plan_sha256=plan_sha,
                 context=context,
                 selected=selected,
+                economics_rulebook=economics_rulebook,
+                progress=progress,
                 started=started,
             )
     except Exception as exc:
@@ -517,6 +571,8 @@ def run_authorized_full_build(
             "receipt_id": context.receipt_id,
             "error_type": type(exc).__name__,
             "error_message": str(exc),
+            "error_details": getattr(exc, "details", {}),
+            "progress": progress,
             "publication_authorized": False,
             "activation_authorized": False,
         }

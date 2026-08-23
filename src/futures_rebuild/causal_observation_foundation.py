@@ -34,6 +34,13 @@ ACTIVE_SOURCE_CONTRACT_ID = (
 ACTIVE_CANONICAL_RELEASE_ID = (
     "9867aedac9cfe732d015489fc4093ffc4aaab5ad698b75a5fa00ca7e1f457995"
 )
+ECONOMICS_RULEBOOK_PATH = "configs/contract_economics_rules.json"
+ECONOMICS_RULEBOOK_SHA256 = (
+    "6a43960f252dc9103ea39f5ef4d082a71aa3aeefe89370c528dc29ac319e0f33"
+)
+ECONOMICS_RULEBOOK_ID = (
+    "83008522be3b959f3c08cc3a9f5ff4d55878210c0e23cff5ceb7bf650ba2ef68"
+)
 DEVELOPMENT_END_EXCLUSIVE = "2025-07-13T22:00:00Z"
 SYNTHETIC_RELEASE_ID = "0" * 64
 RELEASE_KIND = "development_only_causal_observation_partition"
@@ -129,6 +136,7 @@ class CausalObservationOperationContext:
     plan_id: str
     plan_sha256: str
     exact_source_entries_sha256: str
+    economics_rulebook_sha256: str
     output_staging_path: str
     receipt_id: str
     synthetic: bool
@@ -246,6 +254,7 @@ def authorize_canary_row_read(
         plan_id=str(plan["plan_id"]),
         plan_sha256=plan_sha256,
         exact_source_entries_sha256=str(plan["source"]["exact_source_entries_sha256"]),
+        economics_rulebook_sha256=ECONOMICS_RULEBOOK_SHA256,
         output_staging_path=str(plan["output_staging_path"]),
         receipt_id=receipt.receipt_id,
         synthetic=False,
@@ -265,9 +274,10 @@ def required_full_build_scope(
     authority = plan.get("authority")
     execution = plan.get("execution")
     storage = plan.get("storage")
+    economics = plan.get("economics")
     if (
         plan.get("schema_version")
-        != "development_causal_observation_full_build_plan/1.0.0"
+        != "development_causal_observation_full_build_plan/1.1.0"
         or plan.get("operation") != CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
         or plan.get("causal_contract_id") != CAUSAL_OBSERVATION_CONTRACT_ID
         or not isinstance(source, Mapping)
@@ -275,6 +285,7 @@ def required_full_build_scope(
         or not isinstance(authority, Mapping)
         or not isinstance(execution, Mapping)
         or not isinstance(storage, Mapping)
+        or not isinstance(economics, Mapping)
         or source.get("source_contract_id") != ACTIVE_SOURCE_CONTRACT_ID
         or source.get("canonical_release_id") != ACTIVE_CANONICAL_RELEASE_ID
         or plan.get("development_end_exclusive") != DEVELOPMENT_END_EXCLUSIVE
@@ -289,6 +300,13 @@ def required_full_build_scope(
         or execution.get("maximum_runtime_seconds") != 86_400
         or storage.get("publication_authorized") is not False
         or storage.get("activation_authorized") is not False
+        or economics
+        != {
+            "rulebook_path": ECONOMICS_RULEBOOK_PATH,
+            "rulebook_sha256": ECONOMICS_RULEBOOK_SHA256,
+            "provider_null_fallback_only": True,
+            "negative_or_contradictory_provider_value": "FAIL_CLOSED",
+        }
     ):
         raise UnauthorizedOperation("full causal-observation build plan authority is invalid")
     plan_id = _digest(plan.get("plan_id"), "plan_id")
@@ -304,6 +322,7 @@ def required_full_build_scope(
             source.get("exact_source_entries_sha256"),
             "exact_source_entries_sha256",
         ),
+        "economics_rulebook_sha256": ECONOMICS_RULEBOOK_SHA256,
         "output_staging_path": _canonical_path(
             plan.get("output_staging_path"), "output_staging_path"
         ),
@@ -383,6 +402,7 @@ def authorize_full_build_row_read(
         plan_id=str(plan["plan_id"]),
         plan_sha256=plan_sha256,
         exact_source_entries_sha256=str(plan["source"]["exact_source_entries_sha256"]),
+        economics_rulebook_sha256=ECONOMICS_RULEBOOK_SHA256,
         output_staging_path=str(plan["output_staging_path"]),
         receipt_id=receipt.receipt_id,
         synthetic=False,
@@ -423,6 +443,7 @@ def issue_synthetic_observation_context(
         plan_id=fixture,
         plan_sha256=fixture,
         exact_source_entries_sha256=fixture,
+        economics_rulebook_sha256=ECONOMICS_RULEBOOK_SHA256,
         output_staging_path="synthetic/fixture",
         receipt_id=receipt.receipt_id,
         synthetic=True,
@@ -436,6 +457,7 @@ def _require_context(context: CausalObservationOperationContext) -> None:
         or context._seal is not _SEAL
         or context.causal_contract_id != CAUSAL_OBSERVATION_CONTRACT_ID
         or context.source_contract_id != ACTIVE_SOURCE_CONTRACT_ID
+        or context.economics_rulebook_sha256 != ECONOMICS_RULEBOOK_SHA256
         or (
             context.synthetic
             and (
@@ -722,6 +744,8 @@ def prepare_observation_partition(
         "plan_id": context.plan_id,
         "plan_sha256": context.plan_sha256,
         "exact_source_entries_sha256": context.exact_source_entries_sha256,
+        "economics_rulebook_sha256": context.economics_rulebook_sha256,
+        "economics_rulebook_id": ECONOMICS_RULEBOOK_ID,
         "observation_count": len(observation_rows),
         "missingness_count": len(missingness_rows),
         "roll_count": len(roll_rows),

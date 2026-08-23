@@ -22,8 +22,11 @@ from futures_rebuild.causal_observation_canary import (
     _authorize_then_decode,
     _causal_definition,
     _decode_selected_sources,
+    _load_economics_rulebook,
     _validate_plan,
+    _resolve_multiplier,
     build_market_candidate,
+    MultiplierResolutionError,
 )
 from futures_rebuild.causal_observation_foundation import (
     ACTIVE_CANONICAL_RELEASE_ID,
@@ -34,13 +37,15 @@ from futures_rebuild.causal_observation_foundation import (
 )
 from futures_rebuild.causal_observation_verifier import verify_observation_candidate
 from futures_rebuild.errors import ContractError, IntegrityError, UnauthorizedOperation
-from futures_rebuild.foundation.records import ProviderBar, ProviderDefinition
+from futures_rebuild.foundation.records import INT32_NULL, INT64_NULL, ProviderBar, ProviderDefinition
+from futures_rebuild.foundation.economics import EconomicsRuleBook
 from futures_rebuild.foundation import decoder as foundation_decoder
 from futures_rebuild.research_gateway_policy import CAUSAL_OBSERVATION_CANARY_OPERATION
 
 
 H = "a" * 64
 ROOT = Path(__file__).resolve().parents[1]
+RULEBOOK = EconomicsRuleBook.from_file(ROOT / "configs/contract_economics_rules.json")
 START_NS = int(
     datetime(2024, 3, 4, 12, tzinfo=timezone.utc).timestamp() * 1_000_000_000
 )
@@ -235,6 +240,63 @@ def test_causal_definition_rejects_future_definition_even_if_already_active() ->
         _causal_definition(DefinitionIndex((future,)), bar, bar.event_at_ns)
 
 
+@pytest.mark.parametrize("raw", (0, INT32_NULL, INT64_NULL))
+def test_multiplier_uses_pinned_rulebook_only_for_provider_null_states(raw: int) -> None:
+    multiplier, state = _resolve_multiplier(
+        rulebook=RULEBOOK,
+        market="6A",
+        definition=_definition(
+            market="6A",
+            raw_symbol="6AH4",
+            unit_of_measure_qty_nano=raw,
+        ),
+    )
+    assert multiplier == 100_000_000_000_000
+    assert state == "RULEBOOK_VALUE_PROVIDER_UNIT_QTY_UNAVAILABLE"
+
+
+def test_multiplier_rulebook_file_identity_fails_closed_before_use(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "futures_rebuild.causal_observation_canary.sha256_file",
+        lambda *_: "0" * 64,
+    )
+    with pytest.raises(IntegrityError, match="economics rulebook differs"):
+        _load_economics_rulebook(tmp_path)
+
+
+def test_multiplier_rejects_negative_and_contradictory_provider_values() -> None:
+    with pytest.raises(MultiplierResolutionError, match="negative multiplier") as caught:
+        _resolve_multiplier(
+            rulebook=RULEBOOK,
+            market="ES",
+            definition=_definition(unit_of_measure_qty_nano=-1),
+        )
+    assert caught.value.details["multiplier_state"] == "NEGATIVE_PROVIDER_VALUE"
+    assert caught.value.details["definition_row_sha256"] == "1" * 64
+    with pytest.raises(MultiplierResolutionError, match="contradicts"):
+        _resolve_multiplier(
+            rulebook=RULEBOOK,
+            market="ES",
+            definition=_definition(unit_of_measure_qty_nano=51_000_000_000),
+        )
+
+
+def test_multiplier_uses_contract_quantity_not_point_value_for_cent_quotes() -> None:
+    multiplier, state = _resolve_multiplier(
+        rulebook=RULEBOOK,
+        market="ZC",
+        definition=_definition(
+            market="ZC",
+            raw_symbol="ZCH4",
+            unit_of_measure_qty_nano=INT64_NULL,
+        ),
+    )
+    assert multiplier == 5_000_000_000_000
+    assert state == "RULEBOOK_VALUE_PROVIDER_UNIT_QTY_UNAVAILABLE"
+
+
 def test_decoder_admits_exact_canary_reference_bar_schemas(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -367,10 +429,12 @@ def test_synthetic_market_candidate_is_observation_only_and_independently_verifi
         market="ES",
         window={"start": "2024-03-04T00:00:00Z", "end": "2024-03-05T00:00:00Z"},
         decoded=decoded,
+        economics_rulebook=RULEBOOK,
     )
     certificate = verify_observation_candidate(
         stage=prepared.stage,
         manifest=prepared.manifest,
+        economics_rulebook=RULEBOOK,
     )
     assert certificate["outcome_count"] == 0
     assert certificate["feature_count"] == 0

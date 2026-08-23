@@ -18,6 +18,7 @@ from futures_rebuild.canonical import sha256_file, sha256_json
 from futures_rebuild.causal_observation_foundation import (
     ACTIVE_SOURCE_CONTRACT_ID,
     CAUSAL_OBSERVATION_CONTRACT_ID,
+    ECONOMICS_RULEBOOK_SHA256,
     SYNTHETIC_RELEASE_ID,
     authorize_canary_row_read,
     issue_synthetic_observation_context,
@@ -31,6 +32,7 @@ from futures_rebuild.causal_source_closure import select_exact_standard_source_e
 from futures_rebuild.data_layout import PhasePublisher
 from futures_rebuild.errors import ContractError, IntegrityError, UnauthorizedOperation
 from futures_rebuild.foundation.records import INT64_NULL, ProviderBar
+from futures_rebuild.foundation.economics import EconomicsRuleBook
 from futures_rebuild.foundation_operation_firewall import issue_current_source_closure_context
 from futures_rebuild.research_gateway_policy import (
     CAUSAL_OBSERVATION_CANARY_OPERATION,
@@ -39,6 +41,7 @@ from futures_rebuild.research_gateway_policy import (
 
 
 ROOT = Path(__file__).resolve().parents[1]
+RULEBOOK = EconomicsRuleBook.from_file(ROOT / "configs/contract_economics_rules.json")
 FREEZE_ROOT = (
     ROOT
     / "reports/post_rebuild_causal_foundation_contract_freeze"
@@ -315,7 +318,7 @@ def _observation(context, **changes: object) -> dict[str, object]:
         "volume": 10,
         "currency": "USD",
         "min_price_increment_nano": 10_000_000,
-        "multiplier_nano": 1_000_000_000,
+        "multiplier_nano": 1_000_000_000_000,
         "project_session_id": "PROJECT-2023-11-14",
         "project_trade_date": "2023-11-14",
         "project_grouping_start_ns": 1_699_980_000_000_000_000,
@@ -359,7 +362,11 @@ def _evidence(row: Mapping[str, object]):
         "source_contract_id": row["source_contract_id"],
         "source_release_id": row["source_release_id"],
         "source_file_sha256": row["source_file_sha256"],
-        "quality_flags": ["NEGATIVE_PRICE_PROVIDER_VALID"],
+        "quality_flags": [
+            "NEGATIVE_PRICE_PROVIDER_VALID",
+            "MULTIPLIER_PROVIDER_DEFINITION_CROSSCHECK_MATCH",
+            f"ECONOMICS_RULEBOOK_SHA256_{ECONOMICS_RULEBOOK_SHA256}",
+        ],
     }
     cadence = {
         "comparison_id": "1" * 64,
@@ -419,6 +426,7 @@ def test_observation_only_producer_and_independent_verifier(
     certificate = verify_observation_candidate(
         stage=prepared.stage,
         manifest=prepared.manifest,
+        economics_rulebook=RULEBOOK,
     )
     assert certificate["status"] == "PASS_SYNTHETIC_OR_AUTHORIZED_CANDIDATE_ONLY_NOT_PUBLISHED"
     assert certificate["producer_success_flag_accepted"] is False

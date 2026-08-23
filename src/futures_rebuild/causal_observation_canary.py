@@ -26,6 +26,8 @@ from .causal_observation_foundation import (
     ACTIVE_SOURCE_CONTRACT_ID,
     CAUSAL_OBSERVATION_CONTRACT_ID,
     CausalObservationOperationContext,
+    ECONOMICS_RULEBOOK_PATH,
+    ECONOMICS_RULEBOOK_SHA256,
     PreparedObservationPartition,
     authorize_canary_row_read,
     prepare_observation_partition,
@@ -42,11 +44,13 @@ from .foundation.decoder import (
     iter_statuses,
 )
 from .foundation.identity import DefinitionIndex
+from .foundation.economics import EconomicsRuleBook
 from .foundation.records import (
     INT32_NULL,
     INT64_NULL,
     ProviderBar,
     ProviderDefinition,
+    NANO,
 )
 from .foundation.snapshot import DbnReleaseFile
 from .foundation_operation_firewall import issue_current_source_closure_context
@@ -90,6 +94,66 @@ class BuiltMarketCandidate:
     prepared: PreparedObservationPartition
     first_observation: Mapping[str, object]
     last_observation: Mapping[str, object]
+
+
+class MultiplierResolutionError(IntegrityError):
+    """Fail closed while retaining source-safe definition diagnostics."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        market: str,
+        definition: ProviderDefinition,
+        multiplier_state: str,
+    ) -> None:
+        super().__init__(message)
+        self.details = {
+            "market": market,
+            "definition_source_file_path": definition.source_file_path,
+            "definition_source_file_sha256": definition.source_file_sha256,
+            "definition_row_sha256": definition.row_sha256,
+            "multiplier_state": multiplier_state,
+        }
+
+
+def _load_economics_rulebook(root: Path) -> EconomicsRuleBook:
+    path = root / ECONOMICS_RULEBOOK_PATH
+    if sha256_file(path) != ECONOMICS_RULEBOOK_SHA256:
+        raise IntegrityError("causal-observation economics rulebook differs")
+    return EconomicsRuleBook.from_file(path)
+
+
+def _resolve_multiplier(
+    *,
+    rulebook: EconomicsRuleBook,
+    market: str,
+    definition: ProviderDefinition,
+) -> tuple[int, str]:
+    raw = definition.unit_of_measure_qty_nano
+    if raw < 0:
+        raise MultiplierResolutionError(
+            "causal definition contains a negative multiplier",
+            market=market,
+            definition=definition,
+            multiplier_state="NEGATIVE_PROVIDER_VALUE",
+        )
+    try:
+        resolved = rulebook.resolve(market, definition)
+        expected = rulebook.rules[market].expected_unit_qty * NANO
+    except (ContractError, KeyError) as exc:
+        raise MultiplierResolutionError(
+            "causal definition multiplier contradicts the pinned economics rulebook",
+            market=market,
+            definition=definition,
+            multiplier_state="CONTRADICTORY_OR_UNRESOLVED_PROVIDER_VALUE",
+        ) from exc
+    integral = expected.to_integral_value()
+    if expected != integral or integral <= 0:
+        raise IntegrityError("pinned economics multiplier is not a positive nanounit integer")
+    if raw not in {0, INT32_NULL, INT64_NULL} and resolved.provider_unit_qty_state != "PROVIDER_DEFINITION_CROSSCHECK_MATCH":
+        raise IntegrityError("positive provider multiplier lacks an exact rulebook crosscheck")
+    return int(integral), resolved.provider_unit_qty_state
 
 
 class _StageCreator(Protocol):
@@ -510,6 +574,7 @@ def _build_market_candidate_with_state(
     window: Mapping[str, object],
     decoded: DecodedMarket,
     allowed_roots: frozenset[str],
+    economics_rulebook: EconomicsRuleBook,
     prior_observation: Mapping[str, object] | None = None,
 ) -> BuiltMarketCandidate:
     """Build one deterministic market candidate from already-authorized rows."""
@@ -538,9 +603,11 @@ def _build_market_candidate_with_state(
         bar_end = bar.event_at_ns + MINUTE_NS
         available = bar_end + AVAILABILITY_LAG_NS
         definition = _causal_definition(definitions, bar, available)
-        multiplier = definition.unit_of_measure_qty_nano
-        if multiplier in {0, INT32_NULL, INT64_NULL} or multiplier < 0:
-            raise IntegrityError("causal definition lacks a positive multiplier")
+        multiplier, multiplier_state = _resolve_multiplier(
+            rulebook=economics_rulebook,
+            market=market,
+            definition=definition,
+        )
         session_id, trade_date, group_start, group_end = _project_grouping(bar.event_at_ns)
         core: dict[str, object] = {
             "market": market,
@@ -623,7 +690,11 @@ def _build_market_candidate_with_state(
                 "crossing_status": "ROLL_BOUNDARY_UNADJUSTED" if is_roll else "NO_CROSSING",
             }
         )
-        flags = ["OHLC_VOLUME_TIMESTAMP_VALID"]
+        flags = [
+            "OHLC_VOLUME_TIMESTAMP_VALID",
+            f"MULTIPLIER_{multiplier_state}",
+            f"ECONOMICS_RULEBOOK_SHA256_{ECONOMICS_RULEBOOK_SHA256}",
+        ]
         if min(bar.open_nano, bar.high_nano, bar.low_nano, bar.close_nano) < 0:
             flags.append("PROVIDER_VALID_NEGATIVE_PRICE")
         quality.append(
@@ -763,6 +834,7 @@ def build_market_candidate(
     market: str,
     window: Mapping[str, object],
     decoded: DecodedMarket,
+    economics_rulebook: EconomicsRuleBook,
 ) -> PreparedObservationPartition:
     """Build one seven-root canary candidate with the shared causal mechanics."""
 
@@ -773,6 +845,7 @@ def build_market_candidate(
         window=window,
         decoded=decoded,
         allowed_roots=SUPPORTED_ROOTS,
+        economics_rulebook=economics_rulebook,
     ).prepared
 
 
@@ -849,6 +922,7 @@ def run_authorized_canary(
         raise IntegrityError("canary output staging path already exists")
     source_contract_path = root / "configs/source_contract.json"
     source_contract = _json(source_contract_path)
+    economics_rulebook = _load_economics_rulebook(root)
     context, decoded = _authorize_then_decode(
         boundary=boundary,
         receipt=receipt,
@@ -874,10 +948,12 @@ def run_authorized_canary(
             market=str(market),
             window=plan["windows"][str(market)],
             decoded=market_decoded,
+            economics_rulebook=economics_rulebook,
         )
         certificate = verify_observation_candidate(
             stage=prepared.stage,
             manifest=prepared.manifest,
+            economics_rulebook=economics_rulebook,
         )
         inventory = prepared_inventory(prepared)
         total_output_bytes += sum(item["size"] for item in inventory["files"])

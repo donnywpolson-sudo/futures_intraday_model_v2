@@ -23,6 +23,7 @@ from futures_rebuild.causal_observation_foundation import (
     ACTIVE_CANONICAL_RELEASE_ID,
     ACTIVE_SOURCE_CONTRACT_ID,
     CAUSAL_OBSERVATION_CONTRACT_ID,
+    ECONOMICS_RULEBOOK_SHA256,
     authorize_full_build_row_read,
     issue_synthetic_observation_context,
     required_full_build_scope,
@@ -49,6 +50,7 @@ from futures_rebuild.causal_observation_full_build import (
 )
 from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 from futures_rebuild.foundation.records import ProviderBar, ProviderDefinition
+from futures_rebuild.foundation.economics import EconomicsRuleBook
 from futures_rebuild.research_gateway_policy import (
     CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
     PREPARATORY_REAL_HISTORY_OPERATIONS,
@@ -57,6 +59,7 @@ from futures_rebuild.research_gateway_policy import (
 
 ROOT = Path(__file__).resolve().parents[1]
 H = "a" * 64
+RULEBOOK = EconomicsRuleBook.from_file(ROOT / "configs/contract_economics_rules.json")
 def _plan(*, inventory_path: str = "inventory.json", inventory_sha256: str = H) -> dict[str, object]:
     core: dict[str, object] = {
         "schema_version": PLAN_SCHEMA,
@@ -119,6 +122,12 @@ def _plan(*, inventory_path: str = "inventory.json", inventory_sha256: str = H) 
             "partitioning": "market/year/month",
             "empty_partitions": False,
             "full_1s_duplication": False,
+        },
+        "economics": {
+            "rulebook_path": "configs/contract_economics_rules.json",
+            "rulebook_sha256": ECONOMICS_RULEBOOK_SHA256,
+            "provider_null_fallback_only": True,
+            "negative_or_contradictory_provider_value": "FAIL_CLOSED",
         },
         "reuse_canary_candidates": False,
         "reuse_prior_partitions": False,
@@ -313,6 +322,7 @@ def test_month_partitioning_and_cross_boundary_roll_gap_state_are_deterministic(
             decoded_record_count=2,
         ),
         allowed_roots=frozenset({"ES"}),
+        economics_rulebook=RULEBOOK,
     )
     second = _build_market_candidate_with_state(
         publisher=publisher,
@@ -333,6 +343,7 @@ def test_month_partitioning_and_cross_boundary_roll_gap_state_are_deterministic(
             decoded_record_count=2,
         ),
         allowed_roots=frozenset({"ES"}),
+        economics_rulebook=RULEBOOK,
         prior_observation=first.last_observation,
     )
     rolls = [json.loads(line) for line in (second.prepared.stage / "candidate/roll.jsonl").read_text(encoding="utf-8").splitlines()]
@@ -380,6 +391,7 @@ def test_output_and_lock_fail_before_authorization_or_payload_access(
     calls: list[str] = []
     monkeypatch.setattr("futures_rebuild.causal_observation_full_build._validate_plan", lambda *_: None)
     monkeypatch.setattr("futures_rebuild.causal_observation_full_build._load_exact_source_entries", lambda *_: ())
+    monkeypatch.setattr("futures_rebuild.causal_observation_full_build._load_economics_rulebook", lambda *_: RULEBOOK)
     monkeypatch.setattr("futures_rebuild.causal_observation_full_build.issue_current_source_closure_context", lambda *_: object())
     monkeypatch.setattr("futures_rebuild.causal_observation_full_build.select_exact_standard_source_entries", lambda *_, **__: ())
     monkeypatch.setattr("futures_rebuild.causal_observation_full_build.authorize_full_build_row_read", lambda **_: calls.append("authorized"))
@@ -429,11 +441,13 @@ def test_partition_reuse_requires_independent_exact_release_identity(tmp_path: P
             decoded_record_count=2,
         ),
         allowed_roots=frozenset({"ES"}),
+        economics_rulebook=RULEBOOK,
     )
     certificate = validate_reusable_partition(
         stage=built.prepared.stage,
         manifest=built.prepared.manifest,
         expected_release_id=built.prepared.manifest.release_id,
+        economics_rulebook=RULEBOOK,
     )
     assert certificate["release_id"] == built.prepared.manifest.release_id
     with pytest.raises(IntegrityError, match="identity differs"):
@@ -441,4 +455,5 @@ def test_partition_reuse_requires_independent_exact_release_identity(tmp_path: P
             stage=built.prepared.stage,
             manifest=built.prepared.manifest,
             expected_release_id="f" * 64,
+            economics_rulebook=RULEBOOK,
         )

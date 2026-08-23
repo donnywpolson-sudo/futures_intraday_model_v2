@@ -15,6 +15,9 @@ from typing import Mapping
 from .canonical import canonical_bytes, sha256_file, sha256_json
 from .data_layout import DataReleaseManifest
 from .errors import IntegrityError
+from .foundation.economics import EconomicsRuleBook
+from .foundation.records import NANO
+from .causal_observation_foundation import ECONOMICS_RULEBOOK_ID, ECONOMICS_RULEBOOK_SHA256
 
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -74,7 +77,10 @@ def _index_by_filename(
 
 
 def verify_observation_candidate(
-    *, stage: Path, manifest: DataReleaseManifest
+    *,
+    stage: Path,
+    manifest: DataReleaseManifest,
+    economics_rulebook: EconomicsRuleBook,
 ) -> dict[str, object]:
     if (
         manifest.phase != "causally_gated_normalized"
@@ -88,6 +94,9 @@ def verify_observation_candidate(
         metadata.get("schema_version") != "causal_observation_evidence/1.0.0"
         or metadata.get("publication_authorized") is not False
         or metadata.get("activation_authorized") is not False
+        or metadata.get("economics_rulebook_sha256") != ECONOMICS_RULEBOOK_SHA256
+        or metadata.get("economics_rulebook_id") != ECONOMICS_RULEBOOK_ID
+        or economics_rulebook.rulebook_hash != ECONOMICS_RULEBOOK_ID
         or any(metadata.get(name) != 0 for name in ("outcome_count", "feature_count", "prediction_count", "evaluation_count"))
         or any(_SHA256.fullmatch(str(metadata.get(name, ""))) is None for name in (
             "causal_contract_id", "source_contract_id", "source_release_id", "plan_id",
@@ -106,6 +115,7 @@ def verify_observation_candidate(
         raise IntegrityError("candidate has no observations")
     row_ids: list[str] = []
     order: list[tuple[str, int, str]] = []
+    observation_by_id: dict[str, dict[str, object]] = {}
     for row in observations:
         if _FORBIDDEN & set(row):
             raise IntegrityError("candidate contains a non-observation capability field")
@@ -126,6 +136,7 @@ def verify_observation_candidate(
             activation, expiration = int(row["listing_activation_ns"]), int(row["expiration_ns"])
             opening, high = int(row["open_nano"]), int(row["high_nano"])
             low, closing, volume = int(row["low_nano"]), int(row["close_nano"]), int(row["volume"])
+            expected_multiplier = economics_rulebook.rules[market].expected_unit_qty * NANO
         except (KeyError, TypeError, ValueError) as exc:
             raise IntegrityError("candidate observation fields are malformed") from exc
         if (
@@ -144,6 +155,8 @@ def verify_observation_candidate(
             or high < low
             or int(row["min_price_increment_nano"]) <= 0
             or int(row["multiplier_nano"]) <= 0
+            or expected_multiplier != expected_multiplier.to_integral_value()
+            or int(row["multiplier_nano"]) != int(expected_multiplier)
             or not int(row["project_grouping_start_ns"]) <= start < end <= int(row["project_grouping_end_ns"])
             or row.get("project_timezone") != "America/Chicago"
             or row.get("official_schedule_state")
@@ -151,6 +164,7 @@ def verify_observation_candidate(
         ):
             raise IntegrityError("candidate observation invariant failed")
         row_ids.append(row_id)
+        observation_by_id[row_id] = row
         order.append((market, start, row_id))
     if len(set(row_ids)) != len(row_ids) or order != sorted(order):
         raise IntegrityError("candidate row identities are duplicate or unordered")
@@ -199,11 +213,23 @@ def verify_observation_candidate(
         ):
             raise IntegrityError("candidate roll evidence is invalid")
     for row in quality:
+        flags = row.get("quality_flags")
+        multiplier_flags = (
+            set(flags) & {
+                "MULTIPLIER_PROVIDER_DEFINITION_CROSSCHECK_MATCH",
+                "MULTIPLIER_RULEBOOK_VALUE_PROVIDER_UNIT_QTY_UNAVAILABLE",
+            }
+            if isinstance(flags, list)
+            else set()
+        )
         if (
             row.get("source_contract_id") != metadata["source_contract_id"]
             or row.get("source_release_id") != metadata["source_release_id"]
             or any(type(row.get(name)) is not bool for name in ("ohlc_valid", "volume_valid", "timestamp_order_valid"))
             or row.get("duplicate_state") not in {"UNIQUE", "DUPLICATE_IDENTICAL", "DUPLICATE_CONFLICT"}
+            or len(multiplier_flags) != 1
+            or f"ECONOMICS_RULEBOOK_SHA256_{ECONOMICS_RULEBOOK_SHA256}" not in flags
+            or str(row.get("row_id")) not in observation_by_id
         ):
             raise IntegrityError("candidate quality evidence is invalid")
     for row in cadence:
