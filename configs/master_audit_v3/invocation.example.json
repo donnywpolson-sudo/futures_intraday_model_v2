@@ -1,0 +1,37 @@
+{
+  "schema_version": "systematic_futures_audit/3.0.0",
+  "classification": "NON_AUTHORIZING_EVIDENCE_CLASSIFICATION",
+  "mode": "EVIDENCE_ONLY",
+  "audit_id": "EXAMPLE-STRUCTURAL-ONLY",
+  "target_state": "FOUNDATION_READY",
+  "allowed_paths": ["MASTER_AUDIT.md", "docs", "configs", "reports"],
+  "specification": {
+    "path": "MASTER_AUDIT.md",
+    "sha256": "70913d266e7fa819e56b70d012a897d8ffe8957235ea3f31c8b1e295de5aeaec"
+  },
+  "stage_matrix": {
+    "path": "configs/master_audit_v3/stage_requirement_matrix.json",
+    "sha256": "6a0ec9f32010f2362a92f0d428e19774fd7a83125e4565dc0f7bf1c02692b449"
+  },
+  "universe_contract": {
+    "path": "configs/research_universe_contract.json",
+    "sha256": "86e38f8732bd05b10d0faa2eec93e0bd0db6aeac3e56a13fbaed8e69555035d4"
+  },
+  "evidence": [],
+  "check_results": [],
+  "runtime": {
+    "max_files": 100,
+    "max_bytes_read": 10485760,
+    "allowed_command_classes": ["static-read", "hash-read"],
+    "forbidden_actions": [
+      "network",
+      "provider-call",
+      "project-code-execution",
+      "holdout-row-access",
+      "readiness-publication",
+      "candidate-sealing",
+      "order-placement",
+      "legacy-write"
+    ]
+  }
+}

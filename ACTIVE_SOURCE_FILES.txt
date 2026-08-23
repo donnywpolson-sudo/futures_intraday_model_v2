@@ -14,6 +14,7 @@ configs/source_contract_v4.json
 pyproject.toml
 scripts/build_live_cockpit.ps1
 scripts/install_live_cockpit.ps1
+src/futures_rebuild/audit/__main__.py
 src/futures_rebuild/causal_source_closure.py
 src/futures_rebuild/certified_research_gateway.py
 src/futures_rebuild/current_research_surface.py
@@ -67,6 +68,7 @@ src/futures_rebuild/live_cockpit/protocol.py
 src/futures_rebuild/live_cockpit/single_instance.py
 src/futures_rebuild/live_cockpit/smoke.py
 src/futures_rebuild/live_cockpit/workflow.py
+src/futures_rebuild/meta_audit.py
 src/futures_rebuild/pipeline.py
 src/futures_rebuild/prop_firm_account_runtime.py
 src/futures_rebuild/prop_firm_eod_risk.py
@@ -80,6 +82,8 @@ src/futures_rebuild/retirement.py
 .github/workflows/ci.yml
 .gitignore
 ACTIVE_SOURCE_FILES.txt
+MASTER_AUDIT.md
+META_MASTER_AUDIT.md
 PIPELINE_FOLDER_MAP.md
 PROJECT_OUTLINE.md
 README.md
@@ -118,6 +122,7 @@ configs/causal_active_pilot_approval_v6.json
 configs/causal_active_price_policy_approval.json
 configs/causal_market_year_materialization_approval.json
 configs/causal_price_research_policy.json
+configs/closure_workflow_policy.json
 configs/cme_calendar_41_product_schedule_capture_approval.json
 configs/cme_calendar_activation_approval.json
 configs/cme_calendar_activation_bf261f90_approval.json
@@ -180,7 +185,10 @@ configs/live_cockpit_smoke_approval_attempt_4.json
 configs/live_cockpit_smoke_approval_attempt_5.json
 configs/live_cockpit_smoke_approval_attempt_6.json
 configs/live_cockpit_smoke_approval_attempt_7.json
+configs/master_audit_v3/invocation.example.json
+configs/master_audit_v3/stage_requirement_matrix.json
 configs/mechanical_feature_spec.json
+configs/meta_master_audit_coverage.json
 configs/mff_execution_capability_evidence.json
 configs/micro_contract_universe_v1.json
 configs/micro_futures_legacy_lineage.json
@@ -273,10 +281,12 @@ configs/tier1_standard_only_preexecution_certificate.json
 configs/tier1_standard_only_synthetic_verification.json
 configs/tier1_standard_only_trial_protocol.json
 configs/tier1_trade_triggered_trial_protocol.json
+docs/AUDIT_TRACEABILITY.md
 docs/DATA_LAYOUT_V2.md
 docs/HISTORICAL_RESEARCH_HARNESS.md
 docs/LEGACY_WORKFLOWS.md
 docs/M2A_OFFLINE_DATA_PLAN.md
+docs/MASTER_AUDIT_V3.md
 docs/MFF_TRADOVATE_EXECUTION.md
 docs/NAMING_AND_LINEAGE.md
 docs/PIPELINE_FLOWCHART_REMEDIATION_PLAN.md
@@ -436,6 +446,8 @@ src/futures_rebuild/alpha_research_ladder.py
 src/futures_rebuild/anomaly_acceptance.py
 src/futures_rebuild/apex_tradovate_eod_risk.py
 src/futures_rebuild/archive.py
+src/futures_rebuild/audit/__init__.py
+src/futures_rebuild/audit/contract.py
 src/futures_rebuild/boundary.py
 src/futures_rebuild/bundle.py
 src/futures_rebuild/calendar_archived_cme_gap_diagnostic.py
@@ -476,6 +488,14 @@ src/futures_rebuild/cash_open_source_compatibility_census_v2.py
 src/futures_rebuild/cash_open_source_compatibility_correction.py
 src/futures_rebuild/causal_market_year_materialization.py
 src/futures_rebuild/clock.py
+src/futures_rebuild/closure_workflow/__init__.py
+src/futures_rebuild/closure_workflow/__main__.py
+src/futures_rebuild/closure_workflow/cli.py
+src/futures_rebuild/closure_workflow/commit.py
+src/futures_rebuild/closure_workflow/engine.py
+src/futures_rebuild/closure_workflow/lifecycle.py
+src/futures_rebuild/closure_workflow/policy.py
+src/futures_rebuild/closure_workflow/snapshot.py
 src/futures_rebuild/cme_calendar_source_adequacy.py
 src/futures_rebuild/cme_calendar_successor.py
 src/futures_rebuild/cme_contract_economics.py
@@ -736,6 +756,8 @@ tests/test_cash_open_source_compatibility_census_v2.py
 tests/test_causal_market_year_materialization.py
 tests/test_causal_source_closure.py
 tests/test_certified_research_gateway.py
+tests/test_closure_workflow.py
+tests/test_closure_workflow_v2_successor.py
 tests/test_cme_calendar_source_adequacy.py
 tests/test_cme_contract_economics.py
 tests/test_contract_economics_audit.py
@@ -772,6 +794,8 @@ tests/test_live_cockpit_execution.py
 tests/test_live_cockpit_offline_network.py
 tests/test_mandatory_baseline_execution.py
 tests/test_manual_execution_assistant.py
+tests/test_master_audit_v3.py
+tests/test_meta_audit.py
 tests/test_micro_alpha_acquisition.py
 tests/test_micro_alpha_acquisition_v21.py
 tests/test_micro_alpha_acquisition_v22.py

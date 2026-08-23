@@ -67,6 +67,8 @@ def test_synthetic_complete_repo_can_be_classified_without_external_root(
         "CURRENT_WORKFLOW.md",
         "PROJECT_OUTLINE.md",
         "README.md",
+        "MASTER_AUDIT.md",
+        "META_MASTER_AUDIT.md",
     ):
         path = tmp_path / relative
         path.write_text("steady state v2\n", encoding="utf-8")

@@ -50,4 +50,5 @@ jobs:
         run: |
           $basetemp = Join-Path $env:RUNNER_TEMP "ci-provider-free-boundaries"
           python -m pytest -q -m "legacy or high_risk" --basetemp=$basetemp `
+            tests/test_closure_workflow.py::test_governing_documents_do_not_require_copied_approval_lines `
             tests/live/test_package_candidate.py::test_candidate_topology_rejects_credential_locator

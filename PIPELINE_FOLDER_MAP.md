@@ -59,6 +59,8 @@ This is the exact deterministic `[project.scripts]` mapping from `pyproject.toml
 | --- | --- |
 | `futures-dbn-catalog` | `futures_rebuild.dbn_catalog:main` |
 | `futures-high-risk-prepare` | `futures_rebuild.high_risk:main` |
+| `futures-master-audit` | `futures_rebuild.audit.__main__:main` |
+| `futures-meta-audit` | `futures_rebuild.meta_audit:main` |
 | `futures-pipeline` | `futures_rebuild.pipeline:main` |
 | `futures-readiness` | `futures_rebuild.readiness:main` |
 | `futures-retirement-audit` | `futures_rebuild.retirement:main` |
@@ -78,7 +80,7 @@ Each family appears once. Its exact root entry supplies the role, tracking/local
 | `reports/` | `REPORT_AND_DIAGNOSTIC_EVIDENCE_ROOT` | `HISTORICAL_HASH_BOUND` | `MIXED`; local-only: yes | `NO_AUTOMATIC_DELETE` | Reports mix tracked evidence, ignored diagnostics, and generated output; no family-wide cleanup applies. |
 | `state/` | `EVIDENCE_AND_RUNTIME_STATE_ROOT` | `CURRENT_SUPPORTING`, `HISTORICAL_HASH_BOUND`, `PREPARED_NOT_EXECUTED`, `LOCAL_RUNTIME_STATE` | `MIXED`; local-only: yes | `NO_AUTOMATIC_DELETE` | Mixed registries, receipts, immutable evidence, staging, runtime state, and placeholders. |
 | `scripts/` | `SCRIPT_ROOT` | `CURRENT_OPERATIONAL`, `CURRENT_SUPPORTING`, `HISTORICAL_HASH_BOUND`, `PREPARED_NOT_EXECUTED`, `REGENERABLE_CACHE`, `UNRESOLVED_MANUAL_REVIEW` | `MIXED`; local-only: no | `PRESERVE` | Mixed current helpers, prepare-only interfaces, and hash-bound historical command surfaces. |
-| `tests/` | `TEST_ROOT` | `CURRENT_SUPPORTING`, `HISTORICAL_HASH_BOUND`, `REGENERABLE_CACHE` | `MIXED`; local-only: no | `PRESERVE` | Provider-free current, high-risk, legacy, and local-evidence lanes coexist under explicit selection. |
+| `tests/` | `TEST_ROOT` | `CURRENT_SUPPORTING`, `REGENERABLE_CACHE` | `MIXED`; local-only: no | `PRESERVE` | Provider-free current, high-risk, legacy, and local-evidence lanes coexist under explicit selection. |
 | `docs/` | `DOCUMENTATION_ROOT` | `CURRENT_SUPPORTING`, `HISTORICAL_HASH_BOUND` | `MIXED`; local-only: no | `PRESERVE` | Current supporting documentation plus explicitly classified historical guidance. |
 | `FuturesLiveCockpit/` | `MIXED_COCKPIT_PACKAGING_ROOT` | `CURRENT_OPERATIONAL`, `GENERATED_OUTPUT`, `MIXED_PACKAGING_SOURCE_OUTPUT` | `MIXED`; local-only: yes | `NO_AUTOMATIC_DELETE` | Tracked packaging inputs coexist with ignored executable and onedir runtime output; never apply a directory-wide cleanup rule. |
 | `build/` | `CONCURRENT_BUILD_OUTPUT` | `UNRESOLVED_MANUAL_REVIEW` | `UNTRACKED_GENERATED`; local-only: yes | `MANUAL_REVIEW_REQUIRED` | Local build output may contain a current candidate, rollback material, diagnostics, or interrupted work; exact review is required. |
@@ -93,13 +95,13 @@ The counts below use only the canonical classification vocabulary and count regi
 
 | Classification | Entry count |
 | --- | --- |
-| `CURRENT_OPERATIONAL` | 39 |
-| `CURRENT_SUPPORTING` | 39 |
-| `HISTORICAL_HASH_BOUND` | 62 |
-| `HISTORICAL_UNBOUND` | 2 |
+| `CURRENT_OPERATIONAL` | 41 |
+| `CURRENT_SUPPORTING` | 41 |
+| `HISTORICAL_HASH_BOUND` | 61 |
+| `HISTORICAL_UNBOUND` | 3 |
 | `PREPARED_NOT_EXECUTED` | 6 |
 | `GENERATED_OUTPUT` | 10 |
-| `REGENERABLE_CACHE` | 15 |
+| `REGENERABLE_CACHE` | 17 |
 | `LOCAL_RUNTIME_STATE` | 7 |
 | `LOCAL_SECRET` | 8 |
 | `MIXED_PACKAGING_SOURCE_OUTPUT` | 2 |

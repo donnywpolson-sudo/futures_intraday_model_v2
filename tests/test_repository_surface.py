@@ -131,7 +131,7 @@ def test_valid_registry_loads_and_validates_current_checkout() -> None:
 
     assert surface["schema_version"] == "repository_surface/1.0.0"
     assert len(surface["entries"]) == (
-        204 if surface.get("current_direct_authority_registry_id") else 189
+        210 if surface.get("current_direct_authority_registry_id") else 189
     )
 
 
@@ -155,10 +155,10 @@ def test_final_evaluation_successor_surface_entries_are_exact() -> None:
     assert selected["tests/test_final_evaluation_recalibration.py"]["classification"] == "CURRENT_SUPPORTING"
 
 
-@pytest.mark.parametrize("successor_count", [203, 205])
-def test_direct_authority_registry_count_rejects_non_204(successor_count: int) -> None:
+@pytest.mark.parametrize("successor_count", [209, 211])
+def test_direct_authority_registry_count_rejects_non_210(successor_count: int) -> None:
     surface = _surface()
-    if successor_count == 203:
+    if successor_count == 209:
         surface["entries"] = [
             entry
             for entry in surface["entries"]
@@ -171,7 +171,7 @@ def test_direct_authority_registry_count_rejects_non_204(successor_count: int) -
         extra["tracked_expected"] = "ABSENT_EXPECTED"
         surface["entries"].append(extra)
     assert len(surface["entries"]) == successor_count
-    with pytest.raises(RepositorySurfaceError, match="registry entry count must remain 204"):
+    with pytest.raises(RepositorySurfaceError, match="registry entry count must remain 210"):
         expected_pipeline_folder_map_bytes(surface, ROOT)
 
 
@@ -379,8 +379,10 @@ def test_public_command_targets_are_explicitly_current() -> None:
     assert set(resolved) == {
         "futures-dbn-catalog",
         "futures-readiness",
+        "futures-master-audit",
         "futures-pipeline",
         "futures-retirement-audit",
+        "futures-meta-audit",
         "futures-high-risk-prepare",
     }
     for relative in resolved.values():
@@ -388,30 +390,6 @@ def test_public_command_targets_are_explicitly_current() -> None:
         assert entry is not None
         assert entry["match_type"] == "EXACT"
         assert entry["classification"] in {"CURRENT_OPERATIONAL", "CURRENT_SUPPORTING"}
-
-
-def test_retired_closure_and_master_audit_surfaces_are_not_current() -> None:
-    surface = _surface()
-    historical_test = _entry(surface, "tests/test_closure_workflow_v2_successor.py")
-    assert historical_test["classification"] == "HISTORICAL_HASH_BOUND"
-    assert historical_test["authority_role"] == "HISTORICAL_CLOSURE_EVIDENCE_TEST"
-
-    obsolete = (
-        "configs/closure_workflow_policy.json",
-        "configs/meta_master_audit_coverage.json",
-        "src/futures_rebuild/closure_workflow",
-        "tests/test_closure_workflow.py",
-    )
-    for relative in obsolete:
-        assert not (ROOT / relative).exists()
-    assert not any(
-        str(entry["path_or_pattern"]).startswith("src/futures_rebuild/closure_workflow")
-        for entry in surface["entries"]
-    )
-
-    attributes = (ROOT / ".gitattributes").read_text(encoding="utf-8")
-    for retired in ("CODEX_HANDOFF.md", "MASTER_AUDIT.md", "META_MASTER_AUDIT.md"):
-        assert retired not in attributes
 
 
 def test_public_command_targeting_retired_surface_is_rejected(tmp_path: Path) -> None:
@@ -601,7 +579,7 @@ def test_source_of_truth_public_commands_are_sorted_and_complete() -> None:
 
     assert list(commands) == sorted(commands)
     assert rendered_rows == expected_rows
-    assert len(rendered_rows) == len(commands) == 5
+    assert len(rendered_rows) == len(commands) == 7
 
 
 def test_source_of_truth_active_pointer_paths_are_exact_and_complete() -> None:
@@ -760,11 +738,11 @@ def test_default_cli_reports_all_generated_surface_validity() -> None:
     assert report["pipeline_folder_map_valid"] is True
     assert report["active_source_files_valid"] is True
     expected_entry_count = (
-        204 if _surface().get("current_direct_authority_registry_id") else 189
+        210 if _surface().get("current_direct_authority_registry_id") else 189
     )
     assert report["entry_count"] == expected_entry_count
     assert report["unresolved_entry_count"] == EXPECTED_UNRESOLVED_ENTRY_COUNT == 14
-    assert report["public_command_count"] == EXPECTED_PUBLIC_COMMAND_COUNT == 5
+    assert report["public_command_count"] == EXPECTED_PUBLIC_COMMAND_COUNT == 7
     assert report["tracked_root_mode"] == "GIT_LS_FILES"
     assert report["active_source_inventory_mode"] == "GIT_TRACKED_EXACT"
     assert report["mutations_performed"] is False
