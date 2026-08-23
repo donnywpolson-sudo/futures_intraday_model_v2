@@ -109,15 +109,17 @@ cadence comparisons never overwrote source evidence. No real negative-price
 row appeared, so negative-price support remains synthetic-test proven.
 
 The remotely recoverable non-public full development builder processes one
-market-year at a time and creates independently verified, inactive monthly
-candidates. Its first V3 attempt consumed its authority and failed closed after
-91 complete partitions because an intrabar definition update was incorrectly
-treated as invalidating the identity known at bar start. Those partitions are
-preserved inactive evidence and cannot seed a retry. The minimal correction
-defers that update to the next bar. After the correction is remotely verified,
-a successor packet must bind the new commit and a fresh one-use authorization
-for separate approval. This document grants no row-read, publication, or
-activation authority.
+market-year at a time. Its V3 timing failure and later V4 storage-ceiling
+failure are preserved inactive evidence and cannot seed a retry. The compact
+successor representation is designed and benchmarked as five logical
+Parquet/Zstandard tables per market-year, with monthly row groups and
+deterministic evidence identities reconstructed rather than repeated
+physically. The existing annual 2025 DBNs cover through 2026 and
+therefore cross the sealed boundary. Before another row-read packet, an exact
+source successor must end every time-bearing family (`definition`, OHLCV,
+`statistics`, and `status`) at `2025-07-13T22:00:00Z` exclusively and bind each
+DBN through its sidecar. This document grants no acquisition, row-read,
+publication, or activation authority.
 
 ## 6. Universe, tiers, and time boundaries
 

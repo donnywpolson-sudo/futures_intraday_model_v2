@@ -18,6 +18,11 @@ from .errors import IntegrityError
 from .foundation.economics import EconomicsRuleBook
 from .foundation.records import NANO
 from .causal_observation_foundation import ECONOMICS_RULEBOOK_ID, ECONOMICS_RULEBOOK_SHA256
+from .causal_observation_parquet import (
+    FILENAMES as PARQUET_FILENAMES,
+    FORMAT_VERSION as PARQUET_FORMAT_VERSION,
+    read_bundle,
+)
 
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -30,10 +35,11 @@ _FORBIDDEN = {
     "outcome", "target", "label", "feature", "fold", "prediction", "evaluation",
     "pnl", "return", "model", "promotion", "mechanism",
 }
-_FILENAMES = {
+_JSONL_FILENAMES = {
     "observations.jsonl", "missingness.jsonl", "roll.jsonl", "quality.jsonl",
     "cadence.jsonl",
 }
+_PARQUET_FILENAMES = frozenset(PARQUET_FILENAMES.values())
 
 
 def _read_canonical_lines(path: Path) -> list[dict[str, object]]:
@@ -53,12 +59,12 @@ def _read_canonical_lines(path: Path) -> list[dict[str, object]]:
 
 
 def _index_by_filename(
-    stage: Path, manifest: DataReleaseManifest
+    stage: Path, manifest: DataReleaseManifest, expected: frozenset[str] | set[str]
 ) -> dict[str, tuple[Path, object]]:
     result: dict[str, tuple[Path, object]] = {}
     for entry in manifest.files:
         filename = Path(entry.logical_path).name
-        if filename in result or filename not in _FILENAMES:
+        if filename in result or filename not in expected:
             raise IntegrityError("candidate manifest file set is unexpected or duplicate")
         candidates = [
             path for path in stage.rglob(filename)
@@ -67,7 +73,7 @@ def _index_by_filename(
         if len(candidates) != 1:
             raise IntegrityError("candidate file cannot be independently matched to its manifest")
         result[filename] = (candidates[0], entry)
-    if set(result) != _FILENAMES:
+    if set(result) != set(expected):
         raise IntegrityError("candidate manifest omits a required evidence file")
     observed = {path.resolve() for path in stage.rglob("*") if path.is_file()}
     matched = {value[0].resolve() for value in result.values()}
@@ -82,16 +88,34 @@ def verify_observation_candidate(
     manifest: DataReleaseManifest,
     economics_rulebook: EconomicsRuleBook,
 ) -> dict[str, object]:
+    parquet_format = manifest.schema_version == "causal_observation_partition/1.1.0"
     if (
         manifest.phase != "causally_gated_normalized"
         or manifest.release_kind != "development_only_causal_observation_partition"
-        or manifest.schema_version != "causal_observation_partition/1.0.0"
+        or manifest.schema_version
+        not in {
+            "causal_observation_partition/1.0.0",
+            "causal_observation_partition/1.1.0",
+        }
         or manifest.release_id != sha256_json(manifest.core_dict())
     ):
         raise IntegrityError("candidate manifest identity or capability is invalid")
     metadata = manifest.metadata
     if (
-        metadata.get("schema_version") != "causal_observation_evidence/1.0.0"
+        metadata.get("schema_version")
+        != (
+            "causal_observation_evidence/1.1.0"
+            if parquet_format
+            else "causal_observation_evidence/1.0.0"
+        )
+        or (
+            parquet_format
+            and (
+                metadata.get("storage_format") != PARQUET_FORMAT_VERSION
+                or metadata.get("compression") != "zstd-9"
+                or metadata.get("deterministic_identity_columns_reconstructed") is not True
+            )
+        )
         or metadata.get("publication_authorized") is not False
         or metadata.get("activation_authorized") is not False
         or metadata.get("economics_rulebook_sha256") != ECONOMICS_RULEBOOK_SHA256
@@ -105,12 +129,21 @@ def verify_observation_candidate(
     ):
         raise IntegrityError("candidate manifest metadata grants or omits capability")
 
-    files = _index_by_filename(stage, manifest)
-    observations = _read_canonical_lines(files["observations.jsonl"][0])
-    missingness = _read_canonical_lines(files["missingness.jsonl"][0])
-    rolls = _read_canonical_lines(files["roll.jsonl"][0])
-    quality = _read_canonical_lines(files["quality.jsonl"][0])
-    cadence = _read_canonical_lines(files["cadence.jsonl"][0])
+    if parquet_format:
+        files = _index_by_filename(stage, manifest, _PARQUET_FILENAMES)
+        tables = read_bundle(files[PARQUET_FILENAMES["observations"]][0].parent)
+        observations = tables["observations"]
+        missingness = tables["missingness"]
+        rolls = tables["roll"]
+        quality = tables["quality"]
+        cadence = tables["cadence"]
+    else:
+        files = _index_by_filename(stage, manifest, _JSONL_FILENAMES)
+        observations = _read_canonical_lines(files["observations.jsonl"][0])
+        missingness = _read_canonical_lines(files["missingness.jsonl"][0])
+        rolls = _read_canonical_lines(files["roll.jsonl"][0])
+        quality = _read_canonical_lines(files["quality.jsonl"][0])
+        cadence = _read_canonical_lines(files["cadence.jsonl"][0])
     if not observations:
         raise IntegrityError("candidate has no observations")
     row_ids: list[str] = []

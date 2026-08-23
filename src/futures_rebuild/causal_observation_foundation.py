@@ -8,14 +8,14 @@ lineage and cannot authorize real source rows.
 
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Mapping, Sequence
 
 from .boundary import OperationClassification, OperationReceipt, RepoBoundary
-from .canonical import canonical_bytes, sha256_file, sha256_json
+from .canonical import sha256_file, sha256_json
+from .causal_observation_parquet import FORMAT_VERSION, FILENAMES, write_bundle
 from .data_layout import DataReleaseManifest, PhasePublisher
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
 from .foundation.records import ProviderBar, exact_int, validate_timestamp_ns
@@ -44,8 +44,8 @@ ECONOMICS_RULEBOOK_ID = (
 DEVELOPMENT_END_EXCLUSIVE = "2025-07-13T22:00:00Z"
 SYNTHETIC_RELEASE_ID = "0" * 64
 RELEASE_KIND = "development_only_causal_observation_partition"
-SCHEMA_VERSION = "causal_observation_partition/1.0.0"
-EVIDENCE_SCHEMA_VERSION = "causal_observation_evidence/1.0.0"
+SCHEMA_VERSION = "causal_observation_partition/1.1.0"
+EVIDENCE_SCHEMA_VERSION = "causal_observation_evidence/1.1.0"
 _SEAL = object()
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _MARKET = re.compile(r"^[0-9A-Z]{1,16}$")
@@ -669,11 +669,6 @@ def _validate_cadence(row: Mapping[str, object]) -> dict[str, object]:
     return dict(row)
 
 
-def _write_lines(path: Path, rows: Sequence[Mapping[str, object]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(b"".join(canonical_bytes(dict(row)) + b"\n" for row in rows))
-
-
 def prepare_observation_partition(
     *,
     publisher: PhasePublisher,
@@ -721,23 +716,26 @@ def prepare_observation_partition(
         raise IntegrityError("cadence ledger references an unknown causal observation")
 
     stage = publisher.create_stage("causal_observation")
-    names_and_rows = (
-        ("observations.jsonl", observation_rows),
-        ("missingness.jsonl", missingness_rows),
-        ("roll.jsonl", roll_rows),
-        ("quality.jsonl", quality_rows),
-        ("cadence.jsonl", cadence_rows),
-    )
+    tables = {
+        "observations": observation_rows,
+        "missingness": missingness_rows,
+        "roll": roll_rows,
+        "quality": quality_rows,
+        "cadence": cadence_rows,
+    }
+    write_bundle(stage / "candidate", tables=tables)
     logical_paths: dict[str, str] = {}
     staged_paths: dict[str, str] = {}
-    for filename, rows in names_and_rows:
+    for filename in FILENAMES.values():
         relative = f"candidate/{filename}"
-        _write_lines(stage / relative, rows)
         logical = f"data/causally_gated_normalized/{market}/{year}/{interval}/{filename}"
         logical_paths[relative] = logical
         staged_paths[logical] = relative
     metadata = {
         "schema_version": EVIDENCE_SCHEMA_VERSION,
+        "storage_format": FORMAT_VERSION,
+        "compression": "zstd-9",
+        "deterministic_identity_columns_reconstructed": True,
         "causal_contract_id": context.causal_contract_id,
         "source_contract_id": context.source_contract_id,
         "source_release_id": context.source_release_id,

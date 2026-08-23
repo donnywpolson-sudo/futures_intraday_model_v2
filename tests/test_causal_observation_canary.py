@@ -35,6 +35,7 @@ from futures_rebuild.causal_observation_foundation import (
     issue_synthetic_observation_context,
     required_canary_scope,
 )
+from futures_rebuild.causal_observation_parquet import read_bundle
 from futures_rebuild.causal_observation_verifier import verify_observation_candidate
 from futures_rebuild.errors import ContractError, IntegrityError, UnauthorizedOperation
 from futures_rebuild.foundation.records import INT32_NULL, INT64_NULL, ProviderBar, ProviderDefinition
@@ -440,16 +441,10 @@ def test_synthetic_market_candidate_is_observation_only_and_independently_verifi
     assert certificate["feature_count"] == 0
     assert certificate["prediction_count"] == 0
     assert certificate["evaluation_count"] == 0
-    missingness = [
-        json.loads(line)
-        for line in (prepared.stage / "candidate/missingness.jsonl")
-        .read_text(encoding="utf-8")
-        .splitlines()
-    ]
+    tables = read_bundle(prepared.stage / "candidate")
+    missingness = tables["missingness"]
     assert sum(row["state"] == "OBSERVED_VALID" for row in missingness) == 2
     assert sum(row["state"] == "UNKNOWN_FAIL_CLOSED" for row in missingness) == 1
-    observations = (prepared.stage / "candidate/observations.jsonl").read_text(
-        encoding="utf-8"
-    )
-    assert '"official_schedule_state":"UNKNOWN_FAIL_CLOSED"' in observations
-    assert '"open_nano":-100000000' in observations
+    observations = tables["observations"]
+    assert all(row["official_schedule_state"] == "UNKNOWN_FAIL_CLOSED" for row in observations)
+    assert any(row["open_nano"] == -100_000_000 for row in observations)

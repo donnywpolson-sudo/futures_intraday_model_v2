@@ -31,14 +31,16 @@ observation-only safety implementation is built, validated, committed, and
 remotely recoverable. The causal observation release is not built. The
 seven-market development-only canary ran once under consumed authority,
 passed independent verification, and remains unpublished and inactive. The
-non-public full development builder is remotely recoverable. Its first V3
-attempt consumed its one-use authority and failed closed when a definition
-update received during a bar was incorrectly treated as invalidating the
-bar-start identity. Ninety-one complete partitions remain independently
-verified inactive failure evidence and grant no reuse authority. The minimal
-correction defers an intrabar definition update to the next bar. A successor
-full-build packet must bind the remotely verified correction commit and a new
-one-use row-read authorization before another execution approval.
+non-public full development builder is remotely recoverable. The later V4
+attempt also consumed its one-use authority and failed closed at its output
+ceiling while still processing the first market. Its JSONL candidates remain
+inactive failure evidence and grant no reuse authority. A compact five-table
+Parquet/Zstandard successor now preserves the logical evidence while deriving
+redundant deterministic identities instead of storing them repeatedly. The
+current annual 2025 DBNs cross the sealed boundary, so they are rejected before
+authorization consumption, output creation, or decoding. A future source
+successor must bind every time-bearing family and its identity sidecar to
+`2025-07-13T22:00:00Z` exclusively before another full-build row-read packet.
 
 Real research still needs its durable trial declaration and immutable evidence.
 Before registration, every row-dependent sample, fold, feature, execution,
@@ -172,12 +174,14 @@ representative development-only canary passed once; its one-use authorization
 is consumed and its candidates cannot be reused as full-build partitions. The
 full 41-market development release remains incomplete and has no current
 row-read authority. Its non-public runner is remotely recoverable. The prior
-V3 attempt failed closed after producing 91 independently verified inactive
-partitions; its consumed receipt and candidates cannot authorize or seed a
-retry. The corrected timing rule must be committed and remotely verified, then
-a new exact packet and fresh one-use authorization must receive separate
-execution approval. The Final Sealed 252-Session Holdout and forward values
-remain inaccessible.
+timing correction is committed and remotely recoverable at the current
+baseline. The later V4 attempt consumed its one-use authorization and failed
+closed at its storage ceiling; its inactive candidates cannot authorize or
+seed a retry. Compact Parquet storage and the exact 2025 boundary guard are
+prepared but remain uncommitted until their successor packet is approved. A
+new exact packet and fresh one-use authorization would require separate
+approval. The Final Sealed 252-Session Holdout and forward values remain
+inaccessible.
 
 When a milestone changes the active stage, status, or next goal, check
 `PROJECT_OUTLINE.md`, `CURRENT_WORKFLOW.md`, and `README.md`; update only

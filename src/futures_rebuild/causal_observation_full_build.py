@@ -64,6 +64,19 @@ MINIMUM_FREE_AFTER_PEAK_BYTES = 100 * 1024**3
 MAXIMUM_RUNTIME_SECONDS = 86_400
 STANDARD_ROOT_COUNT = 41
 DEFERRED_MICRO_COUNT = 17
+DEVELOPMENT_END_EXCLUSIVE = "2025-07-13T22:00:00Z"
+BOUNDARY_START_INCLUSIVE = "2025-01-01T00:00:00Z"
+BOUNDARY_SOURCE_FAMILIES = frozenset(
+    {
+        "definition",
+        "ohlcv_1d",
+        "ohlcv_1h",
+        "ohlcv_1m",
+        "ohlcv_1s",
+        "statistics",
+        "status",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -219,6 +232,64 @@ def _load_exact_source_entries(
     ):
         raise IntegrityError("full development source inventory counts or identity differ")
     return selected
+
+
+def validate_complete_development_boundary_metadata(
+    entries: Sequence[Mapping[str, object]],
+    *,
+    standard_roots: frozenset[str],
+) -> dict[str, object]:
+    """Require exact boundary-safe 2025 sources before any payload operation."""
+
+    boundary: dict[tuple[str, str, str], Mapping[str, object]] = {}
+    for entry in entries:
+        market = str(entry.get("market", ""))
+        family = str(entry.get("family", ""))
+        kind = str(entry.get("kind", ""))
+        if market not in standard_roots:
+            raise UnauthorizedOperation("full development source includes a nonstandard root")
+        if int(entry.get("year", 0)) != 2025:
+            continue
+        if family not in BOUNDARY_SOURCE_FAMILIES or kind not in {"DBN", "SIDECAR"}:
+            raise UnauthorizedOperation("2025 boundary source family or kind is invalid")
+        if (
+            entry.get("payload_start_inclusive") != BOUNDARY_START_INCLUSIVE
+            or entry.get("payload_end_exclusive") != DEVELOPMENT_END_EXCLUSIVE
+            or entry.get("boundary_safe_exact_acquisition") is not True
+        ):
+            raise UnauthorizedOperation(
+                "2025 source crosses or does not exactly bind the development boundary"
+            )
+        key = (market, family, kind)
+        if key in boundary:
+            raise IntegrityError("2025 boundary source identity is duplicate")
+        boundary[key] = entry
+    expected = {
+        (market, family, kind)
+        for market in standard_roots
+        for family in BOUNDARY_SOURCE_FAMILIES
+        for kind in ("DBN", "SIDECAR")
+    }
+    if set(boundary) != expected:
+        raise UnauthorizedOperation(
+            "full development source omits exact January-July 2025 coverage"
+        )
+    for market in sorted(standard_roots):
+        for family in sorted(BOUNDARY_SOURCE_FAMILIES):
+            dbn = boundary[(market, family, "DBN")]
+            sidecar = boundary[(market, family, "SIDECAR")]
+            if (
+                sidecar.get("paired_dbn_sha256") != dbn.get("sha256")
+                or sidecar.get("paired_dbn_size_bytes") != dbn.get("size_bytes")
+            ):
+                raise IntegrityError("2025 boundary sidecar does not bind its DBN")
+    count = len(standard_roots) * len(BOUNDARY_SOURCE_FAMILIES)
+    return {
+        "boundary_dbn_count": count,
+        "boundary_sidecar_count": count,
+        "development_end_exclusive": DEVELOPMENT_END_EXCLUSIVE,
+        "standard_root_count": len(standard_roots),
+    }
 
 
 def _market_windows(
@@ -513,6 +584,11 @@ def run_authorized_full_build(
     _validate_plan(root, plan)
     economics_rulebook = _load_economics_rulebook(root)
     selected = _load_exact_source_entries(root, plan)
+    source_contract = _json(root / "configs/source_contract.json")
+    validate_complete_development_boundary_metadata(
+        selected,
+        standard_roots=frozenset(source_contract["universe"]["standard_roots"]),
+    )
     closure_context = issue_current_source_closure_context(root)
     selected = select_exact_standard_source_entries(
         root,

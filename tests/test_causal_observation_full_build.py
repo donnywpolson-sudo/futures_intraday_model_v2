@@ -46,8 +46,10 @@ from futures_rebuild.causal_observation_full_build import (
     _month_windows,
     _slice_decoded,
     run_authorized_full_build,
+    validate_complete_development_boundary_metadata,
     validate_reusable_partition,
 )
+from futures_rebuild.causal_observation_parquet import read_bundle
 from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 from futures_rebuild.foundation.records import ProviderBar, ProviderDefinition
 from futures_rebuild.foundation.economics import EconomicsRuleBook
@@ -346,8 +348,9 @@ def test_month_partitioning_and_cross_boundary_roll_gap_state_are_deterministic(
         economics_rulebook=RULEBOOK,
         prior_observation=first.last_observation,
     )
-    rolls = [json.loads(line) for line in (second.prepared.stage / "candidate/roll.jsonl").read_text(encoding="utf-8").splitlines()]
-    gaps = [json.loads(line) for line in (second.prepared.stage / "candidate/missingness.jsonl").read_text(encoding="utf-8").splitlines()]
+    tables = read_bundle(second.prepared.stage / "candidate")
+    rolls = tables["roll"]
+    gaps = tables["missingness"]
     assert rolls[0]["roll_flag"] is True
     assert rolls[0]["price_discontinuity_flag"] is True
     assert rolls[0]["crossing_status"] == "ROLL_BOUNDARY_UNADJUSTED"
@@ -388,9 +391,19 @@ def test_output_and_lock_fail_before_authorization_or_payload_access(
     plan = _plan()
     plan_path = tmp_path / "plan.json"
     plan_path.write_text(json.dumps(plan, sort_keys=True) + "\n", encoding="utf-8")
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    (configs / "source_contract.json").write_text(
+        json.dumps({"universe": {"standard_roots": ["ES"]}}) + "\n",
+        encoding="utf-8",
+    )
     calls: list[str] = []
     monkeypatch.setattr("futures_rebuild.causal_observation_full_build._validate_plan", lambda *_: None)
     monkeypatch.setattr("futures_rebuild.causal_observation_full_build._load_exact_source_entries", lambda *_: ())
+    monkeypatch.setattr(
+        "futures_rebuild.causal_observation_full_build.validate_complete_development_boundary_metadata",
+        lambda *_, **__: {},
+    )
     monkeypatch.setattr("futures_rebuild.causal_observation_full_build._load_economics_rulebook", lambda *_: RULEBOOK)
     monkeypatch.setattr("futures_rebuild.causal_observation_full_build.issue_current_source_closure_context", lambda *_: object())
     monkeypatch.setattr("futures_rebuild.causal_observation_full_build.select_exact_standard_source_entries", lambda *_, **__: ())
@@ -416,6 +429,62 @@ def test_output_and_lock_fail_before_authorization_or_payload_access(
             plan_path=plan_path,
         )
     assert calls == []
+
+
+def test_2025_boundary_metadata_is_exact_and_crossing_files_fail_closed() -> None:
+    families = {
+        "definition", "ohlcv_1d", "ohlcv_1h", "ohlcv_1m", "ohlcv_1s",
+        "statistics", "status",
+    }
+    entries: list[dict[str, object]] = []
+    for family in sorted(families):
+        digest = sha256_json({"family": family})
+        entries.extend(
+            [
+                {
+                    "market": "ES",
+                    "family": family,
+                    "kind": "DBN",
+                    "year": 2025,
+                    "path": f"data/dbn/{family}/ES/2025/exact.dbn.zst",
+                    "sha256": digest,
+                    "size_bytes": 10,
+                    "payload_start_inclusive": "2025-01-01T00:00:00Z",
+                    "payload_end_exclusive": "2025-07-13T22:00:00Z",
+                    "boundary_safe_exact_acquisition": True,
+                },
+                {
+                    "market": "ES",
+                    "family": family,
+                    "kind": "SIDECAR",
+                    "year": 2025,
+                    "path": f"data/dbn/{family}/ES/2025/exact.dbn.zst.manifest.json",
+                    "sha256": sha256_json({"sidecar": family}),
+                    "size_bytes": 1,
+                    "paired_dbn_sha256": digest,
+                    "paired_dbn_size_bytes": 10,
+                    "payload_start_inclusive": "2025-01-01T00:00:00Z",
+                    "payload_end_exclusive": "2025-07-13T22:00:00Z",
+                    "boundary_safe_exact_acquisition": True,
+                },
+            ]
+        )
+    result = validate_complete_development_boundary_metadata(
+        entries, standard_roots=frozenset({"ES"})
+    )
+    assert result["boundary_dbn_count"] == 7
+    assert result["boundary_sidecar_count"] == 7
+    crossing = [dict(entry) for entry in entries]
+    crossing[0]["payload_end_exclusive"] = "2026-01-01T00:00:00Z"
+    with pytest.raises(UnauthorizedOperation, match="development boundary"):
+        validate_complete_development_boundary_metadata(
+            crossing, standard_roots=frozenset({"ES"})
+        )
+    missing = entries[:-2]
+    with pytest.raises(UnauthorizedOperation, match="omits exact"):
+        validate_complete_development_boundary_metadata(
+            missing, standard_roots=frozenset({"ES"})
+        )
 
 
 def test_partition_reuse_requires_independent_exact_release_identity(tmp_path: Path) -> None:

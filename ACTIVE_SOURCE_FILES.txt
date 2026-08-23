@@ -16,6 +16,7 @@ scripts/build_live_cockpit.ps1
 scripts/install_live_cockpit.ps1
 src/futures_rebuild/audit/__main__.py
 src/futures_rebuild/causal_observation_full_build.py
+src/futures_rebuild/causal_observation_parquet.py
 src/futures_rebuild/causal_source_closure.py
 src/futures_rebuild/certified_research_gateway.py
 src/futures_rebuild/current_research_surface.py
@@ -762,6 +763,7 @@ tests/test_causal_market_year_materialization.py
 tests/test_causal_observation_canary.py
 tests/test_causal_observation_foundation.py
 tests/test_causal_observation_full_build.py
+tests/test_causal_observation_parquet.py
 tests/test_causal_source_closure.py
 tests/test_certified_research_gateway.py
 tests/test_closure_workflow.py

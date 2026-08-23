@@ -332,22 +332,37 @@ def _observation(context, **changes: object) -> dict[str, object]:
 
 def _evidence(row: Mapping[str, object]):
     row_id = str(row["row_id"])
-    missing = {
-        "evidence_id": "7" * 64,
+    evidence_sha = sha256_json(
+        {
+            "market": "CL",
+            "source_row_sha256": row["source_row_sha256"],
+            "interval_start_ns": row["bar_start_ns"],
+            "interval_end_ns": row["bar_end_ns"],
+            "authority": "DECODED_SOURCE_ROW",
+        }
+    )
+    missing_core = {
         "observation_row_id": row_id,
         "market": "CL",
         "interval_start_ns": row["bar_start_ns"],
         "interval_end_ns": row["bar_end_ns"],
         "state": "OBSERVED_VALID",
         "authority": "DECODED_SOURCE_ROW",
-        "evidence_sha256": "e" * 64,
+        "evidence_sha256": evidence_sha,
     }
+    missing = {"evidence_id": sha256_json(missing_core), **missing_core}
     roll = {
         "row_id": row_id,
         "actual_contract_before": "CLF4",
         "actual_contract_after": "CLF4",
         "effective_time_ns": None,
-        "causal_selection_evidence_sha256": "f" * 64,
+        "causal_selection_evidence_sha256": sha256_json(
+            {
+                "definition_row_sha256": row["definition_row_sha256"],
+                "definition_received_at_ns": row["definition_received_at_ns"],
+                "prior_contract": "CLF4",
+            }
+        ),
         "roll_flag": False,
         "price_discontinuity_flag": False,
         "crossing_status": "NO_CROSSING",
@@ -368,8 +383,7 @@ def _evidence(row: Mapping[str, object]):
             f"ECONOMICS_RULEBOOK_SHA256_{ECONOMICS_RULEBOOK_SHA256}",
         ],
     }
-    cadence = {
-        "comparison_id": "1" * 64,
+    cadence_core = {
         "row_id": row_id,
         "source_cadence": "1m",
         "comparison_cadence": "1h",
@@ -377,6 +391,7 @@ def _evidence(row: Mapping[str, object]):
         "result": "DISAGREEMENT",
         "exception_state": "PRESERVE_BOTH_NO_OVERWRITE",
     }
+    cadence = {"comparison_id": sha256_json(cadence_core), **cadence_core}
     return missing, roll, quality, cadence
 
 
@@ -401,15 +416,16 @@ def test_observation_only_producer_and_independent_verifier(
     context = issue_synthetic_observation_context(boundary=boundary, fixture_id="2" * 64)
     row = _observation(context)
     missing, roll, quality, cadence = _evidence(row)
-    gap = {
+    gap_core = {
         **missing,
-        "evidence_id": "6" * 64,
         "observation_row_id": None,
         "interval_start_ns": int(row["bar_end_ns"]),
         "interval_end_ns": int(row["bar_end_ns"]) + 60_000_000_000,
         "state": "UNKNOWN_FAIL_CLOSED",
         "authority": "SCHEDULE_AUTHORITY_UNRESOLVED",
     }
+    gap_core.pop("evidence_id")
+    gap = {"evidence_id": sha256_json(gap_core), **gap_core}
     prepared = prepare_observation_partition(
         publisher=publisher,
         context=context,
