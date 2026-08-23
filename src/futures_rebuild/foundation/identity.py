@@ -29,6 +29,8 @@ class DefinitionIndex:
     Databento instrument IDs are only unique within one UTC index date.  The
     provider index timestamp (``ts_recv``) is the knowledge/order clock;
     ``ts_event`` is retained for audit and is never used as a causal gate.
+    A definition received after a bar starts is deferred to the next bar: it
+    cannot rewrite the identity that was knowable at the current bar start.
     """
 
     def __init__(self, definitions: Sequence[ProviderDefinition]) -> None:
@@ -197,15 +199,6 @@ def _replay_definition(
         raise ContractError("bar instrument definition is deleted at bar start")
     _validate_active_definition(selected, event_at_ns=bar.event_at_ns)
 
-    intrabar = [
-        item
-        for item in definitions
-        if bar.event_at_ns < item.ts_recv_ns <= decision_ns
-    ]
-    if intrabar:
-        raise ContractError(
-            "critical definition update became known after bar start and by decision"
-        )
     return selected
 
 

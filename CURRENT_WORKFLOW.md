@@ -31,12 +31,14 @@ observation-only safety implementation is built, validated, committed, and
 remotely recoverable. The causal observation release is not built. The
 seven-market development-only canary ran once under consumed authority,
 passed independent verification, and remains unpublished and inactive. The
-non-public full development builder is remotely recoverable. A V3 full-build
-packet was prepared against the preceding code commit but remains unexecuted;
-this documentation transaction makes it preparation evidence only. After this
-documentation commit is remotely verified, the current ordinary task is to
-rebind that exact scope to the new commit and issue a fresh one-use row-read
-authorization for separate approval.
+non-public full development builder is remotely recoverable. Its first V3
+attempt consumed its one-use authority and failed closed when a definition
+update received during a bar was incorrectly treated as invalidating the
+bar-start identity. Ninety-one complete partitions remain independently
+verified inactive failure evidence and grant no reuse authority. The minimal
+correction defers an intrabar definition update to the next bar. A successor
+full-build packet must bind the remotely verified correction commit and a new
+one-use row-read authorization before another execution approval.
 
 Real research still needs its durable trial declaration and immutable evidence.
 Before registration, every row-dependent sample, fold, feature, execution,
@@ -168,11 +170,14 @@ or backtests directly; it may feed only that exact approved causal builder.
 Old derived releases and the retired foundation runner remain no-read. The
 representative development-only canary passed once; its one-use authorization
 is consumed and its candidates cannot be reused as full-build partitions. The
-full 41-market development build remains unexecuted and has no row-read
-authority. Its non-public runner is remotely recoverable. The prior V3 packet
-must be rebound to the remotely verified documentation commit with a fresh,
-unconsumed one-use authorization before a separate execution approval. The
-Final Sealed 252-Session Holdout and forward values remain inaccessible.
+full 41-market development release remains incomplete and has no current
+row-read authority. Its non-public runner is remotely recoverable. The prior
+V3 attempt failed closed after producing 91 independently verified inactive
+partitions; its consumed receipt and candidates cannot authorize or seed a
+retry. The corrected timing rule must be committed and remotely verified, then
+a new exact packet and fresh one-use authorization must receive separate
+execution approval. The Final Sealed 252-Session Holdout and forward values
+remain inaccessible.
 
 When a milestone changes the active stage, status, or next goal, check
 `PROJECT_OUTLINE.md`, `CURRENT_WORKFLOW.md`, and `README.md`; update only

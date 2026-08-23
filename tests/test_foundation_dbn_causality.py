@@ -283,7 +283,7 @@ def test_causal_bar_uses_actual_instrument_economics_and_exact_availability(tmp_
     assert result.disposition.value == "ELIGIBLE"
 
 
-def test_definition_replay_is_same_day_receive_ordered_and_intrabar_fail_closed(
+def test_definition_replay_is_same_day_receive_ordered_and_defers_intrabar_updates(
     tmp_path: Path,
 ) -> None:
     snapshot, _ = _snapshot(tmp_path)
@@ -324,8 +324,19 @@ def test_definition_replay_is_same_day_receive_ordered_and_intrabar_fail_closed(
         row_ordinal=1,
         row_sha256="2" * 64,
     )
-    with pytest.raises(ContractError, match="after bar start"):
-        DefinitionIndex((definition, intrabar)).resolve(bar, decision_at=decision)
+    index = DefinitionIndex((definition, intrabar))
+    selected = index.resolve(bar, decision_at=decision)
+    assert selected.row_sha256 == definition.row_sha256
+    assert selected.raw_symbol == "ESZ4"
+
+    next_bar = replace(
+        bar,
+        event_at_ns=START_NS + 60_000_000_000,
+        row_sha256="7" * 64,
+    )
+    selected_next = index.resolve(next_bar, decision_at=decision)
+    assert selected_next.row_sha256 == intrabar.row_sha256
+    assert selected_next.raw_symbol == "ESZ4_CHANGED"
 
     tombstone = replace(
         definition,

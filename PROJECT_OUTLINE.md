@@ -23,7 +23,7 @@ authority.
 | Observation-only safety implementation | **BUILT / VALIDATED / REMOTELY RECOVERABLE** |
 | Causal observation release | **NOT BUILT** |
 | Development-only canary | **EXECUTED ONCE / PASSED / INACTIVE** |
-| Full development builder | **IMPLEMENTED / NOT ROW-AUTHORIZED / NOT EXECUTED** |
+| Full development builder | **IMPLEMENTED / FIRST ATTEMPT FAILED CLOSED / CORRECTION PREPARED** |
 | Outcomes | **NOT STARTED** |
 | Features | **NOT STARTED** |
 | WFA | **NOT STARTED** |
@@ -36,7 +36,9 @@ may feed only the frozen development-only causal-observation contract through
 the committed observation-only safety implementation. The representative
 seven-market development canary ran once under consumed authority and passed
 independent verification; its candidates remain unpublished and inactive. The
-full development build has not run.
+full development release is not built. Its first full-build attempt failed
+closed and its complete inactive partitions are retained only as failure
+evidence.
 
 The canonical DBN source is frozen and validated, and active source closure
 blocks old derived inputs and retired execution paths. Prior foundation
@@ -108,12 +110,14 @@ row appeared, so negative-price support remains synthetic-test proven.
 
 The remotely recoverable non-public full development builder processes one
 market-year at a time and creates independently verified, inactive monthly
-candidates. A V3 row-read packet was prepared against the preceding code
-commit but remains unexecuted and must not be reused after this documentation
-transaction. After these documents are remotely verified, its exact scope must
-be rebound to the new commit with a fresh one-use authorization for separate
-approval. This document grants no row-read, publication, or activation
-authority.
+candidates. Its first V3 attempt consumed its authority and failed closed after
+91 complete partitions because an intrabar definition update was incorrectly
+treated as invalidating the identity known at bar start. Those partitions are
+preserved inactive evidence and cannot seed a retry. The minimal correction
+defers that update to the next bar. After the correction is remotely verified,
+a successor packet must bind the new commit and a fresh one-use authorization
+for separate approval. This document grants no row-read, publication, or
+activation authority.
 
 ## 6. Universe, tiers, and time boundaries
 
