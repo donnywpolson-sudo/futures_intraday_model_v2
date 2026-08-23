@@ -121,6 +121,7 @@ configs/causal_active_pilot_approval_v5.json
 configs/causal_active_pilot_approval_v6.json
 configs/causal_active_price_policy_approval.json
 configs/causal_market_year_materialization_approval.json
+configs/causal_observation_contract_v1.json
 configs/causal_price_research_policy.json
 configs/closure_workflow_policy.json
 configs/cme_calendar_41_product_schedule_capture_approval.json
@@ -487,6 +488,9 @@ src/futures_rebuild/cash_open_source_compatibility_census.py
 src/futures_rebuild/cash_open_source_compatibility_census_v2.py
 src/futures_rebuild/cash_open_source_compatibility_correction.py
 src/futures_rebuild/causal_market_year_materialization.py
+src/futures_rebuild/causal_observation_canary.py
+src/futures_rebuild/causal_observation_foundation.py
+src/futures_rebuild/causal_observation_verifier.py
 src/futures_rebuild/clock.py
 src/futures_rebuild/closure_workflow/__init__.py
 src/futures_rebuild/closure_workflow/__main__.py
@@ -754,6 +758,8 @@ tests/test_cash_open_impulse_readiness.py
 tests/test_cash_open_source_compatibility.py
 tests/test_cash_open_source_compatibility_census_v2.py
 tests/test_causal_market_year_materialization.py
+tests/test_causal_observation_canary.py
+tests/test_causal_observation_foundation.py
 tests/test_causal_source_closure.py
 tests/test_certified_research_gateway.py
 tests/test_closure_workflow.py

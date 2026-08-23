@@ -248,6 +248,7 @@ def _chunks(
         "ohlcv-1d": {OHLCV_DTYPE},
         "ohlcv-1h": {OHLCV_DTYPE},
         "ohlcv-1m": {OHLCV_DTYPE},
+        "ohlcv-1s": {OHLCV_DTYPE},
         "status": {STATUS_DTYPE},
         "statistics": {STATISTICS_DTYPE},
     }.get(schema)
@@ -429,7 +430,7 @@ def iter_bars(
     schema: str = "ohlcv-1m",
     batch_rows: int = 100_000,
 ) -> Iterator[ProviderBar]:
-    if schema not in {"ohlcv-1d", "ohlcv-1m"}:
+    if schema not in {"ohlcv-1d", "ohlcv-1h", "ohlcv-1m", "ohlcv-1s"}:
         raise ContractError("DBN bar decoder schema is unsupported")
     ordinal = 0
     for chunk in _chunks(
