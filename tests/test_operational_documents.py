@@ -573,7 +573,7 @@ def _assert_project_outline_is_concise_current_runbook() -> None:
         "No clean-restart DBN row read has occurred",
         "Final Sealed 252-Session Holdout",
         "SEALED / PRISTINE / UNREAD",
-        "AUDIT AND FREEZE THE 41-MARKET DEVELOPMENT-ONLY CAUSAL OBSERVATION FOUNDATION CONTRACT",
+        "NEXT GATE AFTER DOCUMENTATION COMMIT AND PUSH: DEVELOPMENT-ONLY CANARY ROW-READ APPROVAL",
     ):
         assert required.lower() in lowered
 

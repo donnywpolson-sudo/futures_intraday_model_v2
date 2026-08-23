@@ -25,8 +25,12 @@ preservation/rollback boundary. Replying `Approve` is sufficient.
 The project uses one research-selection-pristine **Final Sealed 252-Session Holdout**: trade dates 2025-07-14 through 2026-07-13, manifest `0ff48f99d8b6d3a262ddf0a060bea8e733fc95aa7c4b4d43f19a0f78b107d4d1`. Development ends exclusively at 2025-07-13T22:00:00Z and forward monitoring begins at 2026-07-14T00:00:00Z. The manifest is purpose-limited, grants no row or evaluation access, creates no market-specific or micro holdout, and is not a general exchange calendar. Complete 2018-cutoff project-session continuity remains unresolved for portions of 2023-2024 and is not claimed.
 
 `PROJECT_OUTLINE.md` is the practical current pipeline reference. The previous
-counted mechanism remains closed after Tier 0 ES failure, the new mechanism is
-not started, and the causal-observation contract audit is the next stage.
+counted mechanism remains closed after Tier 0 ES failure, and the new mechanism
+is not started. The causal-observation contract is frozen and its
+observation-only safety implementation is built, validated, committed, and
+remotely recoverable. The causal observation release is not built; the
+development-only canary is prepared but has no row-read authority and has not
+run. Documentation synchronization is the current ordinary task.
 
 Real research still needs its durable trial declaration and immutable evidence.
 Before registration, every row-dependent sample, fold, feature, execution,
@@ -149,14 +153,18 @@ or blocker that needs attention.
 ## Current data boundary
 
 Canonical source closure is complete and active. The canonical DBN source is
-frozen and validated, but the new clean-restart 41-market causal observation
-release is not built. Raw DBN cannot feed features, models, WFA, or backtests
-directly; it may feed only an approved development-only causal builder.
+frozen and validated. The development-only causal-observation contract is
+frozen, and its observation-only safety implementation is built, validated,
+committed, and remotely recoverable, but the new clean-restart 41-market causal
+observation release is not built. Raw DBN cannot feed features, models, WFA,
+or backtests directly; it may feed only that exact approved causal builder.
 
-Old derived releases and the retired foundation runner remain no-read. Row
-access requires separate approval, and the Final Sealed 252-Session Holdout and
-forward values remain inaccessible. The next permitted task is to audit and
-freeze the 41-market development-only causal observation foundation contract.
+Old derived releases and the retired foundation runner remain no-read. The
+representative development-only canary is prepared but not row-authorized or
+executed. Row access requires separate approval, and the Final Sealed
+252-Session Holdout and forward values remain inaccessible. Only after this
+documentation synchronization is committed, pushed, and remotely verified may
+the separate canary row-read approval gate begin.
 
 When a milestone changes the active stage, status, or next goal, check
 `PROJECT_OUTLINE.md`, `CURRENT_WORKFLOW.md`, and `README.md`; update only

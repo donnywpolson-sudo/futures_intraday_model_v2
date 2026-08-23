@@ -28,10 +28,13 @@ operator orientation; `PROJECT_OUTLINE.md` describes the research pipeline.
 
 The project uses one research-selection-pristine **Final Sealed 252-Session Holdout**: trade dates 2025-07-14 through 2026-07-13, manifest `0ff48f99d8b6d3a262ddf0a060bea8e733fc95aa7c4b4d43f19a0f78b107d4d1`. Development ends exclusively at 2025-07-13T22:00:00Z and forward monitoring begins at 2026-07-14T00:00:00Z. The manifest is purpose-limited, grants no row or evaluation access, creates no market-specific or micro holdout, and is not a general exchange calendar. Complete 2018-cutoff project-session continuity remains unresolved for portions of 2023-2024 and is not claimed.
 
-The canonical source and clean-restart baseline are complete, but the new
-41-market causal observation release is not built. The next goal is to audit
-and freeze its development-only causal-observation contract. See
-`PROJECT_OUTLINE.md` for the current pipeline and status.
+The canonical source and clean-restart baseline are complete. The
+development-only causal-observation contract is frozen, and its observation-only
+safety implementation is built, validated, committed, and remotely recoverable.
+The new 41-market causal observation release is not built, and the prepared
+canary is neither row-authorized nor executed. The Final Sealed 252-Session
+Holdout remains pristine and unread. See `PROJECT_OUTLINE.md` for the current
+pipeline and status.
 
 ## Repository map
 

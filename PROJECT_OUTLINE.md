@@ -19,8 +19,10 @@ authority.
 | Canonical DBN source | **COMPLETE / FROZEN / VALIDATED** |
 | Source closure and old-derived-data retirement | **COMPLETE / ACTIVE** |
 | Clean restart | **COMPLETE / CERTIFIED** |
-| Causal-observation contract | **NOT FROZEN / NEXT** |
+| Causal-observation contract | **FROZEN** |
+| Observation-only safety implementation | **BUILT / VALIDATED / REMOTELY RECOVERABLE** |
 | Causal observation release | **NOT BUILT** |
+| Development-only canary | **PREPARED / NOT ROW-AUTHORIZED / NOT EXECUTED** |
 | Outcomes | **NOT STARTED** |
 | Features | **NOT STARTED** |
 | WFA | **NOT STARTED** |
@@ -29,10 +31,10 @@ authority.
 | Forward monitoring | **NOT STARTED** |
 
 Direct DBN use by features, models, WFA, or backtests is forbidden. Raw DBN
-may feed only an approved development-only causal builder. Auditing and
-freezing that builder's causal-observation contract is the next permitted data
-step; it is not authorized by this document. No clean-restart DBN row read has
-occurred.
+may feed only the frozen development-only causal-observation contract through
+the committed observation-only safety implementation. The representative
+canary is prepared but has no row-read authority and has not run. No
+clean-restart DBN row read has occurred.
 
 The canonical DBN source is frozen and validated, and active source closure
 blocks old derived inputs and retired execution paths. Prior foundation
@@ -63,7 +65,7 @@ user-facing pipeline.
 | Stage | Status | Main input | Main output | Main gate |
 | --- | --- | --- | --- | --- |
 | 1. Canonical Source Custody and Closure | Complete | Canonical DBN custody | Frozen validated source plus active no-read closure | Current source contract and closure proof pass |
-| 2. Causal Observation Foundation | Next; contract not frozen; release not built | Approved development-only canonical DBN scope | Certified causal observation release | Contract frozen before any row read; independent certification |
+| 2. Causal Observation Foundation | Contract frozen; safety implementation built; release not built | Approved development-only canonical DBN scope | Certified causal observation release | Canary requires separate row-read approval and independent certification |
 | 3. Outcome/Target Foundation | Not started for the new mechanism | Certified causal observations | Separate immutable outcomes | Point-in-time maturity and separation contract |
 | 4. Feature Foundation | Not started for the new mechanism | Certified causal observations | Separate immutable features | Availability, leakage, and transform checks |
 | 5. Chronological Validation and WFA | Not started for the new mechanism | Frozen outcomes and features | Chronological folds and WFA evidence | Training-only transforms, purge, and embargo where required |
@@ -80,8 +82,8 @@ requirements belong in the current contracts, not in this outline.
 
 ## 5. Next-stage requirements
 
-The causal-observation contract must later freeze, without this documentation
-task deciding the rules:
+The frozen causal-observation contract and committed observation-only safety
+implementation define:
 
 - the development-only boundary;
 - bar start, end, and availability semantics;
@@ -95,6 +97,10 @@ task deciding the rules:
 - storage and materialization;
 - independent certification; and
 - exclusion of micros, holdout, forward, outcomes, features, and evaluation.
+
+The next high-risk gate, only after this documentation synchronization is
+committed, pushed, and remotely verified, is separate approval for the exact
+development-only canary row read. This document grants no such authority.
 
 ## 6. Universe, tiers, and time boundaries
 
@@ -158,4 +164,4 @@ Current contracts hold detailed evidence requirements. Git history and
 foundation releases remain evidence only and do not override active pointers,
 contracts, or closure.
 
-AUDIT AND FREEZE THE 41-MARKET DEVELOPMENT-ONLY CAUSAL OBSERVATION FOUNDATION CONTRACT
+NEXT GATE AFTER DOCUMENTATION COMMIT AND PUSH: DEVELOPMENT-ONLY CANARY ROW-READ APPROVAL
