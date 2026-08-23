@@ -31,10 +31,11 @@ The project uses one research-selection-pristine **Final Sealed 252-Session Hold
 The canonical source and clean-restart baseline are complete. The
 development-only causal-observation contract is frozen, and its observation-only
 safety implementation is built, validated, committed, and remotely recoverable.
-The new 41-market causal observation release is not built, and the prepared
-canary is neither row-authorized nor executed. The Final Sealed 252-Session
-Holdout remains pristine and unread. See `PROJECT_OUTLINE.md` for the current
-pipeline and status.
+The seven-market development canary ran once, passed independent verification,
+and remains unpublished and inactive. The new 41-market causal observation
+release is not built; the non-public full builder has no row-read authority.
+The Final Sealed 252-Session Holdout remains pristine and unread. See
+`PROJECT_OUTLINE.md` for the current pipeline and status.
 
 ## Repository map
 

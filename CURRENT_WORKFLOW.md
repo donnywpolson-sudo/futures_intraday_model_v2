@@ -28,9 +28,11 @@ The project uses one research-selection-pristine **Final Sealed 252-Session Hold
 counted mechanism remains closed after Tier 0 ES failure, and the new mechanism
 is not started. The causal-observation contract is frozen and its
 observation-only safety implementation is built, validated, committed, and
-remotely recoverable. The causal observation release is not built; the
-development-only canary is prepared but has no row-read authority and has not
-run. Documentation synchronization is the current ordinary task.
+remotely recoverable. The causal observation release is not built. The
+seven-market development-only canary ran once under consumed authority,
+passed independent verification, and remains unpublished and inactive. The
+current ordinary task is to make the non-public full development builder
+remotely recoverable before preparing any full-build row-read packet.
 
 Real research still needs its durable trial declaration and immutable evidence.
 Before registration, every row-dependent sample, fold, feature, execution,
@@ -160,11 +162,12 @@ observation release is not built. Raw DBN cannot feed features, models, WFA,
 or backtests directly; it may feed only that exact approved causal builder.
 
 Old derived releases and the retired foundation runner remain no-read. The
-representative development-only canary is prepared but not row-authorized or
-executed. Row access requires separate approval, and the Final Sealed
-252-Session Holdout and forward values remain inaccessible. Only after this
-documentation synchronization is committed, pushed, and remotely verified may
-the separate canary row-read approval gate begin.
+representative development-only canary passed once; its one-use authorization
+is consumed and its candidates cannot be reused as full-build partitions. The
+full 41-market development build remains unexecuted and has no row-read
+authority. Its non-public runner must be committed and pushed before an exact
+full-build packet may be prepared for separate approval. The Final Sealed
+252-Session Holdout and forward values remain inaccessible.
 
 When a milestone changes the active stage, status, or next goal, check
 `PROJECT_OUTLINE.md`, `CURRENT_WORKFLOW.md`, and `README.md`; update only

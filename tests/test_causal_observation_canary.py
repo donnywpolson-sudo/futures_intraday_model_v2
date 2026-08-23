@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import subprocess
 import tomllib
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,7 +33,7 @@ from futures_rebuild.causal_observation_foundation import (
     required_canary_scope,
 )
 from futures_rebuild.causal_observation_verifier import verify_observation_candidate
-from futures_rebuild.errors import ContractError, UnauthorizedOperation
+from futures_rebuild.errors import ContractError, IntegrityError, UnauthorizedOperation
 from futures_rebuild.foundation.records import ProviderBar, ProviderDefinition
 from futures_rebuild.foundation import decoder as foundation_decoder
 from futures_rebuild.research_gateway_policy import CAUSAL_OBSERVATION_CANARY_OPERATION
@@ -255,13 +257,20 @@ def test_decoder_admits_exact_canary_reference_bar_schemas(
     assert observed == ["ohlcv-1s", "ohlcv-1h"]
 
 
-def test_successor_plan_is_complete_nonauthorizing_and_implementation_bound() -> None:
+def test_executed_plan_remains_historically_bound_and_cannot_be_reused() -> None:
     plan_path = ROOT / "configs/causal_observation_canary_plan_v2.json"
     plan = json.loads(plan_path.read_text(encoding="utf-8"))
-    _validate_plan(ROOT, plan)
+    execution_commit = "d3f60621201bebb95eaad7b5fa2de6da10b3bb31"
+    for relative, expected in plan["implementation_bindings"].items():
+        committed = subprocess.check_output(
+            ["git", "show", f"{execution_commit}:{relative}"], cwd=ROOT
+        )
+        assert hashlib.sha256(committed).hexdigest() == expected
     assert plan["one_use_authorization"]["issued"] is False
     assert plan["one_use_authorization"]["consumed"] is False
     assert plan["execution_authorized"] is False
+    with pytest.raises(IntegrityError, match="implementation binding differs"):
+        _validate_plan(ROOT, plan)
     changed = json.loads(json.dumps(plan))
     changed["holdout_allowed"] = True
     with pytest.raises(UnauthorizedOperation, match="nonauthorizing"):

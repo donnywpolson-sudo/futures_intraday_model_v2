@@ -1,0 +1,527 @@
+"""Bounded, non-public full development causal-observation builder.
+
+The module is inert without an exact externally issued one-use receipt.  It
+validates the complete active v4 source inventory without payload access,
+consumes that receipt, and only then decodes one standard-market year at a
+time.  It creates independently verified monthly candidates beneath the
+packet-bound staging root; it cannot publish or activate them.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import time
+from collections import defaultdict
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+
+from .boundary import OperationReceipt, RepoBoundary
+from .canonical import canonical_bytes, sha256_file, sha256_json
+from .causal_observation_canary import (
+    DecodedMarket,
+    _CanaryStageCreator,
+    _build_market_candidate_with_state,
+    _decode_selected_sources,
+)
+from .causal_observation_foundation import (
+    ACTIVE_CANONICAL_RELEASE_ID,
+    ACTIVE_SOURCE_CONTRACT_ID,
+    CAUSAL_OBSERVATION_CONTRACT_ID,
+    CausalObservationOperationContext,
+    authorize_full_build_row_read,
+    prepared_inventory,
+)
+from .causal_observation_verifier import verify_observation_candidate
+from .causal_source_closure import select_exact_standard_source_entries
+from .data_layout import STAGING_ROOT
+from .errors import ContractError, IntegrityError, UnauthorizedOperation
+from .locking import FileLease
+from .foundation_operation_firewall import issue_current_source_closure_context
+from .research_gateway_policy import CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
+
+
+PLAN_SCHEMA = "development_causal_observation_full_build_plan/1.0.0"
+RESULT_SCHEMA = "development_causal_observation_full_build_result/1.0.0"
+FAILURE_SCHEMA = "development_causal_observation_full_build_failure/1.0.0"
+EXPECTED_ENTRY_COUNT = 7_932
+EXPECTED_DBN_COUNT = 3_966
+EXPECTED_SIDECAR_COUNT = 3_966
+EXPECTED_SOURCE_BYTES = 16_352_477_173
+EXPECTED_PAYLOAD_BYTES = 16_348_861_063
+EXPECTED_PRIMARY_1M_DBN_COUNT = 576
+MAXIMUM_PARTITION_COUNT = 6_912
+MAXIMUM_OUTPUT_BYTES = 15_557_980_376
+MAXIMUM_PEAK_ADDITIONAL_BYTES = 17_557_980_376
+MINIMUM_FREE_AFTER_PEAK_BYTES = 100 * 1024**3
+MAXIMUM_RUNTIME_SECONDS = 86_400
+STANDARD_ROOT_COUNT = 41
+DEFERRED_MICRO_COUNT = 17
+
+
+@dataclass(frozen=True, slots=True)
+class FullBuildRunResult:
+    result_path: Path
+    payload: Mapping[str, object]
+
+
+def _json(path: Path) -> dict[str, object]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise IntegrityError(f"full-build JSON is invalid: {path}") from exc
+    if not isinstance(value, dict):
+        raise IntegrityError(f"full-build JSON is not an object: {path}")
+    return value
+
+
+def _contained(root: Path, relative: object) -> Path:
+    if type(relative) is not str or not relative:
+        raise ContractError("full-build path is absent")
+    value = Path(relative)
+    if value.is_absolute() or ".." in value.parts or value.as_posix() != relative:
+        raise ContractError("full-build path is not canonical and relative")
+    candidate = (root / value).resolve()
+    try:
+        candidate.relative_to(root)
+    except ValueError as exc:
+        raise UnauthorizedOperation("full-build path escapes the repository") from exc
+    return candidate
+
+
+def _write_create_only(path: Path, payload: Mapping[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(
+        path,
+        os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0),
+    )
+    try:
+        os.write(descriptor, canonical_bytes(dict(payload)) + b"\n")
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
+def _validate_plan(root: Path, plan: Mapping[str, object]) -> None:
+    source = plan.get("source")
+    limits = plan.get("limits")
+    execution = plan.get("execution")
+    storage = plan.get("storage")
+    authority = plan.get("authority")
+    if (
+        plan.get("schema_version") != PLAN_SCHEMA
+        or plan.get("operation") != CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
+        or plan.get("causal_contract_id") != CAUSAL_OBSERVATION_CONTRACT_ID
+        or plan.get("development_end_exclusive") != "2025-07-13T22:00:00Z"
+        or plan.get("holdout_allowed") is not False
+        or plan.get("forward_allowed") is not False
+        or plan.get("provider_calls") != 0
+        or plan.get("execution_authorized") is not False
+        or not isinstance(source, Mapping)
+        or not isinstance(limits, Mapping)
+        or not isinstance(execution, Mapping)
+        or not isinstance(storage, Mapping)
+        or not isinstance(authority, Mapping)
+        or any(bool(value) for value in authority.values())
+        or source.get("source_contract_id") != ACTIVE_SOURCE_CONTRACT_ID
+        or source.get("canonical_release_id") != ACTIVE_CANONICAL_RELEASE_ID
+        or source.get("exact_source_entry_count") != EXPECTED_ENTRY_COUNT
+        or source.get("exact_dbn_file_count") != EXPECTED_DBN_COUNT
+        or source.get("exact_sidecar_file_count") != EXPECTED_SIDECAR_COUNT
+        or source.get("total_source_bytes") != EXPECTED_SOURCE_BYTES
+        or source.get("maximum_payload_bytes") != EXPECTED_PAYLOAD_BYTES
+        or source.get("primary_1m_dbn_count") != EXPECTED_PRIMARY_1M_DBN_COUNT
+        or source.get("standard_root_count") != STANDARD_ROOT_COUNT
+        or source.get("deferred_micro_count") != DEFERRED_MICRO_COUNT
+        or source.get("minimum_year") != 2010
+        or source.get("maximum_year") != 2024
+        or limits.get("maximum_payload_bytes") != EXPECTED_PAYLOAD_BYTES
+        or limits.get("maximum_output_bytes") != MAXIMUM_OUTPUT_BYTES
+        or limits.get("maximum_partition_count") != MAXIMUM_PARTITION_COUNT
+        or limits.get("maximum_peak_additional_bytes")
+        != MAXIMUM_PEAK_ADDITIONAL_BYTES
+        or execution
+        != {
+            "maximum_attempts": 1,
+            "maximum_retries": 0,
+            "maximum_runtime_seconds": MAXIMUM_RUNTIME_SECONDS,
+            "maximum_workers": 1,
+        }
+        or storage.get("required_free_after_peak_bytes")
+        != MINIMUM_FREE_AFTER_PEAK_BYTES
+        or storage.get("publication_authorized") is not False
+        or storage.get("activation_authorized") is not False
+        or storage.get("partitioning") != "market/year/month"
+        or storage.get("empty_partitions") is not False
+        or storage.get("full_1s_duplication") is not False
+        or plan.get("reuse_canary_candidates") is not False
+        or plan.get("reuse_prior_partitions") is not False
+    ):
+        raise UnauthorizedOperation("full development build plan is not exact and nonauthorizing")
+    plan_id = plan.get("plan_id")
+    if type(plan_id) is not str or len(plan_id) != 64:
+        raise ContractError("full development build plan ID is invalid")
+    if sha256_json({key: value for key, value in plan.items() if key != "plan_id"}) != plan_id:
+        raise IntegrityError("full development build plan identity differs")
+    inventory = _contained(root, source.get("inventory_path"))
+    if sha256_file(inventory) != source.get("inventory_sha256"):
+        raise IntegrityError("full development source inventory differs")
+    output = _contained(root, plan.get("output_staging_path"))
+    try:
+        output.relative_to(root / STAGING_ROOT)
+    except ValueError as exc:
+        raise UnauthorizedOperation("full development output is outside staging") from exc
+
+
+def _load_exact_source_entries(
+    root: Path, plan: Mapping[str, object]
+) -> tuple[dict[str, object], ...]:
+    source = plan["source"]
+    inventory = _json(_contained(root, source["inventory_path"]))
+    entries = inventory.get("entries")
+    if not isinstance(entries, list) or any(not isinstance(item, dict) for item in entries):
+        raise IntegrityError("full development source entries are absent")
+    selected = tuple(dict(item) for item in entries)
+    if (
+        len(selected) != EXPECTED_ENTRY_COUNT
+        or sha256_json(selected) != source.get("exact_source_entries_sha256")
+        or sum(item["kind"] == "DBN" for item in selected) != EXPECTED_DBN_COUNT
+        or sum(item["kind"] == "SIDECAR" for item in selected)
+        != EXPECTED_SIDECAR_COUNT
+        or sum(int(item["size_bytes"]) for item in selected)
+        != EXPECTED_SOURCE_BYTES
+        or sum(
+            int(item["size_bytes"])
+            for item in selected
+            if item["kind"] == "DBN"
+        )
+        != EXPECTED_PAYLOAD_BYTES
+        or sum(
+            item["kind"] == "DBN" and item["family"] == "ohlcv_1m"
+            for item in selected
+        )
+        != EXPECTED_PRIMARY_1M_DBN_COUNT
+    ):
+        raise IntegrityError("full development source inventory counts or identity differ")
+    return selected
+
+
+def _market_windows(
+    entries: Sequence[Mapping[str, object]],
+) -> dict[str, dict[str, str]]:
+    windows: dict[str, dict[str, str]] = {}
+    for item in entries:
+        market = str(item["market"])
+        start = f"{item['interval_start_inclusive']}T00:00:00Z"
+        end = f"{item['interval_end_exclusive']}T00:00:00Z"
+        current = windows.setdefault(market, {"start": start, "end": end})
+        current["start"] = min(current["start"], start)
+        current["end"] = max(current["end"], end)
+    return dict(sorted(windows.items()))
+
+
+def _work_units(
+    selected: Sequence[Mapping[str, object]],
+) -> tuple[tuple[str, int, tuple[dict[str, object], ...]], ...]:
+    grouped: dict[tuple[str, int], list[dict[str, object]]] = defaultdict(list)
+    families: dict[tuple[str, int], set[str]] = defaultdict(set)
+    for item in selected:
+        key = (str(item["market"]), int(item["year"]))
+        grouped[key].append(dict(item))
+        if item["kind"] == "DBN":
+            families[key].add(str(item["family"]))
+    units: list[tuple[str, int, tuple[dict[str, object], ...]]] = []
+    for key in sorted(grouped):
+        if "ohlcv_1m" not in families[key]:
+            continue
+        if "definition" not in families[key]:
+            raise IntegrityError("primary market-year lacks point-in-time definitions")
+        rows = tuple(sorted(grouped[key], key=lambda item: str(item["path"])))
+        units.append((key[0], key[1], rows))
+    if len(units) != 568:
+        raise IntegrityError("full development market-year work-unit count differs")
+    return tuple(units)
+
+
+def _month_windows(year: int) -> tuple[tuple[int, int, str, dict[str, str]], ...]:
+    result: list[tuple[int, int, str, dict[str, str]]] = []
+    for month in range(1, 13):
+        start = datetime(year, month, 1, tzinfo=timezone.utc)
+        end = (
+            datetime(year + 1, 1, 1, tzinfo=timezone.utc)
+            if month == 12
+            else datetime(year, month + 1, 1, tzinfo=timezone.utc)
+        )
+        start_ns = int(start.timestamp() * 1_000_000_000)
+        end_ns = int(end.timestamp() * 1_000_000_000)
+        interval = f"{start.date().isoformat()}_{end.date().isoformat()}"
+        result.append(
+            (
+                start_ns,
+                end_ns,
+                interval,
+                {
+                    "start": start.isoformat().replace("+00:00", "Z"),
+                    "end": end.isoformat().replace("+00:00", "Z"),
+                },
+            )
+        )
+    return tuple(result)
+
+
+def _slice_decoded(
+    decoded: DecodedMarket,
+    *,
+    start_ns: int,
+    end_ns: int,
+    definitions: Sequence[object],
+    carried_support: Sequence[tuple[int, str, str]],
+) -> DecodedMarket:
+    return DecodedMarket(
+        definitions=tuple(definitions),  # type: ignore[arg-type]
+        primary_1m=tuple(
+            row for row in decoded.primary_1m if start_ns <= row.event_at_ns < end_ns
+        ),
+        reference_1s={
+            key: value
+            for key, value in decoded.reference_1s.items()
+            if start_ns <= key < end_ns
+        },
+        reference_1h={
+            key: value
+            for key, value in decoded.reference_1h.items()
+            if start_ns <= key < end_ns
+        },
+        reference_1d={
+            key: value
+            for key, value in decoded.reference_1d.items()
+            if start_ns <= key < end_ns
+        },
+        support_rows=tuple(
+            sorted(
+                tuple(carried_support)
+                + tuple(
+                    row
+                    for row in decoded.support_rows
+                    if start_ns <= row[0] < end_ns
+                )
+            )
+        ),
+        decoded_record_count=decoded.decoded_record_count,
+    )
+
+
+def validate_reusable_partition(
+    *,
+    stage: Path,
+    manifest: object,
+    expected_release_id: str,
+) -> dict[str, object]:
+    """Accept reuse only after independent verification and exact identity."""
+
+    certificate = verify_observation_candidate(stage=stage, manifest=manifest)  # type: ignore[arg-type]
+    if certificate.get("release_id") != expected_release_id:
+        raise IntegrityError("reusable causal partition identity differs")
+    return certificate
+
+
+def _execute(
+    *,
+    root: Path,
+    boundary: RepoBoundary,
+    plan: Mapping[str, object],
+    plan_sha256: str,
+    context: CausalObservationOperationContext,
+    selected: Sequence[Mapping[str, object]],
+    started: float,
+) -> FullBuildRunResult:
+    output = _contained(root, plan["output_staging_path"])
+    relative_output = output.relative_to(root / STAGING_ROOT).as_posix()
+    source_contract = _json(root / "configs/source_contract.json")
+    standard_roots = frozenset(source_contract["universe"]["standard_roots"])
+    prior_observation: dict[str, Mapping[str, object]] = {}
+    carried_support: dict[str, tuple[tuple[int, str, str], ...]] = {}
+    partitions: list[dict[str, object]] = []
+    decoded_records = 0
+    output_bytes = 0
+
+    for market, year, unit_entries in _work_units(selected):
+        if time.monotonic() - started > MAXIMUM_RUNTIME_SECONDS:
+            raise UnauthorizedOperation("full development runtime ceiling exceeded")
+        window = {
+            "start": f"{year:04d}-01-01T00:00:00Z",
+            "end": f"{year + 1:04d}-01-01T00:00:00Z",
+        }
+        decoded = _decode_selected_sources(
+            root=root,
+            selected=unit_entries,
+            windows={market: window},
+            source_contract=source_contract,
+            maximum_decoded_records=int(plan["limits"]["maximum_decoded_records"]),
+        )[market]
+        decoded_records += decoded.decoded_record_count
+        if decoded_records > int(plan["limits"]["maximum_decoded_records"]):
+            raise UnauthorizedOperation("full development decoded-record ceiling exceeded")
+        for start_ns, end_ns, interval, month_window in _month_windows(year):
+            month = _slice_decoded(
+                decoded,
+                start_ns=start_ns,
+                end_ns=end_ns,
+                definitions=decoded.definitions,
+                carried_support=carried_support.get(market, ()),
+            )
+            if not month.primary_1m:
+                continue
+            creator = _CanaryStageCreator(
+                boundary=boundary,
+                relative=f"{relative_output}/{market}/{year}/{interval}",
+            )
+            built = _build_market_candidate_with_state(
+                publisher=creator,
+                context=context,
+                market=market,
+                window=month_window,
+                decoded=month,
+                allowed_roots=standard_roots,
+                prior_observation=prior_observation.get(market),
+            )
+            certificate = verify_observation_candidate(
+                stage=built.prepared.stage,
+                manifest=built.prepared.manifest,
+            )
+            inventory = prepared_inventory(built.prepared)
+            partition_bytes = sum(int(item["size"]) for item in inventory["files"])
+            output_bytes += partition_bytes
+            partitions.append(
+                {
+                    "market": market,
+                    "year": year,
+                    "interval": interval,
+                    "release_id": built.prepared.manifest.release_id,
+                    "certificate_id": certificate["certificate_id"],
+                    "inventory_sha256": inventory["files_sha256"],
+                    "output_bytes": partition_bytes,
+                    "stage": built.prepared.stage.relative_to(root).as_posix(),
+                }
+            )
+            prior_observation[market] = built.last_observation
+            last_bar_end = int(built.last_observation["bar_end_ns"])
+            carried_support[market] = tuple(
+                row
+                for row in decoded.support_rows
+                if last_bar_end <= row[0] < end_ns
+            )
+            if len(partitions) > MAXIMUM_PARTITION_COUNT:
+                raise UnauthorizedOperation("full development partition ceiling exceeded")
+            if output_bytes > MAXIMUM_OUTPUT_BYTES:
+                raise UnauthorizedOperation("full development output byte ceiling exceeded")
+    core: dict[str, object] = {
+        "schema_version": RESULT_SCHEMA,
+        "status": "PASS_AUTHORIZED_FULL_DEVELOPMENT_CANDIDATE_NOT_PUBLISHED_NOT_ACTIVE",
+        "plan_id": plan["plan_id"],
+        "plan_sha256": plan_sha256,
+        "receipt_id": context.receipt_id,
+        "source_contract_id": context.source_contract_id,
+        "source_release_id": context.source_release_id,
+        "causal_contract_id": context.causal_contract_id,
+        "source_entry_count": len(selected),
+        "dbn_file_count": EXPECTED_DBN_COUNT,
+        "payload_bytes_opened_maximum": EXPECTED_PAYLOAD_BYTES,
+        "decoded_record_count": decoded_records,
+        "partition_count": len(partitions),
+        "output_bytes": output_bytes,
+        "partition_inventory_sha256": sha256_json(partitions),
+        "partitions": partitions,
+        "provider_calls": 0,
+        "holdout_rows": 0,
+        "forward_rows": 0,
+        "outcomes": 0,
+        "features": 0,
+        "wfa": 0,
+        "fitting": 0,
+        "predictions": 0,
+        "evaluations": 0,
+        "mechanism_executions": 0,
+        "publication_authorized": False,
+        "activation_authorized": False,
+    }
+    payload = {**core, "result_id": sha256_json(core)}
+    result_path = output / "full_build_result.json"
+    _write_create_only(result_path, payload)
+    return FullBuildRunResult(result_path=result_path, payload=payload)
+
+
+def run_authorized_full_build(
+    *,
+    repository_root: Path,
+    receipt: OperationReceipt,
+    plan_path: Path,
+) -> FullBuildRunResult:
+    """Consume one approval and build verified inactive monthly candidates."""
+
+    root = repository_root.resolve(strict=True)
+    boundary = RepoBoundary(root)
+    path = plan_path.resolve(strict=True)
+    try:
+        path.relative_to(root)
+    except ValueError as exc:
+        raise UnauthorizedOperation("full development plan is outside the repository") from exc
+    plan = _json(path)
+    plan_sha = sha256_file(path)
+    _validate_plan(root, plan)
+    selected = _load_exact_source_entries(root, plan)
+    closure_context = issue_current_source_closure_context(root)
+    selected = select_exact_standard_source_entries(
+        root,
+        operation_context=closure_context,
+        source_entries=selected,
+        windows=_market_windows(selected),
+    )
+    output = _contained(root, plan["output_staging_path"])
+    if output.exists():
+        raise IntegrityError("full development output staging path already exists")
+    free = shutil.disk_usage(root).free
+    if free - MAXIMUM_PEAK_ADDITIONAL_BYTES < MINIMUM_FREE_AFTER_PEAK_BYTES:
+        raise UnauthorizedOperation("full development storage floor would be breached")
+    global_lock = root / "state/locks/foundation-build.lock"
+    run_lock = root / f"state/locks/causal-observation-{plan['plan_id']}.lock"
+    if global_lock.exists() or run_lock.exists():
+        raise UnauthorizedOperation("full development build lock is already active")
+    context = authorize_full_build_row_read(
+        boundary=boundary,
+        receipt=receipt,
+        plan=plan,
+        plan_sha256=plan_sha,
+    )
+    started = time.monotonic()
+    try:
+        with FileLease(global_lock), FileLease(run_lock):
+            return _execute(
+                root=root,
+                boundary=boundary,
+                plan=plan,
+                plan_sha256=plan_sha,
+                context=context,
+                selected=selected,
+                started=started,
+            )
+    except Exception as exc:
+        failure = {
+            "schema_version": FAILURE_SCHEMA,
+            "status": "FAILED_AUTHORIZATION_CONSUMED_NO_AUTOMATIC_RETRY",
+            "plan_id": plan["plan_id"],
+            "plan_sha256": plan_sha,
+            "receipt_id": context.receipt_id,
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+            "publication_authorized": False,
+            "activation_authorized": False,
+        }
+        output.mkdir(parents=True, exist_ok=True)
+        failure_path = output / "failure.json"
+        if not failure_path.exists():
+            _write_create_only(failure_path, failure)
+        raise

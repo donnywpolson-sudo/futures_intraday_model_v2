@@ -85,6 +85,13 @@ class CanaryRunResult:
     payload: Mapping[str, object]
 
 
+@dataclass(frozen=True, slots=True)
+class BuiltMarketCandidate:
+    prepared: PreparedObservationPartition
+    first_observation: Mapping[str, object]
+    last_observation: Mapping[str, object]
+
+
 class _StageCreator(Protocol):
     def create_stage(self, purpose: str) -> Path: ...
 
@@ -495,18 +502,20 @@ def _bar_dict(row: ProviderBar) -> dict[str, int]:
     }
 
 
-def build_market_candidate(
+def _build_market_candidate_with_state(
     *,
     publisher: _StageCreator,
     context: CausalObservationOperationContext,
     market: str,
     window: Mapping[str, object],
     decoded: DecodedMarket,
-) -> PreparedObservationPartition:
+    allowed_roots: frozenset[str],
+    prior_observation: Mapping[str, object] | None = None,
+) -> BuiltMarketCandidate:
     """Build one deterministic market candidate from already-authorized rows."""
 
-    if market not in SUPPORTED_ROOTS:
-        raise UnauthorizedOperation("canary market is outside the seven-root scope")
+    if market not in allowed_roots:
+        raise UnauthorizedOperation("causal observation market is outside the exact scope")
     start_ns, end_ns = _window_ns(window)
     definitions = DefinitionIndex(decoded.definitions)
     bars = tuple(sorted(decoded.primary_1m, key=lambda row: (row.event_at_ns, row.row_sha256)))
@@ -520,7 +529,8 @@ def build_market_candidate(
     rolls: list[dict[str, object]] = []
     quality: list[dict[str, object]] = []
     cadence: list[dict[str, object]] = []
-    prior_observation: dict[str, object] | None = None
+    initial_prior = dict(prior_observation) if prior_observation is not None else None
+    previous_observation = initial_prior
     by_hour: dict[int, list[ProviderBar]] = defaultdict(list)
     by_day: dict[int, list[ProviderBar]] = defaultdict(list)
 
@@ -591,8 +601,8 @@ def build_market_candidate(
             "evidence_sha256": evidence_sha,
         }
         missingness.append({"evidence_id": sha256_json(missing_core), **missing_core})
-        prior_contract = str(prior_observation["actual_contract"]) if prior_observation else definition.raw_symbol
-        is_roll = prior_observation is not None and prior_contract != definition.raw_symbol
+        prior_contract = str(previous_observation["actual_contract"]) if previous_observation else definition.raw_symbol
+        is_roll = previous_observation is not None and prior_contract != definition.raw_symbol
         rolls.append(
             {
                 "row_id": row["row_id"],
@@ -608,8 +618,8 @@ def build_market_candidate(
                 ),
                 "roll_flag": is_roll,
                 "price_discontinuity_flag": bool(
-                    is_roll and int(prior_observation["close_nano"]) != bar.open_nano
-                ) if prior_observation else False,
+                    is_roll and int(previous_observation["close_nano"]) != bar.open_nano
+                ) if previous_observation else False,
                 "crossing_status": "ROLL_BOUNDARY_UNADJUSTED" if is_roll else "NO_CROSSING",
             }
         )
@@ -632,7 +642,30 @@ def build_market_candidate(
         )
         by_hour[bar.event_at_ns // HOUR_NS * HOUR_NS].append(bar)
         by_day[bar.event_at_ns // DAY_NS * DAY_NS].append(bar)
-        prior_observation = row
+        previous_observation = row
+
+    if initial_prior is not None:
+        gap_start = int(initial_prior["bar_end_ns"])
+        gap_end = int(observations[0]["bar_start_ns"])
+        if gap_end > gap_start:
+            support = [
+                {"event_at_ns": ts, "family": family, "row_sha256": row_sha}
+                for ts, family, row_sha in decoded.support_rows
+                if gap_start <= ts < gap_end
+            ]
+            evidence_sha = sha256_json(
+                {"gap_start_ns": gap_start, "gap_end_ns": gap_end, "support_rows": support}
+            )
+            gap_core = {
+                "observation_row_id": None,
+                "market": market,
+                "interval_start_ns": gap_start,
+                "interval_end_ns": gap_end,
+                "state": "UNKNOWN_FAIL_CLOSED",
+                "authority": "OBSERVED_ABSENCE_WITH_STATUS_REVIEW_NO_SCHEDULE_AUTHORITY",
+                "evidence_sha256": evidence_sha,
+            }
+            missingness.append({"evidence_id": sha256_json(gap_core), **gap_core})
 
     for left, right in zip(observations, observations[1:]):
         gap_start = int(left["bar_end_ns"])
@@ -704,7 +737,7 @@ def build_market_candidate(
 
     start_date = datetime.fromtimestamp(start_ns // 1_000_000_000, tz=timezone.utc).date()
     end_date = datetime.fromtimestamp(end_ns // 1_000_000_000, tz=timezone.utc).date()
-    return prepare_observation_partition(
+    prepared = prepare_observation_partition(
         publisher=publisher,
         context=context,
         market=market,
@@ -716,6 +749,31 @@ def build_market_candidate(
         quality=quality,
         cadence=cadence,
     )
+    return BuiltMarketCandidate(
+        prepared=prepared,
+        first_observation=observations[0],
+        last_observation=observations[-1],
+    )
+
+
+def build_market_candidate(
+    *,
+    publisher: _StageCreator,
+    context: CausalObservationOperationContext,
+    market: str,
+    window: Mapping[str, object],
+    decoded: DecodedMarket,
+) -> PreparedObservationPartition:
+    """Build one seven-root canary candidate with the shared causal mechanics."""
+
+    return _build_market_candidate_with_state(
+        publisher=publisher,
+        context=context,
+        market=market,
+        window=window,
+        decoded=decoded,
+        allowed_roots=SUPPORTED_ROOTS,
+    ).prepared
 
 
 Decoder = Callable[..., dict[str, DecodedMarket]]

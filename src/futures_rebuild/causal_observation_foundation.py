@@ -19,7 +19,10 @@ from .canonical import canonical_bytes, sha256_file, sha256_json
 from .data_layout import DataReleaseManifest, PhasePublisher
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
 from .foundation.records import ProviderBar, exact_int, validate_timestamp_ns
-from .research_gateway_policy import CAUSAL_OBSERVATION_CANARY_OPERATION
+from .research_gateway_policy import (
+    CAUSAL_OBSERVATION_CANARY_OPERATION,
+    CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
+)
 
 
 CAUSAL_OBSERVATION_CONTRACT_ID = (
@@ -250,6 +253,143 @@ def authorize_canary_row_read(
     )
 
 
+def required_full_build_scope(
+    *,
+    plan: Mapping[str, object],
+    plan_sha256: str,
+) -> dict[str, str]:
+    """Return the sealed scope for a future full development-only build."""
+
+    source = plan.get("source")
+    limits = plan.get("limits")
+    authority = plan.get("authority")
+    execution = plan.get("execution")
+    storage = plan.get("storage")
+    if (
+        plan.get("schema_version")
+        != "development_causal_observation_full_build_plan/1.0.0"
+        or plan.get("operation") != CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
+        or plan.get("causal_contract_id") != CAUSAL_OBSERVATION_CONTRACT_ID
+        or not isinstance(source, Mapping)
+        or not isinstance(limits, Mapping)
+        or not isinstance(authority, Mapping)
+        or not isinstance(execution, Mapping)
+        or not isinstance(storage, Mapping)
+        or source.get("source_contract_id") != ACTIVE_SOURCE_CONTRACT_ID
+        or source.get("canonical_release_id") != ACTIVE_CANONICAL_RELEASE_ID
+        or plan.get("development_end_exclusive") != DEVELOPMENT_END_EXCLUSIVE
+        or plan.get("holdout_allowed") is not False
+        or plan.get("forward_allowed") is not False
+        or plan.get("provider_calls") != 0
+        or plan.get("execution_authorized") is not False
+        or any(bool(value) for value in authority.values())
+        or execution.get("maximum_workers") != 1
+        or execution.get("maximum_attempts") != 1
+        or execution.get("maximum_retries") != 0
+        or execution.get("maximum_runtime_seconds") != 86_400
+        or storage.get("publication_authorized") is not False
+        or storage.get("activation_authorized") is not False
+    ):
+        raise UnauthorizedOperation("full causal-observation build plan authority is invalid")
+    plan_id = _digest(plan.get("plan_id"), "plan_id")
+    core = {key: value for key, value in plan.items() if key != "plan_id"}
+    if sha256_json(core) != plan_id:
+        raise IntegrityError("full causal-observation build plan identity differs")
+    return {
+        "operation_kind": "FULL_DEVELOPMENT_CAUSAL_OBSERVATION_ONLY",
+        "causal_contract_id": CAUSAL_OBSERVATION_CONTRACT_ID,
+        "source_contract_id": ACTIVE_SOURCE_CONTRACT_ID,
+        "canonical_release_id": ACTIVE_CANONICAL_RELEASE_ID,
+        "exact_source_entries_sha256": _digest(
+            source.get("exact_source_entries_sha256"),
+            "exact_source_entries_sha256",
+        ),
+        "output_staging_path": _canonical_path(
+            plan.get("output_staging_path"), "output_staging_path"
+        ),
+        "development_end_exclusive": DEVELOPMENT_END_EXCLUSIVE,
+        "maximum_payload_bytes": str(
+            exact_int(
+                limits.get("maximum_payload_bytes"),
+                "maximum_payload_bytes",
+                nonnegative=True,
+            )
+        ),
+        "maximum_decoded_records": str(
+            exact_int(
+                limits.get("maximum_decoded_records"),
+                "maximum_decoded_records",
+                nonnegative=True,
+            )
+        ),
+        "maximum_output_bytes": str(
+            exact_int(
+                limits.get("maximum_output_bytes"),
+                "maximum_output_bytes",
+                nonnegative=True,
+            )
+        ),
+        "maximum_partition_count": str(
+            exact_int(
+                limits.get("maximum_partition_count"),
+                "maximum_partition_count",
+                nonnegative=True,
+            )
+        ),
+        "maximum_runtime_seconds": "86400",
+        "maximum_workers": "1",
+        "maximum_attempts": "1",
+        "maximum_retries": "0",
+        "provider_calls": "0",
+        "holdout": "false",
+        "forward": "false",
+        "outcomes": "false",
+        "features": "false",
+        "wfa": "false",
+        "fitting": "false",
+        "prediction": "false",
+        "evaluation": "false",
+        "mechanism": "false",
+        "publication": "false",
+        "activation": "false",
+        "approval_command": CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
+        "approval_plan_id": plan_id,
+        "approval_plan_sha256": _digest(plan_sha256, "plan_sha256"),
+    }
+
+
+def authorize_full_build_row_read(
+    *,
+    boundary: RepoBoundary,
+    receipt: OperationReceipt,
+    plan: Mapping[str, object],
+    plan_sha256: str,
+) -> CausalObservationOperationContext:
+    """Consume one exact full-build approval before the first DBN open."""
+
+    scope = required_full_build_scope(plan=plan, plan_sha256=plan_sha256)
+    receipt.consume(
+        boundary,
+        operation=CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
+        classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
+        required_scope=scope,
+    )
+    return CausalObservationOperationContext(
+        operation=CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
+        classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
+        source_contract_id=ACTIVE_SOURCE_CONTRACT_ID,
+        causal_contract_id=CAUSAL_OBSERVATION_CONTRACT_ID,
+        source_release_id=ACTIVE_CANONICAL_RELEASE_ID,
+        plan_id=str(plan["plan_id"]),
+        plan_sha256=plan_sha256,
+        exact_source_entries_sha256=str(plan["source"]["exact_source_entries_sha256"]),
+        output_staging_path=str(plan["output_staging_path"]),
+        receipt_id=receipt.receipt_id,
+        synthetic=False,
+        _seal=_SEAL,
+    )
+
+
 def issue_synthetic_observation_context(
     *, boundary: RepoBoundary, fixture_id: str
 ) -> CausalObservationOperationContext:
@@ -308,7 +448,11 @@ def _require_context(context: CausalObservationOperationContext) -> None:
             and (
                 context.classification
                 is not OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION
-                or context.operation != CAUSAL_OBSERVATION_CANARY_OPERATION
+                or context.operation
+                not in {
+                    CAUSAL_OBSERVATION_CANARY_OPERATION,
+                    CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
+                }
                 or context.source_release_id != ACTIVE_CANONICAL_RELEASE_ID
             )
         )

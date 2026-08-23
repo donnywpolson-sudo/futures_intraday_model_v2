@@ -22,7 +22,8 @@ authority.
 | Causal-observation contract | **FROZEN** |
 | Observation-only safety implementation | **BUILT / VALIDATED / REMOTELY RECOVERABLE** |
 | Causal observation release | **NOT BUILT** |
-| Development-only canary | **PREPARED / NOT ROW-AUTHORIZED / NOT EXECUTED** |
+| Development-only canary | **EXECUTED ONCE / PASSED / INACTIVE** |
+| Full development builder | **IMPLEMENTED / NOT ROW-AUTHORIZED / NOT EXECUTED** |
 | Outcomes | **NOT STARTED** |
 | Features | **NOT STARTED** |
 | WFA | **NOT STARTED** |
@@ -33,8 +34,9 @@ authority.
 Direct DBN use by features, models, WFA, or backtests is forbidden. Raw DBN
 may feed only the frozen development-only causal-observation contract through
 the committed observation-only safety implementation. The representative
-canary is prepared but has no row-read authority and has not run. No
-clean-restart DBN row read has occurred.
+seven-market development canary ran once under consumed authority and passed
+independent verification; its candidates remain unpublished and inactive. The
+full development build has not run.
 
 The canonical DBN source is frozen and validated, and active source closure
 blocks old derived inputs and retired execution paths. Prior foundation
@@ -65,7 +67,7 @@ user-facing pipeline.
 | Stage | Status | Main input | Main output | Main gate |
 | --- | --- | --- | --- | --- |
 | 1. Canonical Source Custody and Closure | Complete | Canonical DBN custody | Frozen validated source plus active no-read closure | Current source contract and closure proof pass |
-| 2. Causal Observation Foundation | Contract frozen; safety implementation built; release not built | Approved development-only canonical DBN scope | Certified causal observation release | Canary requires separate row-read approval and independent certification |
+| 2. Causal Observation Foundation | Contract frozen; canary passed; full release not built | Approved development-only canonical DBN scope | Certified causal observation release | Full build requires a separate exact row-read packet and independent certification |
 | 3. Outcome/Target Foundation | Not started for the new mechanism | Certified causal observations | Separate immutable outcomes | Point-in-time maturity and separation contract |
 | 4. Feature Foundation | Not started for the new mechanism | Certified causal observations | Separate immutable features | Availability, leakage, and transform checks |
 | 5. Chronological Validation and WFA | Not started for the new mechanism | Frozen outcomes and features | Chronological folds and WFA evidence | Training-only transforms, purge, and embargo where required |
@@ -98,9 +100,17 @@ implementation define:
 - independent certification; and
 - exclusion of micros, holdout, forward, outcomes, features, and evaluation.
 
-The next high-risk gate, only after this documentation synchronization is
-committed, pushed, and remotely verified, is separate approval for the exact
-development-only canary row read. This document grants no such authority.
+The canary produced 48,635 valid observations with no invalid quality rows or
+duplicates. Its 940 observed gaps and all incomplete official schedule states
+remained `UNKNOWN_FAIL_CLOSED`; one ES roll discontinuity was recorded, and
+cadence comparisons never overwrote source evidence. No real negative-price
+row appeared, so negative-price support remains synthetic-test proven.
+
+The non-public full development builder processes one market-year at a time
+and creates independently verified, inactive monthly candidates. Only after
+that runner is committed, pushed, and remotely verified may an immutable full
+development row-read packet be prepared for separate approval. This document
+grants no row-read, publication, or activation authority.
 
 ## 6. Universe, tiers, and time boundaries
 
@@ -164,4 +174,4 @@ Current contracts hold detailed evidence requirements. Git history and
 foundation releases remain evidence only and do not override active pointers,
 contracts, or closure.
 
-NEXT GATE AFTER DOCUMENTATION COMMIT AND PUSH: DEVELOPMENT-ONLY CANARY ROW-READ APPROVAL
+NEXT GATE AFTER RUNNER COMMIT AND PUSH: FULL DEVELOPMENT BUILD PACKET PREPARATION

@@ -570,10 +570,10 @@ def _assert_project_outline_is_concise_current_runbook() -> None:
         "Causal observation release",
         "NOT BUILT",
         "Direct DBN use by features, models, WFA, or backtests is forbidden",
-        "No clean-restart DBN row read has occurred",
+        "seven-market development canary ran once under consumed authority",
         "Final Sealed 252-Session Holdout",
         "SEALED / PRISTINE / UNREAD",
-        "NEXT GATE AFTER DOCUMENTATION COMMIT AND PUSH: DEVELOPMENT-ONLY CANARY ROW-READ APPROVAL",
+        "NEXT GATE AFTER RUNNER COMMIT AND PUSH: FULL DEVELOPMENT BUILD PACKET PREPARATION",
     ):
         assert required.lower() in lowered
 

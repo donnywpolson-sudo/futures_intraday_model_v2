@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import hashlib
+import subprocess
 from collections.abc import Mapping
 from pathlib import Path
 
@@ -83,7 +85,7 @@ def test_frozen_contract_is_the_exact_approved_nonactive_artifact() -> None:
     assert contract["time_segmentation"]["forward"] == "FORBIDDEN"
 
 
-def test_canary_operation_plan_is_exact_nonexecuting_and_implementation_bound() -> None:
+def test_canary_operation_plan_is_exact_and_bound_to_executed_predecessor() -> None:
     plan = json.loads(CANARY_OPERATION_PLAN.read_text(encoding="utf-8"))
     scope = required_canary_scope(
         plan=plan,
@@ -101,8 +103,12 @@ def test_canary_operation_plan_is_exact_nonexecuting_and_implementation_bound() 
     assert plan["one_use_authorization"]["consumed"] is False
     assert plan["execution_authorized"] is False
     assert scope["maximum_payload_bytes"] == "176929782"
+    execution_commit = "d3f60621201bebb95eaad7b5fa2de6da10b3bb31"
     for path, digest in plan["implementation_bindings"].items():
-        assert sha256_file(ROOT / path) == digest
+        committed = subprocess.check_output(
+            ["git", "show", f"{execution_commit}:{path}"], cwd=ROOT
+        )
+        assert hashlib.sha256(committed).hexdigest() == digest
 
 
 def test_provider_bar_accepts_positive_zero_and_negative_futures_prices() -> None:
