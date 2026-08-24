@@ -412,9 +412,13 @@ def load_acquisition_plan(*, root: Path) -> dict[str, object]:
 
 
 def required_scope(*, root: Path, plan: Mapping[str, object]) -> dict[str, str]:
+    plan_sha256 = sha256_file(root / PLAN_PATH)
     return {
+        "approval_command": OPERATION,
+        "approval_plan_id": str(plan["plan_id"]),
+        "approval_plan_sha256": plan_sha256,
         "plan_id": str(plan["plan_id"]),
-        "plan_sha256": sha256_file(root / PLAN_PATH),
+        "plan_sha256": plan_sha256,
         "implementation_commit": _git_head(root),
         "request_count": "287",
         "maximum_parallel_downloads": "2",

@@ -9,6 +9,12 @@ from pathlib import Path
 import pytest
 
 from futures_rebuild import bounded_2025_acquisition as acquisition
+from futures_rebuild.boundary import (
+    OperationClassification,
+    OperationReceipt,
+    RepoBoundary,
+    _personal_approval_line,
+)
 from futures_rebuild.canonical import canonical_bytes, sha256_file
 from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 from futures_rebuild.micro_alpha_acquisition import DownloadProviderApis
@@ -282,6 +288,41 @@ def test_load_plan_rejects_identity_drift(
     _write_json(root / acquisition.PLAN_PATH, plan)
     with pytest.raises(IntegrityError, match="identity"):
         acquisition.load_acquisition_plan(root=root)
+
+
+def test_required_scope_accepts_exact_user_approved_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _synthetic_repository(tmp_path, monkeypatch)
+    plan = acquisition.build_acquisition_plan(root=root)
+    _write_json(root / acquisition.PLAN_PATH, plan)
+    plan_sha256 = sha256_file(root / acquisition.PLAN_PATH)
+    required = acquisition.required_scope(root=root, plan=plan)
+    assert required["approval_command"] == acquisition.OPERATION
+    assert required["approval_plan_id"] == plan["plan_id"]
+    assert required["approval_plan_sha256"] == plan_sha256
+
+    issue_scope = {
+        key: value for key, value in required.items() if not key.startswith("approval_")
+    }
+    receipt = OperationReceipt.issue_user_approved(
+        RepoBoundary(root),
+        operation=acquisition.OPERATION,
+        classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
+        scope=issue_scope,
+        approval_command=acquisition.OPERATION,
+        approval_plan_id=str(plan["plan_id"]),
+        approval_plan_sha256=plan_sha256,
+        approval_line=_personal_approval_line(
+            acquisition.OPERATION, str(plan["plan_id"]), plan_sha256
+        ),
+    )
+    receipt.verify(
+        RepoBoundary(root),
+        operation=acquisition.OPERATION,
+        classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
+        required_scope=required,
+    )
 
 
 def test_source_contains_no_decoder_registration_or_publication_route() -> None:
