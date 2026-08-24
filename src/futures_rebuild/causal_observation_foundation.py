@@ -8,6 +8,7 @@ lineage and cannot authorize real source rows.
 
 from __future__ import annotations
 
+import json
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -272,6 +273,8 @@ def required_full_build_scope(
     *,
     plan: Mapping[str, object],
     plan_sha256: str,
+    source_contract_id: str,
+    canonical_release_id: str,
 ) -> dict[str, str]:
     """Return the sealed scope for a future full development-only build."""
 
@@ -283,7 +286,7 @@ def required_full_build_scope(
     economics = plan.get("economics")
     if (
         plan.get("schema_version")
-        != "development_causal_observation_full_build_plan/1.1.0"
+        != "development_causal_observation_full_build_plan/1.2.0"
         or plan.get("operation") != CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
         or plan.get("causal_contract_id") != CAUSAL_OBSERVATION_CONTRACT_ID
         or not isinstance(source, Mapping)
@@ -292,8 +295,8 @@ def required_full_build_scope(
         or not isinstance(execution, Mapping)
         or not isinstance(storage, Mapping)
         or not isinstance(economics, Mapping)
-        or source.get("source_contract_id") != ACTIVE_SOURCE_CONTRACT_ID
-        or source.get("canonical_release_id") != ACTIVE_CANONICAL_RELEASE_ID
+        or source.get("source_contract_id") != source_contract_id
+        or source.get("canonical_release_id") != canonical_release_id
         or plan.get("development_end_exclusive") != DEVELOPMENT_END_EXCLUSIVE
         or plan.get("holdout_allowed") is not False
         or plan.get("forward_allowed") is not False
@@ -322,8 +325,8 @@ def required_full_build_scope(
     return {
         "operation_kind": "FULL_DEVELOPMENT_CAUSAL_OBSERVATION_ONLY",
         "causal_contract_id": CAUSAL_OBSERVATION_CONTRACT_ID,
-        "source_contract_id": ACTIVE_SOURCE_CONTRACT_ID,
-        "canonical_release_id": ACTIVE_CANONICAL_RELEASE_ID,
+        "source_contract_id": _digest(source_contract_id, "source_contract_id"),
+        "canonical_release_id": _digest(canonical_release_id, "canonical_release_id"),
         "exact_source_entries_sha256": _digest(
             source.get("exact_source_entries_sha256"),
             "exact_source_entries_sha256",
@@ -392,7 +395,30 @@ def authorize_full_build_row_read(
 ) -> CausalObservationOperationContext:
     """Consume one exact full-build approval before the first DBN open."""
 
-    scope = required_full_build_scope(plan=plan, plan_sha256=plan_sha256)
+    contract_path = boundary.active_root / "configs/source_contract.json"
+    try:
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise IntegrityError("active full-build source contract is invalid") from exc
+    if not isinstance(contract, dict):
+        raise IntegrityError("active full-build source contract is not an object")
+    source_contract_id = contract.get("contract_id")
+    source = contract.get("active_canonical_source")
+    core = {key: value for key, value in contract.items() if key != "contract_id"}
+    if (
+        type(source_contract_id) is not str
+        or sha256_json(core) != source_contract_id
+        or not isinstance(source, Mapping)
+        or type(source.get("release_id")) is not str
+    ):
+        raise IntegrityError("active full-build source identity differs")
+    canonical_release_id = str(source["release_id"])
+    scope = required_full_build_scope(
+        plan=plan,
+        plan_sha256=plan_sha256,
+        source_contract_id=source_contract_id,
+        canonical_release_id=canonical_release_id,
+    )
     receipt.consume(
         boundary,
         operation=CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
@@ -402,9 +428,9 @@ def authorize_full_build_row_read(
     return CausalObservationOperationContext(
         operation=CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
         classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
-        source_contract_id=ACTIVE_SOURCE_CONTRACT_ID,
+        source_contract_id=source_contract_id,
         causal_contract_id=CAUSAL_OBSERVATION_CONTRACT_ID,
-        source_release_id=ACTIVE_CANONICAL_RELEASE_ID,
+        source_release_id=canonical_release_id,
         plan_id=str(plan["plan_id"]),
         plan_sha256=plan_sha256,
         exact_source_entries_sha256=str(plan["source"]["exact_source_entries_sha256"]),
@@ -477,8 +503,9 @@ def _require_context(context: CausalObservationOperationContext) -> None:
             identity_valid = (
                 context.classification
                 is OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION
-                and context.source_contract_id == ACTIVE_SOURCE_CONTRACT_ID
-                and context.source_release_id == ACTIVE_CANONICAL_RELEASE_ID
+                and _SHA256.fullmatch(context.source_contract_id) is not None
+                and _SHA256.fullmatch(context.source_release_id) is not None
+                and context.source_release_id != SYNTHETIC_RELEASE_ID
             )
     if (
         type(context) is not CausalObservationOperationContext

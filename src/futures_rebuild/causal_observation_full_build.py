@@ -29,8 +29,6 @@ from .causal_observation_canary import (
     _load_economics_rulebook,
 )
 from .causal_observation_foundation import (
-    ACTIVE_CANONICAL_RELEASE_ID,
-    ACTIVE_SOURCE_CONTRACT_ID,
     CAUSAL_OBSERVATION_CONTRACT_ID,
     CausalObservationOperationContext,
     ECONOMICS_RULEBOOK_PATH,
@@ -39,7 +37,10 @@ from .causal_observation_foundation import (
     prepared_inventory,
 )
 from .causal_observation_verifier import verify_observation_candidate
-from .causal_source_closure import select_exact_standard_source_entries
+from .causal_source_closure import (
+    select_exact_standard_source_entries,
+    validate_full_build_selection_contract,
+)
 from .data_layout import STAGING_ROOT
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
 from .locking import FileLease
@@ -48,16 +49,17 @@ from .foundation.economics import EconomicsRuleBook
 from .research_gateway_policy import CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
 
 
-PLAN_SCHEMA = "development_causal_observation_full_build_plan/1.1.0"
+PLAN_SCHEMA = "development_causal_observation_full_build_plan/1.2.0"
 RESULT_SCHEMA = "development_causal_observation_full_build_result/1.0.0"
 FAILURE_SCHEMA = "development_causal_observation_full_build_failure/1.0.0"
-EXPECTED_ENTRY_COUNT = 7_932
-EXPECTED_DBN_COUNT = 3_966
-EXPECTED_SIDECAR_COUNT = 3_966
-EXPECTED_SOURCE_BYTES = 16_352_477_173
-EXPECTED_PAYLOAD_BYTES = 16_348_861_063
-EXPECTED_PRIMARY_1M_DBN_COUNT = 576
-MAXIMUM_PARTITION_COUNT = 6_912
+EXPECTED_ENTRY_COUNT = 8_506
+EXPECTED_DBN_COUNT = 4_253
+EXPECTED_SIDECAR_COUNT = 4_253
+EXPECTED_SOURCE_BYTES = 17_123_147_852
+EXPECTED_PAYLOAD_BYTES = 17_119_024_382
+EXPECTED_PRIMARY_1M_DBN_COUNT = 617
+EXPECTED_WORK_UNIT_COUNT = 609
+MAXIMUM_PARTITION_COUNT = 6_963
 MAXIMUM_OUTPUT_BYTES = 15_557_980_376
 MAXIMUM_PEAK_ADDITIONAL_BYTES = 17_557_980_376
 MINIMUM_FREE_AFTER_PEAK_BYTES = 100 * 1024**3
@@ -129,6 +131,13 @@ def _validate_plan(root: Path, plan: Mapping[str, object]) -> None:
     storage = plan.get("storage")
     authority = plan.get("authority")
     economics = plan.get("economics")
+    active_contract = _json(root / "configs/source_contract.json")
+    active_contract_id = active_contract.get("contract_id")
+    active_contract_core = {
+        key: value for key, value in active_contract.items() if key != "contract_id"
+    }
+    active_source = active_contract.get("active_canonical_source")
+    active_policy = active_contract.get("selection_policy")
     if (
         plan.get("schema_version") != PLAN_SCHEMA
         or plan.get("operation") != CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
@@ -151,18 +160,27 @@ def _validate_plan(root: Path, plan: Mapping[str, object]) -> None:
         or not isinstance(storage, Mapping)
         or not isinstance(authority, Mapping)
         or any(bool(value) for value in authority.values())
-        or source.get("source_contract_id") != ACTIVE_SOURCE_CONTRACT_ID
-        or source.get("canonical_release_id") != ACTIVE_CANONICAL_RELEASE_ID
+        or type(active_contract_id) is not str
+        or sha256_json(active_contract_core) != active_contract_id
+        or not isinstance(active_source, Mapping)
+        or not isinstance(active_policy, Mapping)
+        or source.get("source_contract_id") != active_contract_id
+        or source.get("canonical_release_id") != active_source.get("release_id")
         or source.get("exact_source_entry_count") != EXPECTED_ENTRY_COUNT
         or source.get("exact_dbn_file_count") != EXPECTED_DBN_COUNT
         or source.get("exact_sidecar_file_count") != EXPECTED_SIDECAR_COUNT
         or source.get("total_source_bytes") != EXPECTED_SOURCE_BYTES
         or source.get("maximum_payload_bytes") != EXPECTED_PAYLOAD_BYTES
         or source.get("primary_1m_dbn_count") != EXPECTED_PRIMARY_1M_DBN_COUNT
+        or source.get("work_unit_count") != EXPECTED_WORK_UNIT_COUNT
+        or source.get("exact_dbn_entries_sha256")
+        != active_policy.get("admitted_standard_dbn_inventory_sha256")
+        or source.get("exact_dbn_file_count")
+        != active_policy.get("admitted_standard_dbn_file_count")
         or source.get("standard_root_count") != STANDARD_ROOT_COUNT
         or source.get("deferred_micro_count") != DEFERRED_MICRO_COUNT
         or source.get("minimum_year") != 2010
-        or source.get("maximum_year") != 2024
+        or source.get("maximum_year") != 2025
         or limits.get("maximum_payload_bytes") != EXPECTED_PAYLOAD_BYTES
         or limits.get("maximum_output_bytes") != MAXIMUM_OUTPUT_BYTES
         or limits.get("maximum_partition_count") != MAXIMUM_PARTITION_COUNT
@@ -194,6 +212,15 @@ def _validate_plan(root: Path, plan: Mapping[str, object]) -> None:
     inventory = _contained(root, source.get("inventory_path"))
     if sha256_file(inventory) != source.get("inventory_sha256"):
         raise IntegrityError("full development source inventory differs")
+    complete_inventory = _json(
+        _contained(root, active_contract["complete_inventory"]["path"])
+    )
+    complete_entries = complete_inventory.get("entries")
+    if not isinstance(complete_entries, list) or any(
+        not isinstance(item, Mapping) for item in complete_entries
+    ):
+        raise IntegrityError("active complete source inventory entries are absent")
+    validate_full_build_selection_contract(active_contract, complete_entries)
     output = _contained(root, plan.get("output_staging_path"))
     try:
         output.relative_to(root / STAGING_ROOT)
@@ -210,9 +237,11 @@ def _load_exact_source_entries(
     if not isinstance(entries, list) or any(not isinstance(item, dict) for item in entries):
         raise IntegrityError("full development source entries are absent")
     selected = tuple(dict(item) for item in entries)
+    dbn_entries = tuple(item for item in selected if item.get("kind") == "DBN")
     if (
         len(selected) != EXPECTED_ENTRY_COUNT
         or sha256_json(selected) != source.get("exact_source_entries_sha256")
+        or sha256_json(dbn_entries) != source.get("exact_dbn_entries_sha256")
         or sum(item["kind"] == "DBN" for item in selected) != EXPECTED_DBN_COUNT
         or sum(item["kind"] == "SIDECAR" for item in selected)
         != EXPECTED_SIDECAR_COUNT
@@ -235,6 +264,7 @@ def _load_exact_source_entries(
 
 
 def validate_complete_development_boundary_metadata(
+    root: Path,
     entries: Sequence[Mapping[str, object]],
     *,
     standard_roots: frozenset[str],
@@ -253,9 +283,8 @@ def validate_complete_development_boundary_metadata(
         if family not in BOUNDARY_SOURCE_FAMILIES or kind not in {"DBN", "SIDECAR"}:
             raise UnauthorizedOperation("2025 boundary source family or kind is invalid")
         if (
-            entry.get("payload_start_inclusive") != BOUNDARY_START_INCLUSIVE
-            or entry.get("payload_end_exclusive") != DEVELOPMENT_END_EXCLUSIVE
-            or entry.get("boundary_safe_exact_acquisition") is not True
+            entry.get("interval_start_inclusive") != BOUNDARY_START_INCLUSIVE
+            or entry.get("interval_end_exclusive") != DEVELOPMENT_END_EXCLUSIVE
         ):
             raise UnauthorizedOperation(
                 "2025 source crosses or does not exactly bind the development boundary"
@@ -278,9 +307,30 @@ def validate_complete_development_boundary_metadata(
         for family in sorted(BOUNDARY_SOURCE_FAMILIES):
             dbn = boundary[(market, family, "DBN")]
             sidecar = boundary[(market, family, "SIDECAR")]
+            sidecar_path = _contained(root, sidecar.get("path"))
             if (
-                sidecar.get("paired_dbn_sha256") != dbn.get("sha256")
-                or sidecar.get("paired_dbn_size_bytes") != dbn.get("size_bytes")
+                sidecar_path.stat().st_size != sidecar.get("size_bytes")
+                or sha256_file(sidecar_path, reject_hardlinks=False)
+                != sidecar.get("sha256")
+            ):
+                raise IntegrityError("2025 boundary sidecar file identity differs")
+            document = _json(sidecar_path)
+            coverage = document.get("coverage_interval")
+            canonical = document.get("canonical_dbn")
+            if (
+                sidecar.get("sidecar_schema_version")
+                != "bounded_2025_canonical_registration_sidecar/1.0.0"
+                or document.get("schema_version")
+                != "bounded_2025_canonical_registration_sidecar/1.0.0"
+                or document.get("market") != market
+                or document.get("family") != family
+                or not isinstance(coverage, Mapping)
+                or coverage.get("start_inclusive_utc") != BOUNDARY_START_INCLUSIVE
+                or coverage.get("end_exclusive_utc") != DEVELOPMENT_END_EXCLUSIVE
+                or not isinstance(canonical, Mapping)
+                or canonical.get("project_relative_path") != dbn.get("path")
+                or canonical.get("sha256") != dbn.get("sha256")
+                or canonical.get("size_bytes") != dbn.get("size_bytes")
             ):
                 raise IntegrityError("2025 boundary sidecar does not bind its DBN")
     count = len(standard_roots) * len(BOUNDARY_SOURCE_FAMILIES)
@@ -295,11 +345,22 @@ def validate_complete_development_boundary_metadata(
 def _market_windows(
     entries: Sequence[Mapping[str, object]],
 ) -> dict[str, dict[str, str]]:
+    def rendered(value: object) -> str:
+        text = str(value)
+        candidate = text if "T" in text else f"{text}T00:00:00Z"
+        try:
+            parsed = datetime.fromisoformat(candidate.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise ContractError("source interval is not an exact UTC timestamp") from exc
+        if parsed.tzinfo != timezone.utc:
+            raise ContractError("source interval is not an exact UTC timestamp")
+        return parsed.isoformat().replace("+00:00", "Z")
+
     windows: dict[str, dict[str, str]] = {}
     for item in entries:
         market = str(item["market"])
-        start = f"{item['interval_start_inclusive']}T00:00:00Z"
-        end = f"{item['interval_end_exclusive']}T00:00:00Z"
+        start = rendered(item["interval_start_inclusive"])
+        end = rendered(item["interval_end_exclusive"])
         current = windows.setdefault(market, {"start": start, "end": end})
         current["start"] = min(current["start"], start)
         current["end"] = max(current["end"], end)
@@ -324,23 +385,51 @@ def _work_units(
             raise IntegrityError("primary market-year lacks point-in-time definitions")
         rows = tuple(sorted(grouped[key], key=lambda item: str(item["path"])))
         units.append((key[0], key[1], rows))
-    if len(units) != 568:
+    if len(units) != EXPECTED_WORK_UNIT_COUNT:
         raise IntegrityError("full development market-year work-unit count differs")
     return tuple(units)
 
 
-def _month_windows(year: int) -> tuple[tuple[int, int, str, dict[str, str]], ...]:
+def _work_unit_window(
+    entries: Sequence[Mapping[str, object]],
+) -> dict[str, str]:
+    market_windows = _market_windows(entries)
+    if len(market_windows) != 1:
+        raise IntegrityError("market-year work unit spans multiple markets")
+    return next(iter(market_windows.values()))
+
+
+def _month_windows(
+    start_inclusive: str,
+    end_exclusive: str,
+) -> tuple[tuple[int, int, str, dict[str, str]], ...]:
+    start_bound = datetime.fromisoformat(start_inclusive.replace("Z", "+00:00"))
+    end_bound = datetime.fromisoformat(end_exclusive.replace("Z", "+00:00"))
+    if (
+        start_bound.tzinfo != timezone.utc
+        or end_bound.tzinfo != timezone.utc
+        or not start_bound < end_bound
+        or end_bound
+        > datetime.fromisoformat(DEVELOPMENT_END_EXCLUSIVE.replace("Z", "+00:00"))
+    ):
+        raise UnauthorizedOperation("work-unit window crosses the development boundary")
     result: list[tuple[int, int, str, dict[str, str]]] = []
-    for month in range(1, 13):
-        start = datetime(year, month, 1, tzinfo=timezone.utc)
-        end = (
-            datetime(year + 1, 1, 1, tzinfo=timezone.utc)
-            if month == 12
-            else datetime(year, month + 1, 1, tzinfo=timezone.utc)
+    start = start_bound
+    while start < end_bound:
+        next_month = (
+            datetime(start.year + 1, 1, 1, tzinfo=timezone.utc)
+            if start.month == 12
+            else datetime(start.year, start.month + 1, 1, tzinfo=timezone.utc)
         )
+        end = min(next_month, end_bound)
         start_ns = int(start.timestamp() * 1_000_000_000)
         end_ns = int(end.timestamp() * 1_000_000_000)
-        interval = f"{start.date().isoformat()}_{end.date().isoformat()}"
+        rendered_end = (
+            end.date().isoformat()
+            if end.time() == datetime.min.time()
+            else end.strftime("%Y-%m-%dT%H%M%SZ")
+        )
+        interval = f"{start.date().isoformat()}_{rendered_end}"
         result.append(
             (
                 start_ns,
@@ -352,6 +441,7 @@ def _month_windows(year: int) -> tuple[tuple[int, int, str, dict[str, str]], ...
                 },
             )
         )
+        start = end
     return tuple(result)
 
 
@@ -441,10 +531,7 @@ def _execute(
     for market, year, unit_entries in _work_units(selected):
         if time.monotonic() - started > MAXIMUM_RUNTIME_SECONDS:
             raise UnauthorizedOperation("full development runtime ceiling exceeded")
-        window = {
-            "start": f"{year:04d}-01-01T00:00:00Z",
-            "end": f"{year + 1:04d}-01-01T00:00:00Z",
-        }
+        window = _work_unit_window(unit_entries)
         unit_dbns = tuple(item for item in unit_entries if item["kind"] == "DBN")
         progress.update(
             {
@@ -471,7 +558,9 @@ def _execute(
         progress["decoded_record_count"] = decoded_records
         if decoded_records > int(plan["limits"]["maximum_decoded_records"]):
             raise UnauthorizedOperation("full development decoded-record ceiling exceeded")
-        for start_ns, end_ns, interval, month_window in _month_windows(year):
+        for start_ns, end_ns, interval, month_window in _month_windows(
+            window["start"], window["end"]
+        ):
             month = _slice_decoded(
                 decoded,
                 start_ns=start_ns,
@@ -586,6 +675,7 @@ def run_authorized_full_build(
     selected = _load_exact_source_entries(root, plan)
     source_contract = _json(root / "configs/source_contract.json")
     validate_complete_development_boundary_metadata(
+        root,
         selected,
         standard_roots=frozenset(source_contract["universe"]["standard_roots"]),
     )

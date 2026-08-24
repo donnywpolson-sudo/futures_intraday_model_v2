@@ -11,8 +11,9 @@ from futures_rebuild.causal_source_closure import (
     reject_unlisted_source_path,
     select_standard_dbn_paths,
     validate_source_contract_metadata,
+    validate_full_build_selection_contract,
 )
-from futures_rebuild.errors import UnauthorizedOperation
+from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 from futures_rebuild.foundation_operation_firewall import (
     CURRENT_SOURCE_CLOSURE_OPERATION,
     issue_current_source_closure_context,
@@ -62,6 +63,32 @@ def test_current_contract_metadata_closure_and_context_are_exact() -> None:
     }
     assert _context().operation == CURRENT_SOURCE_CLOSURE_OPERATION
     assert CONTRACT.read_bytes() == VERSIONED.read_bytes()
+
+
+def test_non_active_full_build_contract_successor_matches_admitted_inventory() -> None:
+    active = _json(CONTRACT)
+    inventory = _json(REPO / str(active["complete_inventory"]["path"]))
+    with pytest.raises(IntegrityError, match="admitted DBN identity differs"):
+        validate_full_build_selection_contract(active, inventory["entries"])
+
+    candidate = _json(
+        REPO
+        / "reports/causal_full_build_source_rebind_preparation/"
+        "cfbsrp_20260824T1856245925105Z_34fea2fa/"
+        "SUCCESSOR_SOURCE_CONTRACT.json"
+    )
+    result = validate_full_build_selection_contract(candidate, inventory["entries"])
+    assert result == {
+        "admitted_standard_dbn_file_count": 4_253,
+        "admitted_standard_dbn_inventory_sha256": (
+            "e23b2709d7674ef9dfc6ef1178a6485b89cb86179ac0c3d2386d2e6cd51fb769"
+        ),
+        "development_end_exclusive": "2025-07-13T22:00:00Z",
+    }
+    assert candidate["active_canonical_source"]["release_id"] == (
+        "4ca353d7814941782bb4c6640afe89b04371492868f57174bb10d632b6e7c9be"
+    )
+    assert candidate["status"].startswith("PREPARED_NON_ACTIVE")
 
 
 def test_exact_standard_selection_rejects_micro_and_unlisted_paths() -> None:

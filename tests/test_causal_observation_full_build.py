@@ -36,6 +36,7 @@ from futures_rebuild.causal_observation_full_build import (
     EXPECTED_PRIMARY_1M_DBN_COUNT,
     EXPECTED_SIDECAR_COUNT,
     EXPECTED_SOURCE_BYTES,
+    EXPECTED_WORK_UNIT_COUNT,
     MAXIMUM_OUTPUT_BYTES,
     MAXIMUM_PARTITION_COUNT,
     MAXIMUM_PEAK_ADDITIONAL_BYTES,
@@ -73,16 +74,18 @@ def _plan(*, inventory_path: str = "inventory.json", inventory_sha256: str = H) 
             "inventory_path": inventory_path,
             "inventory_sha256": inventory_sha256,
             "exact_source_entries_sha256": "b" * 64,
+            "exact_dbn_entries_sha256": "c" * 64,
             "exact_source_entry_count": EXPECTED_ENTRY_COUNT,
             "exact_dbn_file_count": EXPECTED_DBN_COUNT,
             "exact_sidecar_file_count": EXPECTED_SIDECAR_COUNT,
             "total_source_bytes": EXPECTED_SOURCE_BYTES,
             "maximum_payload_bytes": EXPECTED_PAYLOAD_BYTES,
             "primary_1m_dbn_count": EXPECTED_PRIMARY_1M_DBN_COUNT,
+            "work_unit_count": EXPECTED_WORK_UNIT_COUNT,
             "standard_root_count": STANDARD_ROOT_COUNT,
             "deferred_micro_count": DEFERRED_MICRO_COUNT,
             "minimum_year": 2010,
-            "maximum_year": 2024,
+            "maximum_year": 2025,
         },
         "output_staging_path": "state/data_publication_staging/full-build-exact",
         "development_end_exclusive": "2025-07-13T22:00:00Z",
@@ -139,7 +142,12 @@ def _plan(*, inventory_path: str = "inventory.json", inventory_sha256: str = H) 
 
 def _receipt(tmp_path: Path, plan: dict[str, object], plan_sha256: str) -> OperationReceipt:
     boundary = RepoBoundary(tmp_path)
-    required = required_full_build_scope(plan=plan, plan_sha256=plan_sha256)
+    required = required_full_build_scope(
+        plan=plan,
+        plan_sha256=plan_sha256,
+        source_contract_id=ACTIVE_SOURCE_CONTRACT_ID,
+        canonical_release_id=ACTIVE_CANONICAL_RELEASE_ID,
+    )
     scope = {key: value for key, value in required.items() if not key.startswith("approval_")}
     return OperationReceipt.issue_user_approved(
         boundary,
@@ -224,7 +232,7 @@ class _Publisher:
         return stage
 
 
-def test_current_inventory_metadata_matches_full_build_bounds_without_payload_reads() -> None:
+def test_full_build_bounds_include_bounded_2025_while_active_contract_stays_blocked() -> None:
     source = json.loads((ROOT / "configs/source_contract.json").read_text(encoding="utf-8"))
     assert source["contract_id"] == ACTIVE_SOURCE_CONTRACT_ID
     assert source["active_canonical_source"]["release_id"] == ACTIVE_CANONICAL_RELEASE_ID
@@ -234,18 +242,26 @@ def test_current_inventory_metadata_matches_full_build_bounds_without_payload_re
         source["universe"]["deferred_micro_roots"]
     )
     assert (EXPECTED_ENTRY_COUNT, EXPECTED_DBN_COUNT, EXPECTED_SIDECAR_COUNT) == (
-        7_932,
-        3_966,
-        3_966,
+        8_506,
+        4_253,
+        4_253,
     )
     assert (EXPECTED_SOURCE_BYTES, EXPECTED_PAYLOAD_BYTES, EXPECTED_PRIMARY_1M_DBN_COUNT) == (
-        16_352_477_173,
-        16_348_861_063,
-        576,
+        17_123_147_852,
+        17_119_024_382,
+        617,
     )
+    assert EXPECTED_WORK_UNIT_COUNT == 609
+    assert source["selection_policy"]["admitted_standard_dbn_file_count"] == 3_966
+    assert source["selection_policy"]["admitted_standard_dbn_file_count"] != EXPECTED_DBN_COUNT
 
 
 def test_full_build_operation_is_nonpublic_and_receipt_is_one_use(tmp_path: Path) -> None:
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    (configs / "source_contract.json").write_bytes(
+        (ROOT / "configs/source_contract.json").read_bytes()
+    )
     plan = _plan()
     plan_path = tmp_path / "plan.json"
     plan_path.write_text(json.dumps(plan, sort_keys=True) + "\n", encoding="utf-8")
@@ -300,7 +316,9 @@ def test_month_partitioning_and_cross_boundary_roll_gap_state_are_deterministic(
     second_definition: str,
     second_event: str,
 ) -> None:
-    assert len(_month_windows(2024)) == 12
+    assert len(
+        _month_windows("2024-01-01T00:00:00Z", "2025-01-01T00:00:00Z")
+    ) == 12
     context = issue_synthetic_observation_context(
         boundary=RepoBoundary(tmp_path), fixture_id="9" * 64
     )
@@ -432,59 +450,38 @@ def test_output_and_lock_fail_before_authorization_or_payload_access(
 
 
 def test_2025_boundary_metadata_is_exact_and_crossing_files_fail_closed() -> None:
-    families = {
-        "definition", "ohlcv_1d", "ohlcv_1h", "ohlcv_1m", "ohlcv_1s",
-        "statistics", "status",
-    }
-    entries: list[dict[str, object]] = []
-    for family in sorted(families):
-        digest = sha256_json({"family": family})
-        entries.extend(
-            [
-                {
-                    "market": "ES",
-                    "family": family,
-                    "kind": "DBN",
-                    "year": 2025,
-                    "path": f"data/dbn/{family}/ES/2025/exact.dbn.zst",
-                    "sha256": digest,
-                    "size_bytes": 10,
-                    "payload_start_inclusive": "2025-01-01T00:00:00Z",
-                    "payload_end_exclusive": "2025-07-13T22:00:00Z",
-                    "boundary_safe_exact_acquisition": True,
-                },
-                {
-                    "market": "ES",
-                    "family": family,
-                    "kind": "SIDECAR",
-                    "year": 2025,
-                    "path": f"data/dbn/{family}/ES/2025/exact.dbn.zst.manifest.json",
-                    "sha256": sha256_json({"sidecar": family}),
-                    "size_bytes": 1,
-                    "paired_dbn_sha256": digest,
-                    "paired_dbn_size_bytes": 10,
-                    "payload_start_inclusive": "2025-01-01T00:00:00Z",
-                    "payload_end_exclusive": "2025-07-13T22:00:00Z",
-                    "boundary_safe_exact_acquisition": True,
-                },
-            ]
-        )
+    contract = json.loads((ROOT / "configs/source_contract.json").read_text())
+    inventory = json.loads((ROOT / contract["complete_inventory"]["path"]).read_text())
+    entries = [
+        dict(entry)
+        for entry in inventory["entries"]
+        if entry.get("admitted_standard_foundation") is True
+        and entry.get("market") == "ES"
+        and entry.get("year") == 2025
+    ]
     result = validate_complete_development_boundary_metadata(
-        entries, standard_roots=frozenset({"ES"})
+        ROOT, entries, standard_roots=frozenset({"ES"})
     )
     assert result["boundary_dbn_count"] == 7
     assert result["boundary_sidecar_count"] == 7
     crossing = [dict(entry) for entry in entries]
-    crossing[0]["payload_end_exclusive"] = "2026-01-01T00:00:00Z"
+    crossing[0]["interval_end_exclusive"] = "2026-01-01T00:00:00Z"
     with pytest.raises(UnauthorizedOperation, match="development boundary"):
         validate_complete_development_boundary_metadata(
-            crossing, standard_roots=frozenset({"ES"})
+            ROOT, crossing, standard_roots=frozenset({"ES"})
         )
     missing = entries[:-2]
     with pytest.raises(UnauthorizedOperation, match="omits exact"):
         validate_complete_development_boundary_metadata(
-            missing, standard_roots=frozenset({"ES"})
+            ROOT, missing, standard_roots=frozenset({"ES"})
         )
+
+    july = _month_windows(
+        "2025-01-01T00:00:00Z", "2025-07-13T22:00:00Z"
+    )
+    assert len(july) == 7
+    assert july[-1][3]["end"] == "2025-07-13T22:00:00Z"
+    assert july[-1][2] == "2025-07-01_2025-07-13T220000Z"
 
 
 def test_partition_reuse_requires_independent_exact_release_identity(tmp_path: Path) -> None:

@@ -83,6 +83,59 @@ def _declared_dbn_identity(sidecar: Mapping[str, Any], dbn_path: Path) -> tuple[
     return digest, size
 
 
+def _utc_timestamp(value: object, name: str) -> datetime:
+    if type(value) is not str or not value:
+        raise ContractError(f"{name} is not an exact UTC timestamp")
+    rendered = value if "T" in value else f"{value}T00:00:00Z"
+    try:
+        parsed = datetime.fromisoformat(rendered.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ContractError(f"{name} is not an exact UTC timestamp") from exc
+    if parsed.tzinfo != timezone.utc:
+        raise ContractError(f"{name} is not an exact UTC timestamp")
+    return parsed
+
+
+def validate_full_build_selection_contract(
+    contract: Mapping[str, Any],
+    inventory_entries: Sequence[Mapping[str, object]],
+) -> dict[str, object]:
+    """Validate the exact admitted full-build lane without opening DBN payloads."""
+
+    contract_id = contract.get("contract_id")
+    core = {key: value for key, value in contract.items() if key != "contract_id"}
+    if type(contract_id) is not str or sha256_json(core) != contract_id:
+        raise IntegrityError("source contract canonical identity differs")
+    policy = contract.get("selection_policy")
+    if not isinstance(policy, Mapping):
+        raise IntegrityError("source selection policy is absent")
+    admitted_dbns = [
+        dict(item)
+        for item in inventory_entries
+        if item.get("admitted_standard_foundation") is True
+        and item.get("kind") == "DBN"
+    ]
+    if (
+        policy.get("admitted_standard_dbn_file_count") != len(admitted_dbns)
+        or policy.get("admitted_standard_dbn_inventory_sha256")
+        != sha256_json(admitted_dbns)
+    ):
+        raise IntegrityError("source contract admitted DBN identity differs")
+    development_end = _utc_timestamp(
+        policy.get("development_end_exclusive"), "development end"
+    )
+    maximum_file_end = _utc_timestamp(
+        policy.get("file_interval_end_maximum"), "maximum file end"
+    )
+    if maximum_file_end != development_end:
+        raise IntegrityError("source contract file maximum differs from development end")
+    return {
+        "admitted_standard_dbn_file_count": len(admitted_dbns),
+        "admitted_standard_dbn_inventory_sha256": sha256_json(admitted_dbns),
+        "development_end_exclusive": policy["development_end_exclusive"],
+    }
+
+
 def reconstruct_content_inventory(
     repository_root: Path,
     *,
@@ -331,19 +384,21 @@ def select_exact_standard_source_entries(
     if len(by_path) != len(inventory_entries):
         raise IntegrityError("active complete source inventory has duplicate paths")
 
-    development_end = datetime.fromisoformat(
-        str(policy["development_end_exclusive"]).replace("Z", "+00:00")
+    development_end = _utc_timestamp(
+        policy.get("development_end_exclusive"), "development end"
     )
-    maximum_file_end = str(policy["file_interval_end_maximum"])
+    maximum_file_end = _utc_timestamp(
+        policy.get("file_interval_end_maximum"), "maximum file end"
+    )
     allowed_families = set(policy.get("allowed_families", ()))
     normalized_windows: dict[str, tuple[datetime, datetime]] = {}
     for market, window in windows.items():
         if market not in standard or market in deferred or not isinstance(window, Mapping):
             raise UnauthorizedOperation("canary window uses a nonstandard market")
         try:
-            start = datetime.fromisoformat(str(window["start"]).replace("Z", "+00:00"))
-            end = datetime.fromisoformat(str(window["end"]).replace("Z", "+00:00"))
-        except (KeyError, ValueError) as exc:
+            start = _utc_timestamp(window["start"], "window start")
+            end = _utc_timestamp(window["end"], "window end")
+        except KeyError as exc:
             raise ContractError("canary window is not an exact UTC interval") from exc
         if (
             start.tzinfo != timezone.utc
@@ -369,15 +424,22 @@ def select_exact_standard_source_entries(
         market = str(current.get("market"))
         family = str(current.get("family"))
         kind = str(current.get("kind"))
+        interval_start = _utc_timestamp(
+            current.get("interval_start_inclusive"), "source interval start"
+        )
+        interval_end = _utc_timestamp(
+            current.get("interval_end_exclusive"), "source interval end"
+        )
+        requested = normalized_windows.get(market)
         if (
-            market not in normalized_windows
+            requested is None
             or market not in standard
             or market in deferred
             or family not in allowed_families
             or current.get("lane") != "STANDARD_41"
             or current.get("admitted_standard_foundation") is not True
             or kind not in {"DBN", "SIDECAR"}
-            or str(current.get("interval_end_exclusive")) > maximum_file_end
+            or not interval_start < interval_end <= maximum_file_end
         ):
             raise UnauthorizedOperation("planned source entry is not admitted development source")
         base = path[:-len(".manifest.json")] if kind == "SIDECAR" else path
