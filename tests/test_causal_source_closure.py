@@ -50,14 +50,14 @@ def test_current_contract_metadata_closure_and_context_are_exact() -> None:
     )
     assert result == {
         "contract_id": _json(CONTRACT)["contract_id"],
-        "content_inventory_sha256": "77ee7abd00b9dd610c44751588a40bf1ff3fec7a74c29013643be7dddd672abb",
+        "content_inventory_sha256": "a915573b797bd5dc2b0d34beb1d0591dd6ae8b3bb9e448f41e130824d5e94ced",
         "deferred_micro_root_count": 17,
-        "file_count": 10900,
+        "file_count": 11474,
         "payload_files_opened": 0,
-        "release_id": "9867aedac9cfe732d015489fc4093ffc4aaab5ad698b75a5fa00ca7e1f457995",
+        "release_id": "4ca353d7814941782bb4c6640afe89b04371492868f57174bb10d632b6e7c9be",
         "row_reads": 0,
         "standard_root_count": 41,
-        "total_bytes": 23428263920,
+        "total_bytes": 24198934599,
         "valid": True,
     }
     assert _context().operation == CURRENT_SOURCE_CLOSURE_OPERATION
