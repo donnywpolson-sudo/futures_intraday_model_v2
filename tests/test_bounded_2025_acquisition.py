@@ -16,7 +16,7 @@ from futures_rebuild.boundary import (
     RepoBoundary,
     _personal_approval_line,
 )
-from futures_rebuild.canonical import canonical_bytes, sha256_file
+from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
 from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 from futures_rebuild.micro_alpha_acquisition import DownloadProviderApis
 from futures_rebuild.research_gateway_policy import (
@@ -114,7 +114,106 @@ def _synthetic_repository(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Pa
                 },
             )
     monkeypatch.setattr(acquisition, "_git_head", lambda _root: "b" * 40)
+    _seed_resume_evidence(root)
     return root
+
+
+def _seed_resume_evidence(root: Path) -> None:
+    fresh = acquisition.build_fresh_acquisition_plan(root=root)
+    heavy = [item for item in fresh["requests"] if item["family"] == "ohlcv_1s"]
+    light = [
+        item
+        for item in fresh["requests"]
+        if item["family"] not in {"definition", "ohlcv_1s"}
+    ]
+    reusable = heavy[:37] + light[:28]
+    records = []
+    for item in reusable:
+        request_id = str(item["request_id"])
+        worker = "heavy_ohlcv_1s" if item["family"] == "ohlcv_1s" else "light_families"
+        dbn = root / acquisition.V5_ATTEMPT / worker / f"{request_id}.dbn.zst"
+        sidecar = root / acquisition.V5_ATTEMPT / worker / f"{request_id}.manifest.json"
+        dbn.parent.mkdir(parents=True, exist_ok=True)
+        payload = f"opaque-{request_id}".encode()
+        dbn.write_bytes(payload)
+        digest = sha256_file(dbn)
+        sidecar_body = {
+            "schema_version": "bounded_2025_provider_staging_sidecar/1.0.0",
+            "state": "INACTIVE_UNREGISTERED_PROVIDER_STAGING",
+            "request_id": request_id,
+            "market": item["market"],
+            "family": item["family"],
+            "exact_query": item["query"],
+            "byte_count": len(payload),
+            "sha256": digest,
+            "canonical_destination": item["canonical_destination"],
+            "canonical_sidecar_destination": item["canonical_sidecar_destination"],
+            "dbn_rows_decoded": 0,
+            "holdout_or_forward_access": False,
+            "registered": False,
+            "published": False,
+            "activated": False,
+        }
+        _write_json(
+            sidecar, {**sidecar_body, "manifest_id": sha256_json(sidecar_body)}
+        )
+        records.append(
+            {
+                "request_id": request_id,
+                "staging_dbn": dbn.relative_to(root / acquisition.V5_ATTEMPT).as_posix(),
+                "staging_sidecar": sidecar.relative_to(
+                    root / acquisition.V5_ATTEMPT
+                ).as_posix(),
+                "byte_count": len(payload),
+                "sha256": digest,
+            }
+        )
+    for attempt, completed in (
+        (acquisition.V5_ATTEMPT, records),
+        (acquisition.V6_ATTEMPT, []),
+    ):
+        terminal_body = {
+            "state": "FAILURE_INACTIVE_EVIDENCE_PRESERVED",
+            "completed_records": completed,
+            "dbn_rows_decoded": 0,
+            "canonical_registration": False,
+            "publication": False,
+            "activation": False,
+        }
+        _write_json(
+            root / attempt / "terminal.json",
+            {**terminal_body, "terminal_id": sha256_json(terminal_body)},
+        )
+    _write_json(
+        root / acquisition.V6_FAILURE_AUDIT_PATH,
+        {
+            "failed_execution_audit_v6_id": (
+                "1139fc8ec916b7b320d70d56c1b695bcdd412091f8d7aeaf01b4973263caebfc"
+            ),
+            "checks_passed": 23,
+            "checks_failed": 0,
+            "cross_attempt_reconciliation": {
+                "reusable_non_definition_requests": 65
+            },
+        },
+    )
+    journal = root / acquisition.V5_ATTEMPT / "batch_job_journal.jsonl"
+    journal.parent.mkdir(parents=True, exist_ok=True)
+    gf_request_id = next(
+        str(item["request_id"])
+        for item in fresh["requests"]
+        if item["market"] == "GF" and item["family"] == "ohlcv_1s"
+    )
+    journal.write_bytes(
+        canonical_bytes(
+            {
+                "event": "BATCH_JOB_SUBMITTED",
+                "request_id": gf_request_id,
+                "job_id": "GLBX-SYNTHETIC-JOB",
+            }
+        )
+        + b"\n"
+    )
 
 
 def test_plan_is_exact_source_safe_and_two_worker_bounded(
@@ -129,7 +228,7 @@ def test_plan_is_exact_source_safe_and_two_worker_bounded(
         return original_open(path, *args, **kwargs)
 
     monkeypatch.setattr(Path, "open", reject_dbn_open)
-    plan = acquisition.build_acquisition_plan(root=root)
+    plan = acquisition.build_fresh_acquisition_plan(root=root)
     assert plan["counts"] == {
         "requests": 287,
         "expected_dbns": 287,
@@ -167,6 +266,37 @@ def test_plan_rejects_destination_collision(
     collision.write_bytes(b"unapproved-existing")
     with pytest.raises(IntegrityError, match="destination already exists"):
         acquisition.build_acquisition_plan(root=root)
+
+
+def test_resume_plan_references_65_and_downloads_only_222(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    root = _synthetic_repository(tmp_path, monkeypatch)
+    original_open = Path.open
+
+    def reject_dbn_open(path: Path, *args: object, **kwargs: object):
+        if str(path).endswith(".dbn.zst"):
+            raise AssertionError("resume planner opened a DBN payload")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "open", reject_dbn_open)
+    plan = acquisition.build_acquisition_plan(root=root)
+    assert plan["counts"] == {
+        "complete_requests": 287,
+        "reused_non_definition_requests": 65,
+        "network_requests": 222,
+        "network_definitions": 41,
+        "network_heavy_requests": 4,
+        "expected_dbns": 287,
+        "expected_sidecars": 287,
+    }
+    assert plan["limits"]["reused_payload_bytes_additional_disk"] == 0
+    assert all(item["family"] != "definition" for item in plan["reuse_records"])
+    assert plan["resumable_provider_jobs"][0]["request_id"] in {
+        item["request_id"]
+        for item in plan["network_requests"]
+        if item["market"] == "GF" and item["family"] == "ohlcv_1s"
+    }
 
 
 class _ConcurrencyProbe:
@@ -523,6 +653,37 @@ def test_batch_transport_rejects_provider_size_before_download(tmp_path: Path) -
     assert called is False
 
 
+def test_batch_transport_resumes_bound_job_without_resubmission(tmp_path: Path) -> None:
+    payload = b"opaque-synthetic-dbn"
+    batch = _BatchFixture(payload)
+    batch.submissions.clear()
+    adapter = acquisition._BatchRangeAdapter(
+        batch=batch,
+        api_key="not-recorded",
+        journal_path=tmp_path / "resume-journal.jsonl",
+        counter=acquisition._BatchCallCounter(20),
+        http_get=lambda **_kwargs: _StreamResponse(chunks=[payload], status_code=200),
+        sleeper=lambda _seconds: None,
+        resume_job_ids={"a" * 64: "job-1"},
+    )
+    output = tmp_path / "candidate.dbn.zst.partial"
+    adapter.get_range(
+        **acquisition._provider_range_query(_item("a", "ohlcv_1s")),
+        path=str(output),
+        request_id="a" * 64,
+        request_byte_ceiling=1000,
+    )
+    assert output.read_bytes() == payload
+    assert batch.submissions == []
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "resume-journal.jsonl").read_text(
+            encoding="utf-8"
+        ).splitlines()
+    ]
+    assert events[0]["event"] == "BATCH_JOB_RESUMED"
+
+
 def test_failure_summary_retains_mechanism_without_url_or_credential() -> None:
     value = acquisition._safe_failure_summary(
         RuntimeError(
@@ -576,7 +737,7 @@ def test_load_plan_rejects_identity_drift(
     assert acquisition.load_acquisition_plan(root=root)["plan_id"] == plan["plan_id"]
     plan["worker_contract"]["maximum_parallel_downloads"] = 3
     _write_json(root / acquisition.PLAN_PATH, plan)
-    with pytest.raises(IntegrityError, match="identity"):
+    with pytest.raises(IntegrityError, match="semantics"):
         acquisition.load_acquisition_plan(root=root)
 
 
@@ -591,8 +752,10 @@ def test_required_scope_accepts_exact_user_approved_receipt(
     assert required["approval_command"] == acquisition.OPERATION
     assert required["approval_plan_id"] == plan["plan_id"]
     assert required["approval_plan_sha256"] == plan_sha256
-    assert required["maximum_provider_calls"] == "278964"
-    assert required["maximum_batch_job_seconds"] == "3600.0"
+    assert required["complete_request_count"] == "287"
+    assert required["reused_request_count"] == "65"
+    assert required["network_request_count"] == "222"
+    assert required["maximum_batch_job_seconds"] == "14400.0"
 
     issue_scope = {
         key: value for key, value in required.items() if not key.startswith("approval_")

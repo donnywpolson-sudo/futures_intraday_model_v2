@@ -83,6 +83,22 @@ MAXIMUM_BATCH_INTERNAL_CALLS: Final = 287 * (
     + (1 + len(BATCH_CONTROL_RETRY_DELAYS_SECONDS))
     + MAXIMUM_BATCH_GET_ATTEMPTS
 )
+RESUME_STAGING_ROOT: Final = Path(
+    "state/provider_acquisition_staging/bounded_2025_development_resume_v1"
+)
+V5_ATTEMPT: Final = STAGING_ROOT / "c0fff89e0d0d4954"
+V6_ATTEMPT: Final = STAGING_ROOT / "fee3a0441daf858a"
+V6_FAILURE_AUDIT_PATH: Final = Path(
+    "reports/bounded_2025_development_acquisition_network_preparation_v6/"
+    "b25np6_20260824T0325065453062Z_25131906/FAILED_EXECUTION_AUDIT_V6.json"
+)
+REUSED_REQUEST_COUNT: Final = 65
+NETWORK_REQUEST_COUNT: Final = 222
+RESUME_MAXIMUM_BATCH_JOB_SECONDS: Final = 14_400.0
+RESUME_MAXIMUM_BATCH_POLL_ATTEMPTS: Final = 960
+GF_RESUMABLE_REQUEST_ID: Final = (
+    "3ebb64017ea903aafbefcaf268a9a909fc6cf38c520298cac83bfd38054ad5c1"
+)
 _PLAN_QUERY_FIELDS: Final = frozenset(
     {
         "dataset",
@@ -226,7 +242,7 @@ def _validate_source_authorities(
     return source, boundary, benchmark
 
 
-def build_acquisition_plan(*, root: Path) -> dict[str, object]:
+def build_fresh_acquisition_plan(*, root: Path) -> dict[str, object]:
     """Build the exact source-safe plan without opening a DBN payload."""
 
     root = root.resolve(strict=True)
@@ -436,76 +452,6 @@ def build_acquisition_plan(*, root: Path) -> dict[str, object]:
     return {**core, "plan_id": sha256_json(core)}
 
 
-def load_acquisition_plan(*, root: Path) -> dict[str, object]:
-    plan = _object(root / PLAN_PATH, "bounded-2025 acquisition plan")
-    if not _self_hashed(plan, "plan_id"):
-        raise IntegrityError("bounded-2025 acquisition plan identity is invalid")
-    if (
-        plan.get("operation") != OPERATION
-        or plan.get("counts")
-        != {
-            "requests": 287,
-            "expected_dbns": 287,
-            "expected_sidecars": 287,
-            "heavy_requests": 41,
-            "light_requests": 246,
-        }
-        or plan.get("worker_contract", {}).get("maximum_parallel_downloads") != 2
-        or plan.get("worker_contract", {}).get("maximum_concurrent_ohlcv_1s")
-        != 1
-        or plan.get("worker_contract", {}).get(
-            "whole_request_resubmission_retries"
-        )
-        != 0
-        or plan.get("worker_contract", {}).get("download_transport")
-        != DOWNLOAD_TRANSPORT
-        or plan.get("worker_contract", {}).get("batch_submission_retries") != 0
-        or plan.get("worker_contract", {}).get("maximum_batch_get_attempts")
-        != MAXIMUM_BATCH_GET_ATTEMPTS
-        or plan.get("worker_contract", {}).get(
-            "maximum_batch_poll_attempts_per_job"
-        )
-        != MAXIMUM_BATCH_POLL_ATTEMPTS_PER_JOB
-        or plan.get("worker_contract", {}).get("maximum_batch_job_seconds")
-        != MAXIMUM_BATCH_JOB_SECONDS
-        or plan.get("limits", {}).get("maximum_batch_internal_calls")
-        != MAXIMUM_BATCH_INTERNAL_CALLS
-        or plan.get("limits", {}).get("maximum_provider_calls")
-        != 287 + MAXIMUM_BATCH_INTERNAL_CALLS
-        or len(plan.get("requests", [])) != 287
-    ):
-        raise IntegrityError("bounded-2025 acquisition plan semantics drifted")
-    request_ids = [item.get("request_id") for item in plan["requests"]]
-    if len(set(request_ids)) != 287:
-        raise IntegrityError("bounded-2025 request IDs are not unique")
-    return plan
-
-
-def required_scope(*, root: Path, plan: Mapping[str, object]) -> dict[str, str]:
-    plan_sha256 = sha256_file(root / PLAN_PATH)
-    return {
-        "approval_command": OPERATION,
-        "approval_plan_id": str(plan["plan_id"]),
-        "approval_plan_sha256": plan_sha256,
-        "plan_id": str(plan["plan_id"]),
-        "plan_sha256": plan_sha256,
-        "implementation_commit": _git_head(root),
-        "request_count": "287",
-        "maximum_parallel_downloads": "2",
-        "maximum_concurrent_ohlcv_1s": "1",
-        "maximum_download_bytes": str(plan["limits"]["maximum_download_bytes"]),
-        "maximum_provider_calls": str(plan["limits"]["maximum_provider_calls"]),
-        "maximum_batch_job_seconds": str(
-            plan["worker_contract"]["maximum_batch_job_seconds"]
-        ),
-        "maximum_external_cost_usd": "0",
-        "development_end_exclusive": DEVELOPMENT_END_EXCLUSIVE,
-        "canonical_registration": "false",
-        "dbn_payload_decode": "false",
-        "holdout_or_forward_access": "false",
-    }
-
-
 def _set_timeout(function: Callable[..., object], seconds: float) -> None:
     owner = getattr(function, "__self__", None)
     if owner is not None and hasattr(owner, "TIMEOUT"):
@@ -616,6 +562,9 @@ class _BatchRangeAdapter:
         http_get: Callable[..., object] = requests.get,
         clock: Callable[[], float] = time.monotonic,
         sleeper: Callable[[float], None] = time.sleep,
+        maximum_poll_attempts: int = MAXIMUM_BATCH_POLL_ATTEMPTS_PER_JOB,
+        maximum_job_seconds: float = MAXIMUM_BATCH_JOB_SECONDS,
+        resume_job_ids: Mapping[str, str] | None = None,
     ) -> None:
         self._batch = batch
         self._api_key = api_key
@@ -624,6 +573,9 @@ class _BatchRangeAdapter:
         self._http_get = http_get
         self._clock = clock
         self._sleeper = sleeper
+        self._maximum_poll_attempts = maximum_poll_attempts
+        self._maximum_job_seconds = maximum_job_seconds
+        self._resume_job_ids = dict(resume_job_ids or {})
         self.TIMEOUT = float(MAXIMUM_REQUEST_TIMEOUT_SECONDS)
 
     def _control_call(self, name: str, function: Callable[[], object]) -> object:
@@ -676,13 +628,19 @@ class _BatchRangeAdapter:
         )
         return job_id
 
-    def _wait_done(self, *, job_id: str, request_id: str) -> None:
+    def _wait_done(
+        self,
+        *,
+        job_id: str,
+        request_id: str,
+        resume_probe: bool = False,
+    ) -> bool:
         list_jobs = getattr(self._batch, "list_jobs", None)
         if not callable(list_jobs):
             raise IntegrityError("Databento batch list-jobs API is unavailable")
         started = self._clock()
-        for poll in range(1, MAXIMUM_BATCH_POLL_ATTEMPTS_PER_JOB + 1):
-            if self._clock() - started > MAXIMUM_BATCH_JOB_SECONDS:
+        for poll in range(1, self._maximum_poll_attempts + 1):
+            if self._clock() - started > self._maximum_job_seconds:
                 raise UnauthorizedOperation("batch job polling time ceiling reached")
             raw = self._control_call(
                 "batch_list_jobs",
@@ -695,6 +653,8 @@ class _BatchRangeAdapter:
             matches = [item for item in raw if _batch_job_id(item) == job_id]
             if len(matches) > 1:
                 raise IntegrityError("batch job census duplicated the submitted job")
+            if resume_probe and poll == 1 and not matches:
+                return False
             if matches:
                 state = _batch_job_state(matches[0])
                 if state == "done":
@@ -707,8 +667,10 @@ class _BatchRangeAdapter:
                             "poll_count": poll,
                         },
                     )
-                    return
+                    return True
                 if state == "expired":
+                    if resume_probe:
+                        return False
                     raise IntegrityError("batch job expired before download")
             self._sleeper(BATCH_POLL_INTERVAL_SECONDS)
         raise UnauthorizedOperation("batch job poll-attempt ceiling reached")
@@ -845,8 +807,37 @@ class _BatchRangeAdapter:
             raise IntegrityError("batch output path is not create-only")
         query = dict(kwargs)
         request_id = raw_request_id
-        job_id = self._submit(query, request_id)
-        self._wait_done(job_id=job_id, request_id=request_id)
+        job_id = self._resume_job_ids.get(request_id)
+        if job_id is not None:
+            _append_batch_journal(
+                self._journal_path,
+                {
+                    "event": "BATCH_JOB_RESUMED",
+                    "request_id": request_id,
+                    "job_id": job_id,
+                    "source_binding_recorded_in_plan": True,
+                },
+            )
+            resumed = self._wait_done(
+                job_id=job_id,
+                request_id=request_id,
+                resume_probe=True,
+            )
+            if not resumed:
+                _append_batch_journal(
+                    self._journal_path,
+                    {
+                        "event": "BATCH_JOB_RESUME_UNAVAILABLE",
+                        "request_id": request_id,
+                        "job_id": job_id,
+                        "fallback_submission_count": 1,
+                    },
+                )
+                job_id = self._submit(query, request_id)
+                self._wait_done(job_id=job_id, request_id=request_id)
+        else:
+            job_id = self._submit(query, request_id)
+            self._wait_done(job_id=job_id, request_id=request_id)
         item = self._file_manifest(job_id=job_id)
         if int(item["size"]) > raw_byte_ceiling:
             raise UnauthorizedOperation("batch file exceeds its request byte ceiling")
@@ -885,6 +876,9 @@ def build_file_batch_download_provider_apis(
     http_get: Callable[..., object] = requests.get,
     clock: Callable[[], float] = time.monotonic,
     sleeper: Callable[[float], None] = time.sleep,
+    maximum_poll_attempts: int = MAXIMUM_BATCH_POLL_ATTEMPTS_PER_JOB,
+    maximum_job_seconds: float = MAXIMUM_BATCH_JOB_SECONDS,
+    resume_job_ids: Mapping[str, str] | None = None,
 ) -> DownloadProviderApis:
     key = resolve_databento_api_key(key_files=(root / "api.env",))
     if not key:
@@ -907,6 +901,9 @@ def build_file_batch_download_provider_apis(
         http_get=http_get,
         clock=clock,
         sleeper=sleeper,
+        maximum_poll_attempts=maximum_poll_attempts,
+        maximum_job_seconds=maximum_job_seconds,
+        resume_job_ids=resume_job_ids,
     )
     return DownloadProviderApis(get_cost=get_cost, get_range=adapter.get_range)
 
@@ -945,6 +942,7 @@ def _download_worker(
     maximum_total_bytes: int,
     started: float,
     clock: Callable[[], float],
+    maximum_runtime_seconds: float = MAXIMUM_RUNTIME_SECONDS,
 ) -> _WorkerResult:
     records: list[dict[str, object]] = []
     calls = 0
@@ -956,7 +954,7 @@ def _download_worker(
         for item in items:
             if stop_event.is_set():
                 break
-            if clock() - started >= MAXIMUM_RUNTIME_SECONDS:
+            if clock() - started >= maximum_runtime_seconds:
                 raise UnauthorizedOperation("bounded-2025 runtime ceiling reached")
             failed_request_id = str(item["request_id"])
             partial = worker_root / f"{failed_request_id}.dbn.zst.partial"
@@ -1036,7 +1034,7 @@ def _download_worker(
     return _WorkerResult(tuple(records), calls, None, None)
 
 
-def execute_authorized_acquisition(
+def _execute_fresh_acquisition(
     *,
     root: Path,
     authorization: OperationReceipt,
@@ -1202,4 +1200,459 @@ def execute_authorized_acquisition(
         stream.write(canonical_bytes(terminal) + b"\n")
     if state != "SUCCESS_INACTIVE_UNREGISTERED_STAGING":
         raise IntegrityError("bounded-2025 acquisition failed closed")
+    return terminal
+
+
+def _failed_terminal(root: Path, attempt: Path) -> tuple[dict[str, object], str]:
+    path = root / attempt / "terminal.json"
+    terminal = _object(path, "failed bounded-2025 terminal")
+    body = {key: value for key, value in terminal.items() if key != "terminal_id"}
+    if (
+        terminal.get("terminal_id") != sha256_json(body)
+        or terminal.get("state") != "FAILURE_INACTIVE_EVIDENCE_PRESERVED"
+        or terminal.get("dbn_rows_decoded") != 0
+        or terminal.get("canonical_registration") is not False
+        or terminal.get("publication") is not False
+        or terminal.get("activation") is not False
+    ):
+        raise IntegrityError("failed bounded-2025 terminal drifted")
+    return terminal, sha256_file(path)
+
+
+def _reuse_sidecar_binding(
+    *,
+    root: Path,
+    attempt: Path,
+    record: Mapping[str, object],
+    request: Mapping[str, object],
+) -> dict[str, object]:
+    dbn = root / attempt / str(record.get("staging_dbn"))
+    sidecar = root / attempt / str(record.get("staging_sidecar"))
+    if (
+        not dbn.is_file()
+        or dbn.is_symlink()
+        or not sidecar.is_file()
+        or sidecar.is_symlink()
+        or dbn.stat().st_size != record.get("byte_count")
+    ):
+        raise IntegrityError("failed-attempt custody metadata drifted")
+    manifest = _object(sidecar, "failed-attempt sidecar")
+    manifest_body = {
+        key: value for key, value in manifest.items() if key != "manifest_id"
+    }
+    if (
+        manifest.get("manifest_id") != sha256_json(manifest_body)
+        or manifest.get("request_id") != request["request_id"]
+        or manifest.get("market") != request["market"]
+        or manifest.get("family") != request["family"]
+        or manifest.get("exact_query") != request["query"]
+        or manifest.get("byte_count") != record["byte_count"]
+        or manifest.get("sha256") != record["sha256"]
+        or manifest.get("registered") is not False
+        or manifest.get("published") is not False
+        or manifest.get("activated") is not False
+    ):
+        raise IntegrityError("failed-attempt sidecar binding drifted")
+    return {
+        "request_id": request["request_id"],
+        "market": request["market"],
+        "family": request["family"],
+        "source_dbn": dbn.relative_to(root).as_posix(),
+        "source_sidecar": sidecar.relative_to(root).as_posix(),
+        "byte_count": record["byte_count"],
+        "sha256": record["sha256"],
+        "sidecar_sha256": sha256_file(sidecar),
+        "canonical_destination": request["canonical_destination"],
+        "canonical_sidecar_destination": request[
+            "canonical_sidecar_destination"
+        ],
+        "custody_mode": "REFERENCE_VERIFIED_FAILED_ATTEMPT_IN_PLACE_NO_COPY",
+    }
+
+
+def _resumable_gf_job(root: Path, request_id: str) -> dict[str, object]:
+    journal = root / V5_ATTEMPT / "batch_job_journal.jsonl"
+    events = [
+        json.loads(line)
+        for line in journal.read_text(encoding="utf-8").splitlines()
+        if json.loads(line).get("request_id") == request_id
+    ]
+    submitted = [item for item in events if item.get("event") == "BATCH_JOB_SUBMITTED"]
+    finished = [
+        item
+        for item in events
+        if item.get("event")
+        in {"BATCH_JOB_DONE", "BATCH_FILE_BOUND", "BATCH_FILE_DOWNLOADED_AND_HASH_VERIFIED"}
+    ]
+    if (
+        len(submitted) != 1
+        or finished
+        or re.fullmatch(r"GLBX-[A-Z0-9-]+", str(submitted[0].get("job_id")))
+        is None
+    ):
+        raise IntegrityError("GF predecessor batch-job binding drifted")
+    return {
+        "request_id": request_id,
+        "job_id": submitted[0]["job_id"],
+        "source_journal": journal.relative_to(root).as_posix(),
+        "source_journal_sha256": sha256_file(journal),
+        "fallback_if_missing_or_expired": "ONE_NEW_SUBMISSION_SAME_EXACT_QUERY",
+    }
+
+
+def build_acquisition_plan(*, root: Path) -> dict[str, object]:
+    """Build the 65-reuse/222-network successor without opening DBN payloads."""
+
+    root = root.resolve(strict=True)
+    fresh = build_fresh_acquisition_plan(root=root)
+    requests = {str(item["request_id"]): item for item in fresh["requests"]}
+    v5, v5_sha = _failed_terminal(root, V5_ATTEMPT)
+    v6, v6_sha = _failed_terminal(root, V6_ATTEMPT)
+    audit = _object(root / V6_FAILURE_AUDIT_PATH, "V6 failure audit")
+    if (
+        audit.get("failed_execution_audit_v6_id")
+        != "1139fc8ec916b7b320d70d56c1b695bcdd412091f8d7aeaf01b4973263caebfc"
+        or audit.get("checks_passed") != 23
+        or audit.get("checks_failed") != 0
+        or audit.get("cross_attempt_reconciliation", {}).get(
+            "reusable_non_definition_requests"
+        )
+        != REUSED_REQUEST_COUNT
+    ):
+        raise IntegrityError("V6 failure audit drifted")
+    chosen: dict[str, dict[str, object]] = {}
+    identities: dict[str, tuple[int, str]] = {}
+    for label, attempt, terminal, terminal_sha in (
+        ("V5", V5_ATTEMPT, v5, v5_sha),
+        ("V6", V6_ATTEMPT, v6, v6_sha),
+    ):
+        records = terminal.get("completed_records")
+        if not isinstance(records, list):
+            raise IntegrityError("failed terminal records are invalid")
+        for record in records:
+            if not isinstance(record, Mapping):
+                raise IntegrityError("failed terminal record is invalid")
+            request_id = str(record.get("request_id"))
+            request = requests.get(request_id)
+            if request is None:
+                raise IntegrityError("failed-attempt request is outside the plan")
+            if request["family"] == "definition":
+                continue
+            identity = (int(record["byte_count"]), str(record["sha256"]))
+            if request_id in identities and identities[request_id] != identity:
+                raise IntegrityError("non-definition predecessor bytes disagree")
+            identities[request_id] = identity
+            binding = _reuse_sidecar_binding(
+                root=root, attempt=attempt, record=record, request=request
+            )
+            binding.update(
+                {
+                    "source_attempt": label,
+                    "source_terminal_id": terminal["terminal_id"],
+                    "source_terminal_sha256": terminal_sha,
+                }
+            )
+            chosen[request_id] = binding
+    reuse = [chosen[key] for key in sorted(chosen)]
+    network = [
+        item for item in fresh["requests"] if str(item["request_id"]) not in chosen
+    ]
+    if (
+        len(reuse) != REUSED_REQUEST_COUNT
+        or len(network) != NETWORK_REQUEST_COUNT
+        or sum(item["family"] == "definition" for item in network) != 41
+        or sum(item["family"] == "ohlcv_1s" for item in network) != 4
+        or any(item["family"] == "definition" for item in reuse)
+    ):
+        raise IntegrityError("composite 65/222 request partition drifted")
+    gf = [
+        item
+        for item in network
+        if item["market"] == "GF" and item["family"] == "ohlcv_1s"
+    ]
+    if len(gf) != 1:
+        raise IntegrityError("GF network request binding drifted")
+    resumable = _resumable_gf_job(root, str(gf[0]["request_id"]))
+    if resumable["request_id"] not in {item["request_id"] for item in network}:
+        raise IntegrityError("GF resumable job is outside network scope")
+    maximum_network_bytes = sum(
+        int(item["request_byte_ceiling"]) for item in network
+    )
+    causal_peak = int(fresh["limits"]["causal_build_peak_ceiling_bytes"])
+    batch_calls = NETWORK_REQUEST_COUNT * (
+        2
+        + RESUME_MAXIMUM_BATCH_POLL_ATTEMPTS
+        * (1 + len(BATCH_CONTROL_RETRY_DELAYS_SECONDS))
+        + MAXIMUM_BATCH_GET_ATTEMPTS
+    )
+    core = {
+        "schema_version": "bounded_2025_development_acquisition_plan/3.0.0",
+        "state": "PREPARED_IMPLEMENTATION_COMMIT_AND_NETWORK_APPROVAL_REQUIRED",
+        "operation": OPERATION,
+        "prepared_parent_head": _git_head(root),
+        "predecessor_plan_id": "028b9530059c719949250f2aac0aadee3731e127b27b9788e55171e253a58c76",
+        "source_authority": fresh["source_authority"],
+        "interval": fresh["interval"],
+        "universe": fresh["universe"],
+        "families": fresh["families"],
+        "reuse_records": reuse,
+        "network_requests": network,
+        "resumable_provider_jobs": [resumable],
+        "counts": {
+            "complete_requests": 287,
+            "reused_non_definition_requests": REUSED_REQUEST_COUNT,
+            "network_requests": NETWORK_REQUEST_COUNT,
+            "network_definitions": 41,
+            "network_heavy_requests": 4,
+            "expected_dbns": 287,
+            "expected_sidecars": 287,
+        },
+        "worker_contract": {
+            "maximum_parallel_downloads": 2,
+            "maximum_concurrent_ohlcv_1s_downloads": 1,
+            "maximum_batch_job_seconds": RESUME_MAXIMUM_BATCH_JOB_SECONDS,
+            "maximum_batch_poll_attempts_per_job": RESUME_MAXIMUM_BATCH_POLL_ATTEMPTS,
+            "maximum_runtime_seconds": MAXIMUM_RUNTIME_SECONDS,
+            "existing_job_probe_then_one_fallback_submission": True,
+            "new_job_ids_persisted_before_polling": True,
+            "whole_request_retries": 0,
+        },
+        "limits": {
+            "maximum_external_cost_usd": "0",
+            "maximum_network_download_bytes": maximum_network_bytes,
+            "reused_payload_bytes_additional_disk": 0,
+            "maximum_batch_internal_calls": batch_calls,
+            "maximum_provider_calls": NETWORK_REQUEST_COUNT + batch_calls,
+            "causal_build_peak_ceiling_bytes": causal_peak,
+            "minimum_post_peak_free_bytes": MINIMUM_POST_PEAK_FREE_BYTES,
+            "required_free_before_acquisition_bytes": (
+                MINIMUM_POST_PEAK_FREE_BYTES
+                + maximum_network_bytes
+                + causal_peak
+            ),
+        },
+        "custody": {
+            "provider_staging_root": RESUME_STAGING_ROOT.as_posix(),
+            "reuse_is_reference_only_no_copy_no_hardlink": True,
+            "all_definitions_reacquired_single_successor_vintage": True,
+            "predecessor_attempts_preserved": True,
+            "canonical_registration_during_acquisition": False,
+            "dbn_payload_decode": False,
+            "holdout_or_forward_access": False,
+            "publication": False,
+            "activation": False,
+        },
+    }
+    return {**core, "plan_id": sha256_json(core)}
+
+
+def load_acquisition_plan(*, root: Path) -> dict[str, object]:
+    plan = _object(root / PLAN_PATH, "bounded-2025 resume plan")
+    body = {key: value for key, value in plan.items() if key != "plan_id"}
+    counts = plan.get("counts", {})
+    if (
+        plan.get("plan_id") != sha256_json(body)
+        or plan.get("operation") != OPERATION
+        or counts.get("complete_requests") != 287
+        or counts.get("reused_non_definition_requests") != REUSED_REQUEST_COUNT
+        or counts.get("network_requests") != NETWORK_REQUEST_COUNT
+        or counts.get("network_definitions") != 41
+        or counts.get("network_heavy_requests") != 4
+        or len(plan.get("reuse_records", [])) != REUSED_REQUEST_COUNT
+        or len(plan.get("network_requests", [])) != NETWORK_REQUEST_COUNT
+    ):
+        raise IntegrityError("bounded-2025 resume plan semantics drifted")
+    return plan
+
+
+def required_scope(*, root: Path, plan: Mapping[str, object]) -> dict[str, str]:
+    plan_sha = sha256_file(root / PLAN_PATH)
+    return {
+        "approval_command": OPERATION,
+        "approval_plan_id": str(plan["plan_id"]),
+        "approval_plan_sha256": plan_sha,
+        "plan_id": str(plan["plan_id"]),
+        "plan_sha256": plan_sha,
+        "implementation_commit": _git_head(root),
+        "complete_request_count": "287",
+        "reused_request_count": str(REUSED_REQUEST_COUNT),
+        "network_request_count": str(NETWORK_REQUEST_COUNT),
+        "maximum_network_download_bytes": str(
+            plan["limits"]["maximum_network_download_bytes"]
+        ),
+        "maximum_batch_job_seconds": str(RESUME_MAXIMUM_BATCH_JOB_SECONDS),
+    }
+
+
+def _verify_reused_payloads(root: Path, records: Sequence[Mapping[str, object]]) -> None:
+    for record in records:
+        dbn = root / str(record["source_dbn"])
+        sidecar = root / str(record["source_sidecar"])
+        if (
+            not dbn.is_file()
+            or dbn.is_symlink()
+            or dbn.stat().st_size != record["byte_count"]
+            or sha256_file(dbn) != record["sha256"]
+            or sha256_file(sidecar) != record["sidecar_sha256"]
+        ):
+            raise IntegrityError("reused bounded-2025 custody bytes drifted")
+
+
+def execute_authorized_acquisition(
+    *,
+    root: Path,
+    authorization: OperationReceipt,
+    provider_factory: Callable[[], DownloadProviderApis] | None = None,
+    clock: Callable[[], float] = time.monotonic,
+    disk_usage: Callable[[Path], object] = shutil.disk_usage,
+    environment_check: Callable[[Path], object] = require_locked_repository_environment,
+) -> dict[str, object]:
+    """Reference 65 verified payloads and acquire only the remaining 222."""
+
+    root = root.resolve(strict=True)
+    plan = load_acquisition_plan(root=root)
+    environment_check(root)
+    free = getattr(disk_usage(root), "free", None)
+    if type(free) is not int or free < int(
+        plan["limits"]["required_free_before_acquisition_bytes"]
+    ):
+        raise UnauthorizedOperation("insufficient free space for bounded acquisition")
+    boundary = RepoBoundary(root)
+    claim = authorization.consume(
+        boundary,
+        operation=OPERATION,
+        classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
+        required_scope=required_scope(root=root, plan=plan),
+    )
+    reuse = [dict(item) for item in plan["reuse_records"]]
+    _verify_reused_payloads(root, reuse)
+    attempt = root / RESUME_STAGING_ROOT / authorization.receipt_id[:16]
+    boundary.assert_active_path(
+        attempt.absolute(),
+        purpose="bounded-2025 resume inactive provider staging",
+        subtree=RESUME_STAGING_ROOT.as_posix(),
+    )
+    attempt.mkdir(parents=True, exist_ok=False)
+    batch_counter: _BatchCallCounter | None = None
+    if provider_factory is None:
+        batch_counter = _BatchCallCounter(
+            int(plan["limits"]["maximum_batch_internal_calls"])
+        )
+        resume_ids = {
+            str(item["request_id"]): str(item["job_id"])
+            for item in plan["resumable_provider_jobs"]
+        }
+
+        def provider_factory() -> DownloadProviderApis:
+            assert batch_counter is not None
+            return build_file_batch_download_provider_apis(
+                root=root,
+                journal_path=attempt / "batch_job_journal.jsonl",
+                counter=batch_counter,
+                maximum_poll_attempts=RESUME_MAXIMUM_BATCH_POLL_ATTEMPTS,
+                maximum_job_seconds=RESUME_MAXIMUM_BATCH_JOB_SECONDS,
+                resume_job_ids=resume_ids,
+            )
+
+    started = clock()
+    cost_calls = 0
+    range_calls = 0
+    downloaded: list[dict[str, object]] = []
+    failures: list[dict[str, object]] = []
+    try:
+        cost_provider = provider_factory()
+        for item in plan["network_requests"]:
+            _set_timeout(cost_provider.get_cost, 90.0)
+            cost_calls += 1
+            _zero_cost(cost_provider.get_cost(**_provider_cost_query(item)))
+        heavy = [
+            item for item in plan["network_requests"] if item["family"] == "ohlcv_1s"
+        ]
+        light = [
+            item for item in plan["network_requests"] if item["family"] != "ohlcv_1s"
+        ]
+        stop_event = threading.Event()
+        total_state = {"bytes": 0}
+        total_lock = threading.Lock()
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix="bounded-2025-resume") as executor:
+            futures = [
+                executor.submit(
+                    _download_worker,
+                    root=attempt,
+                    worker_name=name,
+                    items=items,
+                    provider_factory=provider_factory,
+                    stop_event=stop_event,
+                    total_state=total_state,
+                    total_lock=total_lock,
+                    maximum_total_bytes=int(
+                        plan["limits"]["maximum_network_download_bytes"]
+                    ),
+                    started=started,
+                    clock=clock,
+                    maximum_runtime_seconds=MAXIMUM_RUNTIME_SECONDS,
+                )
+                for name, items in (
+                    ("heavy_ohlcv_1s", heavy),
+                    ("light_families", light),
+                )
+            ]
+            results = [future.result() for future in futures]
+        range_calls = sum(result.calls for result in results)
+        downloaded = [record for result in results for record in result.records]
+        failures = [
+            {
+                "worker": index,
+                "failure_type": result.failure_type,
+                "failed_request_id": result.failed_request_id,
+                "failure_http_status": result.failure_http_status,
+                "failure_summary": result.failure_summary,
+            }
+            for index, result in enumerate(results)
+            if result.failure_type is not None
+        ]
+        expected_ids = {
+            str(item["request_id"]) for item in plan["network_requests"]
+        }
+        if (
+            failures
+            or len(downloaded) != NETWORK_REQUEST_COUNT
+            or range_calls != NETWORK_REQUEST_COUNT
+            or {str(item["request_id"]) for item in downloaded} != expected_ids
+        ):
+            raise IntegrityError("bounded-2025 resume acquisition did not complete exactly")
+        state = "SUCCESS_INACTIVE_UNREGISTERED_COMPOSITE_STAGING"
+        failure_type = None
+    except Exception as exc:
+        state = "FAILURE_INACTIVE_EVIDENCE_PRESERVED"
+        failure_type = type(exc).__name__
+    completed = [{**item, "worker": "reused_reference"} for item in reuse]
+    completed.extend(downloaded)
+    core = {
+        "schema_version": "bounded_2025_acquisition_terminal/2.0.0",
+        "state": state,
+        "plan_id": plan["plan_id"],
+        "plan_sha256": sha256_file(root / PLAN_PATH),
+        "authorization_receipt_id": authorization.receipt_id,
+        "authorization_claim_sha256": sha256_file(claim),
+        "implementation_commit": _git_head(root),
+        "reused_reference_count": REUSED_REQUEST_COUNT,
+        "network_download_count": len(downloaded),
+        "provider_call_counts": {"get_cost": cost_calls, "get_range": range_calls},
+        "batch_provider_call_counts": (
+            batch_counter.snapshot() if batch_counter is not None else {}
+        ),
+        "completed_records": sorted(completed, key=lambda item: item["request_id"]),
+        "worker_failures": failures,
+        "failure_type": failure_type,
+        "canonical_registration": False,
+        "dbn_rows_decoded": 0,
+        "holdout_or_forward_access": False,
+        "publication": False,
+        "activation": False,
+    }
+    terminal = {**core, "terminal_id": sha256_json(core)}
+    (attempt / "terminal.json").write_bytes(canonical_bytes(terminal) + b"\n")
+    if state != "SUCCESS_INACTIVE_UNREGISTERED_COMPOSITE_STAGING":
+        raise IntegrityError("bounded-2025 resume acquisition failed closed")
     return terminal
