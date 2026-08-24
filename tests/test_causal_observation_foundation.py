@@ -16,7 +16,8 @@ from futures_rebuild.boundary import (
 )
 from futures_rebuild.canonical import sha256_file, sha256_json
 from futures_rebuild.causal_observation_foundation import (
-    ACTIVE_SOURCE_CONTRACT_ID,
+    CANARY_CANONICAL_RELEASE_ID,
+    CANARY_SOURCE_CONTRACT_ID,
     CAUSAL_OBSERVATION_CONTRACT_ID,
     ECONOMICS_RULEBOOK_SHA256,
     SYNTHETIC_RELEASE_ID,
@@ -213,8 +214,8 @@ def _operation_plan() -> dict[str, object]:
         "operation": CAUSAL_OBSERVATION_CANARY_OPERATION,
         "causal_contract_id": CAUSAL_OBSERVATION_CONTRACT_ID,
         "source": {
-            "source_contract_id": ACTIVE_SOURCE_CONTRACT_ID,
-            "canonical_release_id": "9867aedac9cfe732d015489fc4093ffc4aaab5ad698b75a5fa00ca7e1f457995",
+            "source_contract_id": CANARY_SOURCE_CONTRACT_ID,
+            "canonical_release_id": CANARY_CANONICAL_RELEASE_ID,
             "exact_source_entries_sha256": "b" * 64,
         },
         "output_staging_path": "state/data_publication_staging/canary-exact",

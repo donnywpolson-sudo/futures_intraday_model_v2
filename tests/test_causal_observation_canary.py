@@ -29,8 +29,8 @@ from futures_rebuild.causal_observation_canary import (
     MultiplierResolutionError,
 )
 from futures_rebuild.causal_observation_foundation import (
-    ACTIVE_CANONICAL_RELEASE_ID,
-    ACTIVE_SOURCE_CONTRACT_ID,
+    CANARY_CANONICAL_RELEASE_ID,
+    CANARY_SOURCE_CONTRACT_ID,
     CAUSAL_OBSERVATION_CONTRACT_ID,
     issue_synthetic_observation_context,
     required_canary_scope,
@@ -58,8 +58,8 @@ def _operation_plan() -> dict[str, object]:
         "operation": CAUSAL_OBSERVATION_CANARY_OPERATION,
         "causal_contract_id": CAUSAL_OBSERVATION_CONTRACT_ID,
         "source": {
-            "source_contract_id": ACTIVE_SOURCE_CONTRACT_ID,
-            "canonical_release_id": ACTIVE_CANONICAL_RELEASE_ID,
+            "source_contract_id": CANARY_SOURCE_CONTRACT_ID,
+            "canonical_release_id": CANARY_CANONICAL_RELEASE_ID,
             "exact_source_entries_sha256": "b" * 64,
         },
         "output_staging_path": "state/data_publication_staging/canary-exact",
@@ -386,7 +386,7 @@ def test_selected_source_decoder_routes_exact_schema_without_real_payload_open(
         windows={"ES": {"start": "2024-03-04T00:00:00Z", "end": "2024-03-05T00:00:00Z"}},
         source_contract={
             "active_canonical_source": {
-                "release_id": ACTIVE_CANONICAL_RELEASE_ID,
+                "release_id": CANARY_CANONICAL_RELEASE_ID,
                 "release_manifest_sha256": "6" * 64,
             },
             "complete_inventory": {"content_inventory_sha256": "7" * 64},

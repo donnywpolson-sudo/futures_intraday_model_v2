@@ -22,8 +22,8 @@ from zoneinfo import ZoneInfo
 from .boundary import OperationReceipt, RepoBoundary
 from .canonical import canonical_bytes, sha256_file, sha256_json
 from .causal_observation_foundation import (
-    ACTIVE_CANONICAL_RELEASE_ID,
-    ACTIVE_SOURCE_CONTRACT_ID,
+    CANARY_CANONICAL_RELEASE_ID,
+    CANARY_SOURCE_CONTRACT_ID,
     CAUSAL_OBSERVATION_CONTRACT_ID,
     CausalObservationOperationContext,
     ECONOMICS_RULEBOOK_PATH,
@@ -256,8 +256,8 @@ def _validate_plan(root: Path, plan: Mapping[str, object]) -> None:
         }
         or any(value is not False for value in authority.values())
         or not isinstance(source, Mapping)
-        or source.get("source_contract_id") != ACTIVE_SOURCE_CONTRACT_ID
-        or source.get("canonical_release_id") != ACTIVE_CANONICAL_RELEASE_ID
+        or source.get("source_contract_id") != CANARY_SOURCE_CONTRACT_ID
+        or source.get("canonical_release_id") != CANARY_CANONICAL_RELEASE_ID
         or source.get("exact_source_entry_count") != 66
         or source.get("exact_dbn_file_count") != 33
         or source.get("exact_sidecar_file_count") != 33

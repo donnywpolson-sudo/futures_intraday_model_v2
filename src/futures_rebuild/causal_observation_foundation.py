@@ -28,11 +28,17 @@ from .research_gateway_policy import (
 CAUSAL_OBSERVATION_CONTRACT_ID = (
     "a11f587644168555d23042b945799b16947723203e5a592af6451027d301bdc7"
 )
-ACTIVE_SOURCE_CONTRACT_ID = (
+CANARY_SOURCE_CONTRACT_ID = (
     "47ad7a1c100bec86494f3c1eb1e78ba56a4d35c6be993da6ded8e2e7f925823f"
 )
-ACTIVE_CANONICAL_RELEASE_ID = (
+CANARY_CANONICAL_RELEASE_ID = (
     "9867aedac9cfe732d015489fc4093ffc4aaab5ad698b75a5fa00ca7e1f457995"
+)
+ACTIVE_SOURCE_CONTRACT_ID = (
+    "8af92cf4e250e025b61ffb51bc2677f340a4dd4f4f8d6f9825ed28b916dd43d1"
+)
+ACTIVE_CANONICAL_RELEASE_ID = (
+    "4ca353d7814941782bb4c6640afe89b04371492868f57174bb10d632b6e7c9be"
 )
 ECONOMICS_RULEBOOK_PATH = "configs/contract_economics_rules.json"
 ECONOMICS_RULEBOOK_SHA256 = (
@@ -182,8 +188,8 @@ def required_canary_scope(
         or not isinstance(source, Mapping)
         or not isinstance(limits, Mapping)
         or not isinstance(authority, Mapping)
-        or source.get("source_contract_id") != ACTIVE_SOURCE_CONTRACT_ID
-        or source.get("canonical_release_id") != ACTIVE_CANONICAL_RELEASE_ID
+        or source.get("source_contract_id") != CANARY_SOURCE_CONTRACT_ID
+        or source.get("canonical_release_id") != CANARY_CANONICAL_RELEASE_ID
         or plan.get("development_end_exclusive") != DEVELOPMENT_END_EXCLUSIVE
         or plan.get("holdout_allowed") is not False
         or plan.get("forward_allowed") is not False
@@ -199,8 +205,8 @@ def required_canary_scope(
     return {
         "operation_kind": "DEVELOPMENT_CAUSAL_OBSERVATION_ONLY",
         "causal_contract_id": CAUSAL_OBSERVATION_CONTRACT_ID,
-        "source_contract_id": ACTIVE_SOURCE_CONTRACT_ID,
-        "canonical_release_id": ACTIVE_CANONICAL_RELEASE_ID,
+        "source_contract_id": CANARY_SOURCE_CONTRACT_ID,
+        "canonical_release_id": CANARY_CANONICAL_RELEASE_ID,
         "exact_source_entries_sha256": _digest(
             source.get("exact_source_entries_sha256"), "exact_source_entries_sha256"
         ),
@@ -248,9 +254,9 @@ def authorize_canary_row_read(
     return CausalObservationOperationContext(
         operation=CAUSAL_OBSERVATION_CANARY_OPERATION,
         classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
-        source_contract_id=ACTIVE_SOURCE_CONTRACT_ID,
+        source_contract_id=CANARY_SOURCE_CONTRACT_ID,
         causal_contract_id=CAUSAL_OBSERVATION_CONTRACT_ID,
-        source_release_id=ACTIVE_CANONICAL_RELEASE_ID,
+        source_release_id=CANARY_CANONICAL_RELEASE_ID,
         plan_id=str(plan["plan_id"]),
         plan_sha256=plan_sha256,
         exact_source_entries_sha256=str(plan["source"]["exact_source_entries_sha256"]),
@@ -452,32 +458,34 @@ def issue_synthetic_observation_context(
 
 
 def _require_context(context: CausalObservationOperationContext) -> None:
+    identity_valid = False
+    if type(context) is CausalObservationOperationContext:
+        if context.synthetic:
+            identity_valid = (
+                context.classification is OperationClassification.SYNTHETIC_MECHANICS_ONLY
+                and context.source_contract_id == ACTIVE_SOURCE_CONTRACT_ID
+                and context.source_release_id == SYNTHETIC_RELEASE_ID
+            )
+        elif context.operation == CAUSAL_OBSERVATION_CANARY_OPERATION:
+            identity_valid = (
+                context.classification
+                is OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION
+                and context.source_contract_id == CANARY_SOURCE_CONTRACT_ID
+                and context.source_release_id == CANARY_CANONICAL_RELEASE_ID
+            )
+        elif context.operation == CAUSAL_OBSERVATION_FULL_BUILD_OPERATION:
+            identity_valid = (
+                context.classification
+                is OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION
+                and context.source_contract_id == ACTIVE_SOURCE_CONTRACT_ID
+                and context.source_release_id == ACTIVE_CANONICAL_RELEASE_ID
+            )
     if (
         type(context) is not CausalObservationOperationContext
         or context._seal is not _SEAL
         or context.causal_contract_id != CAUSAL_OBSERVATION_CONTRACT_ID
-        or context.source_contract_id != ACTIVE_SOURCE_CONTRACT_ID
         or context.economics_rulebook_sha256 != ECONOMICS_RULEBOOK_SHA256
-        or (
-            context.synthetic
-            and (
-                context.classification is not OperationClassification.SYNTHETIC_MECHANICS_ONLY
-                or context.source_release_id != SYNTHETIC_RELEASE_ID
-            )
-        )
-        or (
-            not context.synthetic
-            and (
-                context.classification
-                is not OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION
-                or context.operation
-                not in {
-                    CAUSAL_OBSERVATION_CANARY_OPERATION,
-                    CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
-                }
-                or context.source_release_id != ACTIVE_CANONICAL_RELEASE_ID
-            )
-        )
+        or not identity_valid
     ):
         raise UnauthorizedOperation("causal-observation operation context is absent or invalid")
 
