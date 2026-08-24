@@ -265,6 +265,8 @@ def test_full_build_bounds_include_bounded_2025_before_or_after_activation() -> 
         617,
     )
     assert EXPECTED_WORK_UNIT_COUNT == 609
+    assert MAXIMUM_OUTPUT_BYTES == 18_000_000_000
+    assert MAXIMUM_PEAK_ADDITIONAL_BYTES == 20_000_000_000
     admitted_count = source["selection_policy"]["admitted_standard_dbn_file_count"]
     if source["contract_id"] == ACTIVE_SOURCE_CONTRACT_ID:
         assert admitted_count == 3_966
