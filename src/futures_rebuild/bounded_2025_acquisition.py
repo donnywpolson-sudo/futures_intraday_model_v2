@@ -67,6 +67,28 @@ MAXIMUM_REQUEST_TIMEOUT_SECONDS: Final = 1_800
 ASSUMED_PLANNING_BITS_PER_SECOND: Final = 25_000_000
 MINIMUM_POST_PEAK_FREE_BYTES: Final = 100 * 1024**3
 MAXIMUM_EXTERNAL_COST_USD: Final = "0"
+_PLAN_QUERY_FIELDS: Final = frozenset(
+    {
+        "dataset",
+        "symbols",
+        "schema",
+        "start",
+        "end",
+        "stype_in",
+        "stype_out",
+        "encoding",
+        "compression",
+    }
+)
+_COST_QUERY_FIELDS: Final = (
+    "dataset",
+    "symbols",
+    "schema",
+    "start",
+    "end",
+    "stype_in",
+)
+_RANGE_QUERY_FIELDS: Final = (*_COST_QUERY_FIELDS, "stype_out")
 
 
 def _object(path: Path, description: str) -> dict[str, object]:
@@ -449,6 +471,32 @@ def _zero_cost(value: object) -> None:
         raise UnauthorizedOperation("bounded-2025 provider cost is not exactly zero")
 
 
+def _provider_query(
+    item: Mapping[str, object], *, fields: Sequence[str]
+) -> dict[str, object]:
+    query = item.get("query")
+    if (
+        not isinstance(query, Mapping)
+        or set(query) != _PLAN_QUERY_FIELDS
+        or query.get("encoding") != "dbn"
+        or query.get("compression") != "zstd"
+    ):
+        raise IntegrityError("bounded-2025 provider query contract drifted")
+    return {field: query[field] for field in fields}
+
+
+def _provider_cost_query(item: Mapping[str, object]) -> dict[str, object]:
+    """Return only arguments accepted by Databento Metadata.get_cost."""
+
+    return _provider_query(item, fields=_COST_QUERY_FIELDS)
+
+
+def _provider_range_query(item: Mapping[str, object]) -> dict[str, object]:
+    """Return only arguments accepted by Databento Timeseries.get_range."""
+
+    return _provider_query(item, fields=_RANGE_QUERY_FIELDS)
+
+
 @dataclass(frozen=True)
 class _WorkerResult:
     records: tuple[dict[str, object], ...]
@@ -494,7 +542,7 @@ def _download_worker(
                 raise IntegrityError("bounded-2025 staging collision")
             _set_timeout(provider.get_range, float(item["request_timeout_seconds"]))
             calls += 1
-            provider.get_range(**dict(item["query"]), path=str(partial))
+            provider.get_range(**_provider_range_query(item), path=str(partial))
             if not partial.is_file() or partial.is_symlink():
                 raise IntegrityError("provider did not create a regular partial DBN")
             size = partial.stat().st_size
@@ -592,7 +640,7 @@ def execute_authorized_acquisition(
         for item in plan["requests"]:
             _set_timeout(cost_provider.get_cost, 90.0)
             cost_calls += 1
-            _zero_cost(cost_provider.get_cost(**dict(item["query"])))
+            _zero_cost(cost_provider.get_cost(**_provider_cost_query(item)))
         heavy = [item for item in plan["requests"] if item["family"] == "ohlcv_1s"]
         light = [item for item in plan["requests"] if item["family"] != "ohlcv_1s"]
         stop_event = threading.Event()

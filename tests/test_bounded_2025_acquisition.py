@@ -195,7 +195,17 @@ def _item(name: str, family: str) -> dict[str, object]:
         "request_id": name * 64,
         "market": "ES",
         "family": family,
-        "query": {"schema": family.replace("_", "-"), "start": "x", "end": "y"},
+        "query": {
+            "dataset": "GLBX.MDP3",
+            "symbols": ["ES.v.0"],
+            "schema": family.replace("_", "-"),
+            "start": "x",
+            "end": "y",
+            "stype_in": "continuous",
+            "stype_out": "instrument_id",
+            "encoding": "dbn",
+            "compression": "zstd",
+        },
         "request_timeout_seconds": 900,
         "request_byte_ceiling": 1000,
         "canonical_destination": f"data/dbn/{family}/ES/result.dbn.zst",
@@ -243,6 +253,69 @@ def test_workers_are_disjoint_bounded_and_finalize_only_staging(tmp_path: Path) 
     assert probe.max_heavy == 1
     assert not list(tmp_path.rglob("*.partial"))
     assert not (tmp_path / "data").exists()
+
+
+def test_provider_queries_match_strict_databento_method_signatures() -> None:
+    item = {
+        **_item("a", "ohlcv_1m"),
+        "query": {
+            "dataset": "GLBX.MDP3",
+            "symbols": ["ES.v.0"],
+            "schema": "ohlcv-1m",
+            "start": acquisition.DEVELOPMENT_START,
+            "end": acquisition.DEVELOPMENT_END_EXCLUSIVE,
+            "stype_in": "continuous",
+            "stype_out": "instrument_id",
+            "encoding": "dbn",
+            "compression": "zstd",
+        },
+    }
+    observed: list[tuple[str, dict[str, object]]] = []
+
+    def strict_get_cost(
+        *, dataset: object, symbols: object, schema: object, start: object,
+        end: object, stype_in: object,
+    ) -> int:
+        observed.append(("cost", locals()))
+        return 0
+
+    def strict_get_range(
+        *, dataset: object, symbols: object, schema: object, start: object,
+        end: object, stype_in: object, stype_out: object, path: object,
+    ) -> None:
+        observed.append(("range", locals()))
+
+    assert strict_get_cost(**acquisition._provider_cost_query(item)) == 0
+    strict_get_range(
+        **acquisition._provider_range_query(item), path="candidate.dbn.zst.partial"
+    )
+    assert [name for name, _ in observed] == ["cost", "range"]
+    assert "stype_out" not in observed[0][1]
+    assert "encoding" not in observed[0][1]
+    assert "compression" not in observed[0][1]
+    assert observed[1][1]["stype_out"] == "instrument_id"
+    assert "encoding" not in observed[1][1]
+    assert "compression" not in observed[1][1]
+
+
+def test_provider_query_filter_rejects_archival_contract_drift() -> None:
+    item = {
+        **_item("a", "ohlcv_1m"),
+        "query": {
+            "dataset": "GLBX.MDP3",
+            "symbols": ["ES.v.0"],
+            "schema": "ohlcv-1m",
+            "start": acquisition.DEVELOPMENT_START,
+            "end": acquisition.DEVELOPMENT_END_EXCLUSIVE,
+            "stype_in": "continuous",
+            "stype_out": "instrument_id",
+            "encoding": "dbn",
+            "compression": "zstd",
+            "unexpected": True,
+        },
+    }
+    with pytest.raises(IntegrityError, match="query contract drifted"):
+        acquisition._provider_cost_query(item)
 
 
 def test_first_failure_stops_new_requests_and_preserves_partial(
