@@ -75,7 +75,7 @@ def test_non_active_full_build_contract_successor_matches_admitted_inventory() -
         REPO
         / "reports/causal_full_build_source_rebind_preparation/"
         "cfbsrp_20260824T1856245925105Z_34fea2fa/"
-        "SUCCESSOR_SOURCE_CONTRACT.json"
+        "SUCCESSOR_SOURCE_CONTRACT_V2.json"
     )
     result = validate_full_build_selection_contract(candidate, inventory["entries"])
     assert result == {
@@ -88,7 +88,7 @@ def test_non_active_full_build_contract_successor_matches_admitted_inventory() -
     assert candidate["active_canonical_source"]["release_id"] == (
         "4ca353d7814941782bb4c6640afe89b04371492868f57174bb10d632b6e7c9be"
     )
-    assert candidate["status"].startswith("PREPARED_NON_ACTIVE")
+    assert candidate["status"] == "CURRENT_SUCCESSOR_NON_AUTHORIZING_ACTIVE_ONLY_AT_EXACT_ALIAS"
 
 
 def test_exact_standard_selection_rejects_micro_and_unlisted_paths() -> None:
