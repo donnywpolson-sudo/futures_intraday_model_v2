@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -138,7 +139,9 @@ def test_plan_is_exact_source_safe_and_two_worker_bounded(
     }
     assert plan["worker_contract"]["maximum_parallel_downloads"] == 2
     assert plan["worker_contract"]["maximum_concurrent_ohlcv_1s"] == 1
-    assert plan["worker_contract"]["automatic_retries"] == 0
+    assert plan["worker_contract"]["whole_request_resubmission_retries"] == 0
+    assert plan["worker_contract"]["batch_submission_retries"] == 0
+    assert plan["worker_contract"]["maximum_batch_get_attempts"] == 6
     assert {item["family"] for item in plan["requests"]} == set(acquisition.FAMILIES)
     assert {item["market"] for item in plan["requests"]} == set(ROOTS)
     assert all(
@@ -316,6 +319,147 @@ def test_provider_query_filter_rejects_archival_contract_drift() -> None:
     }
     with pytest.raises(IntegrityError, match="query contract drifted"):
         acquisition._provider_cost_query(item)
+
+
+class _BatchFixture:
+    def __init__(self, payload: bytes) -> None:
+        self.payload = payload
+        self.submissions: list[dict[str, object]] = []
+
+    def submit_job(self, **kwargs: object) -> dict[str, object]:
+        self.submissions.append(kwargs)
+        return {"id": "job-1", "cost_usd": "0"}
+
+    def list_jobs(self, **_kwargs: object) -> list[dict[str, object]]:
+        return [{"id": "job-1", "state": "done"}]
+
+    def list_files(self, **_kwargs: object) -> list[dict[str, object]]:
+        digest = hashlib.sha256(self.payload).hexdigest()
+        return [{
+            "filename": "bounded.dbn.zst",
+            "size": len(self.payload),
+            "hash": f"sha256:{digest}",
+            "urls": {"https": "https://example.invalid/bounded.dbn.zst"},
+        }]
+
+
+class _StreamResponse:
+    def __init__(
+        self,
+        *,
+        chunks: list[bytes],
+        status_code: int,
+        headers: dict[str, str] | None = None,
+        fail_after_first: bool = False,
+    ) -> None:
+        self._chunks = chunks
+        self.status_code = status_code
+        self.headers = headers or {}
+        self._fail_after_first = fail_after_first
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args: object) -> None:
+        return None
+
+    def iter_content(self, **_kwargs: object):
+        for index, chunk in enumerate(self._chunks):
+            yield chunk
+            if self._fail_after_first and index == 0:
+                raise ConnectionError("synthetic interrupted transfer")
+
+
+def test_batch_transport_is_manifest_bound_and_resumes_interrupted_get(
+    tmp_path: Path,
+) -> None:
+    payload = b"opaque-synthetic-dbn"
+    batch = _BatchFixture(payload)
+    calls: list[dict[str, object]] = []
+
+    def http_get(**kwargs: object) -> _StreamResponse:
+        calls.append(kwargs)
+        if len(calls) == 1:
+            return _StreamResponse(
+                chunks=[payload[:6]], status_code=200, fail_after_first=True
+            )
+        return _StreamResponse(
+            chunks=[payload[6:]],
+            status_code=206,
+            headers={"Content-Range": f"bytes 6-{len(payload) - 1}/{len(payload)}"},
+        )
+
+    counter = acquisition._BatchCallCounter(20)
+    output = tmp_path / "candidate.dbn.zst.partial"
+    adapter = acquisition._BatchRangeAdapter(
+        batch=batch,
+        api_key="not-recorded",
+        journal_path=tmp_path / "journal.jsonl",
+        counter=counter,
+        http_get=http_get,
+        sleeper=lambda _seconds: None,
+    )
+    adapter.get_range(
+        **acquisition._provider_range_query(_item("a", "definition")),
+        path=str(output),
+        request_id="a" * 64,
+        request_byte_ceiling=1000,
+    )
+    assert output.read_bytes() == payload
+    assert len(calls) == 2
+    assert calls[0]["headers"] == {}
+    assert calls[1]["headers"] == {"Range": f"bytes=6-{len(payload) - 1}"}
+    assert batch.submissions[0]["encoding"] == "dbn"
+    assert batch.submissions[0]["compression"] == "zstd"
+    assert batch.submissions[0]["split_duration"] == "none"
+    assert "request_id" not in batch.submissions[0]
+    assert "request_byte_ceiling" not in batch.submissions[0]
+    assert counter.snapshot() == {
+        "batch_submit_job": 1,
+        "batch_list_jobs": 1,
+        "batch_list_files": 1,
+        "batch_download_get": 2,
+    }
+
+
+def test_batch_transport_rejects_provider_size_before_download(tmp_path: Path) -> None:
+    payload = b"larger-than-bound"
+    batch = _BatchFixture(payload)
+    called = False
+
+    def http_get(**_kwargs: object) -> object:
+        nonlocal called
+        called = True
+        raise AssertionError("oversized provider file must not be downloaded")
+
+    adapter = acquisition._BatchRangeAdapter(
+        batch=batch,
+        api_key="not-recorded",
+        journal_path=tmp_path / "journal.jsonl",
+        counter=acquisition._BatchCallCounter(20),
+        http_get=http_get,
+        sleeper=lambda _seconds: None,
+    )
+    with pytest.raises(UnauthorizedOperation, match="request byte ceiling"):
+        adapter.get_range(
+            **acquisition._provider_range_query(_item("a", "definition")),
+            path=str(tmp_path / "candidate.dbn.zst.partial"),
+            request_id="a" * 64,
+            request_byte_ceiling=1,
+        )
+    assert called is False
+
+
+def test_failure_summary_retains_mechanism_without_url_or_credential() -> None:
+    value = acquisition._safe_failure_summary(
+        RuntimeError(
+            "stream failed https://example.invalid/private?token=abc "
+            "api_key=secret-value"
+        )
+    )
+    assert "stream failed" in value
+    assert "example.invalid" not in value
+    assert "secret-value" not in value
 
 
 def test_first_failure_stops_new_requests_and_preserves_partial(

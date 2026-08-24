@@ -8,6 +8,8 @@ does not decode rows, register canonical files, publish, or activate anything.
 from __future__ import annotations
 
 import json
+import os
+import re
 import shutil
 import subprocess
 import threading
@@ -19,13 +21,14 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Final
 
+import requests
+from requests.auth import HTTPBasicAuth
+
 from .boundary import OperationClassification, OperationReceipt, RepoBoundary
 from .canonical import canonical_bytes, sha256_file, sha256_json
 from .errors import IntegrityError, UnauthorizedOperation
-from .micro_alpha_acquisition import (
-    DownloadProviderApis,
-    build_file_download_provider_apis,
-)
+from .live_cockpit.databento_auth import resolve_databento_api_key
+from .micro_alpha_acquisition import DownloadProviderApis
 from .runtime_environment import require_locked_repository_environment
 
 
@@ -60,13 +63,20 @@ FAMILIES: Final = (
 )
 MAXIMUM_PARALLEL_DOWNLOADS: Final = 2
 MAXIMUM_CONCURRENT_OHLCV_1S: Final = 1
-MAXIMUM_RETRIES: Final = 0
 MAXIMUM_RUNTIME_SECONDS: Final = 43_200
 MINIMUM_REQUEST_TIMEOUT_SECONDS: Final = 900
 MAXIMUM_REQUEST_TIMEOUT_SECONDS: Final = 1_800
 ASSUMED_PLANNING_BITS_PER_SECOND: Final = 25_000_000
 MINIMUM_POST_PEAK_FREE_BYTES: Final = 100 * 1024**3
 MAXIMUM_EXTERNAL_COST_USD: Final = "0"
+DOWNLOAD_TRANSPORT: Final = "DATABENTO_BATCH_JOB_RESUMABLE_HTTPS_RANGE_GET"
+MAXIMUM_BATCH_INTERNAL_CALLS: Final = 72_037
+MAXIMUM_BATCH_POLL_ATTEMPTS_PER_JOB: Final = 60
+MAXIMUM_BATCH_JOB_SECONDS: Final = 900.0
+MAXIMUM_BATCH_GET_ATTEMPTS: Final = 6
+BATCH_POLL_INTERVAL_SECONDS: Final = 15.0
+BATCH_CONTROL_RETRY_DELAYS_SECONDS: Final = (2.0, 8.0, 30.0)
+BATCH_GET_RETRY_DELAYS_SECONDS: Final = (2.0, 8.0, 30.0, 120.0, 300.0)
 _PLAN_QUERY_FIELDS: Final = frozenset(
     {
         "dataset",
@@ -328,7 +338,7 @@ def build_acquisition_plan(*, root: Path) -> dict[str, object]:
     )
     required_free = MINIMUM_POST_PEAK_FREE_BYTES + total_byte_ceiling + causal_peak
     core = {
-        "schema_version": "bounded_2025_development_acquisition_plan/1.0.0",
+        "schema_version": "bounded_2025_development_acquisition_plan/2.0.0",
         "state": "PREPARED_IMPLEMENTATION_COMMIT_AND_NETWORK_APPROVAL_REQUIRED",
         "operation": OPERATION,
         "prepared_parent_head": _git_head(root),
@@ -362,6 +372,7 @@ def build_acquisition_plan(*, root: Path) -> dict[str, object]:
             "light_requests": 246,
         },
         "worker_contract": {
+            "download_transport": DOWNLOAD_TRANSPORT,
             "maximum_parallel_downloads": 2,
             "maximum_concurrent_ohlcv_1s": 1,
             "heavy_worker_families": ["ohlcv_1s"],
@@ -370,11 +381,23 @@ def build_acquisition_plan(*, root: Path) -> dict[str, object]:
             ],
             "maximum_submitted_worker_tasks": 2,
             "stop_new_requests_on_first_failure": True,
-            "automatic_retries": 0,
+            "whole_request_resubmission_retries": 0,
+            "batch_submission_retries": 0,
+            "batch_control_retry_delays_seconds": list(
+                BATCH_CONTROL_RETRY_DELAYS_SECONDS
+            ),
+            "maximum_batch_get_attempts": MAXIMUM_BATCH_GET_ATTEMPTS,
+            "batch_get_retry_delays_seconds": list(
+                BATCH_GET_RETRY_DELAYS_SECONDS
+            ),
+            "maximum_batch_poll_attempts_per_job": (
+                MAXIMUM_BATCH_POLL_ATTEMPTS_PER_JOB
+            ),
         },
         "limits": {
             "maximum_external_cost_usd": MAXIMUM_EXTERNAL_COST_USD,
-            "maximum_provider_calls": 574,
+            "maximum_provider_calls": 287 + MAXIMUM_BATCH_INTERNAL_CALLS,
+            "maximum_batch_internal_calls": MAXIMUM_BATCH_INTERNAL_CALLS,
             "maximum_runtime_seconds": MAXIMUM_RUNTIME_SECONDS,
             "minimum_request_timeout_seconds": MINIMUM_REQUEST_TIMEOUT_SECONDS,
             "maximum_request_timeout_seconds": MAXIMUM_REQUEST_TIMEOUT_SECONDS,
@@ -423,7 +446,12 @@ def load_acquisition_plan(*, root: Path) -> dict[str, object]:
         or plan.get("worker_contract", {}).get("maximum_parallel_downloads") != 2
         or plan.get("worker_contract", {}).get("maximum_concurrent_ohlcv_1s")
         != 1
-        or plan.get("worker_contract", {}).get("automatic_retries") != 0
+        or plan.get("worker_contract", {}).get(
+            "whole_request_resubmission_retries"
+        )
+        != 0
+        or plan.get("worker_contract", {}).get("download_transport")
+        != DOWNLOAD_TRANSPORT
         or len(plan.get("requests", [])) != 287
     ):
         raise IntegrityError("bounded-2025 acquisition plan semantics drifted")
@@ -456,6 +484,8 @@ def required_scope(*, root: Path, plan: Mapping[str, object]) -> dict[str, str]:
 
 def _set_timeout(function: Callable[..., object], seconds: float) -> None:
     owner = getattr(function, "__self__", None)
+    if owner is not None and hasattr(owner, "TIMEOUT"):
+        owner.TIMEOUT = seconds
     client = getattr(owner, "_client", None)
     options = getattr(client, "_options", None)
     if options is not None and hasattr(options, "timeout"):  # pragma: no branch
@@ -492,9 +522,369 @@ def _provider_cost_query(item: Mapping[str, object]) -> dict[str, object]:
 
 
 def _provider_range_query(item: Mapping[str, object]) -> dict[str, object]:
-    """Return only arguments accepted by Databento Timeseries.get_range."""
+    """Return fields shared by the bounded Databento batch request."""
 
     return _provider_query(item, fields=_RANGE_QUERY_FIELDS)
+
+
+@dataclass
+class _BatchCallCounter:
+    maximum: int
+
+    def __post_init__(self) -> None:
+        self._lock = threading.Lock()
+        self._counts = {
+            "batch_submit_job": 0,
+            "batch_list_jobs": 0,
+            "batch_list_files": 0,
+            "batch_download_get": 0,
+        }
+
+    def increment(self, name: str) -> None:
+        with self._lock:
+            if name not in self._counts:
+                raise IntegrityError("unknown batch provider call")
+            if sum(self._counts.values()) >= self.maximum:
+                raise UnauthorizedOperation("batch provider call ceiling reached")
+            self._counts[name] += 1
+
+    def snapshot(self) -> dict[str, int]:
+        with self._lock:
+            return dict(self._counts)
+
+
+def _batch_job_id(value: Mapping[str, object]) -> str:
+    observed = value.get("id", value.get("job_id"))
+    if (
+        not isinstance(observed, str)
+        or re.fullmatch(r"[A-Za-z0-9_-]{1,160}", observed) is None
+    ):
+        raise IntegrityError("batch job identifier is invalid")
+    return observed
+
+
+def _batch_job_state(value: Mapping[str, object]) -> str:
+    observed = value.get("state", value.get("status"))
+    if not isinstance(observed, str):
+        raise IntegrityError("batch job state is invalid")
+    state = observed.casefold()
+    if state not in {"queued", "processing", "done", "expired"}:
+        raise IntegrityError("batch job state is outside the bounded contract")
+    return state
+
+
+def _append_batch_journal(path: Path, value: Mapping[str, object]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("ab") as stream:
+        stream.write(canonical_bytes(value) + b"\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+
+
+class _BatchRangeAdapter:
+    def __init__(
+        self,
+        *,
+        batch: object,
+        api_key: str,
+        journal_path: Path,
+        counter: _BatchCallCounter,
+        http_get: Callable[..., object] = requests.get,
+        clock: Callable[[], float] = time.monotonic,
+        sleeper: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self._batch = batch
+        self._api_key = api_key
+        self._journal_path = journal_path
+        self._counter = counter
+        self._http_get = http_get
+        self._clock = clock
+        self._sleeper = sleeper
+        self.TIMEOUT = float(MAXIMUM_REQUEST_TIMEOUT_SECONDS)
+
+    def _control_call(self, name: str, function: Callable[[], object]) -> object:
+        for attempt in range(1 + len(BATCH_CONTROL_RETRY_DELAYS_SECONDS)):
+            self._counter.increment(name)
+            try:
+                return function()
+            except Exception as exc:
+                status = getattr(exc, "http_status", None)
+                retryable = status in {408, 429, 500, 502, 503, 504}
+                if (
+                    not retryable
+                    or attempt >= len(BATCH_CONTROL_RETRY_DELAYS_SECONDS)
+                ):
+                    raise
+                self._sleeper(BATCH_CONTROL_RETRY_DELAYS_SECONDS[attempt])
+        raise IntegrityError("unreachable batch control retry state")
+
+    def _submit(self, query: Mapping[str, object], request_id: str) -> str:
+        submit = getattr(self._batch, "submit_job", None)
+        if not callable(submit):
+            raise IntegrityError("Databento batch submit API is unavailable")
+        self._counter.increment("batch_submit_job")
+        response = submit(
+            **dict(query),
+            encoding="dbn",
+            compression="zstd",
+            map_symbols=False,
+            split_symbols=False,
+            split_duration="none",
+            delivery="download",
+        )
+        if not isinstance(response, Mapping):
+            raise IntegrityError("batch submit response is invalid")
+        job_id = _batch_job_id(response)
+        cost_key = next(
+            (key for key in ("cost_usd", "cost") if key in response), None
+        )
+        if cost_key is not None:
+            _zero_cost(response[cost_key])
+        _append_batch_journal(
+            self._journal_path,
+            {
+                "event": "BATCH_JOB_SUBMITTED",
+                "request_id": request_id,
+                "job_id": job_id,
+                "cost_field_present": cost_key is not None,
+                "raw_provider_response_recorded": False,
+            },
+        )
+        return job_id
+
+    def _wait_done(self, *, job_id: str, request_id: str) -> None:
+        list_jobs = getattr(self._batch, "list_jobs", None)
+        if not callable(list_jobs):
+            raise IntegrityError("Databento batch list-jobs API is unavailable")
+        started = self._clock()
+        for poll in range(1, MAXIMUM_BATCH_POLL_ATTEMPTS_PER_JOB + 1):
+            if self._clock() - started > MAXIMUM_BATCH_JOB_SECONDS:
+                raise UnauthorizedOperation("batch job polling time ceiling reached")
+            raw = self._control_call(
+                "batch_list_jobs",
+                lambda: list_jobs(states="queued,processing,done,expired"),
+            )
+            if not isinstance(raw, list) or not all(
+                isinstance(item, Mapping) for item in raw
+            ):
+                raise IntegrityError("batch job census is invalid")
+            matches = [item for item in raw if _batch_job_id(item) == job_id]
+            if len(matches) > 1:
+                raise IntegrityError("batch job census duplicated the submitted job")
+            if matches:
+                state = _batch_job_state(matches[0])
+                if state == "done":
+                    _append_batch_journal(
+                        self._journal_path,
+                        {
+                            "event": "BATCH_JOB_DONE",
+                            "request_id": request_id,
+                            "job_id": job_id,
+                            "poll_count": poll,
+                        },
+                    )
+                    return
+                if state == "expired":
+                    raise IntegrityError("batch job expired before download")
+            self._sleeper(BATCH_POLL_INTERVAL_SECONDS)
+        raise UnauthorizedOperation("batch job poll-attempt ceiling reached")
+
+    def _file_manifest(self, *, job_id: str) -> dict[str, object]:
+        list_files = getattr(self._batch, "list_files", None)
+        if not callable(list_files):
+            raise IntegrityError("Databento batch list-files API is unavailable")
+        raw = self._control_call(
+            "batch_list_files", lambda: list_files(job_id=job_id)
+        )
+        if not isinstance(raw, list) or not all(
+            isinstance(item, Mapping) for item in raw
+        ):
+            raise IntegrityError("batch file manifest is invalid")
+        candidates = [
+            dict(item)
+            for item in raw
+            if str(item.get("filename", "")).endswith(".dbn.zst")
+        ]
+        if len(candidates) != 1:
+            raise IntegrityError(
+                "batch job did not expose exactly one DBN Zstandard file"
+            )
+        item = candidates[0]
+        filename = item.get("filename")
+        size = item.get("size")
+        hash_value = item.get("hash")
+        urls = item.get("urls")
+        if (
+            not isinstance(filename, str)
+            or Path(filename).name != filename
+            or type(size) is not int
+            or size <= 0
+            or not isinstance(hash_value, str)
+            or re.fullmatch(r"sha256:[0-9a-f]{64}", hash_value) is None
+            or not isinstance(urls, Mapping)
+            or not isinstance(urls.get("https"), str)
+            or not str(urls["https"]).startswith("https://")
+        ):
+            raise IntegrityError("batch DBN manifest fields are invalid")
+        return item
+
+    def _download(self, *, item: Mapping[str, object], path: Path) -> None:
+        expected_size = int(item["size"])
+        expected_hash = str(item["hash"]).split(":", 1)[1]
+        url = str(item["urls"]["https"])
+        for attempt in range(MAXIMUM_BATCH_GET_ATTEMPTS):
+            existing = path.stat().st_size if path.exists() else 0
+            if existing > expected_size:
+                raise IntegrityError("resumable batch partial exceeds provider size")
+            if existing == expected_size:
+                if sha256_file(path) == expected_hash:
+                    return
+                raise IntegrityError("complete-sized batch file has the wrong hash")
+            headers: dict[str, str] = {}
+            mode = "xb"
+            if existing:
+                headers["Range"] = f"bytes={existing}-{expected_size - 1}"
+                mode = "ab"
+            self._counter.increment("batch_download_get")
+            try:
+                response_context = self._http_get(
+                    url=url,
+                    headers=headers,
+                    auth=HTTPBasicAuth(username=self._api_key, password=""),
+                    allow_redirects=True,
+                    stream=True,
+                    timeout=(30.0, min(900.0, self.TIMEOUT)),
+                )
+                with response_context as response:
+                    status = int(getattr(response, "status_code", 0))
+                    if status == 429:
+                        raise requests.HTTPError("batch download rate limited")
+                    if status >= 400:
+                        raise IntegrityError(
+                            "batch download returned a permanent HTTP error"
+                        )
+                    if existing and status != 206:
+                        raise IntegrityError(
+                            "batch resume response did not honor the byte range"
+                        )
+                    if existing:
+                        response_headers = getattr(response, "headers", {})
+                        content_range = (
+                            response_headers.get("Content-Range")
+                            if isinstance(response_headers, Mapping)
+                            else None
+                        )
+                        if (
+                            not isinstance(content_range, str)
+                            or not content_range.startswith(f"bytes {existing}-")
+                        ):
+                            raise IntegrityError(
+                                "batch resume response content range is invalid"
+                            )
+                    with path.open(mode) as stream:
+                        for chunk in response.iter_content(chunk_size=1_048_576):
+                            if chunk:
+                                stream.write(chunk)
+                        stream.flush()
+                        os.fsync(stream.fileno())
+            except IntegrityError:
+                raise
+            except Exception:
+                if attempt + 1 >= MAXIMUM_BATCH_GET_ATTEMPTS:
+                    raise
+                self._sleeper(BATCH_GET_RETRY_DELAYS_SECONDS[attempt])
+                continue
+        if not path.is_file() or path.stat().st_size != expected_size:
+            raise IntegrityError(
+                "resumable batch download size differs from provider manifest"
+            )
+        if sha256_file(path) != expected_hash:
+            raise IntegrityError(
+                "resumable batch download hash differs from provider manifest"
+            )
+
+    def get_range(self, **kwargs: object) -> object:
+        raw_path = kwargs.pop("path", None)
+        raw_request_id = kwargs.pop("request_id", None)
+        raw_byte_ceiling = kwargs.pop("request_byte_ceiling", None)
+        if not isinstance(raw_path, str):
+            raise IntegrityError("batch output path is invalid")
+        if (
+            not isinstance(raw_request_id, str)
+            or re.fullmatch(r"[0-9a-f]{64}", raw_request_id) is None
+            or type(raw_byte_ceiling) is not int
+            or raw_byte_ceiling <= 0
+        ):
+            raise IntegrityError("batch request binding is invalid")
+        path = Path(raw_path)
+        if path.exists():
+            raise IntegrityError("batch output path is not create-only")
+        query = dict(kwargs)
+        request_id = raw_request_id
+        job_id = self._submit(query, request_id)
+        self._wait_done(job_id=job_id, request_id=request_id)
+        item = self._file_manifest(job_id=job_id)
+        if int(item["size"]) > raw_byte_ceiling:
+            raise UnauthorizedOperation("batch file exceeds its request byte ceiling")
+        _append_batch_journal(
+            self._journal_path,
+            {
+                "event": "BATCH_FILE_BOUND",
+                "request_id": request_id,
+                "job_id": job_id,
+                "filename": item["filename"],
+                "provider_byte_count": item["size"],
+                "provider_sha256": str(item["hash"]).split(":", 1)[1],
+                "provider_download_url_recorded": False,
+            },
+        )
+        self._download(item=item, path=path)
+        _append_batch_journal(
+            self._journal_path,
+            {
+                "event": "BATCH_FILE_DOWNLOADED_AND_HASH_VERIFIED",
+                "request_id": request_id,
+                "job_id": job_id,
+                "byte_count": path.stat().st_size,
+                "sha256": sha256_file(path),
+            },
+        )
+        return object()
+
+
+def build_file_batch_download_provider_apis(
+    *,
+    root: Path,
+    journal_path: Path,
+    counter: _BatchCallCounter,
+    historical_factory: Callable[..., object] | None = None,
+    http_get: Callable[..., object] = requests.get,
+    clock: Callable[[], float] = time.monotonic,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> DownloadProviderApis:
+    key = resolve_databento_api_key(key_files=(root / "api.env",))
+    if not key:
+        raise UnauthorizedOperation("the bound file api.env credential is unavailable")
+    if historical_factory is None:
+        from databento import Historical
+
+        historical_factory = Historical
+    client = historical_factory(key=key)
+    metadata = getattr(client, "metadata", None)
+    batch = getattr(client, "batch", None)
+    get_cost = getattr(metadata, "get_cost", None)
+    if not callable(get_cost) or batch is None:
+        raise IntegrityError("Databento client lacks the bounded batch APIs")
+    adapter = _BatchRangeAdapter(
+        batch=batch,
+        api_key=key,
+        journal_path=journal_path,
+        counter=counter,
+        http_get=http_get,
+        clock=clock,
+        sleeper=sleeper,
+    )
+    return DownloadProviderApis(get_cost=get_cost, get_range=adapter.get_range)
 
 
 @dataclass(frozen=True)
@@ -503,6 +893,20 @@ class _WorkerResult:
     calls: int
     failure_type: str | None
     failed_request_id: str | None
+    failure_http_status: int | None = None
+    failure_summary: str | None = None
+
+
+def _safe_failure_summary(exc: Exception) -> str:
+    value = str(exc).replace("\r", " ").replace("\n", " ")
+    value = re.sub(r"https?://\S+", "<url-redacted>", value)
+    value = re.sub(
+        r"(?i)(api[_ -]?key|authorization|token|credential)\s*[:=]\s*\S+",
+        r"\1=<redacted>",
+        value,
+    )
+    value = " ".join(value.split())
+    return value[:500] or type(exc).__name__
 
 
 def _download_worker(
@@ -542,7 +946,12 @@ def _download_worker(
                 raise IntegrityError("bounded-2025 staging collision")
             _set_timeout(provider.get_range, float(item["request_timeout_seconds"]))
             calls += 1
-            provider.get_range(**_provider_range_query(item), path=str(partial))
+            provider.get_range(
+                **_provider_range_query(item),
+                path=str(partial),
+                request_id=failed_request_id,
+                request_byte_ceiling=int(item["request_byte_ceiling"]),
+            )
             if not partial.is_file() or partial.is_symlink():
                 raise IntegrityError("provider did not create a regular partial DBN")
             size = partial.stat().st_size
@@ -591,7 +1000,15 @@ def _download_worker(
             failed_request_id = None
     except Exception as exc:
         stop_event.set()
-        return _WorkerResult(tuple(records), calls, type(exc).__name__, failed_request_id)
+        status = getattr(exc, "http_status", None)
+        return _WorkerResult(
+            tuple(records),
+            calls,
+            type(exc).__name__,
+            failed_request_id,
+            status if type(status) is int else None,
+            _safe_failure_summary(exc),
+        )
     return _WorkerResult(tuple(records), calls, None, None)
 
 
@@ -627,9 +1044,18 @@ def execute_authorized_acquisition(
         subtree=STAGING_ROOT.as_posix(),
     )
     attempt.mkdir(parents=True, exist_ok=False)
-    provider_factory = provider_factory or (
-        lambda: build_file_download_provider_apis(root=root)
-    )
+    batch_counter: _BatchCallCounter | None = None
+    if provider_factory is None:
+        batch_counter = _BatchCallCounter(MAXIMUM_BATCH_INTERNAL_CALLS)
+
+        def provider_factory() -> DownloadProviderApis:
+            assert batch_counter is not None
+            return build_file_batch_download_provider_apis(
+                root=root,
+                journal_path=attempt / "batch_job_journal.jsonl",
+                counter=batch_counter,
+            )
+
     started = clock()
     cost_calls = 0
     range_calls = 0
@@ -689,6 +1115,8 @@ def execute_authorized_acquisition(
                 "worker": index,
                 "failure_type": result.failure_type,
                 "failed_request_id": result.failed_request_id,
+                "failure_http_status": result.failure_http_status,
+                "failure_summary": result.failure_summary,
             }
             for index, result in enumerate(results)
             if result.failure_type is not None
@@ -717,7 +1145,20 @@ def execute_authorized_acquisition(
         "implementation_commit": _git_head(root),
         "download_worker_count": 2,
         "maximum_concurrent_ohlcv_1s": 1,
-        "automatic_retries": 0,
+        "whole_request_resubmission_retries": 0,
+        "download_transport": DOWNLOAD_TRANSPORT,
+        "batch_submission_retries": 0,
+        "maximum_batch_get_attempts": MAXIMUM_BATCH_GET_ATTEMPTS,
+        "batch_provider_call_counts": (
+            batch_counter.snapshot()
+            if batch_counter is not None
+            else {
+                "batch_submit_job": 0,
+                "batch_list_jobs": 0,
+                "batch_list_files": 0,
+                "batch_download_get": 0,
+            }
+        ),
         "provider_call_counts": {"get_cost": cost_calls, "get_range": range_calls},
         "completed_records": sorted(records, key=lambda item: item["request_id"]),
         "worker_failures": failures,
