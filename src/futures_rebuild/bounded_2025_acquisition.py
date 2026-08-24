@@ -70,13 +70,19 @@ ASSUMED_PLANNING_BITS_PER_SECOND: Final = 25_000_000
 MINIMUM_POST_PEAK_FREE_BYTES: Final = 100 * 1024**3
 MAXIMUM_EXTERNAL_COST_USD: Final = "0"
 DOWNLOAD_TRANSPORT: Final = "DATABENTO_BATCH_JOB_RESUMABLE_HTTPS_RANGE_GET"
-MAXIMUM_BATCH_INTERNAL_CALLS: Final = 72_037
-MAXIMUM_BATCH_POLL_ATTEMPTS_PER_JOB: Final = 60
-MAXIMUM_BATCH_JOB_SECONDS: Final = 900.0
+MAXIMUM_BATCH_POLL_ATTEMPTS_PER_JOB: Final = 240
+MAXIMUM_BATCH_JOB_SECONDS: Final = 3_600.0
 MAXIMUM_BATCH_GET_ATTEMPTS: Final = 6
 BATCH_POLL_INTERVAL_SECONDS: Final = 15.0
 BATCH_CONTROL_RETRY_DELAYS_SECONDS: Final = (2.0, 8.0, 30.0)
 BATCH_GET_RETRY_DELAYS_SECONDS: Final = (2.0, 8.0, 30.0, 120.0, 300.0)
+MAXIMUM_BATCH_INTERNAL_CALLS: Final = 287 * (
+    1
+    + MAXIMUM_BATCH_POLL_ATTEMPTS_PER_JOB
+    * (1 + len(BATCH_CONTROL_RETRY_DELAYS_SECONDS))
+    + (1 + len(BATCH_CONTROL_RETRY_DELAYS_SECONDS))
+    + MAXIMUM_BATCH_GET_ATTEMPTS
+)
 _PLAN_QUERY_FIELDS: Final = frozenset(
     {
         "dataset",
@@ -393,6 +399,7 @@ def build_acquisition_plan(*, root: Path) -> dict[str, object]:
             "maximum_batch_poll_attempts_per_job": (
                 MAXIMUM_BATCH_POLL_ATTEMPTS_PER_JOB
             ),
+            "maximum_batch_job_seconds": MAXIMUM_BATCH_JOB_SECONDS,
         },
         "limits": {
             "maximum_external_cost_usd": MAXIMUM_EXTERNAL_COST_USD,
@@ -452,6 +459,19 @@ def load_acquisition_plan(*, root: Path) -> dict[str, object]:
         != 0
         or plan.get("worker_contract", {}).get("download_transport")
         != DOWNLOAD_TRANSPORT
+        or plan.get("worker_contract", {}).get("batch_submission_retries") != 0
+        or plan.get("worker_contract", {}).get("maximum_batch_get_attempts")
+        != MAXIMUM_BATCH_GET_ATTEMPTS
+        or plan.get("worker_contract", {}).get(
+            "maximum_batch_poll_attempts_per_job"
+        )
+        != MAXIMUM_BATCH_POLL_ATTEMPTS_PER_JOB
+        or plan.get("worker_contract", {}).get("maximum_batch_job_seconds")
+        != MAXIMUM_BATCH_JOB_SECONDS
+        or plan.get("limits", {}).get("maximum_batch_internal_calls")
+        != MAXIMUM_BATCH_INTERNAL_CALLS
+        or plan.get("limits", {}).get("maximum_provider_calls")
+        != 287 + MAXIMUM_BATCH_INTERNAL_CALLS
         or len(plan.get("requests", [])) != 287
     ):
         raise IntegrityError("bounded-2025 acquisition plan semantics drifted")
@@ -474,6 +494,10 @@ def required_scope(*, root: Path, plan: Mapping[str, object]) -> dict[str, str]:
         "maximum_parallel_downloads": "2",
         "maximum_concurrent_ohlcv_1s": "1",
         "maximum_download_bytes": str(plan["limits"]["maximum_download_bytes"]),
+        "maximum_provider_calls": str(plan["limits"]["maximum_provider_calls"]),
+        "maximum_batch_job_seconds": str(
+            plan["worker_contract"]["maximum_batch_job_seconds"]
+        ),
         "maximum_external_cost_usd": "0",
         "development_end_exclusive": DEVELOPMENT_END_EXCLUSIVE,
         "canonical_registration": "false",
@@ -1136,7 +1160,7 @@ def execute_authorized_acquisition(
         state = "FAILURE_INACTIVE_EVIDENCE_PRESERVED"
         failure_type = type(exc).__name__
     core = {
-        "schema_version": "bounded_2025_acquisition_terminal/1.0.0",
+        "schema_version": "bounded_2025_acquisition_terminal/1.1.0",
         "state": state,
         "plan_id": plan["plan_id"],
         "plan_sha256": sha256_file(root / PLAN_PATH),
@@ -1149,6 +1173,10 @@ def execute_authorized_acquisition(
         "download_transport": DOWNLOAD_TRANSPORT,
         "batch_submission_retries": 0,
         "maximum_batch_get_attempts": MAXIMUM_BATCH_GET_ATTEMPTS,
+        "maximum_batch_poll_attempts_per_job": (
+            MAXIMUM_BATCH_POLL_ATTEMPTS_PER_JOB
+        ),
+        "maximum_batch_job_seconds": MAXIMUM_BATCH_JOB_SECONDS,
         "batch_provider_call_counts": (
             batch_counter.snapshot()
             if batch_counter is not None

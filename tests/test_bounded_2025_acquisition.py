@@ -142,6 +142,10 @@ def test_plan_is_exact_source_safe_and_two_worker_bounded(
     assert plan["worker_contract"]["whole_request_resubmission_retries"] == 0
     assert plan["worker_contract"]["batch_submission_retries"] == 0
     assert plan["worker_contract"]["maximum_batch_get_attempts"] == 6
+    assert plan["worker_contract"]["maximum_batch_poll_attempts_per_job"] == 240
+    assert plan["worker_contract"]["maximum_batch_job_seconds"] == 3_600.0
+    assert plan["limits"]["maximum_batch_internal_calls"] == 278_677
+    assert plan["limits"]["maximum_provider_calls"] == 278_964
     assert {item["family"] for item in plan["requests"]} == set(acquisition.FAMILIES)
     assert {item["market"] for item in plan["requests"]} == set(ROOTS)
     assert all(
@@ -343,6 +347,18 @@ class _BatchFixture:
         }]
 
 
+class _DelayedBatchFixture(_BatchFixture):
+    def __init__(self, payload: bytes, *, done_on_poll: int) -> None:
+        super().__init__(payload)
+        self.done_on_poll = done_on_poll
+        self.polls = 0
+
+    def list_jobs(self, **_kwargs: object) -> list[dict[str, object]]:
+        self.polls += 1
+        state = "done" if self.polls >= self.done_on_poll else "processing"
+        return [{"id": "job-1", "state": state}]
+
+
 class _StreamResponse:
     def __init__(
         self,
@@ -420,6 +436,63 @@ def test_batch_transport_is_manifest_bound_and_resumes_interrupted_get(
         "batch_list_files": 1,
         "batch_download_get": 2,
     }
+
+
+def test_batch_transport_waits_beyond_old_fifteen_minute_ceiling(
+    tmp_path: Path,
+) -> None:
+    payload = b"opaque-synthetic-dbn"
+    batch = _DelayedBatchFixture(payload, done_on_poll=62)
+    elapsed = [0.0]
+
+    def advance(seconds: float) -> None:
+        elapsed[0] += seconds
+
+    adapter = acquisition._BatchRangeAdapter(
+        batch=batch,
+        api_key="not-recorded",
+        journal_path=tmp_path / "journal.jsonl",
+        counter=acquisition._BatchCallCounter(100),
+        http_get=lambda **_kwargs: _StreamResponse(
+            chunks=[payload], status_code=200
+        ),
+        clock=lambda: elapsed[0],
+        sleeper=advance,
+    )
+    output = tmp_path / "candidate.dbn.zst.partial"
+    adapter.get_range(
+        **acquisition._provider_range_query(_item("a", "ohlcv_1s")),
+        path=str(output),
+        request_id="a" * 64,
+        request_byte_ceiling=1000,
+    )
+    assert output.read_bytes() == payload
+    assert batch.polls == 62
+    assert elapsed[0] == 915.0
+
+
+def test_batch_transport_remains_bounded_at_one_hour(tmp_path: Path) -> None:
+    payload = b"opaque-synthetic-dbn"
+    batch = _DelayedBatchFixture(payload, done_on_poll=999)
+    elapsed = [0.0]
+
+    adapter = acquisition._BatchRangeAdapter(
+        batch=batch,
+        api_key="not-recorded",
+        journal_path=tmp_path / "journal.jsonl",
+        counter=acquisition._BatchCallCounter(1000),
+        clock=lambda: elapsed[0],
+        sleeper=lambda seconds: elapsed.__setitem__(0, elapsed[0] + seconds),
+    )
+    with pytest.raises(UnauthorizedOperation, match="poll-attempt ceiling"):
+        adapter.get_range(
+            **acquisition._provider_range_query(_item("a", "ohlcv_1s")),
+            path=str(tmp_path / "candidate.dbn.zst.partial"),
+            request_id="a" * 64,
+            request_byte_ceiling=1000,
+        )
+    assert batch.polls == 240
+    assert elapsed[0] == 3_600.0
 
 
 def test_batch_transport_rejects_provider_size_before_download(tmp_path: Path) -> None:
@@ -518,6 +591,8 @@ def test_required_scope_accepts_exact_user_approved_receipt(
     assert required["approval_command"] == acquisition.OPERATION
     assert required["approval_plan_id"] == plan["plan_id"]
     assert required["approval_plan_sha256"] == plan_sha256
+    assert required["maximum_provider_calls"] == "278964"
+    assert required["maximum_batch_job_seconds"] == "3600.0"
 
     issue_scope = {
         key: value for key, value in required.items() if not key.startswith("approval_")
