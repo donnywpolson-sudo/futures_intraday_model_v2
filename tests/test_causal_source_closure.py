@@ -65,12 +65,9 @@ def test_current_contract_metadata_closure_and_context_are_exact() -> None:
     assert CONTRACT.read_bytes() == VERSIONED.read_bytes()
 
 
-def test_non_active_full_build_contract_successor_matches_admitted_inventory() -> None:
+def test_full_build_contract_successor_matches_admitted_inventory_before_or_after_activation() -> None:
     active = _json(CONTRACT)
     inventory = _json(REPO / str(active["complete_inventory"]["path"]))
-    with pytest.raises(IntegrityError, match="admitted DBN identity differs"):
-        validate_full_build_selection_contract(active, inventory["entries"])
-
     candidate = _json(
         REPO
         / "reports/causal_full_build_source_rebind_preparation/"
@@ -85,6 +82,15 @@ def test_non_active_full_build_contract_successor_matches_admitted_inventory() -
         ),
         "development_end_exclusive": "2025-07-13T22:00:00Z",
     }
+    if active["contract_id"] == candidate["contract_id"]:
+        assert validate_full_build_selection_contract(active, inventory["entries"]) == result
+        assert CONTRACT.read_bytes() == VERSIONED.read_bytes()
+    else:
+        assert active["contract_id"] == (
+            "8af92cf4e250e025b61ffb51bc2677f340a4dd4f4f8d6f9825ed28b916dd43d1"
+        )
+        with pytest.raises(IntegrityError, match="admitted DBN identity differs"):
+            validate_full_build_selection_contract(active, inventory["entries"])
     assert candidate["active_canonical_source"]["release_id"] == (
         "4ca353d7814941782bb4c6640afe89b04371492868f57174bb10d632b6e7c9be"
     )
