@@ -27,6 +27,7 @@ from .causal_observation_canary import (
     _build_market_candidate_with_state,
     _decode_selected_sources,
     _load_economics_rulebook,
+    _query_contract,
 )
 from .causal_observation_foundation import (
     CAUSAL_OBSERVATION_CONTRACT_ID,
@@ -51,7 +52,7 @@ from .research_gateway_policy import CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
 
 PLAN_SCHEMA = "development_causal_observation_full_build_plan/1.2.0"
 RESULT_SCHEMA = "development_causal_observation_full_build_result/1.0.0"
-FAILURE_SCHEMA = "development_causal_observation_full_build_failure/1.0.0"
+FAILURE_SCHEMA = "development_causal_observation_full_build_failure/1.1.0"
 EXPECTED_ENTRY_COUNT = 8_506
 EXPECTED_DBN_COUNT = 4_253
 EXPECTED_SIDECAR_COUNT = 4_253
@@ -303,17 +304,26 @@ def validate_complete_development_boundary_metadata(
         raise UnauthorizedOperation(
             "full development source omits exact January-July 2025 coverage"
         )
+    query_contracts: list[dict[str, object]] = []
     for market in sorted(standard_roots):
         for family in sorted(BOUNDARY_SOURCE_FAMILIES):
             dbn = boundary[(market, family, "DBN")]
             sidecar = boundary[(market, family, "SIDECAR")]
+            dbn_path = _contained(root, dbn.get("path"))
             sidecar_path = _contained(root, sidecar.get("path"))
+            dbn_stat = dbn_path.stat()
+            sidecar_stat = sidecar_path.stat()
             if (
-                sidecar_path.stat().st_size != sidecar.get("size_bytes")
+                not dbn_path.is_file()
+                or dbn_path.is_symlink()
+                or dbn_stat.st_size != dbn.get("size_bytes")
+                or dbn_stat.st_nlink < 2
+                or sidecar_stat.st_size != sidecar.get("size_bytes")
+                or sidecar_stat.st_nlink < 2
                 or sha256_file(sidecar_path, reject_hardlinks=False)
                 != sidecar.get("sha256")
             ):
-                raise IntegrityError("2025 boundary sidecar file identity differs")
+                raise IntegrityError("2025 registered file custody identity differs")
             document = _json(sidecar_path)
             coverage = document.get("coverage_interval")
             canonical = document.get("canonical_dbn")
@@ -333,11 +343,19 @@ def validate_complete_development_boundary_metadata(
                 or canonical.get("size_bytes") != dbn.get("size_bytes")
             ):
                 raise IntegrityError("2025 boundary sidecar does not bind its DBN")
+            selected_sidecar = dict(sidecar)
+            selected_sidecar["paired_dbn_sha256"] = dbn["sha256"]
+            selected_sidecar["paired_dbn_size_bytes"] = dbn["size_bytes"]
+            query_contracts.append(_query_contract(root, selected_sidecar))
     count = len(standard_roots) * len(BOUNDARY_SOURCE_FAMILIES)
     return {
         "boundary_dbn_count": count,
         "boundary_sidecar_count": count,
         "development_end_exclusive": DEVELOPMENT_END_EXCLUSIVE,
+        "registered_hardlinked_dbn_count": count,
+        "registered_hardlinked_sidecar_count": count,
+        "query_contract_count": len(query_contracts),
+        "query_contracts_sha256": sha256_json(query_contracts),
         "standard_root_count": len(standard_roots),
     }
 
@@ -485,25 +503,6 @@ def _slice_decoded(
         ),
         decoded_record_count=decoded.decoded_record_count,
     )
-
-
-def validate_reusable_partition(
-    *,
-    stage: Path,
-    manifest: object,
-    expected_release_id: str,
-    economics_rulebook: EconomicsRuleBook,
-) -> dict[str, object]:
-    """Accept reuse only after independent verification and exact identity."""
-
-    certificate = verify_observation_candidate(
-        stage=stage,
-        manifest=manifest,  # type: ignore[arg-type]
-        economics_rulebook=economics_rulebook,
-    )
-    if certificate.get("release_id") != expected_release_id:
-        raise IntegrityError("reusable causal partition identity differs")
-    return certificate
 
 
 def _execute(
@@ -739,6 +738,11 @@ def run_authorized_full_build(
             "error_message": str(exc),
             "error_details": getattr(exc, "details", {}),
             "progress": progress,
+            "terminal": True,
+            "receipt_reuse_authorized": False,
+            "partial_partition_reuse_authorized": False,
+            "automatic_retry_authorized": False,
+            "required_successor": "NEW_PLAN_NEW_RECEIPT_NEW_OUTPUT_ROOT",
             "publication_authorized": False,
             "activation_authorized": False,
         }

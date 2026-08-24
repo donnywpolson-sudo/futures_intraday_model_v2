@@ -25,7 +25,7 @@ from .records import (
     UINT64_NULL,
     exact_int,
 )
-from .snapshot import DBN_NAME, SnapshotFile
+from .snapshot import DBN_NAME, SnapshotFile, dbn_filename_interval
 
 
 SUPPORTED_DATABENTO_VERSION = "0.78.0"
@@ -166,10 +166,21 @@ def _tri_state(value: object, name: str) -> str:
 
 
 def _date_boundary_ns(value: str) -> int:
-    parsed = datetime.fromisoformat(value).replace(tzinfo=timezone.utc)
+    try:
+        if value.endswith("Z"):
+            parsed = datetime.fromisoformat(value.removesuffix("Z") + "+00:00")
+        else:
+            parsed = datetime.fromisoformat(value).replace(tzinfo=timezone.utc)
+    except ValueError as exc:
+        raise ContractError("DBN metadata boundary is invalid") from exc
+    if parsed.tzinfo != timezone.utc:
+        raise ContractError("DBN metadata boundary is not exact UTC")
     epoch = datetime(1970, 1, 1, tzinfo=timezone.utc)
     delta = parsed - epoch
-    return delta.days * 86_400_000_000_000
+    return (
+        (delta.days * 86_400 + delta.seconds) * 1_000_000_000
+        + delta.microseconds * 1_000
+    )
 
 
 def _index_date_iso(timestamp_ns: int, cache: dict[int, str]) -> str:
@@ -195,13 +206,14 @@ def _validate_metadata(
     match = DBN_NAME.fullmatch(name)
     if match is None:
         raise IntegrityError("snapshot DBN filename is invalid")
+    interval_start, interval_end = dbn_filename_interval(name)
     metadata = store.metadata
     expected = require_query_contract(expected_query_contract)
     observed = build_query_contract(
         schema=schema,
         market=market,
-        start=match.group("start"),
-        end=match.group("end"),
+        start=interval_start,
+        end=interval_end,
         stype_in=str(metadata.stype_in),
         symbols=metadata.symbols,
     )
@@ -212,8 +224,8 @@ def _validate_metadata(
         or metadata.ts_out is not False
         or metadata.limit is not None
         or observed != expected
-        or metadata.start != _date_boundary_ns(match.group("start"))
-        or metadata.end != _date_boundary_ns(match.group("end"))
+        or metadata.start != _date_boundary_ns(interval_start)
+        or metadata.end != _date_boundary_ns(interval_end)
     ):
         raise IntegrityError("DBN metadata differs from its exact foundation contract")
 

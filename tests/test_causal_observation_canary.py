@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import pytest
+import databento_dbn as dbn
 
 from futures_rebuild.boundary import (
     OperationClassification,
@@ -15,7 +16,7 @@ from futures_rebuild.boundary import (
     RepoBoundary,
     _personal_approval_line,
 )
-from futures_rebuild.canonical import sha256_file, sha256_json
+from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
 from futures_rebuild.causal_observation_canary import (
     _CanaryStageCreator,
     DecodedMarket,
@@ -23,6 +24,7 @@ from futures_rebuild.causal_observation_canary import (
     _causal_definition,
     _decode_selected_sources,
     _load_economics_rulebook,
+    _query_contract,
     _validate_plan,
     _resolve_multiplier,
     build_market_candidate,
@@ -50,6 +52,190 @@ RULEBOOK = EconomicsRuleBook.from_file(ROOT / "configs/contract_economics_rules.
 START_NS = int(
     datetime(2024, 3, 4, 12, tzinfo=timezone.utc).timestamp() * 1_000_000_000
 )
+BOUNDED_START_NS = int(
+    datetime(2025, 1, 1, tzinfo=timezone.utc).timestamp() * 1_000_000_000
+)
+BOUNDED_END_NS = int(
+    datetime(2025, 7, 13, 22, tzinfo=timezone.utc).timestamp() * 1_000_000_000
+)
+
+
+def _bounded_sidecar(
+    tmp_path: Path,
+    *,
+    family: str,
+    dbn_sha256: str = H,
+    dbn_size: int = 123,
+) -> tuple[dict[str, object], dict[str, object]]:
+    dbn_path = (
+        f"data/dbn/{family}/6A/2025/"
+        "2025-01-01_2025-07-13T220000Z.dbn.zst"
+    )
+    core: dict[str, object] = {
+        "authority": {
+            "activation": False,
+            "dbn_rows_decoded": 0,
+            "holdout_or_forward_access": False,
+            "provider_calls": 0,
+            "publication": False,
+        },
+        "canonical_dbn": {
+            "copy_semantics": "CREATE_ONLY_EXACT_BYTES_NO_OVERWRITE",
+            "project_relative_path": dbn_path,
+            "sha256": dbn_sha256,
+            "size_bytes": dbn_size,
+        },
+        "coverage_interval": {
+            "end_exclusive_utc": "2025-07-13T22:00:00Z",
+            "start_inclusive_utc": "2025-01-01T00:00:00Z",
+        },
+        "dataset": "GLBX.MDP3",
+        "family": family,
+        "market": "6A",
+        "schema_version": "bounded_2025_canonical_registration_sidecar/1.0.0",
+        "source_provenance": {},
+        "state": "CANDIDATE_INACTIVE_NOT_PUBLISHED_NOT_ACTIVATED",
+    }
+    payload = {**core, "manifest_id": sha256_json(core)}
+    sidecar_path = f"{dbn_path}.manifest.json"
+    seed = tmp_path / f"{family}-sidecar-seed.json"
+    seed.write_bytes(canonical_bytes(payload))
+    target = tmp_path / sidecar_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.hardlink_to(seed)
+    entry: dict[str, object] = {
+        "family": family,
+        "identity_basis": "SIDECAR_BYTES_HASHED_METADATA_ONLY",
+        "interval_end_exclusive": "2025-07-13T22:00:00Z",
+        "interval_start_inclusive": "2025-01-01T00:00:00Z",
+        "kind": "SIDECAR",
+        "market": "6A",
+        "paired_dbn_sha256": dbn_sha256,
+        "paired_dbn_size_bytes": dbn_size,
+        "path": sidecar_path,
+        "sha256": sha256_file(target, reject_hardlinks=False),
+        "sidecar_schema_version": "bounded_2025_canonical_registration_sidecar/1.0.0",
+        "size_bytes": target.stat().st_size,
+        "year": 2025,
+    }
+    return entry, payload
+
+
+@pytest.mark.parametrize(
+    "family",
+    [
+        "definition",
+        "ohlcv_1d",
+        "ohlcv_1h",
+        "ohlcv_1m",
+        "ohlcv_1s",
+        "statistics",
+        "status",
+    ],
+)
+def test_bounded_2025_hardlinked_sidecar_builds_exact_query_contract(
+    tmp_path: Path, family: str
+) -> None:
+    entry, _ = _bounded_sidecar(tmp_path, family=family)
+    contract = _query_contract(tmp_path, entry)
+    assert contract["schema"] == family.replace("_", "-")
+    assert contract["start"] == "2025-01-01T00:00:00Z"
+    assert contract["end"] == "2025-07-13T22:00:00Z"
+    assert contract["stype_in"] == (
+        "parent" if family == "definition" else "continuous"
+    )
+
+
+def test_bounded_2025_sidecar_pairing_drift_fails_closed(tmp_path: Path) -> None:
+    entry, _ = _bounded_sidecar(tmp_path, family="definition")
+    entry["paired_dbn_sha256"] = "f" * 64
+    with pytest.raises(IntegrityError, match="sidecar contract differs"):
+        _query_contract(tmp_path, entry)
+
+
+def test_bounded_2025_registered_hardlink_reaches_real_decoder_path(
+    tmp_path: Path,
+) -> None:
+    metadata = dbn.Metadata(
+        dataset="GLBX.MDP3",
+        start=BOUNDED_START_NS,
+        end=BOUNDED_END_NS,
+        stype_in=dbn.SType.PARENT,
+        stype_out=dbn.SType.INSTRUMENT_ID,
+        schema=dbn.Schema.DEFINITION,
+        symbols=["6A.FUT"],
+        ts_out=False,
+    )
+    record = dbn.InstrumentDefMsg(
+        publisher_id=1,
+        instrument_id=123,
+        ts_event=BOUNDED_START_NS + 1,
+        ts_recv=BOUNDED_START_NS,
+        activation=BOUNDED_START_NS,
+        expiration=BOUNDED_END_NS,
+        min_price_increment=1,
+        display_factor=1_000_000_000,
+        raw_symbol="6AH5",
+        asset="6A",
+        security_type="FUT",
+        instrument_class=dbn.InstrumentClass.FUTURE,
+        security_update_action=dbn.SecurityUpdateAction.ADD,
+        unit_of_measure_qty=1_000_000_000,
+        currency="USD",
+        group="6A",
+        exchange="XCME",
+        unit_of_measure="IPNT",
+    )
+    payload = metadata.encode() + bytes(record)
+    dbn_path = (
+        "data/dbn/definition/6A/2025/"
+        "2025-01-01_2025-07-13T220000Z.dbn.zst"
+    )
+    seed = tmp_path / "definition-dbn-seed.dbn.zst"
+    seed.write_bytes(payload)
+    target = tmp_path / dbn_path
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.hardlink_to(seed)
+    dbn_sha = sha256_file(target, reject_hardlinks=False)
+    sidecar_entry, _ = _bounded_sidecar(
+        tmp_path,
+        family="definition",
+        dbn_sha256=dbn_sha,
+        dbn_size=len(payload),
+    )
+    dbn_entry: dict[str, object] = {
+        "family": "definition",
+        "identity_basis": "BOUNDED_2025_REGISTRATION_SIDECAR_DECLARATION",
+        "interval_end_exclusive": "2025-07-13T22:00:00Z",
+        "interval_start_inclusive": "2025-01-01T00:00:00Z",
+        "kind": "DBN",
+        "market": "6A",
+        "path": dbn_path,
+        "sha256": dbn_sha,
+        "sidecar_schema_version": None,
+        "size_bytes": len(payload),
+        "year": 2025,
+    }
+    decoded = _decode_selected_sources(
+        root=tmp_path,
+        selected=(dbn_entry, sidecar_entry),
+        windows={
+            "6A": {
+                "start": "2025-01-01T00:00:00Z",
+                "end": "2025-07-13T22:00:00Z",
+            }
+        },
+        source_contract={
+            "active_canonical_source": {
+                "release_id": "a" * 64,
+                "release_manifest_sha256": "b" * 64,
+            },
+            "complete_inventory": {"content_inventory_sha256": "c" * 64},
+        },
+        maximum_decoded_records=10,
+    )
+    assert decoded["6A"].decoded_record_count == 1
+    assert len(decoded["6A"].definitions) == 1
 
 
 def _operation_plan() -> dict[str, object]:

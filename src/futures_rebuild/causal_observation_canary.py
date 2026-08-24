@@ -70,6 +70,11 @@ ORDERED_ROOTS = ("ES", "CL", "ZN", "6E", "GC", "ZC", "LE")
 SOURCE_FAMILIES = frozenset(
     {"definition", "ohlcv_1d", "ohlcv_1h", "ohlcv_1m", "ohlcv_1s", "statistics", "status"}
 )
+BOUNDED_2025_SIDECAR_SCHEMA = (
+    "bounded_2025_canonical_registration_sidecar/1.0.0"
+)
+BOUNDED_2025_START = "2025-01-01T00:00:00Z"
+BOUNDED_2025_END = "2025-07-13T22:00:00Z"
 
 
 @dataclass(frozen=True, slots=True)
@@ -323,6 +328,7 @@ def _binding(
     release_id: str,
     release_manifest_sha256: str,
     files_index_sha256: str,
+    allow_registered_hardlinks: bool = False,
 ) -> DbnReleaseFile:
     relative = str(entry["path"])
     return DbnReleaseFile(
@@ -334,14 +340,113 @@ def _binding(
         source_release_id=release_id,
         source_manifest_sha256=release_manifest_sha256,
         files_index_sha256=files_index_sha256,
+        allow_registered_hardlinks=allow_registered_hardlinks,
     )
+
+
+def _is_registered_bounded_2025_pair(
+    dbn_entry: Mapping[str, object], sidecar_entry: Mapping[str, object]
+) -> bool:
+    schema = sidecar_entry.get("sidecar_schema_version")
+    if schema != BOUNDED_2025_SIDECAR_SCHEMA:
+        return False
+    dbn_path = str(dbn_entry.get("path"))
+    sidecar_path = str(sidecar_entry.get("path"))
+    if (
+        dbn_entry.get("kind") != "DBN"
+        or sidecar_entry.get("kind") != "SIDECAR"
+        or dbn_entry.get("year") != 2025
+        or sidecar_entry.get("year") != 2025
+        or dbn_entry.get("identity_basis")
+        != "BOUNDED_2025_REGISTRATION_SIDECAR_DECLARATION"
+        or sidecar_entry.get("identity_basis")
+        != "SIDECAR_BYTES_HASHED_METADATA_ONLY"
+        or dbn_entry.get("interval_start_inclusive") != BOUNDED_2025_START
+        or sidecar_entry.get("interval_start_inclusive") != BOUNDED_2025_START
+        or dbn_entry.get("interval_end_exclusive") != BOUNDED_2025_END
+        or sidecar_entry.get("interval_end_exclusive") != BOUNDED_2025_END
+        or dbn_entry.get("market") != sidecar_entry.get("market")
+        or dbn_entry.get("family") != sidecar_entry.get("family")
+        or sidecar_path != f"{dbn_path}.manifest.json"
+        or not dbn_path.endswith(
+            "/2025/2025-01-01_2025-07-13T220000Z.dbn.zst"
+        )
+    ):
+        raise IntegrityError("bounded-2025 DBN/sidecar registration binding differs")
+    return True
 
 
 def _query_contract(root: Path, sidecar_entry: Mapping[str, object]) -> dict[str, object]:
     path = _contained(root, sidecar_entry["path"])
-    if sha256_file(path) != sidecar_entry["sha256"]:
+    bounded = sidecar_entry.get("sidecar_schema_version") == BOUNDED_2025_SIDECAR_SCHEMA
+    if bounded and (
+        sidecar_entry.get("kind") != "SIDECAR"
+        or sidecar_entry.get("year") != 2025
+        or sidecar_entry.get("identity_basis")
+        != "SIDECAR_BYTES_HASHED_METADATA_ONLY"
+        or sidecar_entry.get("interval_start_inclusive") != BOUNDED_2025_START
+        or sidecar_entry.get("interval_end_exclusive") != BOUNDED_2025_END
+        or not str(sidecar_entry.get("path")).endswith(
+            "/2025/2025-01-01_2025-07-13T220000Z.dbn.zst.manifest.json"
+        )
+    ):
+        raise IntegrityError("bounded-2025 sidecar registration entry differs")
+    if (
+        path.stat().st_size != sidecar_entry.get("size_bytes")
+        or sha256_file(path, reject_hardlinks=not bounded)
+        != sidecar_entry["sha256"]
+    ):
         raise IntegrityError("canary sidecar identity differs")
     payload = _json(path)
+    if bounded:
+        coverage = payload.get("coverage_interval")
+        canonical = payload.get("canonical_dbn")
+        authority = payload.get("authority")
+        core = {key: value for key, value in payload.items() if key != "manifest_id"}
+        family = str(sidecar_entry.get("family"))
+        market = str(sidecar_entry.get("market"))
+        expected_stype = "parent" if family == "definition" else "continuous"
+        expected_symbols = (
+            [f"{market}.FUT"] if family == "definition" else [f"{market}.v.0"]
+        )
+        if (
+            payload.get("schema_version") != BOUNDED_2025_SIDECAR_SCHEMA
+            or payload.get("manifest_id") != sha256_json(core)
+            or payload.get("dataset") != "GLBX.MDP3"
+            or payload.get("market") != market
+            or payload.get("family") != family
+            or family not in SOURCE_FAMILIES
+            or not isinstance(coverage, Mapping)
+            or coverage.get("start_inclusive_utc") != BOUNDED_2025_START
+            or coverage.get("end_exclusive_utc") != BOUNDED_2025_END
+            or sidecar_entry.get("interval_start_inclusive") != BOUNDED_2025_START
+            or sidecar_entry.get("interval_end_exclusive") != BOUNDED_2025_END
+            or not isinstance(canonical, Mapping)
+            or canonical.get("project_relative_path")
+            != str(sidecar_entry["path"]).removesuffix(".manifest.json")
+            or canonical.get("sha256") != sidecar_entry["paired_dbn_sha256"]
+            or canonical.get("size_bytes") != sidecar_entry["paired_dbn_size_bytes"]
+            or authority
+            != {
+                "activation": False,
+                "dbn_rows_decoded": 0,
+                "holdout_or_forward_access": False,
+                "provider_calls": 0,
+                "publication": False,
+            }
+        ):
+            raise IntegrityError("bounded-2025 sidecar contract differs")
+        result = build_query_contract(
+            schema=family.replace("_", "-"),
+            market=market,
+            start=BOUNDED_2025_START,
+            end=BOUNDED_2025_END,
+            stype_in=expected_stype,
+            symbols=expected_symbols,
+        )
+        if sha256_file(path, reject_hardlinks=False) != sidecar_entry["sha256"]:
+            raise IntegrityError("bounded-2025 sidecar changed during validation")
+        return result
     if (
         payload.get("path") != str(sidecar_entry["path"]).removesuffix(".manifest.json")
         or payload.get("file_sha256") is None
@@ -437,12 +542,16 @@ def _decode_selected_sources(
         if family not in SOURCE_FAMILIES or market not in decoded:
             raise UnauthorizedOperation("canary decoder received an unapproved source")
         start_ns, end_ns = _window_ns(windows[market])
+        registered_bounded_pair = _is_registered_bounded_2025_pair(
+            dbn_entry, sidecar_entry
+        )
         binding = _binding(
             root=root,
             entry=dbn_entry,
             release_id=str(release["release_id"]),
             release_manifest_sha256=str(release["release_manifest_sha256"]),
             files_index_sha256=str(inventory["content_inventory_sha256"]),
+            allow_registered_hardlinks=registered_bounded_pair,
         )
         query = _query_contract(root, sidecar_entry)
         target = decoded[market]

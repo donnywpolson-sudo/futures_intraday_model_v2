@@ -47,12 +47,14 @@ from futures_rebuild.foundation.support import (
     VerifiedFoundationPolicies,
     publish_foundation_policies,
 )
+from futures_rebuild.foundation.snapshot import DbnReleaseFile, dbn_filename_interval
 from futures_rebuild.source_symbology import build_query_contract
 
 
 REPO = Path(__file__).resolve().parents[1]
 START_NS = 1_704_067_200_000_000_000
 END_NS = 1_735_689_600_000_000_000
+BOUNDED_END_NS = 1_752_444_000_000_000_000
 
 
 def _query(schema: str) -> dict[str, object]:
@@ -222,6 +224,103 @@ def test_offline_dbn_decode_retains_exact_nanoseconds_and_provenance(tmp_path: P
     assert definitions[0].source_file_sha256 == sha256_file(definition_binding.path)
     assert bars[0].source_file_path.startswith("dbn/ohlcv_1m/ES/2024/")
     assert definitions[0].row_sha256 != bars[0].row_sha256
+
+
+def test_registered_hardlinked_timestamped_dbn_uses_exact_intraday_end(
+    tmp_path: Path,
+) -> None:
+    payload = _definition_bytes()
+    seed = tmp_path / "seed.dbn.zst"
+    seed.write_bytes(payload)
+    target = tmp_path / "2025-01-01_2025-07-13T220000Z.dbn.zst"
+    target.hardlink_to(seed)
+    binding = DbnReleaseFile(
+        logical_path=target.name,
+        physical_path=target,
+        relative_path=target.name,
+        size=len(payload),
+        sha256=sha256_file(target, reject_hardlinks=False),
+        source_release_id="a" * 64,
+        source_manifest_sha256="b" * 64,
+        files_index_sha256="c" * 64,
+    )
+    with pytest.raises(ContractError, match="hard-linked"):
+        binding.verify()
+    registered = replace(binding, allow_registered_hardlinks=True)
+    assert registered.verify() == target
+    assert dbn_filename_interval(target.name) == (
+        "2025-01-01T00:00:00Z",
+        "2025-07-13T22:00:00Z",
+    )
+    seed.write_bytes(payload + b"drift")
+    with pytest.raises(IntegrityError, match="central manifest"):
+        registered.verify()
+
+
+def test_timestamped_dbn_metadata_end_is_not_truncated_to_midnight(
+    tmp_path: Path,
+) -> None:
+    start_ns = int(
+        datetime(2025, 1, 1, tzinfo=timezone.utc).timestamp() * 1_000_000_000
+    )
+    metadata = dbn.Metadata(
+        dataset="GLBX.MDP3",
+        start=start_ns,
+        end=BOUNDED_END_NS,
+        stype_in=dbn.SType.PARENT,
+        stype_out=dbn.SType.INSTRUMENT_ID,
+        schema=dbn.Schema.DEFINITION,
+        symbols=["6A.FUT"],
+        ts_out=False,
+    )
+    record = dbn.InstrumentDefMsg(
+        publisher_id=1,
+        instrument_id=123,
+        ts_event=start_ns + 1,
+        ts_recv=start_ns,
+        activation=start_ns,
+        expiration=BOUNDED_END_NS,
+        min_price_increment=1,
+        display_factor=1_000_000_000,
+        raw_symbol="6AH5",
+        asset="6A",
+        security_type="FUT",
+        instrument_class=dbn.InstrumentClass.FUTURE,
+        security_update_action=dbn.SecurityUpdateAction.ADD,
+        unit_of_measure_qty=1_000_000_000,
+        currency="USD",
+        group="6A",
+        exchange="XCME",
+        unit_of_measure="IPNT",
+    )
+    target = tmp_path / "2025-01-01_2025-07-13T220000Z.dbn.zst"
+    target.write_bytes(metadata.encode() + bytes(record))
+    binding = DbnReleaseFile(
+        logical_path=target.name,
+        physical_path=target,
+        relative_path=target.name,
+        size=target.stat().st_size,
+        sha256=sha256_file(target),
+        source_release_id="a" * 64,
+        source_manifest_sha256="b" * 64,
+        files_index_sha256="c" * 64,
+    )
+    records = list(
+        iter_definitions(
+            binding,
+            market="6A",
+            expected_query_contract=build_query_contract(
+                schema="definition",
+                market="6A",
+                start="2025-01-01T00:00:00Z",
+                end="2025-07-13T22:00:00Z",
+                stype_in="parent",
+                symbols=["6A.FUT"],
+            ),
+            batch_rows=1,
+        )
+    )
+    assert len(records) == 1
 
 
 def test_causal_bar_uses_actual_instrument_economics_and_exact_availability(tmp_path: Path):

@@ -33,9 +33,29 @@ SCHEMA_DIRECTORIES = MappingProxyType(
     }
 )
 DBN_NAME = re.compile(
-    r"^(?P<start>\d{4}-\d{2}-\d{2})_(?P<end>\d{4}-\d{2}-\d{2})\.dbn\.zst$"
+    r"^(?P<start>\d{4}-\d{2}-\d{2}(?:T\d{6}Z)?)_"
+    r"(?P<end>\d{4}-\d{2}-\d{2}(?:T\d{6}Z)?)\.dbn\.zst$"
 )
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
+
+
+def dbn_filename_interval(filename: str) -> tuple[str, str]:
+    """Return an exact query interval from a canonical DBN filename."""
+
+    match = DBN_NAME.fullmatch(filename)
+    if match is None:
+        raise IntegrityError("snapshot DBN filename is invalid")
+    raw_start, raw_end = match.group("start"), match.group("end")
+    timestamped = "T" in raw_start or "T" in raw_end
+
+    def normalized(value: str) -> str:
+        if "T" in value:
+            return (
+                f"{value[:10]}T{value[11:13]}:{value[13:15]}:{value[15:17]}Z"
+            )
+        return f"{value}T00:00:00Z" if timestamped else value
+
+    return normalized(raw_start), normalized(raw_end)
 
 
 def _validate_successor_receipt(
@@ -123,6 +143,7 @@ class DbnReleaseFile:
     source_release_id: str
     source_manifest_sha256: str
     files_index_sha256: str
+    allow_registered_hardlinks: bool = False
 
     @property
     def path(self) -> Path:
@@ -131,10 +152,15 @@ class DbnReleaseFile:
     def verify(self) -> Path:
         path = self.physical_path
         if (
-            not path.is_file()
+            type(self.allow_registered_hardlinks) is not bool
+            or not path.is_file()
             or path.is_symlink()
             or path.stat().st_size != self.size
-            or sha256_file(path) != self.sha256
+            or sha256_file(
+                path,
+                reject_hardlinks=not self.allow_registered_hardlinks,
+            )
+            != self.sha256
         ):
             raise IntegrityError("DBN release file bytes differ from their central manifest")
         return path

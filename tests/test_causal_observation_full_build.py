@@ -18,6 +18,7 @@ from futures_rebuild.canonical import sha256_file, sha256_json
 from futures_rebuild.causal_observation_canary import (
     DecodedMarket,
     _build_market_candidate_with_state,
+    _query_contract,
 )
 from futures_rebuild.causal_observation_foundation import (
     ACTIVE_CANONICAL_RELEASE_ID,
@@ -48,7 +49,6 @@ from futures_rebuild.causal_observation_full_build import (
     _slice_decoded,
     run_authorized_full_build,
     validate_complete_development_boundary_metadata,
-    validate_reusable_partition,
 )
 from futures_rebuild.causal_observation_parquet import read_bundle
 from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
@@ -468,9 +468,96 @@ def test_output_and_lock_fail_before_authorization_or_payload_access(
     assert calls == []
 
 
+def test_consumed_runtime_failure_marks_partitions_terminal_and_nonreusable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    plan = _plan()
+    plan_path = tmp_path / "plan.json"
+    plan_path.write_text(json.dumps(plan, sort_keys=True) + "\n", encoding="utf-8")
+    configs = tmp_path / "configs"
+    configs.mkdir()
+    (configs / "source_contract.json").write_text(
+        json.dumps({"universe": {"standard_roots": ["ES"]}}) + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(
+        "futures_rebuild.causal_observation_full_build._validate_plan", lambda *_: None
+    )
+    monkeypatch.setattr(
+        "futures_rebuild.causal_observation_full_build._load_exact_source_entries",
+        lambda *_: (),
+    )
+    monkeypatch.setattr(
+        "futures_rebuild.causal_observation_full_build.validate_complete_development_boundary_metadata",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(
+        "futures_rebuild.causal_observation_full_build._load_economics_rulebook",
+        lambda *_: RULEBOOK,
+    )
+    monkeypatch.setattr(
+        "futures_rebuild.causal_observation_full_build.issue_current_source_closure_context",
+        lambda *_: object(),
+    )
+    monkeypatch.setattr(
+        "futures_rebuild.causal_observation_full_build.select_exact_standard_source_entries",
+        lambda *_, **__: (),
+    )
+    monkeypatch.setattr(
+        "futures_rebuild.causal_observation_full_build.authorize_full_build_row_read",
+        lambda **_: SimpleNamespace(receipt_id="d" * 64),
+    )
+    monkeypatch.setattr(
+        "futures_rebuild.causal_observation_full_build.shutil.disk_usage",
+        lambda *_: SimpleNamespace(free=10**15),
+    )
+    monkeypatch.setattr(
+        "futures_rebuild.causal_observation_full_build._execute",
+        lambda **_: (_ for _ in ()).throw(RuntimeError("synthetic terminal failure")),
+    )
+    with pytest.raises(RuntimeError, match="terminal failure"):
+        run_authorized_full_build(
+            repository_root=tmp_path,
+            receipt=object(),  # type: ignore[arg-type]
+            plan_path=plan_path,
+        )
+    output = tmp_path / str(plan["output_staging_path"])
+    failure = json.loads((output / "failure.json").read_text(encoding="utf-8"))
+    assert failure["terminal"] is True
+    assert failure["receipt_reuse_authorized"] is False
+    assert failure["partial_partition_reuse_authorized"] is False
+    assert failure["required_successor"] == "NEW_PLAN_NEW_RECEIPT_NEW_OUTPUT_ROOT"
+    with pytest.raises(IntegrityError, match="already exists"):
+        run_authorized_full_build(
+            repository_root=tmp_path,
+            receipt=object(),  # type: ignore[arg-type]
+            plan_path=plan_path,
+        )
+
+
 def test_2025_boundary_metadata_is_exact_and_crossing_files_fail_closed() -> None:
     contract = json.loads((ROOT / "configs/source_contract.json").read_text())
     inventory = json.loads((ROOT / contract["complete_inventory"]["path"]).read_text())
+    all_entries = [
+        dict(entry)
+        for entry in inventory["entries"]
+        if entry.get("admitted_standard_foundation") is True
+        and entry.get("year") == 2025
+    ]
+    complete = validate_complete_development_boundary_metadata(
+        ROOT,
+        all_entries,
+        standard_roots=frozenset(contract["universe"]["standard_roots"]),
+    )
+    assert complete["boundary_dbn_count"] == 287
+    assert complete["boundary_sidecar_count"] == 287
+    assert complete["registered_hardlinked_dbn_count"] == 287
+    assert complete["registered_hardlinked_sidecar_count"] == 287
+    assert complete["query_contract_count"] == 287
+    assert (
+        complete["query_contracts_sha256"]
+        == "cc381bc1cd517afe145ecfdd740f704ad3e71c9e571db69f8bdfff297bfff7ed"
+    )
     entries = [
         dict(entry)
         for entry in inventory["entries"]
@@ -483,6 +570,7 @@ def test_2025_boundary_metadata_is_exact_and_crossing_files_fail_closed() -> Non
     )
     assert result["boundary_dbn_count"] == 7
     assert result["boundary_sidecar_count"] == 7
+    assert result["query_contract_count"] == 7
     crossing = [dict(entry) for entry in entries]
     crossing[0]["interval_end_exclusive"] = "2026-01-01T00:00:00Z"
     with pytest.raises(UnauthorizedOperation, match="development boundary"):
@@ -503,42 +591,43 @@ def test_2025_boundary_metadata_is_exact_and_crossing_files_fail_closed() -> Non
     assert july[-1][2] == "2025-07-01_2025-07-13T220000Z"
 
 
-def test_partition_reuse_requires_independent_exact_release_identity(tmp_path: Path) -> None:
-    context = issue_synthetic_observation_context(
-        boundary=RepoBoundary(tmp_path), fixture_id="8" * 64
-    )
-    built = _build_market_candidate_with_state(
-        publisher=_Publisher(tmp_path),
-        context=context,
-        market="ES",
-        window={"start": "2024-01-01T00:00:00Z", "end": "2024-02-01T00:00:00Z"},
-        decoded=DecodedMarket(
-            definitions=(
-                _definition(instrument=2, received="2024-01-02T00:00:00Z", symbol="ESH4", ordinal=0),
-            ),
-            primary_1m=(
-                _bar(instrument=2, event="2024-01-02T00:01:00Z", digit="6", price=-50),
-            ),
-            reference_1s={},
-            reference_1h={},
-            reference_1d={},
-            support_rows=(),
-            decoded_record_count=2,
-        ),
-        allowed_roots=frozenset({"ES"}),
-        economics_rulebook=RULEBOOK,
-    )
-    certificate = validate_reusable_partition(
-        stage=built.prepared.stage,
-        manifest=built.prepared.manifest,
-        expected_release_id=built.prepared.manifest.release_id,
-        economics_rulebook=RULEBOOK,
-    )
-    assert certificate["release_id"] == built.prepared.manifest.release_id
-    with pytest.raises(IntegrityError, match="identity differs"):
-        validate_reusable_partition(
-            stage=built.prepared.stage,
-            manifest=built.prepared.manifest,
-            expected_release_id="f" * 64,
-            economics_rulebook=RULEBOOK,
+def test_all_bounded_2025_query_derivations_match_registered_provenance() -> None:
+    contract = json.loads((ROOT / "configs/source_contract.json").read_text())
+    inventory = json.loads((ROOT / contract["complete_inventory"]["path"]).read_text())
+    boundary = [
+        dict(entry)
+        for entry in inventory["entries"]
+        if entry.get("admitted_standard_foundation") is True
+        and entry.get("year") == 2025
+    ]
+    by_path = {str(entry["path"]): entry for entry in boundary}
+    compared = 0
+    for sidecar in sorted(
+        (entry for entry in boundary if entry["kind"] == "SIDECAR"),
+        key=lambda entry: str(entry["path"]),
+    ):
+        dbn_entry = by_path[str(sidecar["path"]).removesuffix(".manifest.json")]
+        sidecar["paired_dbn_sha256"] = dbn_entry["sha256"]
+        sidecar["paired_dbn_size_bytes"] = dbn_entry["size_bytes"]
+        derived = _query_contract(ROOT, sidecar)
+        canonical = json.loads((ROOT / str(sidecar["path"])).read_text())
+        provenance = canonical["source_provenance"]
+        source_path = ROOT / provenance["source_sidecar_path"]
+        assert (
+            sha256_file(source_path, reject_hardlinks=False)
+            == provenance["source_sidecar_sha256"]
         )
+        exact = json.loads(source_path.read_text())["exact_query"]
+        assert exact == {
+            "compression": "zstd",
+            "dataset": derived["dataset"],
+            "encoding": "dbn",
+            "end": derived["end"],
+            "schema": derived["schema"],
+            "start": derived["start"],
+            "stype_in": derived["stype_in"],
+            "stype_out": derived["stype_out"],
+            "symbols": derived["symbols"],
+        }
+        compared += 1
+    assert compared == 287

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Sequence
-from datetime import date
+from datetime import datetime, timezone
 from typing import Mapping
 
 from .canonical import sha256_json
@@ -24,6 +24,30 @@ _SUPPORTED_SCHEMAS = (
     | _CONTINUOUS_ONLY_SCHEMAS
     | _MIXED_MARKET_STATE_SCHEMAS
 )
+_DATE_BOUND = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_UTC_SECOND_BOUND = re.compile(
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$"
+)
+
+
+def _query_bound(value: object) -> tuple[str, datetime]:
+    if type(value) is not str or (
+        _DATE_BOUND.fullmatch(value) is None
+        and _UTC_SECOND_BOUND.fullmatch(value) is None
+    ):
+        raise ContractError("DBN query contract interval is invalid")
+    try:
+        rendered = (
+            value.removesuffix("Z") + "+00:00"
+            if value.endswith("Z")
+            else f"{value}T00:00:00+00:00"
+        )
+        parsed = datetime.fromisoformat(rendered)
+    except ValueError as exc:
+        raise ContractError("DBN query contract interval is invalid") from exc
+    if parsed.tzinfo != timezone.utc:
+        raise ContractError("DBN query contract interval is invalid")
+    return value, parsed
 
 
 def allowed_query_symbologies(
@@ -93,12 +117,9 @@ def build_query_contract(
         symbols=symbols,
         allow_diagnostic_parent=allow_diagnostic_parent,
     )
-    try:
-        start_date = date.fromisoformat(start)
-        end_date = date.fromisoformat(end)
-    except (TypeError, ValueError) as exc:
-        raise ContractError("DBN query contract interval is invalid") from exc
-    if end_date <= start_date:
+    normalized_start, start_at = _query_bound(start)
+    normalized_end, end_at = _query_bound(end)
+    if end_at <= start_at:
         raise ContractError("DBN query contract interval is empty or reversed")
     symbol_template = (
         "{market}.FUT" if normalized_stype == "parent" else "{market}.v.0"
@@ -116,11 +137,11 @@ def build_query_contract(
     mode_id = sha256_json(mode_core)
     contract_core: dict[str, object] = {
         **mode_core,
-        "end": end,
+        "end": normalized_end,
         "market": market,
         "query_mode_id": mode_id,
         "symbols": list(normalized_symbols),
-        "start": start,
+        "start": normalized_start,
     }
     return {**contract_core, "query_contract_id": sha256_json(contract_core)}
 
