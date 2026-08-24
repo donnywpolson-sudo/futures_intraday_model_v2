@@ -63,14 +63,23 @@ from futures_rebuild.research_gateway_policy import (
 ROOT = Path(__file__).resolve().parents[1]
 H = "a" * 64
 RULEBOOK = EconomicsRuleBook.from_file(ROOT / "configs/contract_economics_rules.json")
+
+
+def _active_source() -> dict[str, object]:
+    value = json.loads((ROOT / "configs/source_contract.json").read_text(encoding="utf-8"))
+    assert isinstance(value, dict)
+    return value
+
+
 def _plan(*, inventory_path: str = "inventory.json", inventory_sha256: str = H) -> dict[str, object]:
+    active = _active_source()
     core: dict[str, object] = {
         "schema_version": PLAN_SCHEMA,
         "operation": CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
         "causal_contract_id": CAUSAL_OBSERVATION_CONTRACT_ID,
         "source": {
-            "source_contract_id": ACTIVE_SOURCE_CONTRACT_ID,
-            "canonical_release_id": ACTIVE_CANONICAL_RELEASE_ID,
+            "source_contract_id": active["contract_id"],
+            "canonical_release_id": active["active_canonical_source"]["release_id"],
             "inventory_path": inventory_path,
             "inventory_sha256": inventory_sha256,
             "exact_source_entries_sha256": "b" * 64,
@@ -142,11 +151,12 @@ def _plan(*, inventory_path: str = "inventory.json", inventory_sha256: str = H) 
 
 def _receipt(tmp_path: Path, plan: dict[str, object], plan_sha256: str) -> OperationReceipt:
     boundary = RepoBoundary(tmp_path)
+    source = plan["source"]
     required = required_full_build_scope(
         plan=plan,
         plan_sha256=plan_sha256,
-        source_contract_id=ACTIVE_SOURCE_CONTRACT_ID,
-        canonical_release_id=ACTIVE_CANONICAL_RELEASE_ID,
+        source_contract_id=str(source["source_contract_id"]),
+        canonical_release_id=str(source["canonical_release_id"]),
     )
     scope = {key: value for key, value in required.items() if not key.startswith("approval_")}
     return OperationReceipt.issue_user_approved(
@@ -232,9 +242,12 @@ class _Publisher:
         return stage
 
 
-def test_full_build_bounds_include_bounded_2025_while_active_contract_stays_blocked() -> None:
-    source = json.loads((ROOT / "configs/source_contract.json").read_text(encoding="utf-8"))
-    assert source["contract_id"] == ACTIVE_SOURCE_CONTRACT_ID
+def test_full_build_bounds_include_bounded_2025_before_or_after_activation() -> None:
+    source = _active_source()
+    assert source["contract_id"] in {
+        ACTIVE_SOURCE_CONTRACT_ID,
+        "45322859e44305cc72a88867a7911407f918da50e9eb3f32f288d53cfa111566",
+    }
     assert source["active_canonical_source"]["release_id"] == ACTIVE_CANONICAL_RELEASE_ID
     assert len(source["universe"]["standard_roots"]) == STANDARD_ROOT_COUNT
     assert len(source["universe"]["deferred_micro_roots"]) == DEFERRED_MICRO_COUNT
@@ -252,8 +265,12 @@ def test_full_build_bounds_include_bounded_2025_while_active_contract_stays_bloc
         617,
     )
     assert EXPECTED_WORK_UNIT_COUNT == 609
-    assert source["selection_policy"]["admitted_standard_dbn_file_count"] == 3_966
-    assert source["selection_policy"]["admitted_standard_dbn_file_count"] != EXPECTED_DBN_COUNT
+    admitted_count = source["selection_policy"]["admitted_standard_dbn_file_count"]
+    if source["contract_id"] == ACTIVE_SOURCE_CONTRACT_ID:
+        assert admitted_count == 3_966
+        assert admitted_count != EXPECTED_DBN_COUNT
+    else:
+        assert admitted_count == EXPECTED_DBN_COUNT == 4_253
 
 
 def test_full_build_operation_is_nonpublic_and_receipt_is_one_use(tmp_path: Path) -> None:
