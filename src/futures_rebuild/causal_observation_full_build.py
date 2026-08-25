@@ -477,6 +477,8 @@ def _work_unit_sort_key(key: tuple[str, int]) -> tuple[int, str, int]:
 
 def _work_units(
     selected: Sequence[Mapping[str, object]],
+    *,
+    expected_count: int = EXPECTED_WORK_UNIT_COUNT,
 ) -> tuple[tuple[str, int, tuple[dict[str, object], ...]], ...]:
     grouped: dict[tuple[str, int], list[dict[str, object]]] = defaultdict(list)
     families: dict[tuple[str, int], set[str]] = defaultdict(set)
@@ -493,7 +495,7 @@ def _work_units(
             raise IntegrityError("primary market-year lacks point-in-time definitions")
         rows = tuple(sorted(grouped[key], key=lambda item: str(item["path"])))
         units.append((key[0], key[1], rows))
-    if len(units) != EXPECTED_WORK_UNIT_COUNT:
+    if len(units) != expected_count:
         raise IntegrityError("full development market-year work-unit count differs")
     return tuple(units)
 
@@ -618,7 +620,9 @@ def _execute(
     output_bytes = 0
     complete_work_units = 0
 
-    for market, year, unit_entries in _work_units(selected):
+    for market, year, unit_entries in _work_units(
+        selected, expected_count=int(plan["source"]["work_unit_count"])
+    ):
         if time.monotonic() - started > MAXIMUM_RUNTIME_SECONDS:
             raise UnauthorizedOperation("full development runtime ceiling exceeded")
         window = _work_unit_window(unit_entries)
@@ -670,9 +674,14 @@ def _execute(
             )
             if not month.primary_1m:
                 continue
+            partition_relative = (
+                f"{relative_output}/{year}/{interval}"
+                if type(plan.get("target_market")) is str
+                else f"{relative_output}/{market}/{year}/{interval}"
+            )
             creator = _CanaryStageCreator(
                 boundary=boundary,
-                relative=f"{relative_output}/{market}/{year}/{interval}",
+                relative=partition_relative,
             )
             built = _build_market_candidate_with_state(
                 publisher=creator,
@@ -713,16 +722,22 @@ def _execute(
                 for row in decoded.support_rows
                 if last_bar_end <= row[0] < end_ns
             )
-            if len(partitions) > MAXIMUM_PARTITION_COUNT:
+            if len(partitions) > int(plan["limits"]["maximum_partition_count"]):
                 raise UnauthorizedOperation("full development partition ceiling exceeded")
-            if output_bytes > MAXIMUM_OUTPUT_BYTES:
+            if output_bytes > int(plan["limits"]["maximum_output_bytes"]):
                 raise UnauthorizedOperation("full development output byte ceiling exceeded")
         complete_work_units += 1
         progress["complete_work_unit_count"] = complete_work_units
         progress["current_work_unit_state"] = "COMPLETE"
+    checkpoint_market = plan.get("target_market")
+    is_market_checkpoint = type(checkpoint_market) is str
     core: dict[str, object] = {
         "schema_version": RESULT_SCHEMA,
-        "status": "PASS_AUTHORIZED_FULL_DEVELOPMENT_CANDIDATE_NOT_PUBLISHED_NOT_ACTIVE",
+        "status": (
+            "PASS_COMPLETE_MARKET_CHECKPOINT_INACTIVE"
+            if is_market_checkpoint
+            else "PASS_AUTHORIZED_FULL_DEVELOPMENT_CANDIDATE_NOT_PUBLISHED_NOT_ACTIVE"
+        ),
         "plan_id": plan["plan_id"],
         "plan_sha256": plan_sha256,
         "receipt_id": context.receipt_id,
@@ -730,8 +745,10 @@ def _execute(
         "source_release_id": context.source_release_id,
         "causal_contract_id": context.causal_contract_id,
         "source_entry_count": len(selected),
-        "dbn_file_count": EXPECTED_DBN_COUNT,
-        "payload_bytes_opened_maximum": EXPECTED_PAYLOAD_BYTES,
+        "dbn_file_count": sum(item["kind"] == "DBN" for item in selected),
+        "payload_bytes_opened_maximum": sum(
+            int(item["size_bytes"]) for item in selected if item["kind"] == "DBN"
+        ),
         "decoded_record_count": decoded_records,
         "complete_work_unit_count": complete_work_units,
         "partition_count": len(partitions),
@@ -750,9 +767,16 @@ def _execute(
         "mechanism_executions": 0,
         "publication_authorized": False,
         "activation_authorized": False,
+        "target_market": checkpoint_market,
+        "attempt_id": plan.get("attempt_id"),
+        "checkpoint_set_id": plan.get("checkpoint_set_id"),
+        "complete_market_checkpoint": is_market_checkpoint,
+        "reusable_in_same_checkpoint_set": is_market_checkpoint,
     }
     payload = {**core, "result_id": sha256_json(core)}
-    result_path = output / "full_build_result.json"
+    result_path = output / (
+        "market_checkpoint.json" if is_market_checkpoint else "full_build_result.json"
+    )
     _write_create_only(result_path, payload)
     return FullBuildRunResult(result_path=result_path, payload=payload)
 

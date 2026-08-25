@@ -16,6 +16,7 @@ from typing import Iterable, Mapping, Sequence
 
 from .boundary import OperationClassification, OperationReceipt, RepoBoundary
 from .canonical import sha256_file, sha256_json
+from .causal_full_build_durable_host import expected_durable_host_plan
 from .causal_observation_parquet import FORMAT_VERSION, FILENAMES, write_bundle
 from .data_layout import DataReleaseManifest, PhasePublisher
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
@@ -50,6 +51,12 @@ ECONOMICS_RULEBOOK_ID = (
     "83008522be3b959f3c08cc3a9f5ff4d55878210c0e23cff5ceb7bf650ba2ef68"
 )
 DEVELOPMENT_END_EXCLUSIVE = "2025-07-13T22:00:00Z"
+V9_CHECKPOINT_MARKETS = (
+    "ES", "GC", "6E", "CL", "NQ", "6A", "6B", "6C", "6J", "6M", "6N",
+    "6S", "BTC", "ETH", "GF", "HE", "HG", "HO", "KE", "LE", "NG", "PA",
+    "PL", "RB", "RTY", "SI", "SR1", "SR3", "TN", "UB", "YM", "ZB", "ZC",
+    "ZF", "ZL", "ZM", "ZN", "ZQ", "ZS", "ZT", "ZW",
+)
 SYNTHETIC_RELEASE_ID = "0" * 64
 RELEASE_KIND = "development_only_causal_observation_partition"
 SCHEMA_VERSION = "causal_observation_partition/1.1.0"
@@ -592,6 +599,188 @@ def authorize_full_build_row_read(
 
     source_contract_id, canonical_release_id = _active_source_identity(boundary)
     scope = required_full_build_scope(
+        plan=plan,
+        plan_sha256=plan_sha256,
+        source_contract_id=source_contract_id,
+        canonical_release_id=canonical_release_id,
+    )
+    receipt.consume(
+        boundary,
+        operation=CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
+        classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
+        required_scope=scope,
+    )
+    return CausalObservationOperationContext(
+        operation=CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
+        classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
+        source_contract_id=source_contract_id,
+        causal_contract_id=CAUSAL_OBSERVATION_CONTRACT_ID,
+        source_release_id=canonical_release_id,
+        plan_id=str(plan["plan_id"]),
+        plan_sha256=plan_sha256,
+        exact_source_entries_sha256=str(plan["source"]["exact_source_entries_sha256"]),
+        economics_rulebook_sha256=ECONOMICS_RULEBOOK_SHA256,
+        output_staging_path=str(plan["output_staging_path"]),
+        receipt_id=receipt.receipt_id,
+        synthetic=False,
+        _seal=_SEAL,
+    )
+
+
+def required_market_checkpoint_scope(
+    *,
+    plan: Mapping[str, object],
+    plan_sha256: str,
+    source_contract_id: str,
+    canonical_release_id: str,
+) -> dict[str, str]:
+    """Seal one complete-market V9 checkpoint independently of other markets."""
+
+    market = plan.get("target_market")
+    attempt_id = plan.get("attempt_id")
+    source = plan.get("source")
+    limits = plan.get("limits")
+    execution = plan.get("execution")
+    authority = plan.get("authority")
+    if (
+        plan.get("schema_version")
+        != "development_causal_observation_market_checkpoint_plan/1.0.0"
+        or plan.get("operation") != CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
+        or plan.get("causal_contract_id") != CAUSAL_OBSERVATION_CONTRACT_ID
+        or type(market) is not str
+        or market not in V9_CHECKPOINT_MARKETS
+        or type(attempt_id) is not str
+        or not isinstance(source, Mapping)
+        or not isinstance(limits, Mapping)
+        or not isinstance(execution, Mapping)
+        or not isinstance(authority, Mapping)
+        or any(bool(value) for value in authority.values())
+        or plan.get("durable_host") != expected_durable_host_plan(market, attempt_id)
+        or source.get("source_contract_id") != source_contract_id
+        or source.get("canonical_release_id") != canonical_release_id
+        or plan.get("development_end_exclusive") != DEVELOPMENT_END_EXCLUSIVE
+        or plan.get("holdout_allowed") is not False
+        or plan.get("forward_allowed") is not False
+        or plan.get("provider_calls") != 0
+        or plan.get("execution_authorized") is not False
+        or execution
+        != {
+            "maximum_attempts": 1,
+            "maximum_retries": 0,
+            "maximum_runtime_seconds": 216_000,
+            "maximum_workers": 1,
+            "python_executable": ".venv/Scripts/python.exe",
+            "databento_version": "0.78.0",
+        }
+        or plan.get("output_staging_path")
+        != (
+            "state/data_publication_staging/"
+            f"causal_observation_full_development_bounded_2025_v9/{market}/{attempt_id}"
+        )
+        or any(
+            type(source.get(name)) is not int or int(source[name]) <= 0
+            for name in (
+                "exact_source_entry_count",
+                "exact_dbn_file_count",
+                "exact_sidecar_file_count",
+                "total_source_bytes",
+                "maximum_payload_bytes",
+                "work_unit_count",
+            )
+        )
+        or source.get("exact_source_entry_count")
+        != source.get("exact_dbn_file_count") + source.get("exact_sidecar_file_count")
+    ):
+        raise UnauthorizedOperation("market-checkpoint plan authority is invalid")
+    plan_id = _digest(plan.get("plan_id"), "plan_id")
+    attempt_id = _digest(attempt_id, "attempt_id")
+    checkpoint_set_id = _digest(plan.get("checkpoint_set_id"), "checkpoint_set_id")
+    if sha256_json({key: value for key, value in plan.items() if key != "plan_id"}) != plan_id:
+        raise IntegrityError("market-checkpoint plan identity differs")
+    return {
+        "operation_kind": "COMPLETE_MARKET_CAUSAL_OBSERVATION_CHECKPOINT_ONLY",
+        "target_market": market,
+        "attempt_id": attempt_id,
+        "checkpoint_set_id": checkpoint_set_id,
+        "causal_contract_id": CAUSAL_OBSERVATION_CONTRACT_ID,
+        "source_contract_id": _digest(source_contract_id, "source_contract_id"),
+        "canonical_release_id": _digest(canonical_release_id, "canonical_release_id"),
+        "exact_source_entries_sha256": _digest(
+            source.get("exact_source_entries_sha256"), "exact_source_entries_sha256"
+        ),
+        "exact_dbn_entries_sha256": _digest(
+            source.get("exact_dbn_entries_sha256"), "exact_dbn_entries_sha256"
+        ),
+        "exact_source_entry_count": str(
+            exact_int(source.get("exact_source_entry_count"), "exact_source_entry_count")
+        ),
+        "exact_dbn_file_count": str(
+            exact_int(source.get("exact_dbn_file_count"), "exact_dbn_file_count")
+        ),
+        "exact_sidecar_file_count": str(
+            exact_int(source.get("exact_sidecar_file_count"), "exact_sidecar_file_count")
+        ),
+        "total_source_bytes": str(
+            exact_int(source.get("total_source_bytes"), "total_source_bytes")
+        ),
+        "work_unit_count": str(
+            exact_int(source.get("work_unit_count"), "work_unit_count")
+        ),
+        "maximum_payload_bytes": str(
+            exact_int(limits.get("maximum_payload_bytes"), "maximum_payload_bytes")
+        ),
+        "maximum_decoded_records": str(
+            exact_int(limits.get("maximum_decoded_records"), "maximum_decoded_records")
+        ),
+        "maximum_output_bytes": str(
+            exact_int(limits.get("maximum_output_bytes"), "maximum_output_bytes")
+        ),
+        "maximum_partition_count": str(
+            exact_int(limits.get("maximum_partition_count"), "maximum_partition_count")
+        ),
+        "output_staging_path": _canonical_path(
+            plan.get("output_staging_path"), "output_staging_path"
+        ),
+        "development_end_exclusive": DEVELOPMENT_END_EXCLUSIVE,
+        "economics_rulebook_sha256": ECONOMICS_RULEBOOK_SHA256,
+        "durable_host_kind": str(plan["durable_host"]["kind"]),
+        "durable_host_task_name": str(plan["durable_host"]["task_name"]),
+        "durable_host_evidence_path": str(plan["durable_host"]["evidence_path"]),
+        "maximum_runtime_seconds": "216000",
+        "maximum_workers": "1",
+        "maximum_attempts": "1",
+        "maximum_retries": "0",
+        "python_executable": ".venv/Scripts/python.exe",
+        "databento_version": "0.78.0",
+        "provider_calls": "0",
+        "holdout": "false",
+        "forward": "false",
+        "outcomes": "false",
+        "features": "false",
+        "wfa": "false",
+        "fitting": "false",
+        "prediction": "false",
+        "evaluation": "false",
+        "mechanism": "false",
+        "publication": "false",
+        "activation": "false",
+        "approval_command": CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
+        "approval_plan_id": plan_id,
+        "approval_plan_sha256": _digest(plan_sha256, "plan_sha256"),
+    }
+
+
+def authorize_market_checkpoint_row_read(
+    *,
+    boundary: RepoBoundary,
+    receipt: OperationReceipt,
+    plan: Mapping[str, object],
+    plan_sha256: str,
+) -> CausalObservationOperationContext:
+    """Consume one receipt for one complete market, never for another market."""
+
+    source_contract_id, canonical_release_id = _active_source_identity(boundary)
+    scope = required_market_checkpoint_scope(
         plan=plan,
         plan_sha256=plan_sha256,
         source_contract_id=source_contract_id,
