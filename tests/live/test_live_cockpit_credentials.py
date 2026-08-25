@@ -142,6 +142,42 @@ def test_repository_package_path_is_available_for_existence_only_self_check(
     assert default_repository_package_api_env_path() is None
 
 
+def test_frozen_repository_package_resolves_exact_parent_api_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repository_root = tmp_path / "futures_intraday_model_v2"
+    executable_dir = repository_root / "FuturesLiveCockpit"
+    executable_dir.mkdir(parents=True)
+    (repository_root / "pyproject.toml").write_text("[project]\n", encoding="utf-8")
+    (repository_root / "src" / "futures_rebuild" / "live_cockpit").mkdir(parents=True)
+    executable = executable_dir / "FuturesLiveCockpit.exe"
+    credential_path = repository_root / "api.env"
+    _write_key(credential_path)
+    monkeypatch.setattr(credentials.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(credentials.sys, "executable", str(executable))
+
+    resolved = resolve_cockpit_api_key_source(None)
+
+    assert default_repository_package_api_env_path() == credential_path
+    assert resolved is not None
+    assert resolved.key == FILE_KEY
+    assert resolved.source == "file api.env"
+
+
+def test_arbitrary_frozen_package_does_not_read_parent_api_env(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    executable_dir = tmp_path / "copied-package"
+    executable_dir.mkdir()
+    executable = executable_dir / "FuturesLiveCockpit.exe"
+    _write_key(tmp_path / "api.env")
+    monkeypatch.setattr(credentials.sys, "frozen", True, raising=False)
+    monkeypatch.setattr(credentials.sys, "executable", str(executable))
+
+    assert default_repository_package_api_env_path() is None
+    assert resolve_cockpit_api_key_source(None) is None
+
+
 def test_frozen_default_locator_and_status_use_existing_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

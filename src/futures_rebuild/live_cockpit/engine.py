@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import importlib.util
 import queue
 import threading
 import time
@@ -66,31 +67,28 @@ from .predictions import (
     PredictionContext,
     SyntheticPredictionSource,
     now_utc,
+    repository_model_payload,
 )
+from .model_runtime import DecisionStore, ModelRuntime, TrustedModelAdapter
 from .protocol import event, serialize_bar, timestamp_seconds
 
 
 Publish = Callable[[dict[str, Any]], None]
-VISUAL_UPDATE_HZ = {
-    "efficient": 5.0,
-    "smooth": 10.0,
-    "high": 15.0,
-}
-DEFAULT_VISUAL_UPDATE_MODE = "smooth"
-MIN_RENDER_HZ = VISUAL_UPDATE_HZ["efficient"]
-MAX_RENDER_HZ = VISUAL_UPDATE_HZ["high"]
+MIN_RENDER_HZ = 5.0
+MAX_RENDER_HZ = 15.0
 RENDER_INTERVAL_SECONDS_OVERRIDE: float | None = None
 FOCUS_SWITCH_DEBOUNCE_SECONDS = 0.15
 FOCUS_MAPPING_WAIT_SECONDS = 3.0
 DEFAULT_HISTORY_HOURS = 168
 QUICK_CHART_MARKETS = ("ES", "CL", "ZN", "6E", "NQ")
+DEMO_RETAINED_MARKET_LIMIT = 3
 CHART_RANGE_HOURS = {
+    "1D": 24,
     "1W": DEFAULT_HISTORY_HOURS,
-    "2W": 14 * 24,
     "1M": 30 * 24,
-    "3M": 90 * 24,
 }
 DEFAULT_CHART_RANGE = "1W"
+CURRENT_CONTRACT_CHART_RANGES = frozenset({"1D", "1W"})
 EXTENDED_HISTORY_CHUNK_HOURS = 14 * 24
 OVERVIEW_STALE_SECONDS = 150.0
 FOCUS_LIVE_TAIL_MAX_AGE_SECONDS = 150.0
@@ -146,33 +144,17 @@ class CockpitEngine(Protocol):
 
     def retry_history_cache_estimate(self) -> bool: ...
 
-    def set_visual_update_mode(self, mode: str) -> bool: ...
-
     def set_visual_update_active(self, active: bool) -> float: ...
 
     def stop(self) -> None: ...
 
 
 class VisualUpdateState:
-    """Thread-safe desired/effective chart-render rate state."""
+    """Thread-safe default/adaptive chart-render rate state."""
 
-    def __init__(self, mode: str = DEFAULT_VISUAL_UPDATE_MODE) -> None:
+    def __init__(self) -> None:
         self._lock = threading.RLock()
-        self._mode = mode if mode in VISUAL_UPDATE_HZ else DEFAULT_VISUAL_UPDATE_MODE
         self._active = True
-
-    @property
-    def mode(self) -> str:
-        with self._lock:
-            return self._mode
-
-    def set_mode(self, mode: str) -> bool:
-        normalized = str(mode).strip().lower()
-        if normalized not in VISUAL_UPDATE_HZ:
-            return False
-        with self._lock:
-            self._mode = normalized
-        return True
 
     def set_active(self, active: bool) -> float:
         with self._lock:
@@ -190,7 +172,7 @@ class VisualUpdateState:
         return 1.0 / self.effective_hz()
 
     def _effective_hz_locked(self) -> float:
-        return VISUAL_UPDATE_HZ[self._mode] if self._active else MIN_RENDER_HZ
+        return MAX_RENDER_HZ if self._active else MIN_RENDER_HZ
 
 
 def _wait_for_visual_tick(
@@ -464,8 +446,19 @@ def _market_payload(info: object, *, alpha_tier_group: str | None = None) -> dic
         "alpha_tier_group": alpha_tier_group,
         "status": "WAITING",
         "last": None,
-        "change_1m": None,
+        "session_move_pct": None,
     }
+
+
+def _session_move_percent(close: object, session_open: object) -> float | None:
+    try:
+        close_value = float(close)
+        open_value = float(session_open)
+    except (TypeError, ValueError):
+        return None
+    if not math.isfinite(close_value) or not math.isfinite(open_value) or open_value == 0:
+        return None
+    return (close_value / open_value - 1.0) * 100.0
 
 
 def _bootstrap_payload(
@@ -518,12 +511,11 @@ def _bootstrap_payload(
             "retained_markets": [
                 market for market in QUICK_CHART_MARKETS if market in symbols
             ],
-            "max_range": "3M",
+            "max_range": "1M",
         },
         "market_grouping_capability": alpha_tiers.capability_payload(),
         "visual_update_capability": {
-            "default_mode": DEFAULT_VISUAL_UPDATE_MODE,
-            "modes": dict(VISUAL_UPDATE_HZ),
+            "default_hz": MAX_RENDER_HZ,
             "adaptive_floor_hz": MIN_RENDER_HZ,
         },
         "max_provider_sessions": 0 if demo_mode else 2,
@@ -676,6 +668,7 @@ class DemoCockpitEngine:
         self._thread: threading.Thread | None = None
         self._lock = threading.RLock()
         self._bars: dict[str, list[dict[str, Any]]] = {}
+        self._demo_end = floor_timeframe(datetime.now(timezone.utc), 60)
         self._ticks = 0
         self._prediction_source = SyntheticPredictionSource()
         self._visual_updates = VisualUpdateState()
@@ -703,7 +696,7 @@ class DemoCockpitEngine:
         cached = self._bars.get(market)
         if cached is not None:
             return cached
-        end = floor_timeframe(datetime.now(timezone.utc), 60)
+        end = self._demo_end
         start = end - timedelta(days=3)
         base = self._base_price(market)
         seed = sum(ord(character) for character in market)
@@ -726,8 +719,62 @@ class DemoCockpitEngine:
                 }
             )
             previous = close
+        # Dict insertion order is the LRU order. A fixed per-engine clock makes
+        # an evicted market reproducible when regenerated.
+        self._bars.pop(market, None)
         self._bars[market] = bars
+        while len(self._bars) > DEMO_RETAINED_MARKET_LIMIT:
+            self._bars.pop(next(iter(self._bars)))
         return bars
+
+    @staticmethod
+    def _sine_sum(*, seed: int, period: float, steps: int) -> float:
+        if steps <= 0:
+            return 0.0
+        increment = 1.0 / period
+        return (
+            math.sin((seed / period) + ((steps - 1) * increment / 2.0))
+            * math.sin(steps * increment / 2.0)
+            / math.sin(increment / 2.0)
+        )
+
+    def _overview_quote(self, market: str, *, end: datetime) -> tuple[float, float]:
+        cached = self._bars.get(market)
+        if cached is not None:
+            latest = cached[-1]
+            session_start = trading_day_start(normalize_ts_event(latest["time"]))
+            session_bar = next(
+                (
+                    bar
+                    for bar in cached
+                    if normalize_ts_event(bar["time"]) == session_start
+                ),
+                None,
+            )
+            return float(latest["close"]), float(
+                session_bar["open"] if session_bar is not None else latest["open"]
+            )
+
+        start = end - timedelta(days=3)
+        latest_time = end - timedelta(minutes=1)
+        session_start = trading_day_start(latest_time)
+        session_steps = max(
+            0,
+            min(3 * 24 * 60, int((session_start - start).total_seconds() // 60)),
+        )
+        base = self._base_price(market)
+        seed = sum(ord(character) for character in market)
+
+        def close_after(steps: int) -> float:
+            wave = base * 0.00055 * 0.09 * self._sine_sum(
+                seed=seed, period=31.0, steps=steps
+            )
+            drift = base * 0.00008 * self._sine_sum(
+                seed=seed, period=257.0, steps=steps
+            )
+            return base + wave + drift
+
+        return close_after(3 * 24 * 60), close_after(session_steps)
 
     def start(self, publish: Publish) -> None:
         self._publish = publish
@@ -751,10 +798,13 @@ class DemoCockpitEngine:
                 },
             )
         )
+        self._publish_focus_snapshot(source="demo")
+        overview_end = self._demo_end
         for index, info in enumerate(self.markets):
-            bars = self._market_bars(info.symbol)
-            latest = bars[-1]
-            previous = bars[-2]
+            latest, session_open = self._overview_quote(
+                info.symbol,
+                end=overview_end,
+            )
             state = "LIVE"
             if index == 10:
                 state = "STALE"
@@ -767,17 +817,13 @@ class DemoCockpitEngine:
                     "market_status",
                     {
                         "market": info.symbol,
-                        "last": float(latest["close"]),
-                        "change_1m": (
-                            (float(latest["close"]) / float(previous["close"]) - 1.0)
-                            * 100.0
-                        ),
+                        "last": latest,
+                        "session_move_pct": _session_move_percent(latest, session_open),
                         "state": state,
                         "age_seconds": 0 if state == "LIVE" else 180,
                     },
                 )
             )
-        self._publish_focus_snapshot(source="demo")
         publish(
             event(
                 "feed_status",
@@ -985,9 +1031,6 @@ class DemoCockpitEngine:
     def retry_history_cache_estimate(self) -> bool:
         return False
 
-    def set_visual_update_mode(self, mode: str) -> bool:
-        return self._visual_updates.set_mode(mode)
-
     def set_visual_update_active(self, active: bool) -> float:
         return self._visual_updates.set_active(active)
 
@@ -998,7 +1041,7 @@ class DemoCockpitEngine:
 
 
 class LiveCockpitEngine:
-    """Two-session live engine: all-market minute overview plus one trade focus."""
+    """At-most-two-session engine: minute overview plus optional model OHLCV."""
 
     def __init__(
         self,
@@ -1015,6 +1058,9 @@ class LiveCockpitEngine:
         reconnect_enabled: bool = True,
         fail_fast_provider_errors: bool = False,
         markets: Sequence[MarketInfo] | None = None,
+        model_adapter: TrustedModelAdapter | None = None,
+        model_store_path: Path | None = None,
+        focus_stream_enabled: bool = True,
     ) -> None:
         self.markets = tuple(markets) if markets is not None else chart_market_universe()
         if not self.markets or len({info.symbol for info in self.markets}) != len(
@@ -1045,17 +1091,40 @@ class LiveCockpitEngine:
         self.cache_enabled = cache_enabled
         self.reconnect_enabled = reconnect_enabled
         self.fail_fast_provider_errors = fail_fast_provider_errors
+        self._model_adapter = model_adapter
+        self._focus_stream_enabled = bool(focus_stream_enabled)
+        if model_adapter is not None and not set(model_adapter.spec.markets) <= self._symbols:
+            raise ValueError("model markets must be in the cockpit universe")
         if cache_enabled and cache_path is None:
             raise ValueError("cache_path is required when cache_enabled is true")
-        self.cache = BarCache(cache_path) if cache_enabled and cache_path is not None else None
+        self._cache_path = cache_path
+        self._cache: BarCache | None = None
+        self._cache_init_lock = threading.Lock()
         self.generation = 0
         self._publish: Publish | None = None
         self._api_key: str | None = None
         self._historical: object | None = None
         self._overview_client: object | None = None
         self._focus_client: object | None = None
+        self._model_client: object | None = None
+        self._model_instruments: dict[int, str] = {}
+        self._model_bindings: dict[str, HistoryBinding] = {}
+        self._model_runtime: ModelRuntime | None = None
+        if model_adapter is not None:
+            resolved_model_store = model_store_path or (
+                cache_path.with_name("model-decisions.sqlite3") if cache_path is not None else None
+            )
+            if resolved_model_store is None:
+                raise ValueError("model_store_path is required when the bar cache is disabled")
+            self._model_store = DecisionStore(resolved_model_store)
+        else:
+            self._model_store = None
+        self._model_state = "OFFLINE"
+        self._model_reason = "MODEL_NOT_AUTHORIZED"
+        self._latest_model_predictions: dict[str, dict[str, Any]] = {}
         self._overview_instruments: dict[int, str] = {}
         self._overview_latest: dict[str, tuple[float, datetime]] = {}
+        self._overview_session_opens: dict[str, tuple[datetime, float]] = {}
         self._overview_latest_bars: dict[str, tuple[int, dict[str, Any]]] = {}
         self._overview_pending_cache: dict[
             int, tuple[str, str, list[dict[str, Any]]]
@@ -1090,21 +1159,7 @@ class LiveCockpitEngine:
         self._stop_event = threading.Event()
         self._threads: list[threading.Thread] = []
         self._trading_day = trading_day_start(datetime.now(timezone.utc))
-        if self.cache is not None:
-            try:
-                stored_bindings = self.cache.get_market_bindings(
-                    dataset=DEFAULT_DATASET,
-                    session_start=self._trading_day,
-                )
-            except Exception:
-                stored_bindings = {}
-            for stored_market, (stored_contract, stored_instrument_id) in stored_bindings.items():
-                if stored_market in self._symbols:
-                    self._market_bindings[stored_market] = HistoryBinding(
-                        market=stored_market,
-                        contract=stored_contract,
-                        instrument_id=stored_instrument_id,
-                    )
+        self._maintenance_clock = (time.monotonic(), time.time())
         self._focus_live_announced_generation: int | None = None
         self._provider_failure: dict[str, Any] | None = None
         self._active_live_clients: dict[int, str] = {}
@@ -1126,6 +1181,37 @@ class LiveCockpitEngine:
         self._prediction_source = NullPredictionSource()
         self._visual_updates = VisualUpdateState()
 
+    @property
+    def cache(self) -> BarCache | None:
+        if not self.cache_enabled or self._cache_path is None:
+            return None
+        with self._cache_init_lock:
+            if self._cache is None:
+                cache = BarCache(self._cache_path)
+                try:
+                    stored_bindings = cache.get_market_bindings(
+                        dataset=DEFAULT_DATASET,
+                        session_start=self._trading_day,
+                    )
+                except Exception:
+                    cache.close()
+                    raise
+                if self._stop_event.is_set():
+                    cache.close()
+                    raise RuntimeError("cockpit stopped during cache initialization")
+                self._cache = cache
+                for stored_market, (
+                    stored_contract,
+                    stored_instrument_id,
+                ) in stored_bindings.items():
+                    if stored_market in self._symbols:
+                        self._market_bindings[stored_market] = HistoryBinding(
+                            market=stored_market,
+                            contract=stored_contract,
+                            instrument_id=stored_instrument_id,
+                        )
+            return self._cache
+
     def bootstrap_event(self) -> dict[str, Any]:
         return event(
             "bootstrap",
@@ -1140,7 +1226,7 @@ class LiveCockpitEngine:
         )
 
     def _emit(self, event_type: str, payload: Mapping[str, Any]) -> None:
-        if self._publish is not None:
+        if self._publish is not None and not self._stop_event.is_set():
             self._publish(event(event_type, payload))
 
     def _history_health_state(self, *, generation: int, has_bars: bool) -> str:
@@ -1297,25 +1383,82 @@ class LiveCockpitEngine:
                 ),
             )
         )
-        self._publish(
-            event(
-                "prediction_update",
-                self._prediction_source.build(
-                    PredictionContext(
-                        market=market,
-                        contract=contract,
-                        instrument_id=instrument_id,
-                        timeframe=timeframe,
-                        generation=generation,
-                        bars=aggregated,
-                        prediction_time=evaluated_at,
-                    )
-                ),
+        if self._model_adapter is not None:
+            prediction = self._latest_model_predictions.get(market)
+            if prediction is None:
+                prediction = repository_model_payload(
+                    spec=self._model_adapter.spec,
+                    market=market,
+                    contract=contract,
+                    instrument_id=instrument_id,
+                    generation=generation,
+                    display_timeframe=timeframe,
+                    prediction_time=evaluated_at,
+                    state=self._model_state,
+                    reason_code=self._model_reason,
+                )
+            else:
+                prediction = {**prediction, "timeframe": timeframe, "generation": generation}
+            self._publish(event("prediction_update", prediction))
+        else:
+            self._publish(
+                event(
+                    "prediction_update",
+                    self._prediction_source.build(
+                        PredictionContext(
+                            market=market,
+                            contract=contract,
+                            instrument_id=instrument_id,
+                            timeframe=timeframe,
+                            generation=generation,
+                            bars=aggregated,
+                            prediction_time=evaluated_at,
+                        )
+                    ),
+                )
             )
-        )
 
     def start(self, publish: Publish) -> None:
         self._publish = publish
+        if self._stop_event.is_set():
+            return
+        try:
+            _ = self.cache
+        except Exception as exc:
+            if self._stop_event.is_set():
+                return
+            self._emit(
+                "feed_status",
+                {
+                    "scope": "all",
+                    "state": "ERROR",
+                    "message": f"Cache unavailable: {exc}",
+                },
+            )
+            return
+        if self._stop_event.is_set():
+            return
+        if self._model_adapter is not None:
+            try:
+                missing = [
+                    name for name in self._model_adapter.spec.dependencies
+                    if importlib.util.find_spec(name) is None
+                ]
+                if missing:
+                    raise RuntimeError(f"missing model dependencies: {', '.join(missing)}")
+                adapter_self_check = getattr(self._model_adapter, "self_check", None)
+                if not callable(adapter_self_check) or adapter_self_check() is not True:
+                    raise RuntimeError("model identity/hash self-check failed")
+                self._model_runtime = ModelRuntime(self._model_adapter)
+                self._model_runtime.start()
+                self._set_model_state("WARMING_UP", "FEATURE_WARMUP_INCOMPLETE")
+            except Exception as exc:
+                self._set_model_state("ERROR", "MODEL_ERROR")
+                self._emit(
+                    "feed_status",
+                    {"scope": "model", "state": "ERROR", "message": f"Model failed before live connection: {exc}"},
+                )
+                return
         try:
             key_resolution = resolve_cockpit_api_key_source(self.env)
         except CredentialLocatorError as exc:
@@ -1359,12 +1502,16 @@ class LiveCockpitEngine:
             return
 
         self._start_overview()
+        if self._model_adapter is not None and self._model_adapter.spec.schema != DEFAULT_HISTORICAL_SCHEMA:
+            self._start_model_feed()
         if self._stop_event.is_set():
             return
         workers = [
             (self._switch_worker, "cockpit-focus-switch"),
             (self._render_worker, "cockpit-render"),
         ]
+        if self._model_runtime is not None:
+            workers.append((self._model_worker, "cockpit-model-results"))
         if self.reconnect_enabled:
             workers.append((self._maintenance_worker, "cockpit-maintenance"))
         for target, name in workers:
@@ -1459,6 +1606,11 @@ class LiveCockpitEngine:
             if self._provider_failure is None:
                 self._provider_failure = dict(payload)
         self._emit("feed_status", payload)
+        if self._model_adapter is not None and (
+            scope == "model"
+            or (scope == "overview" and self._model_adapter.spec.schema == DEFAULT_HISTORICAL_SCHEMA)
+        ):
+            self._set_model_state("ERROR", "DATA_RECONCILIATION_REQUIRED")
         if self.fail_fast_provider_errors:
             self._stop_event.set()
 
@@ -1550,7 +1702,7 @@ class LiveCockpitEngine:
         target_start: datetime,
         target_end: datetime,
     ) -> list[HistoryBinding]:
-        if range_key != DEFAULT_CHART_RANGE:
+        if range_key not in CURRENT_CONTRACT_CHART_RANGES:
             return [
                 continuous_history_binding(market)
                 for market in self._history_symbols
@@ -1571,7 +1723,7 @@ class LiveCockpitEngine:
     ) -> list[dict[str, Any]]:
         start = now - timedelta(hours=self._range_hours(range_key))
         cached: list[dict[str, Any]] = []
-        if self.cache is not None and range_key != DEFAULT_CHART_RANGE:
+        if self.cache is not None and range_key not in CURRENT_CONTRACT_CHART_RANGES:
             extended_binding = continuous_history_binding(market)
             cached.extend(
                 self.cache.get_bars(
@@ -1606,7 +1758,7 @@ class LiveCockpitEngine:
     def _coverage_binding(self, binding: HistoryBinding, range_key: str) -> HistoryBinding:
         return (
             continuous_history_binding(binding.market)
-            if range_key != DEFAULT_CHART_RANGE
+            if range_key not in CURRENT_CONTRACT_CHART_RANGES
             else binding
         )
 
@@ -1822,7 +1974,7 @@ class LiveCockpitEngine:
         with self._lock:
             instrument_id = self._resolved_instrument_id
             if (
-                self.chart_range != DEFAULT_CHART_RANGE
+                self.chart_range not in CURRENT_CONTRACT_CHART_RANGES
                 and self.market in self._history_symbols
             ):
                 instrument_id = continuous_cache_instrument_id(self.market)
@@ -2095,7 +2247,7 @@ class LiveCockpitEngine:
             missing_by_instrument,
             max_hours=(
                 EXTENDED_HISTORY_CHUNK_HOURS
-                if resolved_range != DEFAULT_CHART_RANGE
+                if resolved_range not in CURRENT_CONTRACT_CHART_RANGES
                 else 24
             ),
         )
@@ -2318,6 +2470,46 @@ class LiveCockpitEngine:
         text = str(value or "").strip().upper()
         return text or None
 
+    def _session_open_for_overview_bar(
+        self,
+        *,
+        market: str,
+        instrument_id: int,
+        timestamp: datetime,
+        candle_open: object,
+    ) -> float | None:
+        session_start = trading_day_start(timestamp)
+        with self._overview_lock:
+            known = self._overview_session_opens.get(market)
+            if known is not None and known[0] == session_start:
+                return known[1]
+            if known is not None:
+                self._overview_session_opens.pop(market, None)
+
+        candidate: object | None = candle_open if timestamp == session_start else None
+        if candidate is None and self.cache is not None and market in self._history_symbols:
+            try:
+                cached = self.cache.get_bars(
+                    dataset=DEFAULT_DATASET,
+                    instrument_id=instrument_id,
+                    start=session_start,
+                    end=session_start + timedelta(minutes=1),
+                )
+            except Exception:
+                cached = []
+            if cached and normalize_ts_event(cached[0]["time"]) == session_start:
+                candidate = cached[0]["open"]
+
+        try:
+            session_open = float(candidate)
+        except (TypeError, ValueError):
+            return None
+        if not math.isfinite(session_open) or session_open == 0:
+            return None
+        with self._overview_lock:
+            self._overview_session_opens[market] = (session_start, session_open)
+        return session_open
+
     def _on_overview_record(self, record: object) -> None:
         if self._handle_provider_control(record, scope="overview"):
             return
@@ -2369,8 +2561,13 @@ class LiveCockpitEngine:
                 candle_value = dict(candle)
                 binding = self._market_bindings.get(market)
                 raw_symbol = binding.contract if binding is not None else market
+                session_open = self._session_open_for_overview_bar(
+                    market=market,
+                    instrument_id=int(instrument_id_value),
+                    timestamp=timestamp,
+                    candle_open=candle["open"],
+                )
                 with self._overview_lock:
-                    previous = self._overview_latest.get(market)
                     self._overview_latest[market] = (close, timestamp)
                     self._overview_latest_bars[market] = (
                         int(instrument_id_value),
@@ -2386,15 +2583,12 @@ class LiveCockpitEngine:
                             )
                         else:
                             pending[2].append(candle_value)
-                change = None
-                if previous is not None and previous[0] != 0:
-                    change = (close / previous[0] - 1.0) * 100.0
                 self._emit(
                     "market_status",
                     {
                         "market": market,
                         "last": close,
-                        "change_1m": change,
+                        "session_move_pct": _session_move_percent(close, session_open),
                         "state": "LIVE",
                         "age_seconds": max(
                             0.0,
@@ -2402,6 +2596,18 @@ class LiveCockpitEngine:
                         ),
                     },
                 )
+                if binding is not None and (self._model_adapter is not None or not self._focus_stream_enabled):
+                    if self._model_adapter is not None and self._model_adapter.spec.schema == DEFAULT_HISTORICAL_SCHEMA and market in self._model_adapter.spec.markets:
+                        self._submit_model_candle(
+                            market=market,
+                            binding=binding,
+                            candle=candle_value,
+                        )
+                    with self._lock:
+                        if market == self.market and binding.instrument_id == self._resolved_instrument_id:
+                            _upsert_sorted_bar(self._raw_bars, candle_value)
+                            self._pending_update = (self.generation, dict(candle_value))
+                            self._focus_last_live_event = (self.generation, binding.contract, timestamp)
             except Exception:
                 return
             return
@@ -2416,7 +2622,7 @@ class LiveCockpitEngine:
                 {
                     "market": market,
                     "last": last,
-                    "change_1m": None,
+                    "session_move_pct": None,
                     "state": "STALE",
                     "age_seconds": age_seconds,
                 },
@@ -2469,6 +2675,152 @@ class LiveCockpitEngine:
             self._stop_client(self._overview_client)
             self._overview_client = None
             self._overview_instruments.clear()
+            self._overview_session_opens.clear()
+
+    def _set_model_state(self, state: str, reason: str) -> None:
+        self._model_state = state
+        self._model_reason = reason
+        if self._model_store is not None:
+            self._model_store.record_state(state, reason)
+
+    def _submit_model_candle(
+        self,
+        *,
+        market: str,
+        binding: HistoryBinding,
+        candle: Mapping[str, Any],
+    ) -> None:
+        runtime = self._model_runtime
+        adapter = self._model_adapter
+        if runtime is None or adapter is None or runtime.error is not None:
+            return
+        try:
+            runtime.submit(
+                {
+                    "market": market,
+                    "contract": binding.contract,
+                    "instrument_id": binding.instrument_id,
+                    "schema": adapter.spec.schema,
+                    "time": timestamp_seconds(candle["time"]),
+                    "open": candle["open"],
+                    "high": candle["high"],
+                    "low": candle["low"],
+                    "close": candle["close"],
+                    "volume": candle["volume"],
+                }
+            )
+        except Exception as exc:
+            self._set_model_state("ERROR", "MODEL_ERROR")
+            self._emit("feed_status", {"scope": "model", "state": "ERROR", "message": str(exc)})
+
+    def _on_model_record(self, record: object) -> None:
+        if self._handle_provider_control(record, scope="model"):
+            self._set_model_state("ERROR", "MODEL_ERROR")
+            return
+        mapped_market = self._mapping_symbol(record)
+        if self._model_adapter is not None and mapped_market in self._model_adapter.spec.markets:
+            instrument_id = int(_record_field(record, "instrument_id"))
+            self._model_instruments[instrument_id] = mapped_market
+            raw_symbol = self._mapping_raw_symbol(record)
+            if raw_symbol:
+                self._model_bindings[mapped_market] = HistoryBinding(
+                    market=mapped_market, contract=raw_symbol, instrument_id=instrument_id
+                )
+            return
+        if not all(hasattr(record, field) for field in ("open", "high", "low", "close", "volume")):
+            return
+        try:
+            instrument_id = int(_record_field(record, "instrument_id"))
+            market = self._model_instruments[instrument_id]
+            binding = self._model_bindings[market]
+            self._submit_model_candle(
+                market=market,
+                binding=binding,
+                candle=ohlcv_record_to_candle(record),
+            )
+        except Exception as exc:
+            self._set_model_state("ERROR", "MODEL_ERROR")
+            self._emit("feed_status", {"scope": "model", "state": "ERROR", "message": f"Invalid model feed record: {exc}"})
+
+    def _start_model_feed(self) -> None:
+        if self.db_module is None or self._api_key is None or self._model_adapter is None:
+            return
+        client: object | None = None
+        try:
+            client = self._new_live_client()
+            client.subscribe(
+                dataset=DEFAULT_DATASET,
+                schema=self._model_adapter.spec.schema,
+                symbols=[f"{market}{DEFAULT_CONTINUOUS_SUFFIX}" for market in self._model_adapter.spec.markets],
+                stype_in="continuous",
+            )
+            self._add_live_callback(client, self._on_model_record, scope="model")
+            client.start()
+            self._register_started_client(client, scope="model")
+            self._model_client = client
+            self._emit(
+                "feed_status",
+                {"scope": "model", "state": "LIVE", "message": f"Model {self._model_adapter.spec.schema} entitlement and subscription accepted"},
+            )
+        except Exception as exc:
+            self._stop_client(client)
+            self._model_client = None
+            self._set_model_state("ERROR", "MODEL_ERROR")
+            self._emit("feed_status", {"scope": "model", "state": "ERROR", "message": f"Model schema unavailable: {exc}"})
+
+    def _model_worker(self) -> None:
+        while not self._stop_event.wait(0.02):
+            runtime = self._model_runtime
+            adapter = self._model_adapter
+            if runtime is None or adapter is None:
+                return
+            messages = runtime.poll()
+            for message in messages:
+                kind = message.get("kind")
+                if kind == "error":
+                    self._set_model_state("ERROR", "MODEL_ERROR")
+                    self._emit("feed_status", {"scope": "model", "state": "ERROR", "message": str(message.get("reason") or "Model error")})
+                    return
+                if kind == "state":
+                    self._set_model_state(str(message["state"]), str(message["reason"]))
+                    continue
+                if kind != "result":
+                    continue
+                decisions = list(message.get("decisions") or [])
+                if not decisions:
+                    continue
+                for decision in decisions:
+                    market = str(decision["market"])
+                    binding = self._model_bindings.get(market) or self._market_bindings.get(market)
+                    if binding is None:
+                        self._set_model_state("ERROR", "MODEL_ERROR")
+                        return
+                    input_time = int(decision["input_bar_time"])
+                    state = "ABSTAIN" if decision["decision"] == "ABSTAIN" else "READY"
+                    reason = "MODEL_ABSTAINED" if state == "ABSTAIN" else "MODEL_DECISION"
+                    with self._lock:
+                        timeframe = self.timeframe
+                        generation = self.generation
+                        selected = self.market
+                    payload = repository_model_payload(
+                        spec=adapter.spec,
+                        market=market,
+                        contract=binding.contract,
+                        instrument_id=binding.instrument_id,
+                        generation=generation,
+                        display_timeframe=timeframe,
+                        prediction_time=datetime.fromtimestamp(input_time + 1 + {"ohlcv-1s": 0, "ohlcv-1m": 59, "ohlcv-1h": 3599, "ohlcv-1d": 86399}[adapter.spec.schema], tz=timezone.utc),
+                        state=state,
+                        reason_code=reason,
+                        decision=decision,
+                    )
+                    payload["reason"] = decision.get("reason", "")
+                    self._latest_model_predictions[market] = payload
+                    self._set_model_state(state, reason)
+                    if self._model_store is not None:
+                        self._model_store.record_decision(str(payload["prediction_id"]), payload)
+                    if market == selected:
+                        self._emit("prediction_update", payload)
 
     def _publish_cached_selection(
         self,
@@ -2560,6 +2912,19 @@ class LiveCockpitEngine:
                 "message": f"Resolving {normalized}",
             },
         )
+        if self._cache is None and self.cache_enabled:
+            try:
+                _ = self.cache
+            except Exception as exc:
+                self._emit(
+                    "feed_status",
+                    {
+                        "scope": "focus",
+                        "market": normalized,
+                        "state": "ERROR",
+                        "message": f"Cache unavailable: {exc}",
+                    },
+                )
         with self._history_lock:
             known_binding = self._market_bindings.get(normalized)
         if known_binding is not None and self._publish_cached_selection(
@@ -2733,7 +3098,7 @@ class LiveCockpitEngine:
                         start=chunk.start,
                         end=covered_end,
                     )
-                if plan.range_key == DEFAULT_CHART_RANGE:
+                if plan.range_key in CURRENT_CONTRACT_CHART_RANGES:
                     self._refresh_selected_from_history_chunk(
                         chunk=chunk,
                         grouped=grouped,
@@ -2786,7 +3151,7 @@ class LiveCockpitEngine:
                         continuous_history_binding(market)
                         for market in self._history_symbols
                     ]
-                    if plan.range_key != DEFAULT_CHART_RANGE
+                    if plan.range_key not in CURRENT_CONTRACT_CHART_RANGES
                     else [
                         self._market_bindings[market]
                         for market in self._history_symbols
@@ -2844,7 +3209,7 @@ class LiveCockpitEngine:
                         )
                     ),
                 )
-            if not remaining and plan.range_key != DEFAULT_CHART_RANGE:
+            if not remaining and plan.range_key not in CURRENT_CONTRACT_CHART_RANGES:
                 with self._lock:
                     selected_market = self.market
                     generation = self.generation
@@ -2983,9 +3348,6 @@ class LiveCockpitEngine:
         )
         self._history_wakeup.set()
         return True
-
-    def set_visual_update_mode(self, mode: str) -> bool:
-        return self._visual_updates.set_mode(mode)
 
     def set_visual_update_active(self, active: bool) -> float:
         return self._visual_updates.set_active(active)
@@ -3227,6 +3589,18 @@ class LiveCockpitEngine:
         if generation != self.generation or self._stop_event.is_set():
             return
         bars = visible_bars
+
+        if self._model_adapter is not None or not self._focus_stream_enabled:
+            self._emit(
+                "feed_status",
+                {
+                    "scope": "focus",
+                    "market": market,
+                    "state": "LIVE",
+                    "message": f"{contract} chart follows the minute overview; no trade stream",
+                },
+            )
+            return
 
         self._emit(
             "feed_status",
@@ -3522,6 +3896,15 @@ class LiveCockpitEngine:
 
     def _maintenance_worker(self) -> None:
         while not self._stop_event.wait(30.0):
+            monotonic_now, wall_now = time.monotonic(), time.time()
+            prior_monotonic, prior_wall = self._maintenance_clock
+            self._maintenance_clock = (monotonic_now, wall_now)
+            if self._model_adapter is not None and abs((wall_now - prior_wall) - (monotonic_now - prior_monotonic)) > 5.0:
+                self._set_model_state("ERROR", "DATA_RECONCILIATION_REQUIRED")
+                self._emit(
+                    "feed_status",
+                    {"scope": "model", "state": "ERROR", "message": "Computer sleep or clock jump detected; restart after the missing interval is reconciled"},
+                )
             self._refresh_overview_staleness()
             self._publish_current_focus_health()
             current_day = trading_day_start(datetime.now(timezone.utc))
@@ -3548,12 +3931,22 @@ class LiveCockpitEngine:
             )
             self._stop_overview()
             self._start_overview()
+            if self._model_adapter is not None and self._model_adapter.spec.schema != DEFAULT_HISTORICAL_SCHEMA:
+                self._stop_client(self._model_client)
+                self._model_client = None
+                self._model_instruments.clear()
+                self._model_bindings.clear()
+                self._start_model_feed()
             self.select_market(self.market, force=True)
             self._history_wakeup.set()
 
     def stop(self) -> None:
         self._stop_event.set()
         self._history_wakeup.set()
+        self._stop_client(self._model_client)
+        self._model_client = None
+        if self._model_runtime is not None:
+            self._model_runtime.stop()
         self._stop_client(self._focus_client)
         self._focus_client = None
         with self._lock:
@@ -3562,5 +3955,11 @@ class LiveCockpitEngine:
         for thread in self._threads:
             if thread is not threading.current_thread():
                 thread.join(timeout=1.0)
-        if self.cache is not None:
-            self.cache.close()
+        # Serialize with lazy initialization so a connection cannot be
+        # installed after shutdown has already looked for it.
+        with self._cache_init_lock:
+            if self._cache is not None:
+                self._cache.close()
+                self._cache = None
+        if self._model_store is not None:
+            self._model_store.close()

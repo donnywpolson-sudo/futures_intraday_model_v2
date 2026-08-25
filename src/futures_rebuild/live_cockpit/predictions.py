@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Mapping, Protocol, Sequence
 
 from .protocol import direction_entropy, timestamp_seconds
+from .model_runtime import ModelSpec
 
 
 @dataclass(frozen=True)
@@ -154,3 +155,52 @@ class SyntheticPredictionSource:
 
 def now_utc() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def repository_model_payload(
+    *,
+    spec: ModelSpec,
+    market: str,
+    contract: str,
+    instrument_id: int | None,
+    generation: int,
+    display_timeframe: str,
+    prediction_time: datetime,
+    state: str,
+    reason_code: str,
+    decision: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Translate validated worker output into the existing observation-only UI contract."""
+
+    input_time = int(decision["input_bar_time"]) if decision is not None else None
+    forecast = None
+    reasons = [reason_code]
+    if state == "READY" and decision is not None:
+        probabilities = dict(decision["probabilities"])
+        forecast = {
+            "direction": decision["decision"],
+            "confidence": float(decision["confidence"]),
+            "horizon_seconds": int(decision["horizon_seconds"]),
+            "probabilities": probabilities,
+            "expected_return": float(decision["expected_return"]),
+            "direction_entropy": direction_entropy(probabilities),
+        }
+    identity_time = input_time if input_time is not None else timestamp_seconds(prediction_time)
+    return {
+        "market": market,
+        "contract": contract,
+        "instrument_id": instrument_id,
+        "timeframe": display_timeframe,
+        "input_schema": spec.schema,
+        "generation": generation,
+        "prediction_id": f"repository-model:{spec.model_id}:{spec.version}:{market}:{identity_time}:{state.lower()}",
+        "prediction_time": timestamp_seconds(prediction_time),
+        "input_bar_time": input_time,
+        "state": state,
+        "source": "REPOSITORY_MODEL",
+        "synthetic": False,
+        "observation_only": True,
+        "model": {"id": spec.model_id, "version": spec.version, "strategy": spec.strategy},
+        "forecast": forecast,
+        "reason_codes": reasons,
+    }

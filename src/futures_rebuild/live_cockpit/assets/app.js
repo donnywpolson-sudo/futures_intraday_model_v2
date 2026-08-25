@@ -12,7 +12,7 @@
     "1d": 86400,
   };
   const DEFAULT_QUICK_MARKETS = ["ES", "CL", "ZN", "6E", "NQ"];
-  const DEFAULT_CHART_RANGES = ["1W", "2W", "1M", "3M"];
+  const DEFAULT_CHART_RANGES = ["1D", "1W", "1M"];
   const FAMILY_ORDER = [
     "Equity Index",
     "Energy",
@@ -29,8 +29,15 @@
     tier_3_traditional_additions: "Tier 3 · Traditional additions",
     tier_3_satellites: "Tier 3 · Satellite stress",
   };
-  const VISUAL_UPDATE_HZ = { efficient: 5, smooth: 10, high: 15 };
-  const DEFAULT_VISUAL_UPDATE_MODE = "smooth";
+  const DEFAULT_VISUAL_UPDATE_HZ = 15;
+  const ADAPTIVE_VISUAL_UPDATE_HZ = 5;
+  const DEMO_EXCHANGE_CLOCK = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Chicago",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  });
+  let demoSessionOpenTime = null;
   const POLL_EVENT_LIMIT = 100;
   const UNHEALTHY_POLL_LIMIT = 3;
   const RECOVERY_WINDOW_MS = 5000;
@@ -61,6 +68,11 @@
     OUTSIDE_DEMO_SCENARIO: "No synthetic forecast is defined for this demo market.",
     MODEL_ABSTAINED: "The synthetic example abstained instead of forcing a direction.",
     SYNTHETIC_DEMO_ERROR: "Synthetic error state for display testing.",
+    MODEL_ERROR: "Model stopped after an invalid output, crash, overflow, or timeout. Restart required.",
+    MODEL_WAITING_MARKETS: "Waiting for every required model market.",
+    CONTRACT_ROLL_REWARM: "Contract changed; rebuilding the declared warmup window.",
+    DATA_RECONCILIATION_REQUIRED: "A feed gap, sleep, disconnect, or clock jump must be reconciled before decisions resume.",
+    MODEL_DECISION: "Decision from the latest completed reviewed-model input.",
   };
 
   const state = {
@@ -75,7 +87,6 @@
     generation: 0,
     chart: null,
     candleSeries: null,
-    volumeSeries: null,
     sessionMarkers: [],
     sessionBoundaryRenderQueued: false,
     sessionResizeObserver: null,
@@ -137,9 +148,7 @@
     panelPreferenceExplicit: false,
     uiPreferences: {
       show_session_boundaries: true,
-      show_volume: true,
       show_predictions: true,
-      visual_update_mode: DEFAULT_VISUAL_UPDATE_MODE,
       market_grouping_mode: "sector",
       sector_group_order: [],
       alpha_tier_group_order: [],
@@ -164,17 +173,12 @@
     focusState: document.getElementById("focus-state"),
     timeframeList: document.getElementById("timeframe-list"),
     chartRangeList: document.getElementById("chart-range-list"),
-    quickMarketList: document.getElementById("quick-market-list"),
     fitChart: document.getElementById("fit-chart"),
     fullscreenToggle: document.getElementById("fullscreen-toggle"),
     layersToggle: document.getElementById("layers-toggle"),
     layersMenu: document.getElementById("layers-menu"),
     layerSessions: document.getElementById("layer-sessions"),
-    layerVolume: document.getElementById("layer-volume"),
     layerPredictions: document.getElementById("layer-predictions"),
-    smoothnessEfficient: document.getElementById("smoothness-efficient"),
-    smoothnessSmooth: document.getElementById("smoothness-smooth"),
-    smoothnessHigh: document.getElementById("smoothness-high"),
     localTime: document.getElementById("local-time"),
     workspaceContent: document.getElementById("workspace-content"),
     chart: document.getElementById("chart"),
@@ -190,17 +194,13 @@
     footerDot: document.getElementById("footer-dot"),
     footerStatus: document.getElementById("footer-status"),
     renderRate: document.getElementById("render-rate"),
-    quoteOpen: document.getElementById("quote-open"),
-    quoteHigh: document.getElementById("quote-high"),
-    quoteLow: document.getElementById("quote-low"),
-    quoteClose: document.getElementById("quote-close"),
-    quoteVolume: document.getElementById("quote-volume"),
     predictionRail: document.getElementById("prediction-rail"),
     predictionPanelToggle: document.getElementById("prediction-panel-toggle"),
     predictionMode: document.getElementById("prediction-mode"),
     predictionFreshness: document.getElementById("prediction-freshness"),
     predictionState: document.getElementById("prediction-state"),
     predictionReason: document.getElementById("prediction-reason"),
+    predictionOutput: document.getElementById("prediction-output"),
     probabilityLong: document.getElementById("probability-long"),
     probabilityFlat: document.getElementById("probability-flat"),
     probabilityShort: document.getElementById("probability-short"),
@@ -268,14 +268,6 @@
     });
   }
 
-  function formatVolume(value) {
-    if (value === null || value === undefined) return "—";
-    const number = Number(value);
-    if (number >= 1_000_000) return `${(number / 1_000_000).toFixed(1)}M`;
-    if (number >= 1_000) return `${(number / 1_000).toFixed(1)}K`;
-    return Math.round(number).toLocaleString();
-  }
-
   function initializeChart() {
     if (state.chart || !window.LightweightCharts) return;
     const LWC = window.LightweightCharts;
@@ -288,11 +280,6 @@
         fontFamily: 'Inter, ui-sans-serif, system-ui, "Segoe UI", sans-serif',
         fontSize: 11,
         attributionLogo: true,
-        panes: {
-          separatorColor: "rgba(139, 163, 193, 0.12)",
-          separatorHoverColor: "rgba(116, 167, 255, 0.25)",
-          enableResize: true,
-        },
       },
       ...(localTime ? {
         localization: {
@@ -341,18 +328,6 @@
         priceLineColor: "rgba(116, 167, 255, 0.55)",
         priceLineWidth: 1,
       });
-      state.volumeSeries = state.chart.addSeries(
-        LWC.HistogramSeries,
-        { base: 0, priceFormat: { type: "volume" }, priceLineVisible: false, lastValueVisible: false },
-        1,
-      );
-      state.volumeSeries.priceScale().applyOptions({
-        autoScale: true,
-        scaleMargins: { top: 0.16, bottom: 0 },
-      });
-      const panes = state.chart.panes ? state.chart.panes() : [];
-      if (panes[0] && panes[0].setStretchFactor) panes[0].setStretchFactor(4);
-      if (panes[1] && panes[1].setStretchFactor) panes[1].setStretchFactor(1);
     } else {
       state.candleSeries = state.chart.addCandlestickSeries({
         upColor: "#35c7a0",
@@ -361,31 +336,10 @@
         wickDownColor: "#f06f79",
         borderVisible: false,
       });
-      state.volumeSeries = state.chart.addHistogramSeries({
-        base: 0,
-        priceFormat: { type: "volume" },
-        priceScaleId: "volume",
-      });
-      state.volumeSeries.priceScale().applyOptions({
-        autoScale: true,
-        scaleMargins: { top: 0.82, bottom: 0 },
-      });
     }
     if (LWC.createSeriesMarkers && state.candleSeries) {
       state.predictionMarkers = LWC.createSeriesMarkers(state.candleSeries, []);
     }
-    if (state.volumeSeries?.applyOptions) {
-      state.volumeSeries.applyOptions({ visible: state.uiPreferences.show_volume });
-    }
-
-    state.chart.subscribeCrosshairMove((parameter) => {
-      if (!parameter || !parameter.time || !parameter.seriesData) {
-        updateQuote(state.latestBar);
-        return;
-      }
-      const candle = parameter.seriesData.get(state.candleSeries);
-      if (candle) updateQuote(candle);
-    });
     const timeScale = state.chart.timeScale();
     if (timeScale.subscribeVisibleLogicalRangeChange) {
       timeScale.subscribeVisibleLogicalRangeChange(queueSessionBoundaryRender);
@@ -454,24 +408,6 @@
     window.requestAnimationFrame(renderSessionBoundaries);
   }
 
-  function updateQuote(bar) {
-    if (!bar) {
-      [
-        elements.quoteOpen,
-        elements.quoteHigh,
-        elements.quoteLow,
-        elements.quoteClose,
-        elements.quoteVolume,
-      ].forEach((element) => { element.textContent = "—"; });
-      return;
-    }
-    elements.quoteOpen.textContent = formatPrice(bar.open);
-    elements.quoteHigh.textContent = formatPrice(bar.high);
-    elements.quoteLow.textContent = formatPrice(bar.low);
-    elements.quoteClose.textContent = formatPrice(bar.close);
-    elements.quoteVolume.textContent = formatVolume(bar.volume);
-  }
-
   function formatAge(timestamp) {
     if (timestamp === null || timestamp === undefined || timestamp === "" || !Number.isFinite(Number(timestamp))) return "—";
     const seconds = Math.max(0, Math.floor(Date.now() / 1000 - Number(timestamp)));
@@ -485,13 +421,7 @@
 
   function formatEventTime(timestamp) {
     if (timestamp === null || timestamp === undefined || timestamp === "" || !Number.isFinite(Number(timestamp))) return "—";
-    return new Intl.DateTimeFormat(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).format(new Date(Number(timestamp) * 1000));
+    return window.CockpitTime?.formatLocalEventTime(Number(timestamp), navigator.language) || "—";
   }
 
   function loadedChartRange() {
@@ -558,26 +488,36 @@
   function renderPrediction() {
     const prediction = state.prediction;
     const synthetic = Boolean(prediction?.synthetic || state.predictionCapability.synthetic);
-    elements.predictionMode.textContent = synthetic ? "SYNTHETIC DEMO" : "LIVE MODE";
-    elements.predictionMode.className = `forecast-mode ${synthetic ? "synthetic" : "offline"}`;
+    const repositoryModel = prediction?.source === "REPOSITORY_MODEL";
+    elements.predictionMode.textContent = synthetic ? "SYNTHETIC DEMO" : repositoryModel ? "MODEL LIVE" : "LIVE MODE";
+    elements.predictionMode.className = `forecast-mode ${synthetic ? "synthetic" : repositoryModel ? "live" : "offline"}`;
     elements.predictionFreshness.textContent = prediction ? formatAge(prediction.prediction_time) : "No event";
 
     const stateName = String(prediction?.state || (synthetic ? "WARMING_UP" : "OFFLINE")).toUpperCase();
     const forecast = prediction?.forecast || null;
     const direction = String(forecast?.direction || "").toUpperCase();
-    let stateLabel = "NO PREDICTION";
-    if (stateName === "READY") stateLabel = `${direction || "FLAT"} BIAS`;
-    else if (stateName === "WARMING_UP") stateLabel = "WARMING UP";
+    const ready = stateName === "READY" && Boolean(forecast);
+    let stateLabel = "Unavailable";
+    if (ready) {
+      const confidence = Number(forecast?.confidence);
+      stateLabel = `${direction || "FLAT"} ${Number.isFinite(confidence) ? `${Math.round(confidence * 100)}%` : ""}`.trim();
+    }
+    else if (stateName === "WARMING_UP") stateLabel = "Warming up";
+    else if (stateName === "ABSTAIN") stateLabel = "Abstain";
+    else if (stateName === "ERROR") stateLabel = "MODEL ERROR";
+    else if (stateName === "STALE") stateLabel = "Stale";
+    else if (stateName === "OFFLINE") stateLabel = "Offline";
     elements.predictionState.textContent = stateLabel;
-    const stateClass = stateName === "READY" ? direction.toLowerCase() : stateName.toLowerCase().replace("_up", "");
+    const stateClass = ready ? direction.toLowerCase() : stateName.toLowerCase().replace("_up", "");
     elements.predictionState.className = `forecast-state ${stateClass}`;
+    elements.predictionOutput.hidden = !ready;
 
     const reasons = Array.isArray(prediction?.reason_codes) ? prediction.reason_codes : [];
-    elements.predictionReason.textContent = stateName === "READY"
-      ? "Synthetic example generated from a completed demo bar."
+    elements.predictionReason.textContent = prediction?.reason || (ready
+      ? (synthetic ? "Synthetic example generated from a completed demo bar." : "Ready from the latest completed input bar.")
       : PREDICTION_REASON_LABELS[reasons[0]] || (synthetic
         ? "Waiting for a deterministic synthetic scenario."
-        : "No authorized model is connected.");
+        : stateName === "READY" ? "Forecast details are incomplete." : "No authorized model is connected."));
 
     const probabilities = forecast?.probabilities || {};
     setProbability("Long", probabilities.long);
@@ -639,17 +579,24 @@
     const age = health && health.last_bar_time !== null && health.last_bar_time !== undefined && Number.isFinite(Number(health.last_bar_time))
       ? formatAge(health.last_bar_time)
       : "unknown";
+    let explanation = "";
     if (cacheState === "CONFIRMATION_REQUIRED") {
-      elements.dataHealthExplanation.textContent = `Showing cached data only (${range}). No history download has started. Review the estimate and approve the update to load missing recent days; the newest loaded bar is ${age}.`;
+      explanation = `Showing cached data only (${range}). No history download has started. Review the estimate and approve the update to load missing recent days; the newest loaded bar is ${age}.`;
     } else if (["WARMING", "PAUSED"].includes(cacheState)) {
-      elements.dataHealthExplanation.textContent = `Showing ${range} while missing ${state.chartRange} history is ${cacheState === "PAUSED" ? "paused" : "updated in the background"}.`;
-    } else if (healthState === "CURRENT") {
-      elements.dataHealthExplanation.textContent = `The focused stream and requested history are current. Loaded range: ${range}.`;
+      explanation = `Showing ${range} while missing ${state.chartRange} history is ${cacheState === "PAUSED" ? "paused" : "updated in the background"}.`;
+    } else if (["ERROR", "PARTIAL"].includes(cacheState)) {
+      explanation = `Selected-range history is incomplete. Loaded range: ${range}; newest bar: ${age}. This does not necessarily mean the live feed is disconnected.`;
+    } else if (cacheState === "CHECKING") {
+      explanation = "Checking requested history coverage.";
     } else if (health) {
-      elements.dataHealthExplanation.textContent = `Analysis is paused. Loaded range: ${range}; newest bar: ${age}. History state: ${String(history?.state || "unknown").replaceAll("_", " ").toLowerCase()}.`;
+      if (healthState !== "CURRENT") {
+        explanation = `Analysis is paused. Loaded range: ${range}; newest bar: ${age}. History state: ${String(history?.state || "unknown").replaceAll("_", " ").toLowerCase()}.`;
+      }
     } else {
-      elements.dataHealthExplanation.textContent = "Waiting for chart coverage details.";
+      explanation = "Waiting for chart coverage details.";
     }
+    elements.dataHealthExplanation.textContent = explanation;
+    elements.dataHealthExplanation.hidden = !explanation;
   }
 
   function clearSelectionContext() {
@@ -670,7 +617,7 @@
     elements.predictionPanelToggle.setAttribute("aria-expanded", String(state.panelOpen));
     elements.predictionPanelToggle.setAttribute(
       "aria-label",
-      state.panelOpen ? "Collapse shadow forecast" : "Expand shadow forecast",
+      state.panelOpen ? "Collapse market context" : "Expand market context",
     );
     if (persist) {
       state.panelPreferenceExplicit = true;
@@ -682,34 +629,20 @@
 
   function applyLayerVisibility() {
     elements.layerSessions.checked = state.uiPreferences.show_session_boundaries;
-    elements.layerVolume.checked = state.uiPreferences.show_volume;
     elements.layerPredictions.checked = state.uiPreferences.show_predictions;
-    if (state.volumeSeries?.applyOptions) {
-      state.volumeSeries.applyOptions({ visible: state.uiPreferences.show_volume });
-    }
     queueSessionBoundaryRender();
     renderPredictionMarker();
   }
 
-  function visualUpdateMode() {
-    return Object.hasOwn(VISUAL_UPDATE_HZ, state.uiPreferences.visual_update_mode)
-      ? state.uiPreferences.visual_update_mode
-      : DEFAULT_VISUAL_UPDATE_MODE;
-  }
-
   function effectiveVisualUpdateHz() {
     return document.hidden || state.visualUpdateConstrained
-      ? VISUAL_UPDATE_HZ.efficient
-      : VISUAL_UPDATE_HZ[visualUpdateMode()];
+      ? ADAPTIVE_VISUAL_UPDATE_HZ
+      : DEFAULT_VISUAL_UPDATE_HZ;
   }
 
   function renderVisualUpdateState() {
-    const mode = visualUpdateMode();
-    elements.smoothnessEfficient.checked = mode === "efficient";
-    elements.smoothnessSmooth.checked = mode === "smooth";
-    elements.smoothnessHigh.checked = mode === "high";
     const effective = effectiveVisualUpdateHz();
-    const adaptive = state.visualUpdateConstrained && !document.hidden && mode !== "efficient";
+    const adaptive = state.visualUpdateConstrained && !document.hidden;
     elements.renderRate.textContent = `≤ ${effective} visual updates/sec${adaptive ? " · adaptive" : ""}`;
   }
 
@@ -733,12 +666,9 @@
 
   function applyUiPreferences(preferences) {
     const values = preferences && typeof preferences === "object" ? preferences : {};
-    ["show_session_boundaries", "show_volume", "show_predictions"].forEach((key) => {
+    ["show_session_boundaries", "show_predictions"].forEach((key) => {
       if (typeof values[key] === "boolean") state.uiPreferences[key] = values[key];
     });
-    if (Object.hasOwn(VISUAL_UPDATE_HZ, values.visual_update_mode)) {
-      state.uiPreferences.visual_update_mode = values.visual_update_mode;
-    }
     if (["sector", "alpha_tier"].includes(values.market_grouping_mode)) {
       state.uiPreferences.market_grouping_mode = values.market_grouping_mode;
     }
@@ -776,9 +706,6 @@
     if (state.candleSeries?.priceScale) {
       state.candleSeries.priceScale().applyOptions({ autoScale: true });
     }
-    if (state.volumeSeries?.priceScale) {
-      state.volumeSeries.priceScale().applyOptions({ autoScale: true });
-    }
     state.chart.timeScale().fitContent();
     queueSessionBoundaryRender();
   }
@@ -800,9 +727,6 @@
     if (!state.chart) return;
     if (state.candleSeries?.priceScale) {
       state.candleSeries.priceScale().applyOptions({ autoScale: true });
-    }
-    if (state.volumeSeries?.priceScale) {
-      state.volumeSeries.priceScale().applyOptions({ autoScale: true });
     }
     state.chart.timeScale().scrollToRealTime();
     queueSessionBoundaryRender();
@@ -870,20 +794,6 @@
       button.setAttribute("aria-pressed", String(chartRange === state.chartRange));
       button.addEventListener("click", () => chooseChartRange(chartRange));
       elements.chartRangeList.appendChild(button);
-    });
-  }
-
-  function renderQuickMarkets() {
-    elements.quickMarketList.replaceChildren();
-    state.quickMarkets.forEach((market, index) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `quick-market-button${market === state.selectedMarket ? " active" : ""}`;
-      button.textContent = market;
-      button.title = `${market} quick chart · Alt+${index + 1}`;
-      button.setAttribute("aria-pressed", String(market === state.selectedMarket));
-      button.addEventListener("click", () => chooseMarket(market));
-      elements.quickMarketList.appendChild(button);
     });
   }
 
@@ -1125,7 +1035,7 @@
         last.textContent = formatPrice(status.last);
 
         const change = document.createElement("span");
-        const numericChange = status.change_1m === null || status.change_1m === undefined ? null : Number(status.change_1m);
+        const numericChange = status.session_move_pct === null || status.session_move_pct === undefined ? null : Number(status.session_move_pct);
         const direction = numericChange === null ? "flat" : numericChange > 0 ? "up" : numericChange < 0 ? "down" : "flat";
         change.className = `market-change ${direction}`;
         change.textContent = numericChange === null ? "—" : `${numericChange >= 0 ? "+" : ""}${numericChange.toFixed(2)}%`;
@@ -1266,13 +1176,31 @@
       && policy.last_auto_attempt_at !== undefined
       && policy.last_auto_attempt_at !== "";
     elements.historyPolicyLastAttempt.textContent = hasLastAttempt && Number.isFinite(Number(policy.last_auto_attempt_at))
-      ? `${new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(Number(policy.last_auto_attempt_at) * 1000))}${policy.last_auto_outcome ? ` (${String(policy.last_auto_outcome).toLowerCase()})` : ""}`
+      ? `${formatEventTime(policy.last_auto_attempt_at)}${policy.last_auto_outcome ? ` (${String(policy.last_auto_outcome).toLowerCase()})` : ""}`
       : "Never";
     elements.historyPolicyAuto.classList.toggle("active", mode === "AUTO");
     elements.historyPolicyManual.classList.toggle("active", mode === "MANUAL");
     elements.historyPolicyDialog.hidden = state.mode === "demo"
       ? state.demoScenario !== "consent"
       : mode !== "UNDECIDED";
+  }
+
+  function historyFailureGuidance(cache) {
+    const category = String(cache?.failure_category || "").toUpperCase();
+    const phase = String(cache?.diagnostic?.phase || "").toUpperCase();
+    const guidance = {
+      TIMEOUT: "The provider estimate timed out. Check the connection, then refresh the estimate for manual review.",
+      CONNECTION: "The provider could not be reached. Check the network connection, then refresh the estimate for manual review.",
+      AUTHORIZATION: "History authorization was unavailable. Check the ignored local API credential file, restart the cockpit, then refresh the estimate.",
+      DATA_AVAILABILITY: "The requested provider dataset was unavailable for this interval. Refresh the estimate later or review provider dataset availability.",
+      SYMBOL_RESOLUTION: "A quick-market contract could not be resolved. Retry after the market mapping is available.",
+      CACHE_UNAVAILABLE: "The local history cache was unavailable. Close other cockpit instances, restart, then refresh the estimate.",
+      ESTIMATE_UNAVAILABLE: "The provider could not produce a cost estimate. Refresh the estimate for manual review; no history was downloaded.",
+      UNAVAILABLE: "The history estimate was unavailable. Refresh the estimate for manual review; no history was downloaded.",
+    };
+    const message = guidance[category];
+    if (!message) return "History review is required. Refresh the estimate for manual review; no history was downloaded.";
+    return phase ? `${message} Failed phase: ${phase.replaceAll("_", " ").toLowerCase()}.` : message;
   }
 
   function renderHistoryCache() {
@@ -1311,18 +1239,20 @@
     const missingStart = Number(cache.missing_start);
     const missingEnd = Number(cache.missing_end);
     elements.historyCacheInterval.textContent = hasMissingInterval && Number.isFinite(missingStart) && Number.isFinite(missingEnd)
-      ? `${new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(missingStart * 1000))} – ${new Intl.DateTimeFormat(undefined, { dateStyle: "short", timeStyle: "short" }).format(new Date(missingEnd * 1000))}`
+      ? `${formatEventTime(missingStart)} – ${formatEventTime(missingEnd)}`
       : "—";
     elements.historyCacheTitle.textContent = titles[cacheState] || "History cache";
     elements.historyCacheMessage.textContent = cacheState === "CONFIRMATION_REQUIRED"
       ? `${cache.message || "A history update is available."} No download has started. The current chart remains available until you approve the displayed estimate.`
-      : cache.message || "History cache status unavailable.";
+      : cacheState === "ERROR"
+        ? historyFailureGuidance(cache)
+        : cache.message || "History cache status unavailable.";
     elements.historyCacheCost.textContent = formatHistoryCost(cache.estimated_cost_usd);
     const hasExpiry = cache.estimate_expires_at !== null
       && cache.estimate_expires_at !== undefined
       && cache.estimate_expires_at !== "";
     elements.historyCacheExpiry.textContent = hasExpiry && Number.isFinite(Number(cache.estimate_expires_at))
-      ? new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(new Date(Number(cache.estimate_expires_at) * 1000))
+      ? formatEventTime(cache.estimate_expires_at)
       : "—";
     setDot(elements.historyCacheDot, cacheState);
     elements.historyCacheConfirm.hidden = cacheState !== "CONFIRMATION_REQUIRED";
@@ -1330,9 +1260,7 @@
     elements.historyCachePause.hidden = !["WARMING", "PAUSED"].includes(cacheState);
     elements.historyCachePause.textContent = cacheState === "PAUSED" ? "Resume" : "Pause";
     elements.historyCacheRetry.hidden = !["ERROR", "PARTIAL"].includes(cacheState);
-    elements.historyCacheRetry.textContent = cache.automatic_blocked
-      ? "Try automatic again"
-      : "Refresh estimate";
+    elements.historyCacheRetry.textContent = "Refresh estimate for manual review";
     elements.historyCacheToggle.title = cache.message || titles[cacheState] || "History cache";
     renderHistoryPolicy();
     renderSourceState();
@@ -1356,6 +1284,7 @@
     renderHistoryCache();
     if (
       payload.state === "CONFIRMATION_REQUIRED" &&
+      String(payload.update_origin || "").toUpperCase() !== "AUTO" &&
       payload.plan_id &&
       payload.plan_id !== previousPlan &&
       payload.plan_id !== state.historyPopoverDismissedPlanId
@@ -1394,9 +1323,7 @@
     if (state.browserDemo) return;
     elements.historyCacheRetry.disabled = true;
     try {
-      const result = state.historyCache?.automatic_blocked
-        ? await window.pywebview.api.retry_automatic_history()
-        : await window.pywebview.api.retry_history_cache_estimate();
+      const result = await window.pywebview.api.retry_history_cache_estimate();
       if (result?.history_update_policy) {
         state.historyPolicy = { ...state.historyPolicy, ...result.history_update_policy };
         renderHistoryPolicy();
@@ -1493,7 +1420,6 @@
     state.selectedMarket = market;
     if (!state.quickMarkets.includes(market)) state.chartRange = "1W";
     state.generation += 1;
-    renderQuickMarkets();
     renderChartRanges();
     elements.instrumentSymbol.textContent = market;
     elements.instrumentContract.textContent = hasVisibleChart
@@ -1507,7 +1433,6 @@
       state.barCount = 0;
       state.earliestBar = null;
       state.latestBar = null;
-      updateQuote(null);
     }
     state.source = "switching";
     renderSourceState();
@@ -1531,9 +1456,7 @@
       elements.instrumentContract.textContent = previousContract || previousMarket;
       elements.chartEmpty.classList.toggle("hidden", state.barCount > 0);
       renderSourceState();
-      updateQuote(state.latestBar);
       renderMarkets();
-      renderQuickMarkets();
       renderChartRanges();
       setFocusStatus("ERROR", String(error));
     }
@@ -1668,7 +1591,6 @@
     resetHistoryState();
     applyUiPreferences(payload.ui_preferences || {});
     clearSelectionContext();
-    renderQuickMarkets();
     renderChartRanges();
     renderTimeframes();
     renderMarkets();
@@ -1701,24 +1623,17 @@
       bars.map((bar) => [Number(bar.time), Number(bar.close)]),
     );
     initializeChart();
-    if (!state.candleSeries || !state.volumeSeries) {
+    if (!state.candleSeries) {
       elements.chartEmptyDetail.textContent = "The bundled chart library did not load.";
       setFocusStatus("ERROR", "Chart runtime unavailable");
       return;
     }
     const candleData = bars.map(({ time, open, high, low, close }) => ({ time, open, high, low, close }));
-    const volumeData = bars.map((bar) => ({
-      time: bar.time,
-      value: bar.volume,
-      color: bar.close >= bar.open ? "rgba(53, 199, 160, 0.34)" : "rgba(240, 111, 121, 0.32)",
-    }));
     state.candleSeries.setData(candleData);
-    state.volumeSeries.setData(volumeData);
     state.sessionMarkers = Array.isArray(payload.markers) ? payload.markers : [];
     queueSessionBoundaryRender();
     state.latestBar = bars.at(-1) || null;
     state.earliestBar = bars[0] || null;
-    updateQuote(state.latestBar);
     state.source = payload.source || "unknown";
     state.barCount = bars.length;
     renderSourceState();
@@ -1773,11 +1688,6 @@
     const becameLiveOnly = state.source === "contract-resolved" || state.source === "switching";
     if (becameLiveOnly) state.source = "live-only";
     state.candleSeries.update({ time: bar.time, open: bar.open, high: bar.high, low: bar.low, close: bar.close });
-    state.volumeSeries.update({
-      time: bar.time,
-      value: bar.volume,
-      color: bar.close >= bar.open ? "rgba(53, 199, 160, 0.34)" : "rgba(240, 111, 121, 0.32)",
-    });
     state.latestBar = bar;
     if (!state.earliestBar) state.earliestBar = bar;
     state.barCloses.set(Number(bar.time), Number(bar.close));
@@ -1794,38 +1704,53 @@
       window.clearTimeout(state.startupWatchdog);
       state.startupWatchdog = null;
     }
-    updateQuote(bar);
     if (becameLiveOnly) scheduleChartReset();
     else if (isNewBar) followLatestBar();
   }
 
-  function applyMarketStatus(payload) {
+  function applyMarketStatus(payload, render = true) {
     if (!payload.market) return;
     const current = state.statuses.get(payload.market) || { symbol: payload.market };
     state.statuses.set(payload.market, { ...current, ...payload });
-    renderMarkets();
+    if (render) renderMarkets();
   }
 
   function applyFeedStatus(payload) {
     if (payload.scope === "overview") setOverviewStatus(payload.state, payload.message);
     else if (payload.scope === "history") applyHistoryStatus(payload);
     else if (payload.scope === "focus") setFocusStatus(payload.state, payload.message);
+    else if (payload.scope === "model") {
+      if (payload.state === "ERROR") {
+        state.prediction = state.prediction ? { ...state.prediction, state: "ERROR", forecast: null, reason_codes: ["MODEL_ERROR"] } : state.prediction;
+        renderPrediction();
+      }
+    }
     else {
       setOverviewStatus(payload.state, payload.message);
       setFocusStatus(payload.state, payload.message);
     }
   }
 
-  function receive(message) {
+  function receive(message, renderMarketStatus = true) {
     if (!message || message.v !== PROTOCOL_VERSION || !message.payload) return;
     if (message.type === "bootstrap") applyBootstrap(message.payload);
     else if (message.type === "chart_snapshot") applySnapshot(message.payload);
     else if (message.type === "bar_update") applyBarUpdate(message.payload);
-    else if (message.type === "market_status") applyMarketStatus(message.payload);
+    else if (message.type === "market_status") applyMarketStatus(message.payload, renderMarketStatus);
     else if (message.type === "feed_status") applyFeedStatus(message.payload);
     else if (message.type === "data_health") applyDataHealth(message.payload);
     else if (message.type === "prediction_update") applyPrediction(message.payload);
     else if (message.type === "history_cache_status") applyHistoryCacheStatus(message.payload);
+  }
+
+  function receiveBatch(messages) {
+    let marketStatusChanged = false;
+    (Array.isArray(messages) ? messages : []).forEach((message) => {
+      const isMarketStatus = message?.type === "market_status";
+      receive(message, !isMarketStatus);
+      marketStatusChanged = marketStatusChanged || isMarketStatus;
+    });
+    if (marketStatusChanged) renderMarkets();
   }
 
   function newestCurrentBarEventAge(messages, nowMs) {
@@ -1877,7 +1802,7 @@
     return { constrained: state.visualUpdateConstrained, effective_hz: effectiveVisualUpdateHz() };
   }
 
-  window.cockpit = { receive, observePollHealth };
+  window.cockpit = { receive, receiveBatch, observePollHealth };
 
   async function pollDesktopEvents() {
     if (!state.bridgeReady || state.browserDemo || state.pollInFlight) return;
@@ -1886,7 +1811,7 @@
     state.pollInFlight = true;
     try {
       messages = await window.pywebview.api.poll_events(POLL_EVENT_LIMIT);
-      if (Array.isArray(messages)) messages.forEach(receive);
+      if (Array.isArray(messages)) receiveBatch(messages);
       else messages = [];
     } catch (error) {
       setFocusStatus("ERROR", `Desktop event bridge unavailable: ${error}`);
@@ -1950,6 +1875,24 @@
     }
     state.browserBars.set(market, bars);
     return bars;
+  }
+
+  function browserDemoSessionOpen(bars) {
+    if (demoSessionOpenTime !== null) {
+      const known = bars.find((bar) => bar.time === demoSessionOpenTime);
+      if (known) return known.open;
+    }
+    for (let index = bars.length - 1; index >= 0; index -= 1) {
+      const bar = bars[index];
+      const parts = Object.fromEntries(
+        DEMO_EXCHANGE_CLOCK.formatToParts(new Date(bar.time * 1000)).map((part) => [part.type, part.value]),
+      );
+      if (parts.hour === "17" && parts.minute === "00") {
+        demoSessionOpenTime = bar.time;
+        return bar.open;
+      }
+    }
+    return null;
   }
 
   function aggregateDemo(bars, timeframe) {
@@ -2094,7 +2037,7 @@
     const markets = DEMO_MARKETS.map(([symbol, family], index) => {
       const bars = demoBars(symbol);
       const latest = bars.at(-1);
-      const previous = bars.at(-2);
+      const sessionOpen = browserDemoSessionOpen(bars);
       const status = index === 10 ? "STALE" : index === 20 ? "WAITING" : index === 30 ? "ERROR" : "LIVE";
       return {
         symbol,
@@ -2102,7 +2045,7 @@
         alpha_tier_group: demoAlphaTierGroup(symbol),
         status,
         last: latest.close,
-        change_1m: (latest.close / previous.close - 1) * 100,
+        session_move_pct: sessionOpen === null ? null : (latest.close / sessionOpen - 1) * 100,
       };
     });
     receive({
@@ -2139,9 +2082,8 @@
           })),
         },
         visual_update_capability: {
-          default_mode: DEFAULT_VISUAL_UPDATE_MODE,
-          modes: VISUAL_UPDATE_HZ,
-          adaptive_floor_hz: VISUAL_UPDATE_HZ.efficient,
+          default_hz: DEFAULT_VISUAL_UPDATE_HZ,
+          adaptive_floor_hz: ADAPTIVE_VISUAL_UPDATE_HZ,
         },
         ui_preferences: {},
       },
@@ -2261,25 +2203,12 @@
   });
   [
     [elements.layerSessions, "show_session_boundaries"],
-    [elements.layerVolume, "show_volume"],
     [elements.layerPredictions, "show_predictions"],
   ].forEach(([element, key]) => {
     element.addEventListener("change", () => {
       state.uiPreferences[key] = element.checked;
       applyLayerVisibility();
       persistUiPreferences();
-    });
-  });
-  [elements.smoothnessEfficient, elements.smoothnessSmooth, elements.smoothnessHigh].forEach((element) => {
-    element.addEventListener("change", () => {
-      if (!element.checked || !Object.hasOwn(VISUAL_UPDATE_HZ, element.value)) return;
-      state.uiPreferences.visual_update_mode = element.value;
-      state.visualUpdateConstrained = false;
-      state.unhealthyPolls = 0;
-      state.healthySince = null;
-      renderVisualUpdateState();
-      persistUiPreferences();
-      syncVisualUpdateActivity();
     });
   });
   document.addEventListener("click", (event) => {
@@ -2313,14 +2242,6 @@
     }
   });
   document.addEventListener("keydown", (event) => {
-    if (event.altKey && /^[1-5]$/.test(event.key)) {
-      const market = state.quickMarkets[Number(event.key) - 1];
-      if (market) {
-        event.preventDefault();
-        chooseMarket(market);
-      }
-      return;
-    }
     if (event.key === "F11") {
       event.preventDefault();
       toggleFullscreen();
@@ -2343,7 +2264,7 @@
       elements.marketSearch.focus();
       return;
     }
-    if (/^[1-7]$/.test(event.key) && document.activeElement !== elements.marketSearch) {
+    if (!event.altKey && !event.ctrlKey && !event.metaKey && /^[1-7]$/.test(event.key) && document.activeElement !== elements.marketSearch) {
       const timeframe = state.timeframes[Number(event.key) - 1];
       if (timeframe) chooseTimeframe(timeframe);
       return;
@@ -2361,12 +2282,10 @@
   });
 
   function updateClock() {
-    elements.localTime.textContent = new Intl.DateTimeFormat(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    }).format(new Date());
+    elements.localTime.textContent = localTime.formatLocalClock(
+      Date.now() / 1000,
+      navigator.language,
+    );
     renderPrediction();
     renderDataHealth();
   }

@@ -87,8 +87,9 @@ PREDICTION_STATES = frozenset(
     {"OFFLINE", "WARMING_UP", "READY", "ABSTAIN", "STALE", "ERROR"}
 )
 PREDICTION_DIRECTIONS = frozenset({"LONG", "SHORT", "FLAT"})
-PREDICTION_SOURCES = frozenset({"NONE", "SYNTHETIC_DEMO"})
+PREDICTION_SOURCES = frozenset({"NONE", "SYNTHETIC_DEMO", "REPOSITORY_MODEL"})
 PREDICTION_TIMEFRAME_SECONDS = {
+    "1s": 1,
     "1m": 60,
     "5m": 5 * 60,
     "15m": 15 * 60,
@@ -107,6 +108,11 @@ PREDICTION_REASON_CODES = frozenset(
         "OUTSIDE_DEMO_SCENARIO",
         "MODEL_ABSTAINED",
         "SYNTHETIC_DEMO_ERROR",
+        "MODEL_ERROR",
+        "MODEL_WAITING_MARKETS",
+        "CONTRACT_ROLL_REWARM",
+        "DATA_RECONCILIATION_REQUIRED",
+        "MODEL_DECISION",
     }
 )
 DATA_HEALTH_STATES = frozenset({"CURRENT", "DEGRADED", "STALE", "UNKNOWN"})
@@ -137,7 +143,7 @@ HISTORY_CACHE_FAILURE_CATEGORIES = frozenset(
         "CACHE_UNAVAILABLE",
     }
 )
-HISTORY_RANGE_KEYS = frozenset({"1W", "2W", "1M", "3M"})
+HISTORY_RANGE_KEYS = frozenset({"1D", "1W", "1M"})
 DATA_HEALTH_REASON_CODES = frozenset(
     {
         "HISTORY_LOADING",
@@ -633,7 +639,9 @@ def validate_prediction_payload(payload: Mapping[str, Any]) -> None:
     input_bar_time = payload.get("input_bar_time")
     if input_bar_time is not None:
         input_bar_time = _nonnegative_int(input_bar_time, name="input_bar_time")
-        timeframe_seconds = PREDICTION_TIMEFRAME_SECONDS.get(str(payload["timeframe"]))
+        input_schema = str(payload.get("input_schema") or payload["timeframe"])
+        input_timeframe = input_schema.removeprefix("ohlcv-")
+        timeframe_seconds = PREDICTION_TIMEFRAME_SECONDS.get(input_timeframe)
         if timeframe_seconds is None:
             raise ValueError("unsupported prediction timeframe")
         if input_bar_time + timeframe_seconds > prediction_time:

@@ -42,7 +42,7 @@ class BarCache:
 
     def _open(self) -> sqlite3.Connection:
         self.path.parent.mkdir(parents=True, exist_ok=True)
-        connection = sqlite3.connect(self.path, check_same_thread=False, timeout=5.0)
+        connection = sqlite3.connect(self.path, check_same_thread=False, timeout=1.0)
         try:
             connection.execute("PRAGMA journal_mode=WAL")
         except Exception:
@@ -107,25 +107,9 @@ class BarCache:
         return connection
 
     def _open_or_recover(self) -> sqlite3.Connection:
-        try:
-            return self._open()
-        except sqlite3.DatabaseError:
-            if not self.path.exists():
-                raise
-            timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-            destination = self.path.with_name(f"{self.path.name}.corrupt-{timestamp}")
-            suffix = 1
-            while destination.exists():
-                destination = self.path.with_name(
-                    f"{self.path.name}.corrupt-{timestamp}-{suffix}"
-                )
-                suffix += 1
-            self.path.replace(destination)
-            for sidecar_suffix in ("-wal", "-shm"):
-                sidecar = Path(f"{self.path}{sidecar_suffix}")
-                if sidecar.exists():
-                    sidecar.replace(Path(f"{destination}{sidecar_suffix}"))
-            return self._open()
+        # Integrity failures are observation failures, not cleanup authority.
+        # Never replace malformed evidence with an empty cache.
+        return self._open()
 
     @staticmethod
     def _timestamp_ns(value: object) -> int:

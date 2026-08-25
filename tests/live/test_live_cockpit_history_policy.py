@@ -51,7 +51,12 @@ class _PolicyEngine:
         return True
 
 
-def _plan_status(*, estimate: object = 0.05, plan_id: str = "plan-1") -> dict[str, object]:
+def _plan_status(
+    *,
+    estimate: object = 0.05,
+    plan_id: str = "plan-1",
+    range_key: str = "1W",
+) -> dict[str, object]:
     return {
         "state": "CONFIRMATION_REQUIRED",
         "message": "A history update is ready for review",
@@ -65,6 +70,7 @@ def _plan_status(*, estimate: object = 0.05, plan_id: str = "plan-1") -> dict[st
         "total_markets": 41,
         "queued_markets": 41,
         "paused": False,
+        "range_key": range_key,
     }
 
 
@@ -139,6 +145,107 @@ def test_automatic_cost_gate_uses_decimal_and_fails_closed(
     assert result_reason == reason
     if eligible:
         assert parsed == Decimal(str(estimate))
+
+
+@pytest.mark.parametrize("range_key", ["1D", "1W"])
+def test_automatic_small_repairs_allow_current_contract_ranges(range_key: str) -> None:
+    policy = cockpit_app.default_history_update_policy()
+    policy["mode"] = "AUTO"
+    assert cockpit_app._automatic_history_eligibility(
+        policy,
+        _plan_status(range_key=range_key),
+        now=datetime.now(timezone.utc),
+    )[:2] == (True, None)
+
+
+def test_positive_cost_one_month_history_requires_manual_review() -> None:
+    policy = cockpit_app.default_history_update_policy()
+    policy["mode"] = "AUTO"
+    assert cockpit_app._automatic_history_eligibility(
+        policy,
+        _plan_status(range_key="1M"),
+        now=datetime.now(timezone.utc),
+    )[:2] == (False, "EXTENDED_RANGE_REQUIRES_REVIEW")
+
+
+@pytest.mark.parametrize("range_key", ["1D", "1W", "1M"])
+def test_exact_zero_cost_automatically_allows_every_supported_range(
+    range_key: str,
+) -> None:
+    now = datetime.now(timezone.utc)
+    policy = cockpit_app.default_history_update_policy()
+    policy.update(
+        {
+            "mode": "AUTO",
+            "auto_blocked": True,
+            "block_reason": "AUTO_TIMEOUT",
+            "last_auto_attempt_at": cockpit_app._utc_text(now),
+            "last_auto_outcome": "ERROR",
+        }
+    )
+    assert cockpit_app._automatic_history_eligibility(
+        policy,
+        _plan_status(estimate="0.0000", range_key=range_key),
+        now=now,
+    ) == (True, None, Decimal("0.0000"))
+
+
+def test_zero_cost_does_not_bypass_manual_mode_user_cancel_or_invalid_plan() -> None:
+    now = datetime.now(timezone.utc)
+    manual = cockpit_app.default_history_update_policy()
+    manual["mode"] = "MANUAL"
+    assert cockpit_app._automatic_history_eligibility(
+        manual,
+        _plan_status(estimate=0, range_key="1M"),
+        now=now,
+    )[:2] == (False, "AUTOMATIC_OFF")
+
+    canceled = cockpit_app.default_history_update_policy()
+    canceled.update(
+        {"mode": "AUTO", "auto_blocked": True, "block_reason": "USER_DISABLED"}
+    )
+    assert cockpit_app._automatic_history_eligibility(
+        canceled,
+        _plan_status(estimate=0, range_key="1M"),
+        now=now,
+    )[:2] == (False, "USER_DISABLED")
+
+    expired = {
+        **_plan_status(estimate=0, range_key="1M"),
+        "estimate_expires_at": int(now.timestamp()) - 1,
+    }
+    automatic = cockpit_app.default_history_update_policy()
+    automatic["mode"] = "AUTO"
+    assert cockpit_app._automatic_history_eligibility(
+        automatic,
+        expired,
+        now=now,
+    )[:2] == (False, "PLAN_INVALID")
+
+
+def test_zero_cost_plan_is_reserved_and_confirmed_exactly_once(tmp_path: Path) -> None:
+    engine = _PolicyEngine()
+    state_path = tmp_path / "state.json"
+    policy = cockpit_app.default_history_update_policy()
+    policy["mode"] = "AUTO"
+    save_state(state_path, {"history_update_policy": policy})
+    controller = CockpitController(engine, state_path=state_path)
+    message = event(
+        "history_cache_status",
+        _plan_status(estimate=0.0, range_key="1M"),
+    )
+
+    controller.publish(message)
+    controller.publish(message)
+
+    assert engine.confirmed == ["plan-1"]
+    status = controller.poll_events()[-1]["payload"]
+    assert status["update_origin"] == "AUTO"
+
+
+@pytest.mark.parametrize("removed_range", ["2W", "3M"])
+def test_removed_persisted_ranges_migrate_to_one_week(removed_range: str) -> None:
+    assert cockpit_app.normalize_persisted_chart_range(removed_range) == "1W"
 
 
 def test_automatic_attempt_interval_is_one_rolling_24_hour_window() -> None:
@@ -355,10 +462,7 @@ def test_concurrent_preference_updates_preserve_history_safety_state(tmp_path: P
     state = load_state(state_path)
     assert state["history_update_policy"]["auto_blocked"] is True
     assert state["history_update_policy"]["block_reason"] == "AUTO_TIMEOUT"
-    assert state["ui_preferences"] == {
-        "show_predictions": True,
-        "show_volume": False,
-    }
+    assert state["ui_preferences"] == {"show_predictions": True}
 
 
 def test_second_cockpit_instance_cannot_reach_history_startup(tmp_path: Path) -> None:

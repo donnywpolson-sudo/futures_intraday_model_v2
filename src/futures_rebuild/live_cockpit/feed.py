@@ -868,6 +868,20 @@ def frozen_project_api_key_files(frozen_base: Path) -> tuple[Path, ...]:
     return (frozen_base / PROJECT_DIR_NAME / "api.env",)
 
 
+def frozen_repository_api_key_file(frozen_base: Path) -> Path | None:
+    """Return the canonical checkout credential path for its packaged app."""
+
+    repository_root = frozen_base.parent
+    if (
+        frozen_base.name != "FuturesLiveCockpit"
+        or repository_root.name != PROJECT_DIR_NAME
+        or not (repository_root / "pyproject.toml").is_file()
+        or not (repository_root / "src" / "futures_rebuild" / "live_cockpit").is_dir()
+    ):
+        return None
+    return repository_root / "api.env"
+
+
 def runtime_api_key_base() -> Path:
     return frozen_executable_dir() or ROOT
 
@@ -875,7 +889,9 @@ def runtime_api_key_base() -> Path:
 def runtime_api_key_files() -> tuple[Path, ...]:
     frozen_base = frozen_executable_dir()
     if frozen_base is not None:
+        repository_file = frozen_repository_api_key_file(frozen_base)
         return (
+            *((repository_file,) if repository_file is not None else ()),
             *frozen_project_api_key_files(frozen_base),
             *api_key_files_for_base(frozen_base),
         )

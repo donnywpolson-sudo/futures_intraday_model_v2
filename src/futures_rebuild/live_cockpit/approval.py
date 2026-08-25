@@ -13,7 +13,7 @@ from futures_rebuild.canonical import sha256_file, sha256_json
 from .feed import chart_market_universe
 
 
-PLAN_SCHEMA = "futures_live_cockpit_smoke_plan/1.3.0"
+PLAN_SCHEMA = "futures_live_cockpit_smoke_plan/1.4.0"
 APPROVAL_SCHEMA = "futures_live_cockpit_smoke_approval/1.4.0"
 OPERATION = "RUN_BOUNDED_OBSERVATION_ONLY_DATABENTO_SMOKE_ATTEMPT_9"
 RESULT_OUTPUT_RELATIVE = (
@@ -84,12 +84,34 @@ def build_live_smoke_plan(
     *,
     source_revision: str,
     package_inputs: Sequence[Mapping[str, Any]],
+    model_binding: Mapping[str, Any] | None = None,
 ) -> dict[str, Any]:
     if _HASH.fullmatch(prepared_executable_sha256) is None:
         raise LiveSmokeApprovalError("prepared executable hash is invalid")
     if _SOURCE_REVISION.fullmatch(source_revision) is None:
         raise LiveSmokeApprovalError("source revision is invalid")
     bound_inputs = _package_input_binding(package_inputs)
+    bound_model: dict[str, Any] | None = None
+    if model_binding is not None:
+        if set(model_binding) != {"model_id", "version", "artifact_sha256", "schema", "markets"}:
+            raise LiveSmokeApprovalError("model smoke binding fields are invalid")
+        bound_model = {
+            "model_id": str(model_binding["model_id"]),
+            "version": str(model_binding["version"]),
+            "artifact_sha256": str(model_binding["artifact_sha256"]),
+            "schema": str(model_binding["schema"]),
+            "markets": list(model_binding["markets"]),
+        }
+        if (
+            not bound_model["model_id"]
+            or not bound_model["version"]
+            or _HASH.fullmatch(bound_model["artifact_sha256"]) is None
+            or bound_model["schema"] not in {"ohlcv-1s", "ohlcv-1m", "ohlcv-1h", "ohlcv-1d"}
+            or not bound_model["markets"]
+            or len(set(bound_model["markets"])) != len(bound_model["markets"])
+        ):
+            raise LiveSmokeApprovalError("model smoke binding is invalid")
+    focus_market = bound_model["markets"][0] if bound_model is not None else "ES"
     body: dict[str, Any] = {
         "schema_version": PLAN_SCHEMA,
         "classification": "PENDING_EXACT_HASH_BOUND_APPROVAL",
@@ -99,11 +121,12 @@ def build_live_smoke_plan(
             "overview_markets": sorted(
                 info.symbol for info in chart_market_universe()
             ),
-            "focus_market": "ES",
+            "focus_market": focus_market,
+            "model": bound_model,
             "required_focus_market_calendar_state": "OPEN",
             "minimum_open_window_seconds": 180,
             "duration_seconds": 120,
-            "maximum_live_sessions": 2,
+            "maximum_live_sessions": 1 if bound_model is not None and bound_model["schema"] == "ohlcv-1m" else 2,
             "historical_replay": False,
             "cache_mutation": False,
             "reconnect_loop": False,
@@ -166,6 +189,7 @@ def validate_live_smoke_plan(payload: Mapping[str, Any]) -> dict[str, Any]:
         "dataset",
         "overview_markets",
         "focus_market",
+        "model",
         "required_focus_market_calendar_state",
         "minimum_open_window_seconds",
         "duration_seconds",
@@ -192,6 +216,7 @@ def validate_live_smoke_plan(payload: Mapping[str, Any]) -> dict[str, Any]:
         executable_hash,
         source_revision=source_revision,
         package_inputs=package_inputs,
+        model_binding=scope.get("model"),
     )
     if dict(payload) != expected:
         raise LiveSmokeApprovalError("live-smoke plan identity is invalid")

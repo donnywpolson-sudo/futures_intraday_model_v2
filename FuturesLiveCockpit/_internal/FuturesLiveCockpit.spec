@@ -31,6 +31,8 @@ a = Analysis(
         'webview',
         'webview.platforms.edgechromium',
         'futures_rebuild.live_cockpit.smoke',
+        'futures_rebuild.live_cockpit.live_model',
+        'futures_rebuild.live_cockpit.model_runtime',
     ],
     hookspath=[],
     hooksconfig={},

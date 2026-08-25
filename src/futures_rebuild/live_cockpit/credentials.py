@@ -12,6 +12,7 @@ from .feed import (
     API_KEY_ENV,
     ApiKeyResolution,
     ROOT as REPOSITORY_ROOT,
+    frozen_repository_api_key_file,
     load_databento_api_key_from_file,
     resolve_api_key_source,
 )
@@ -46,7 +47,7 @@ def default_repository_package_api_env_path() -> Path | None:
     """Return the source-package credential path for existence-only self-checks."""
 
     if getattr(sys, "frozen", False):
-        return None
+        return frozen_repository_api_key_file(Path(sys.executable).resolve().parent)
     return REPOSITORY_ROOT / "api.env"
 
 

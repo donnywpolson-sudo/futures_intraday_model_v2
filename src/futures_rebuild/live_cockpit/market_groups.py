@@ -10,10 +10,15 @@ from typing import Any
 import yaml
 
 
-ALPHA_TIER_PROFILES = (
-    ("tier_1_research", "tier_1_core", "Tier 1 · Core"),
-    ("tier_2_research", "tier_2_additions", "Tier 2 · Additions"),
-    ("tier_3_research", "tier_3_additions", "Tier 3 · Additions"),
+ALPHA_TIER_MARKET_SETS = (
+    ("core", "tier_1_core", "Tier 1 · Core confirmation"),
+    ("balanced", "tier_2_additions", "Tier 2 · Balanced additions"),
+    (
+        "traditional",
+        "tier_3_traditional_additions",
+        "Tier 3 · Traditional additions",
+    ),
+    ("satellite", "tier_3_satellites", "Tier 3 · Satellite stress"),
 )
 
 
@@ -30,19 +35,8 @@ class AlphaTierGrouping:
         }
 
 
-def _profile_markets(
-    profiles: Mapping[str, Any],
-    market_sets: Mapping[str, Any],
-    name: str,
-) -> list[str] | None:
-    profile = profiles.get(name)
-    if not isinstance(profile, Mapping):
-        return None
-    values = profile.get("markets")
-    if values is None:
-        market_set = profile.get("market_set")
-        if isinstance(market_set, str):
-            values = market_sets.get(market_set)
+def _market_set_markets(market_sets: Mapping[str, Any], name: str) -> list[str] | None:
+    values = market_sets.get(name)
     if not isinstance(values, list):
         return None
     markets: list[str] = []
@@ -68,42 +62,47 @@ def load_alpha_tier_grouping(
         return unavailable
     if not isinstance(payload, Mapping):
         return unavailable
-    profiles = payload.get("profiles")
     market_sets = payload.get("market_sets")
-    if not isinstance(profiles, Mapping) or not isinstance(market_sets, Mapping):
+    if not isinstance(market_sets, Mapping):
         return unavailable
 
     expected = {str(market).strip().upper() for market in expected_markets}
-    tier_markets: list[list[str]] = []
-    for profile_name, _group_id, _label in ALPHA_TIER_PROFILES:
-        markets = _profile_markets(profiles, market_sets, profile_name)
+    configured: list[list[str]] = []
+    for market_set_name, _group_id, _label in ALPHA_TIER_MARKET_SETS:
+        markets = _market_set_markets(market_sets, market_set_name)
         if markets is None:
             return unavailable
-        tier_markets.append([market for market in markets if market in expected])
+        configured.append(markets)
 
-    tier_sets = [set(markets) for markets in tier_markets]
-    if not tier_sets[0] <= tier_sets[1] <= tier_sets[2]:
+    core, balanced, traditional, satellite = configured
+    core_set, balanced_set, traditional_set, satellite_set = map(set, configured)
+    if not core_set <= balanced_set <= traditional_set:
         return unavailable
-    if tier_sets[2] != expected:
+    if traditional_set & satellite_set:
+        return unavailable
+    if traditional_set | satellite_set != expected:
         return unavailable
 
+    additions = (
+        core,
+        [market for market in balanced if market not in core_set],
+        [market for market in traditional if market not in balanced_set],
+        satellite,
+    )
     assignments: dict[str, str] = {}
     groups: list[dict[str, Any]] = []
-    previous: set[str] = set()
-    for (_profile_name, group_id, label), markets, tier_set in zip(
-        ALPHA_TIER_PROFILES, tier_markets, tier_sets, strict=True
+    for (_market_set_name, group_id, label), markets in zip(
+        ALPHA_TIER_MARKET_SETS, additions, strict=True
     ):
-        additions = [market for market in markets if market not in previous]
-        for market in additions:
+        for market in markets:
             assignments[market] = group_id
         groups.append(
             {
                 "id": group_id,
                 "label": label,
-                "market_count": len(additions),
+                "market_count": len(markets),
             }
         )
-        previous = tier_set
 
     if set(assignments) != expected or sum(
         group["market_count"] for group in groups

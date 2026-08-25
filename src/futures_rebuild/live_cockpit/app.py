@@ -31,9 +31,8 @@ from .feed import (
 )
 
 from .engine import (
+    CURRENT_CONTRACT_CHART_RANGES,
     DEFAULT_CHART_RANGE,
-    DEFAULT_VISUAL_UPDATE_MODE,
-    VISUAL_UPDATE_HZ,
     CockpitEngine,
     DemoCockpitEngine,
     LiveCockpitEngine,
@@ -41,6 +40,8 @@ from .engine import (
     normalize_chart_range,
 )
 from .market_groups import load_alpha_tier_grouping
+from .live_model import build_live_model_adapter
+from .model_runtime import packaged_worker_self_check
 from .offline_network import DemoLoopbackDenyProxy
 from .single_instance import SingleInstance
 
@@ -60,7 +61,6 @@ BOOLEAN_UI_PREFERENCE_KEYS = frozenset(
     {
         "prediction_panel_open",
         "show_session_boundaries",
-        "show_volume",
         "show_predictions",
     }
 )
@@ -284,16 +284,6 @@ def _automatic_history_eligibility(
 ) -> tuple[bool, str | None, Decimal | None]:
     if policy.get("mode") != "AUTO":
         return False, "AUTOMATIC_OFF", None
-    if (
-        str(history_status.get("range_key") or DEFAULT_CHART_RANGE).upper()
-        != DEFAULT_CHART_RANGE
-    ):
-        return False, "EXTENDED_RANGE_REQUIRES_REVIEW", None
-    if policy.get("auto_blocked") is True:
-        return False, str(policy.get("block_reason") or "AUTOMATIC_BLOCKED"), None
-    last_attempt = _parse_utc_text(policy.get("last_auto_attempt_at"))
-    if last_attempt is not None and now - last_attempt < HISTORY_AUTO_INTERVAL:
-        return False, "RECENT_ATTEMPT", None
     if str(history_status.get("state") or "").upper() != "CONFIRMATION_REQUIRED":
         return False, "PLAN_NOT_READY", None
     try:
@@ -302,8 +292,6 @@ def _automatic_history_eligibility(
         return False, "ESTIMATE_INVALID", None
     if not estimate.is_finite() or estimate < 0:
         return False, "ESTIMATE_INVALID", None
-    if estimate > HISTORY_AUTO_MAX_ESTIMATED_COST_USD:
-        return False, "ABOVE_CAP", estimate
     plan_id = history_status.get("plan_id")
     fingerprint = history_status.get("plan_fingerprint")
     expires_at = history_status.get("estimate_expires_at")
@@ -317,7 +305,37 @@ def _automatic_history_eligibility(
         or expires_at <= int(now.timestamp())
     ):
         return False, "PLAN_INVALID", estimate
+    if (
+        policy.get("last_auto_outcome") == "STARTED"
+        and policy.get("last_auto_plan_fingerprint") == fingerprint
+    ):
+        return False, "PLAN_ALREADY_STARTED", estimate
+    block_reason = str(policy.get("block_reason") or "")
+    if estimate == 0:
+        if block_reason == "USER_DISABLED":
+            return False, "USER_DISABLED", estimate
+        return True, None, estimate
+    if str(history_status.get("range_key") or DEFAULT_CHART_RANGE).upper() not in (
+        CURRENT_CONTRACT_CHART_RANGES
+    ):
+        return False, "EXTENDED_RANGE_REQUIRES_REVIEW", None
+    if policy.get("auto_blocked") is True:
+        return False, block_reason or "AUTOMATIC_BLOCKED", None
+    last_attempt = _parse_utc_text(policy.get("last_auto_attempt_at"))
+    if last_attempt is not None and now - last_attempt < HISTORY_AUTO_INTERVAL:
+        return False, "RECENT_ATTEMPT", None
+    if estimate > HISTORY_AUTO_MAX_ESTIMATED_COST_USD:
+        return False, "ABOVE_CAP", estimate
     return True, None, estimate
+
+
+def normalize_persisted_chart_range(value: object) -> str:
+    """Migrate removed or malformed persisted ranges to the safe default."""
+
+    try:
+        return normalize_chart_range(value)
+    except ValueError:
+        return DEFAULT_CHART_RANGE
 
 
 def _sanitize_group_ids(value: object) -> list[str] | None:
@@ -350,9 +368,6 @@ def sanitize_ui_preferences(value: object) -> dict[str, Any]:
         for key, item in value.items()
         if key in BOOLEAN_UI_PREFERENCE_KEYS and isinstance(item, bool)
     }
-    visual_mode = value.get("visual_update_mode")
-    if isinstance(visual_mode, str) and visual_mode.strip().lower() in VISUAL_UPDATE_HZ:
-        sanitized["visual_update_mode"] = visual_mode.strip().lower()
     grouping_mode = value.get("market_grouping_mode")
     if (
         isinstance(grouping_mode, str)
@@ -416,6 +431,25 @@ def self_check(*, env: Mapping[str, str] | None = None) -> dict[str, Any]:
         "databento": importlib.util.find_spec("databento") is not None,
         "webview": importlib.util.find_spec("webview") is not None,
     }
+    try:
+        worker_check = packaged_worker_self_check()
+    except Exception as exc:
+        worker_check = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+    try:
+        checked_adapter = build_live_model_adapter()
+        adapter_check = (
+            {"ok": True, "configured": False}
+            if checked_adapter is None
+            else {
+                "ok": checked_adapter.self_check() is True,
+                "configured": True,
+                "model_id": checked_adapter.spec.model_id,
+                "version": checked_adapter.spec.version,
+                "artifact_sha256": checked_adapter.spec.artifact_sha256,
+            }
+        )
+    except Exception as exc:
+        adapter_check = {"ok": False, "configured": True, "error": f"{type(exc).__name__}: {exc}"}
     locator_path = default_credential_locator_path()
     locator_present = bool(locator_path is not None and locator_path.is_file())
     repository_api_env_path = default_repository_package_api_env_path()
@@ -440,6 +474,8 @@ def self_check(*, env: Mapping[str, str] | None = None) -> dict[str, Any]:
         and asset_launch_target_local
         and all(imports.values())
         and cache_writeable
+        and worker_check.get("ok") is True
+        and adapter_check.get("ok") is True
     )
     return {
         "status": "PASS" if core_pass and webview2_runtime else "FAIL",
@@ -449,6 +485,8 @@ def self_check(*, env: Mapping[str, str] | None = None) -> dict[str, Any]:
         "assets": asset_results,
         "asset_launch_target_local": asset_launch_target_local,
         "imports": imports,
+        "model_worker_fixture": worker_check,
+        "model_adapter": adapter_check,
         "cache_writeable": cache_writeable,
         "cache_error": cache_error,
         "webview2_runtime": webview2_runtime,
@@ -478,6 +516,7 @@ class CockpitController:
         self._stop_started = False
         self._fullscreen = False
         self._stop_complete = threading.Event()
+        self._engine_start_thread: threading.Thread | None = None
         self._pending: list[dict[str, Any]] = []
         self._lock = threading.RLock()
         self._state_lock = threading.RLock()
@@ -669,10 +708,6 @@ class CockpitController:
                 with self._state_lock:
                     persisted = load_state(self.state_path)
                 preferences = sanitize_ui_preferences(persisted.get("ui_preferences"))
-                visual_mode = str(
-                    preferences.get("visual_update_mode", DEFAULT_VISUAL_UPDATE_MODE)
-                )
-                self.engine.set_visual_update_mode(visual_mode)
                 payload["ui_preferences"] = preferences
                 history_capability = payload.get("history_cache_capability")
                 if (
@@ -686,11 +721,12 @@ class CockpitController:
                     )
             if not self._started:
                 self._started = True
-                threading.Thread(
+                self._engine_start_thread = threading.Thread(
                     target=self._start_after_bootstrap,
                     name="cockpit-engine-start",
                     daemon=True,
-                ).start()
+                )
+                self._engine_start_thread.start()
         return bootstrap
 
     def _start_after_bootstrap(self) -> None:
@@ -701,6 +737,9 @@ class CockpitController:
         self.engine.start(self.publish)
 
     def publish(self, message: dict[str, Any]) -> None:
+        with self._lock:
+            if self._stop_started:
+                return
         auto_confirm_plan: str | None = None
         if message.get("type") == "history_cache_status":
             raw_payload = message.get("payload")
@@ -710,7 +749,7 @@ class CockpitController:
                 if (
                     state_name == "CHECKING"
                     and str(payload.get("range_key") or DEFAULT_CHART_RANGE).upper()
-                    == DEFAULT_CHART_RANGE
+                    in CURRENT_CONTRACT_CHART_RANGES
                     and self._history_planning_origin is None
                 ):
                     if self._history_policy().get("mode") == "AUTO":
@@ -931,9 +970,6 @@ class CockpitController:
             state["ui_preferences"] = current
 
         self._mutate_state(update)
-        visual_mode = sanitized.get("visual_update_mode")
-        if isinstance(visual_mode, str):
-            self.engine.set_visual_update_mode(visual_mode)
         return {"ok": True, "ui_preferences": current}
 
     def set_visual_update_active(self, active: object) -> dict[str, Any]:
@@ -971,6 +1007,9 @@ class CockpitController:
     def _stop_engine(self) -> None:
         try:
             self.engine.stop()
+            start_thread = self._engine_start_thread
+            if start_thread is not None and start_thread is not threading.current_thread():
+                start_thread.join(timeout=6.0)
         finally:
             self._stop_complete.set()
 
@@ -1164,12 +1203,9 @@ def main(argv: list[str] | None = None) -> int:
     persisted = load_state(state_path)
     market = args.market or str(persisted.get("market", "ES")).strip().upper()
     timeframe = args.timeframe or str(persisted.get("timeframe", "1m")).strip().lower()
-    try:
-        chart_range = normalize_chart_range(
-            persisted.get("chart_range", DEFAULT_CHART_RANGE)
-        )
-    except ValueError:
-        chart_range = DEFAULT_CHART_RANGE
+    chart_range = normalize_persisted_chart_range(
+        persisted.get("chart_range", DEFAULT_CHART_RANGE)
+    )
     symbols = {info.symbol for info in chart_market_universe()}
     if market not in symbols:
         market = "ES"
@@ -1198,10 +1234,14 @@ def main(argv: list[str] | None = None) -> int:
             market=market, timeframe=timeframe, chart_range=chart_range
         )
     else:
+        model_adapter = build_live_model_adapter()
         engine = LiveCockpitEngine(
             cache_path=root / CACHE_FILENAME,
             market=market,
             timeframe=timeframe,
             chart_range=chart_range,
+            model_adapter=model_adapter,
+            model_store_path=root / "model-decisions.sqlite3",
+            focus_stream_enabled=False,
         )
     return run_desktop(engine=engine, state_path=state_path, demo=args.demo)
