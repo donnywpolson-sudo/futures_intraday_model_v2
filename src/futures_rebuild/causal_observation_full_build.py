@@ -12,12 +12,15 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import sys
 import time
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+
+import databento
 
 from .boundary import OperationReceipt, RepoBoundary
 from .canonical import canonical_bytes, sha256_file, sha256_json
@@ -46,11 +49,12 @@ from .data_layout import STAGING_ROOT
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
 from .locking import FileLease
 from .foundation_operation_firewall import issue_current_source_closure_context
+from .foundation.decoder import SUPPORTED_DATABENTO_VERSION
 from .foundation.economics import EconomicsRuleBook
 from .research_gateway_policy import CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
 
 
-PLAN_SCHEMA = "development_causal_observation_full_build_plan/1.4.0"
+PLAN_SCHEMA = "development_causal_observation_full_build_plan/1.5.0"
 RESULT_SCHEMA = "development_causal_observation_full_build_result/1.0.0"
 FAILURE_SCHEMA = "development_causal_observation_full_build_failure/1.1.0"
 RUNTIME_PROJECTION_SCHEMA = "causal_full_build_runtime_projection/1.0.0"
@@ -70,6 +74,7 @@ MAXIMUM_PROJECTED_RUNTIME_HIGH_SECONDS = 181_000
 MINIMUM_MEASURED_WORK_UNIT_COUNT = 64
 WORK_UNIT_PRIORITY_MARKETS = ("ES", "GC", "6E", "CL", "NQ")
 REMAINING_WORK_UNIT_ORDER = "MARKET_LEXICOGRAPHIC_THEN_YEAR_ASCENDING"
+PINNED_PYTHON_EXECUTABLE = ".venv/Scripts/python.exe"
 STANDARD_ROOT_COUNT = 41
 DEFERRED_MICRO_COUNT = 17
 DEVELOPMENT_END_EXCLUSIVE = "2025-07-13T22:00:00Z"
@@ -247,6 +252,8 @@ def _validate_plan(root: Path, plan: Mapping[str, object]) -> None:
             "maximum_workers": 1,
             "priority_markets": list(WORK_UNIT_PRIORITY_MARKETS),
             "remaining_order": REMAINING_WORK_UNIT_ORDER,
+            "python_executable": PINNED_PYTHON_EXECUTABLE,
+            "databento_version": SUPPORTED_DATABENTO_VERSION,
         }
         or storage.get("required_free_after_peak_bytes")
         != MINIMUM_FREE_AFTER_PEAK_BYTES
@@ -317,6 +324,25 @@ def _load_exact_source_entries(
     ):
         raise IntegrityError("full development source inventory counts or identity differ")
     return selected
+
+
+def validate_full_build_execution_environment(
+    root: Path, plan: Mapping[str, object]
+) -> None:
+    execution = plan.get("execution")
+    if not isinstance(execution, Mapping):
+        raise UnauthorizedOperation("full-build execution environment is absent")
+    expected = (root / PINNED_PYTHON_EXECUTABLE).resolve(strict=True)
+    observed = Path(sys.executable).resolve(strict=False)
+    if (
+        execution.get("python_executable") != PINNED_PYTHON_EXECUTABLE
+        or execution.get("databento_version") != SUPPORTED_DATABENTO_VERSION
+        or observed != expected
+        or databento.__version__ != SUPPORTED_DATABENTO_VERSION
+    ):
+        raise UnauthorizedOperation(
+            "full-build execution requires the pinned project interpreter and DBN decoder"
+        )
 
 
 def validate_complete_development_boundary_metadata(
@@ -607,18 +633,27 @@ def _execute(
                 "current_work_unit_state": "STARTED",
             }
         )
+
+        def record_dbn_open(path: Path) -> None:
+            relative = path.resolve(strict=True).relative_to(root).as_posix()
+            opened = progress["dbn_paths_opened"]
+            if not isinstance(opened, list) or relative in opened:
+                raise IntegrityError("full development DBN open ledger is invalid")
+            opened.append(relative)
+            progress["dbn_files_opened"] = int(progress["dbn_files_opened"]) + 1
+            progress["dbn_payload_bytes_opened"] = int(
+                progress["dbn_payload_bytes_opened"]
+            ) + path.stat().st_size
+
         decoded = _decode_selected_sources(
             root=root,
             selected=unit_entries,
             windows={market: window},
             source_contract=source_contract,
             maximum_decoded_records=int(plan["limits"]["maximum_decoded_records"]),
+            on_dbn_open=record_dbn_open,
         )[market]
         progress["current_work_unit_decode_state"] = "COMPLETE"
-        progress["dbn_files_opened"] = int(progress["dbn_files_opened"]) + len(unit_dbns)
-        progress["dbn_payload_bytes_opened"] = int(progress["dbn_payload_bytes_opened"]) + sum(
-            int(item["size_bytes"]) for item in unit_dbns
-        )
         decoded_records += decoded.decoded_record_count
         progress["decoded_record_count"] = decoded_records
         if decoded_records > int(plan["limits"]["maximum_decoded_records"]):
@@ -765,6 +800,7 @@ def run_authorized_full_build(
     run_lock = root / f"state/locks/causal-observation-{plan['plan_id']}.lock"
     if global_lock.exists() or run_lock.exists():
         raise UnauthorizedOperation("full development build lock is already active")
+    validate_full_build_execution_environment(root, plan)
     context = authorize_full_build_row_read(
         boundary=boundary,
         receipt=receipt,
@@ -781,6 +817,7 @@ def run_authorized_full_build(
         "current_work_unit_state": "NOT_STARTED",
         "dbn_files_opened": 0,
         "dbn_payload_bytes_opened": 0,
+        "dbn_paths_opened": [],
         "decoded_record_count": 0,
         "complete_work_unit_count": 0,
         "complete_partition_count": 0,

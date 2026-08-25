@@ -506,6 +506,7 @@ def _decode_selected_sources(
     windows: Mapping[str, Mapping[str, object]],
     source_contract: Mapping[str, object],
     maximum_decoded_records: int,
+    on_dbn_open: Callable[[Path], None] | None = None,
 ) -> dict[str, DecodedMarket]:
     """Open and decode only after the caller has consumed exact authority."""
 
@@ -556,7 +557,12 @@ def _decode_selected_sources(
         query = _query_contract(root, sidecar_entry)
         target = decoded[market]
         if family == "definition":
-            iterator = iter_definitions(binding, market=market, expected_query_contract=query)
+            iterator = iter_definitions(
+                binding,
+                market=market,
+                expected_query_contract=query,
+                on_open=on_dbn_open,
+            )
             for record in iterator:
                 total_count += 1
                 target["count"] = int(target["count"]) + 1
@@ -565,7 +571,11 @@ def _decode_selected_sources(
         elif family in {"ohlcv_1m", "ohlcv_1s", "ohlcv_1h", "ohlcv_1d"}:
             schema = family.replace("_", "-")
             iterator = iter_bars(
-                binding, market=market, expected_query_contract=query, schema=schema
+                binding,
+                market=market,
+                expected_query_contract=query,
+                schema=schema,
+                on_open=on_dbn_open,
             )
             for record in iterator:
                 total_count += 1
@@ -585,13 +595,23 @@ def _decode_selected_sources(
                 else:
                     target["reference_1d"][record.event_at_ns // DAY_NS * DAY_NS] = record  # type: ignore[index]
         elif family == "status":
-            for record in iter_statuses(binding, market=market, expected_query_contract=query):
+            for record in iter_statuses(
+                binding,
+                market=market,
+                expected_query_contract=query,
+                on_open=on_dbn_open,
+            ):
                 total_count += 1
                 target["count"] = int(target["count"]) + 1
                 if start_ns <= record.ts_event_ns < end_ns:
                     target["support_rows"].append((record.ts_event_ns, family, record.row_sha256))  # type: ignore[union-attr]
         else:
-            for record in iter_statistics(binding, market=market, expected_query_contract=query):
+            for record in iter_statistics(
+                binding,
+                market=market,
+                expected_query_contract=query,
+                on_open=on_dbn_open,
+            ):
                 total_count += 1
                 target["count"] = int(target["count"]) + 1
                 if start_ns <= record.ts_event_ns < end_ns:

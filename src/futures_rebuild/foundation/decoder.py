@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import gc
 import hashlib
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -237,6 +237,7 @@ def _chunks(
     market: str,
     expected_query_contract: Mapping[str, object],
     batch_rows: int,
+    on_open: Callable[[Path], None] | None = None,
 ) -> Iterator[np.ndarray]:
     if (
         isinstance(batch_rows, bool)
@@ -245,6 +246,8 @@ def _chunks(
     ):
         raise ContractError("DBN decode batch size is outside its bounded range")
     path = binding.verify()
+    if on_open is not None:
+        on_open(path)
     store = databento.DBNStore.from_file(path)
     _validate_metadata(
         store,
@@ -374,6 +377,7 @@ def iter_definitions(
     market: str,
     expected_query_contract: Mapping[str, object],
     batch_rows: int = 100_000,
+    on_open: Callable[[Path], None] | None = None,
 ) -> Iterator[ProviderDefinition]:
     ordinal = 0
     index_date_cache: dict[int, str] = {}
@@ -383,6 +387,7 @@ def iter_definitions(
         market=market,
         expected_query_contract=expected_query_contract,
         batch_rows=batch_rows,
+        on_open=on_open,
     ):
         for row in chunk:
             raw_bytes = row.tobytes()
@@ -441,6 +446,7 @@ def iter_bars(
     expected_query_contract: Mapping[str, object],
     schema: str = "ohlcv-1m",
     batch_rows: int = 100_000,
+    on_open: Callable[[Path], None] | None = None,
 ) -> Iterator[ProviderBar]:
     if schema not in {"ohlcv-1d", "ohlcv-1h", "ohlcv-1m", "ohlcv-1s"}:
         raise ContractError("DBN bar decoder schema is unsupported")
@@ -451,6 +457,7 @@ def iter_bars(
         market=market,
         expected_query_contract=expected_query_contract,
         batch_rows=batch_rows,
+        on_open=on_open,
     ):
         for row in chunk:
             raw_bytes = row.tobytes()
@@ -480,6 +487,7 @@ def iter_statuses(
     market: str,
     expected_query_contract: Mapping[str, object],
     batch_rows: int = 100_000,
+    on_open: Callable[[Path], None] | None = None,
 ) -> Iterator[StatusRecordV1]:
     ordinal = 0
     index_date_cache: dict[int, str] = {}
@@ -489,6 +497,7 @@ def iter_statuses(
         market=market,
         expected_query_contract=expected_query_contract,
         batch_rows=batch_rows,
+        on_open=on_open,
     ):
         for row in chunk:
             raw_bytes = row.tobytes()
@@ -535,6 +544,7 @@ def iter_statistics(
     market: str,
     expected_query_contract: Mapping[str, object],
     batch_rows: int = 100_000,
+    on_open: Callable[[Path], None] | None = None,
 ) -> Iterator[StatisticsRecordV1]:
     ordinal = 0
     index_date_cache: dict[int, str] = {}
@@ -544,6 +554,7 @@ def iter_statistics(
         market=market,
         expected_query_contract=expected_query_contract,
         batch_rows=batch_rows,
+        on_open=on_open,
     ):
         for row in chunk:
             raw_bytes = row.tobytes()

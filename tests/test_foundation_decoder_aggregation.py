@@ -135,6 +135,36 @@ def _decode_diagnostic_headers(
     ))
 
 
+def test_open_callback_records_file_before_metadata_validation_failure(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    source = tmp_path / "2010-06-06_2011-01-01.dbn.zst"
+    source.write_bytes(b"synthetic-offline-dbn")
+    store = SimpleNamespace(metadata=SimpleNamespace(dataset="WRONG"))
+    monkeypatch.setattr(
+        decoder.databento,
+        "DBNStore",
+        SimpleNamespace(from_file=lambda path: store),
+    )
+    binding = SimpleNamespace(
+        relative_path="dbn/definition/6A/2010/2010-06-06_2011-01-01.dbn.zst",
+        verify=lambda: source,
+    )
+    opened: list[Path] = []
+    with pytest.raises((ContractError, IntegrityError)):
+        list(
+            decoder._chunks(
+                binding,
+                schema="definition",
+                market="6A",
+                expected_query_contract={},
+                batch_rows=100,
+                on_open=opened.append,
+            )
+        )
+    assert opened == [source]
+
+
 @pytest.mark.parametrize("schema", ("ohlcv-1h", "ohlcv-1d"))
 def test_pinned_aggregate_schemas_decode_offline(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, schema: str
@@ -174,14 +204,14 @@ def test_pinned_aggregate_schema_rejects_metadata_drift(
         )
 
 
-def test_unapproved_ohlcv_schema_remains_unsupported(
+def test_unapproved_chunk_schema_remains_unsupported(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     with pytest.raises(ContractError, match="unsupported"):
         _decode_chunks(
             tmp_path,
             monkeypatch,
-            requested_schema="ohlcv-1s",
+            requested_schema="trades",
         )
 
 

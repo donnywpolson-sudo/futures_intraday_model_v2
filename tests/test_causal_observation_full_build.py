@@ -45,6 +45,7 @@ from futures_rebuild.causal_observation_full_build import (
     MAXIMUM_RUNTIME_SECONDS,
     MINIMUM_MEASURED_WORK_UNIT_COUNT,
     MINIMUM_FREE_AFTER_PEAK_BYTES,
+    PINNED_PYTHON_EXECUTABLE,
     PLAN_SCHEMA,
     REMAINING_WORK_UNIT_ORDER,
     RUNTIME_PROJECTION_SCHEMA,
@@ -55,6 +56,7 @@ from futures_rebuild.causal_observation_full_build import (
     _validate_runtime_projection,
     _work_unit_sort_key,
     run_authorized_full_build,
+    validate_full_build_execution_environment,
     validate_complete_development_boundary_metadata,
 )
 from futures_rebuild.causal_observation_parquet import read_bundle
@@ -163,6 +165,8 @@ def _plan(
             "maximum_workers": 1,
             "priority_markets": list(WORK_UNIT_PRIORITY_MARKETS),
             "remaining_order": REMAINING_WORK_UNIT_ORDER,
+            "python_executable": PINNED_PYTHON_EXECUTABLE,
+            "databento_version": "0.78.0",
         },
         "runtime_projection": {
             "path": runtime_projection_path,
@@ -312,6 +316,7 @@ def test_full_build_bounds_include_bounded_2025_before_or_after_activation() -> 
     assert MINIMUM_MEASURED_WORK_UNIT_COUNT == 64
     assert WORK_UNIT_PRIORITY_MARKETS == ("ES", "GC", "6E", "CL", "NQ")
     assert REMAINING_WORK_UNIT_ORDER == "MARKET_LEXICOGRAPHIC_THEN_YEAR_ASCENDING"
+    assert PINNED_PYTHON_EXECUTABLE == ".venv/Scripts/python.exe"
     admitted_count = source["selection_policy"]["admitted_standard_dbn_file_count"]
     if source["contract_id"] == ACTIVE_SOURCE_CONTRACT_ID:
         assert admitted_count == 3_966
@@ -345,6 +350,27 @@ def test_work_unit_order_prioritizes_exact_markets_then_is_deterministic() -> No
     ]
 
 
+def test_execution_environment_requires_project_venv_and_pinned_decoder(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = _plan()
+    validate_full_build_execution_environment(ROOT, plan)
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            "futures_rebuild.causal_observation_full_build.sys.executable",
+            str(ROOT / "not-the-project-venv.exe"),
+        )
+        with pytest.raises(UnauthorizedOperation, match="pinned project interpreter"):
+            validate_full_build_execution_environment(ROOT, plan)
+    with monkeypatch.context() as scoped:
+        scoped.setattr(
+            "futures_rebuild.causal_observation_full_build.databento.__version__",
+            "0.79.0",
+        )
+        with pytest.raises(UnauthorizedOperation, match="pinned project interpreter"):
+            validate_full_build_execution_environment(ROOT, plan)
+
+
 def test_runtime_projection_is_hash_bound_and_has_completion_margin(
     tmp_path: Path,
 ) -> None:
@@ -361,6 +387,8 @@ def test_runtime_projection_is_hash_bound_and_has_completion_margin(
         "maximum_workers": 1,
         "priority_markets": ["ES", "GC", "6E", "CL", "NQ"],
         "remaining_order": "MARKET_LEXICOGRAPHIC_THEN_YEAR_ASCENDING",
+        "python_executable": ".venv/Scripts/python.exe",
+        "databento_version": "0.78.0",
     }
     projection = json.loads((tmp_path / path).read_text(encoding="utf-8"))
     assert projection["projected_runtime_high_seconds"] < 216_000
@@ -629,6 +657,10 @@ def test_consumed_runtime_failure_marks_partitions_terminal_and_nonreusable(
     )
     monkeypatch.setattr(
         "futures_rebuild.causal_observation_full_build._validate_plan", lambda *_: None
+    )
+    monkeypatch.setattr(
+        "futures_rebuild.causal_observation_full_build.validate_full_build_execution_environment",
+        lambda *_: None,
     )
     monkeypatch.setattr(
         "futures_rebuild.causal_observation_full_build._load_exact_source_entries",
