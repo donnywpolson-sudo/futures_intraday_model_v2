@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pyarrow.parquet as pq
@@ -8,6 +9,7 @@ import pytest
 from futures_rebuild.canonical import sha256_file, sha256_json
 from futures_rebuild.causal_observation_parquet import (
     FILENAMES,
+    _parquet_io_path,
     read_bundle,
     read_table,
     write_bundle,
@@ -161,3 +163,23 @@ def test_truncated_parquet_is_rejected(tmp_path: Path) -> None:
     path.write_bytes(raw[:-8])
     with pytest.raises(IntegrityError, match="unreadable"):
         read_table(path, name="observations")
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows extended-length path contract")
+def test_exact_bounded_2025_layout_supports_265_character_parquet_path(
+    tmp_path: Path,
+) -> None:
+    suffix = Path(
+        "2025/2025-07-01_2025-07-13T220000Z/candidate/observations.parquet"
+    )
+    prefix = tmp_path.resolve()
+    padding_length = 265 - len(str(prefix / suffix)) - 1
+    assert 0 < padding_length < 256
+    directory = prefix / ("x" * padding_length) / suffix.parent
+    path = directory / suffix.name
+    assert len(str(path)) == 265
+
+    write_bundle(directory, tables=_tables())
+
+    assert read_bundle(directory) == _tables()
+    assert Path(_parquet_io_path(path)).is_file()

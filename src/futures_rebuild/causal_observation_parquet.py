@@ -178,12 +178,26 @@ def _decode_physical(name: str, row: Mapping[str, object]) -> dict[str, object]:
     return decoded
 
 
+def _parquet_io_path(path: Path) -> Path | str:
+    """Give Arrow an extended-length absolute path on Windows."""
+
+    if os.name != "nt":
+        return path
+    value = str(path.resolve(strict=False))
+    if value.startswith("\\\\?\\"):
+        return value
+    if value.startswith("\\\\"):
+        return "\\\\?\\UNC\\" + value.lstrip("\\")
+    return "\\\\?\\" + value
+
+
 def _writer(path: Path, schema: pa.Schema) -> pq.ParquetWriter:
-    if path.exists():
+    io_path = Path(_parquet_io_path(path))
+    if io_path.exists():
         raise IntegrityError("immutable causal-observation Parquet output already exists")
-    path.parent.mkdir(parents=True, exist_ok=True)
+    io_path.parent.mkdir(parents=True, exist_ok=True)
     return pq.ParquetWriter(
-        path,
+        _parquet_io_path(path),
         schema,
         compression="zstd",
         compression_level=9,
@@ -205,6 +219,7 @@ def write_table(
 
     if name not in SCHEMAS:
         raise ContractError("unknown causal-observation Parquet table")
+    io_path = Path(_parquet_io_path(path))
     writer = _writer(path, SCHEMAS[name])
     count = 0
     try:
@@ -222,16 +237,16 @@ def write_table(
             count += len(encoded)
     except Exception:
         writer.close()
-        if path.is_file():
-            path.unlink()
+        if io_path.is_file():
+            io_path.unlink()
         raise
     else:
         writer.close()
     if count <= 0:
-        if path.is_file():
-            path.unlink()
+        if io_path.is_file():
+            io_path.unlink()
         raise IntegrityError("causal-observation Parquet table cannot be empty")
-    with path.open("r+b") as handle:
+    with io_path.open("r+b") as handle:
         os.fsync(handle.fileno())
     return count
 
@@ -379,7 +394,7 @@ def write_partitioned_bundle(
 
 def _parquet(path: Path, name: str) -> pq.ParquetFile:
     try:
-        parquet = pq.ParquetFile(path)
+        parquet = pq.ParquetFile(_parquet_io_path(path))
     except (OSError, pa.ArrowException) as exc:
         raise IntegrityError("causal-observation Parquet file is unreadable") from exc
     if not parquet.schema_arrow.equals(SCHEMAS[name], check_metadata=True):
