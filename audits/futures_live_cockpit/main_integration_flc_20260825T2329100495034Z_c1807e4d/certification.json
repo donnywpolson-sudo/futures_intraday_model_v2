@@ -1,0 +1,39 @@
+{
+  "schema_version": "futures_live_cockpit_main_integration_certification/1.0.0",
+  "run_id": "main_integration_flc_20260825T2329100495034Z_c1807e4d",
+  "product_certification_status": "PASS",
+  "overall_historical_audit_status": "BLOCKED",
+  "historical_audit_limitation": "Provider contact occurred during the earlier audit and the original SQLite bytes cannot be reconstructed; the user-approved exact logical rollback is complete.",
+  "origin_main_basis": "c1807e4db1bcbed51f4be7f293e89d7460d15c0e",
+  "integration_merge_commit": "d32863fb3851d4a7733d6724e1c6f415cccf6085",
+  "source_remediation_commit": "00a3e2e9f910292fb77f0a63a5f8d49f4cbe7668",
+  "audit_certification_commit": "0e74840766c78f6f9fde612d12cdf33659bae67f",
+  "closure_finalization_commit": "40bcfd93196af2386e0ebde00ea6fd8818205440",
+  "integration_method": "no-fast-forward merge preserving certified commit identities",
+  "cockpit_tests": {
+    "passed": 190,
+    "failed": 0,
+    "skipped": 0,
+    "deselected": 69,
+    "duration_seconds": 15.50
+  },
+  "cache": {
+    "backup_present": true,
+    "backup_sha256": "75e2463c8b5398a6fb76f5ce70c7a32833a472e65f11dda5f832f1599d92186a",
+    "current_sha256": "ecb7b8f2acec6cebd6e9617bd5d9c9f6d3bcd7f538b2b5d75f6e84b1b4c13480",
+    "quick_check": "ok",
+    "binding_rows": 0,
+    "bar_rows": 201655,
+    "coverage_rows": 43,
+    "logical_rollback_complete": true,
+    "original_byte_identity_restored": false
+  },
+  "canonical_executable": {
+    "path": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2\\FuturesLiveCockpit\\FuturesLiveCockpit.exe",
+    "sha256": "76b1daddb6027c7a2d2d971e2603300ce489bc42aa1e68948a759d6de7776ed1",
+    "materialized_gui_executable_count": 1
+  },
+  "observation_only": true,
+  "certified_source_or_foundation_modified": false,
+  "unrelated_user_work_discarded": false
+}
