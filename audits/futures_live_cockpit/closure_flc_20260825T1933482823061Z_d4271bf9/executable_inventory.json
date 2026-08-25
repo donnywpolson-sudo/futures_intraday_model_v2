@@ -1,0 +1,11 @@
+{
+  "scan_scope": "current user profile plus standard install roots",
+  "materialized_gui_executable_count": 1,
+  "canonical": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2\\FuturesLiveCockpit\\FuturesLiveCockpit.exe",
+  "canonical_sha256": "76b1daddb6027c7a2d2d971e2603300ce489bc42aa1e68948a759d6de7776ed1",
+  "alternate_executable_count": 0,
+  "cockpit_named_archive_count": 0,
+  "zip_embedded_cockpit_executable_hits": 0,
+  "zip_files_scanned": 164,
+  "unreadable_unrelated_zip_count": 10
+}

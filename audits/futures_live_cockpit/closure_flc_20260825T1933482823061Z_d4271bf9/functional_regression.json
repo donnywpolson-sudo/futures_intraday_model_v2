@@ -1,0 +1,11 @@
+{
+  "status": "PASS_WITH_PREEXISTING_BROADER_TEST_DEBT",
+  "legacy_cockpit_lane": {"passed": 190, "failed": 0, "skipped": 0, "deselected": 69},
+  "broader_current_lane": {"passed": 48, "failed": 2, "deselected": 259},
+  "broader_failures_reproduced_at_basis": true,
+  "broader_failure_expectations": [
+    "MFF simulated-account UI and manual ticket",
+    "execution configuration embedded in the PyInstaller spec"
+  ],
+  "decision": "Not implemented because both expectations contradict the controlling observation-only cockpit contract."
+}

@@ -1,0 +1,25 @@
+{
+  "incident": {
+    "provider_contact_observed": true,
+    "prelaunch_sha256": "f5ce584f0bd51ab5bdcc35892ca98464742c5e9dab6ab6d5b5b2a46ea52af26c",
+    "postlaunch_sha256": "75e2463c8b5398a6fb76f5ce70c7a32833a472e65f11dda5f832f1599d92186a",
+    "confirmed_inserted_binding_rows": 41
+  },
+  "approved_rollback": {
+    "method": "delete the exact 41 incident bindings in a candidate and atomically replace the live database",
+    "completed": true,
+    "current_sha256": "ecb7b8f2acec6cebd6e9617bd5d9c9f6d3bcd7f538b2b5d75f6e84b1b4c13480",
+    "size_bytes": 41631744,
+    "quick_check": "ok",
+    "binding_count": 0,
+    "bars_count": 201655,
+    "bars_logical_digest": "2a62079d7de4d5a16c3c88e6a6d807785ee401f2ff2600a59be28b98b37eb5c6",
+    "history_coverage_count": 43,
+    "history_coverage_logical_digest": "b03bc9b4dc7d49bd981f0ee326411f6538e547d15a8ed94cfae93e25c73bce36",
+    "exact_prelaunch_bytes_recovered": false
+  },
+  "backup": {
+    "path": "C:\\Users\\donny\\AppData\\Local\\futures_intraday_model_v2\\live_cockpit\\bars.sqlite3.incident-backup-75e2463c",
+    "sha256": "75e2463c8b5398a6fb76f5ce70c7a32833a472e65f11dda5f832f1599d92186a"
+  }
+}

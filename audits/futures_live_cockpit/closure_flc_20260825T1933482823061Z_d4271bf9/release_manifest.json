@@ -1,0 +1,11 @@
+{
+  "release_state": "INACTIVE_REPOSITORY_PACKAGE",
+  "branch": "codex/futures-live-cockpit-remediation-closure-20260825",
+  "source_commit": "00a3e2e9f910292fb77f0a63a5f8d49f4cbe7668",
+  "canonical_executable": "FuturesLiveCockpit/FuturesLiveCockpit.exe",
+  "canonical_executable_sha256": "76b1daddb6027c7a2d2d971e2603300ce489bc42aa1e68948a759d6de7776ed1",
+  "observation_only": true,
+  "installed": false,
+  "activated": false,
+  "published_release": false
+}

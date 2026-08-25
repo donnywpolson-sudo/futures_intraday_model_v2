@@ -1,0 +1,6 @@
+run,copy_size,initialization_ms,binding_query_ms,binding_count,result
+1,41631744,80.294,0.079,0,PASS
+2,41631744,72.444,0.072,0,PASS
+3,41631744,75.035,0.073,0,PASS
+4,41631744,71.129,0.074,0,PASS
+5,41631744,95.944,0.09,0,PASS
