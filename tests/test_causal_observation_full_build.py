@@ -41,12 +41,16 @@ from futures_rebuild.causal_observation_full_build import (
     MAXIMUM_OUTPUT_BYTES,
     MAXIMUM_PARTITION_COUNT,
     MAXIMUM_PEAK_ADDITIONAL_BYTES,
+    MAXIMUM_PROJECTED_RUNTIME_HIGH_SECONDS,
     MAXIMUM_RUNTIME_SECONDS,
+    MINIMUM_MEASURED_WORK_UNIT_COUNT,
     MINIMUM_FREE_AFTER_PEAK_BYTES,
     PLAN_SCHEMA,
+    RUNTIME_PROJECTION_SCHEMA,
     STANDARD_ROOT_COUNT,
     _month_windows,
     _slice_decoded,
+    _validate_runtime_projection,
     run_authorized_full_build,
     validate_complete_development_boundary_metadata,
 )
@@ -71,7 +75,33 @@ def _active_source() -> dict[str, object]:
     return value
 
 
-def _plan(*, inventory_path: str = "inventory.json", inventory_sha256: str = H) -> dict[str, object]:
+def _runtime_projection(tmp_path: Path) -> tuple[str, str, str]:
+    core: dict[str, object] = {
+        "schema_version": RUNTIME_PROJECTION_SCHEMA,
+        "status": "PASS_RUNTIME_CEILING_SIZED_FROM_INTERRUPTED_V6",
+        "source_receipt_id": "708733f6638be78f266bf6615731f250e9a410335e67a91324b9ee6f46f60689",
+        "total_work_unit_count": EXPECTED_WORK_UNIT_COUNT,
+        "completed_work_unit_count": MINIMUM_MEASURED_WORK_UNIT_COUNT,
+        "observed_elapsed_seconds": 15_600,
+        "projected_runtime_seconds": 148_444,
+        "projected_runtime_high_seconds": MAXIMUM_PROJECTED_RUNTIME_HIGH_SECONDS,
+        "successor_runtime_ceiling_seconds": MAXIMUM_RUNTIME_SECONDS,
+        "partial_output_reuse_allowed": False,
+    }
+    payload = {**core, "projection_id": sha256_json(core)}
+    path = tmp_path / "runtime_projection.json"
+    path.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+    return path.name, sha256_file(path), str(payload["projection_id"])
+
+
+def _plan(
+    *,
+    inventory_path: str = "inventory.json",
+    inventory_sha256: str = H,
+    runtime_projection_path: str = "runtime_projection.json",
+    runtime_projection_sha256: str = H,
+    runtime_projection_id: str = H,
+) -> dict[str, object]:
     active = _active_source()
     core: dict[str, object] = {
         "schema_version": PLAN_SCHEMA,
@@ -128,6 +158,11 @@ def _plan(*, inventory_path: str = "inventory.json", inventory_sha256: str = H) 
             "maximum_retries": 0,
             "maximum_runtime_seconds": MAXIMUM_RUNTIME_SECONDS,
             "maximum_workers": 1,
+        },
+        "runtime_projection": {
+            "path": runtime_projection_path,
+            "sha256": runtime_projection_sha256,
+            "projection_id": runtime_projection_id,
         },
         "storage": {
             "required_free_after_peak_bytes": MINIMUM_FREE_AFTER_PEAK_BYTES,
@@ -267,6 +302,9 @@ def test_full_build_bounds_include_bounded_2025_before_or_after_activation() -> 
     assert EXPECTED_WORK_UNIT_COUNT == 609
     assert MAXIMUM_OUTPUT_BYTES == 18_000_000_000
     assert MAXIMUM_PEAK_ADDITIONAL_BYTES == 20_000_000_000
+    assert MAXIMUM_RUNTIME_SECONDS == 216_000
+    assert MAXIMUM_PROJECTED_RUNTIME_HIGH_SECONDS == 181_000
+    assert MINIMUM_MEASURED_WORK_UNIT_COUNT == 64
     admitted_count = source["selection_policy"]["admitted_standard_dbn_file_count"]
     if source["contract_id"] == ACTIVE_SOURCE_CONTRACT_ID:
         assert admitted_count == 3_966
@@ -275,13 +313,57 @@ def test_full_build_bounds_include_bounded_2025_before_or_after_activation() -> 
         assert admitted_count == EXPECTED_DBN_COUNT == 4_253
 
 
+def test_runtime_projection_is_hash_bound_and_has_completion_margin(
+    tmp_path: Path,
+) -> None:
+    path, projection_sha, projection_id = _runtime_projection(tmp_path)
+    plan = _plan(
+        runtime_projection_path=path,
+        runtime_projection_sha256=projection_sha,
+        runtime_projection_id=projection_id,
+    )
+    assert plan["execution"] == {
+        "maximum_attempts": 1,
+        "maximum_retries": 0,
+        "maximum_runtime_seconds": 216_000,
+        "maximum_workers": 1,
+    }
+    projection = json.loads((tmp_path / path).read_text(encoding="utf-8"))
+    assert projection["projected_runtime_high_seconds"] < 216_000
+    projection["projected_runtime_high_seconds"] = 216_000
+    (tmp_path / path).write_text(
+        json.dumps(projection, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    with pytest.raises(IntegrityError, match="projection differs"):
+        _validate_runtime_projection(tmp_path, plan)
+
+    core = {key: value for key, value in projection.items() if key != "projection_id"}
+    core["projected_runtime_high_seconds"] = MAXIMUM_RUNTIME_SECONDS
+    over_limit = {**core, "projection_id": sha256_json(core)}
+    (tmp_path / path).write_text(
+        json.dumps(over_limit, sort_keys=True) + "\n", encoding="utf-8"
+    )
+    plan["runtime_projection"] = {
+        "path": path,
+        "sha256": sha256_file(tmp_path / path),
+        "projection_id": over_limit["projection_id"],
+    }
+    with pytest.raises(UnauthorizedOperation, match="not exact or sufficient"):
+        _validate_runtime_projection(tmp_path, plan)
+
+
 def test_full_build_operation_is_nonpublic_and_receipt_is_one_use(tmp_path: Path) -> None:
     configs = tmp_path / "configs"
     configs.mkdir()
     (configs / "source_contract.json").write_bytes(
         (ROOT / "configs/source_contract.json").read_bytes()
     )
-    plan = _plan()
+    projection_path, projection_sha, projection_id = _runtime_projection(tmp_path)
+    plan = _plan(
+        runtime_projection_path=projection_path,
+        runtime_projection_sha256=projection_sha,
+        runtime_projection_id=projection_id,
+    )
     plan_path = tmp_path / "plan.json"
     plan_path.write_text(json.dumps(plan, sort_keys=True) + "\n", encoding="utf-8")
     plan_sha = sha256_file(plan_path)
@@ -425,7 +507,12 @@ def test_slice_keeps_only_partition_rows_and_aggregated_references() -> None:
 def test_output_and_lock_fail_before_authorization_or_payload_access(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    plan = _plan()
+    projection_path, projection_sha, projection_id = _runtime_projection(tmp_path)
+    plan = _plan(
+        runtime_projection_path=projection_path,
+        runtime_projection_sha256=projection_sha,
+        runtime_projection_id=projection_id,
+    )
     plan_path = tmp_path / "plan.json"
     plan_path.write_text(json.dumps(plan, sort_keys=True) + "\n", encoding="utf-8")
     configs = tmp_path / "configs"
@@ -468,10 +555,18 @@ def test_output_and_lock_fail_before_authorization_or_payload_access(
     assert calls == []
 
 
+@pytest.mark.parametrize(
+    "failure", (RuntimeError("synthetic terminal failure"), KeyboardInterrupt())
+)
 def test_consumed_runtime_failure_marks_partitions_terminal_and_nonreusable(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, failure: BaseException
 ) -> None:
-    plan = _plan()
+    projection_path, projection_sha, projection_id = _runtime_projection(tmp_path)
+    plan = _plan(
+        runtime_projection_path=projection_path,
+        runtime_projection_sha256=projection_sha,
+        runtime_projection_id=projection_id,
+    )
     plan_path = tmp_path / "plan.json"
     plan_path.write_text(json.dumps(plan, sort_keys=True) + "\n", encoding="utf-8")
     configs = tmp_path / "configs"
@@ -513,9 +608,9 @@ def test_consumed_runtime_failure_marks_partitions_terminal_and_nonreusable(
     )
     monkeypatch.setattr(
         "futures_rebuild.causal_observation_full_build._execute",
-        lambda **_: (_ for _ in ()).throw(RuntimeError("synthetic terminal failure")),
+        lambda **_: (_ for _ in ()).throw(failure),
     )
-    with pytest.raises(RuntimeError, match="terminal failure"):
+    with pytest.raises(type(failure)):
         run_authorized_full_build(
             repository_root=tmp_path,
             receipt=object(),  # type: ignore[arg-type]
@@ -527,6 +622,7 @@ def test_consumed_runtime_failure_marks_partitions_terminal_and_nonreusable(
     assert failure["receipt_reuse_authorized"] is False
     assert failure["partial_partition_reuse_authorized"] is False
     assert failure["required_successor"] == "NEW_PLAN_NEW_RECEIPT_NEW_OUTPUT_ROOT"
+    assert failure["error_type"] in {"RuntimeError", "KeyboardInterrupt"}
     with pytest.raises(IntegrityError, match="already exists"):
         run_authorized_full_build(
             repository_root=tmp_path,

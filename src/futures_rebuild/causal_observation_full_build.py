@@ -50,9 +50,10 @@ from .foundation.economics import EconomicsRuleBook
 from .research_gateway_policy import CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
 
 
-PLAN_SCHEMA = "development_causal_observation_full_build_plan/1.2.0"
+PLAN_SCHEMA = "development_causal_observation_full_build_plan/1.3.0"
 RESULT_SCHEMA = "development_causal_observation_full_build_result/1.0.0"
 FAILURE_SCHEMA = "development_causal_observation_full_build_failure/1.1.0"
+RUNTIME_PROJECTION_SCHEMA = "causal_full_build_runtime_projection/1.0.0"
 EXPECTED_ENTRY_COUNT = 8_506
 EXPECTED_DBN_COUNT = 4_253
 EXPECTED_SIDECAR_COUNT = 4_253
@@ -64,7 +65,9 @@ MAXIMUM_PARTITION_COUNT = 6_963
 MAXIMUM_OUTPUT_BYTES = 18_000_000_000
 MAXIMUM_PEAK_ADDITIONAL_BYTES = 20_000_000_000
 MINIMUM_FREE_AFTER_PEAK_BYTES = 100 * 1024**3
-MAXIMUM_RUNTIME_SECONDS = 86_400
+MAXIMUM_RUNTIME_SECONDS = 216_000
+MAXIMUM_PROJECTED_RUNTIME_HIGH_SECONDS = 181_000
+MINIMUM_MEASURED_WORK_UNIT_COUNT = 64
 STANDARD_ROOT_COUNT = 41
 DEFERRED_MICRO_COUNT = 17
 DEVELOPMENT_END_EXCLUSIVE = "2025-07-13T22:00:00Z"
@@ -123,6 +126,53 @@ def _write_create_only(path: Path, payload: Mapping[str, object]) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
+
+
+def _validate_runtime_projection(
+    root: Path, plan: Mapping[str, object]
+) -> dict[str, object]:
+    binding = plan.get("runtime_projection")
+    if not isinstance(binding, Mapping):
+        raise UnauthorizedOperation("full development runtime projection is absent")
+    projection_path = _contained(root, binding.get("path"))
+    if sha256_file(projection_path) != binding.get("sha256"):
+        raise IntegrityError("full development runtime projection differs")
+    projection = _json(projection_path)
+    projection_id = projection.get("projection_id")
+    if (
+        projection.get("schema_version") != RUNTIME_PROJECTION_SCHEMA
+        or projection.get("status") != "PASS_RUNTIME_CEILING_SIZED_FROM_INTERRUPTED_V6"
+        or projection.get("source_receipt_id")
+        != "708733f6638be78f266bf6615731f250e9a410335e67a91324b9ee6f46f60689"
+        or projection.get("total_work_unit_count") != EXPECTED_WORK_UNIT_COUNT
+        or type(projection.get("completed_work_unit_count")) is not int
+        or int(projection["completed_work_unit_count"])
+        < MINIMUM_MEASURED_WORK_UNIT_COUNT
+        or type(projection.get("observed_elapsed_seconds")) is not int
+        or int(projection["observed_elapsed_seconds"]) <= 0
+        or type(projection.get("projected_runtime_seconds")) is not int
+        or type(projection.get("projected_runtime_high_seconds")) is not int
+        or int(projection["projected_runtime_seconds"])
+        > int(projection["projected_runtime_high_seconds"])
+        or int(projection["projected_runtime_high_seconds"])
+        > MAXIMUM_PROJECTED_RUNTIME_HIGH_SECONDS
+        or int(projection["projected_runtime_high_seconds"])
+        >= MAXIMUM_RUNTIME_SECONDS
+        or projection.get("successor_runtime_ceiling_seconds")
+        != MAXIMUM_RUNTIME_SECONDS
+        or projection.get("partial_output_reuse_allowed") is not False
+        or type(projection_id) is not str
+        or len(projection_id) != 64
+        or sha256_json(
+            {key: value for key, value in projection.items() if key != "projection_id"}
+        )
+        != projection_id
+        or binding.get("projection_id") != projection_id
+    ):
+        raise UnauthorizedOperation(
+            "full development runtime projection is not exact or sufficient"
+        )
+    return projection
 
 
 def _validate_plan(root: Path, plan: Mapping[str, object]) -> None:
@@ -210,6 +260,7 @@ def _validate_plan(root: Path, plan: Mapping[str, object]) -> None:
         raise ContractError("full development build plan ID is invalid")
     if sha256_json({key: value for key, value in plan.items() if key != "plan_id"}) != plan_id:
         raise IntegrityError("full development build plan identity differs")
+    _validate_runtime_projection(root, plan)
     inventory = _contained(root, source.get("inventory_path"))
     if sha256_file(inventory) != source.get("inventory_sha256"):
         raise IntegrityError("full development source inventory differs")
@@ -526,6 +577,7 @@ def _execute(
     partitions: list[dict[str, object]] = []
     decoded_records = 0
     output_bytes = 0
+    complete_work_units = 0
 
     for market, year, unit_entries in _work_units(selected):
         if time.monotonic() - started > MAXIMUM_RUNTIME_SECONDS:
@@ -539,6 +591,7 @@ def _execute(
                 "current_work_unit_dbn_count": len(unit_dbns),
                 "current_work_unit_dbn_bytes": sum(int(item["size_bytes"]) for item in unit_dbns),
                 "current_work_unit_decode_state": "STARTED",
+                "current_work_unit_state": "STARTED",
             }
         )
         decoded = _decode_selected_sources(
@@ -616,6 +669,9 @@ def _execute(
                 raise UnauthorizedOperation("full development partition ceiling exceeded")
             if output_bytes > MAXIMUM_OUTPUT_BYTES:
                 raise UnauthorizedOperation("full development output byte ceiling exceeded")
+        complete_work_units += 1
+        progress["complete_work_unit_count"] = complete_work_units
+        progress["current_work_unit_state"] = "COMPLETE"
     core: dict[str, object] = {
         "schema_version": RESULT_SCHEMA,
         "status": "PASS_AUTHORIZED_FULL_DEVELOPMENT_CANDIDATE_NOT_PUBLISHED_NOT_ACTIVE",
@@ -629,6 +685,7 @@ def _execute(
         "dbn_file_count": EXPECTED_DBN_COUNT,
         "payload_bytes_opened_maximum": EXPECTED_PAYLOAD_BYTES,
         "decoded_record_count": decoded_records,
+        "complete_work_unit_count": complete_work_units,
         "partition_count": len(partitions),
         "output_bytes": output_bytes,
         "partition_inventory_sha256": sha256_json(partitions),
@@ -708,9 +765,11 @@ def run_authorized_full_build(
         "current_work_unit_dbn_count": 0,
         "current_work_unit_dbn_bytes": 0,
         "current_work_unit_decode_state": "NOT_STARTED",
+        "current_work_unit_state": "NOT_STARTED",
         "dbn_files_opened": 0,
         "dbn_payload_bytes_opened": 0,
         "decoded_record_count": 0,
+        "complete_work_unit_count": 0,
         "complete_partition_count": 0,
         "output_bytes": 0,
     }
@@ -727,7 +786,7 @@ def run_authorized_full_build(
                 progress=progress,
                 started=started,
             )
-    except Exception as exc:
+    except (Exception, KeyboardInterrupt) as exc:
         failure = {
             "schema_version": FAILURE_SCHEMA,
             "status": "FAILED_AUTHORIZATION_CONSUMED_NO_AUTOMATIC_RETRY",

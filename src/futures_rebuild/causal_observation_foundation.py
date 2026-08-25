@@ -460,17 +460,19 @@ def required_full_build_scope(
     limits = plan.get("limits")
     authority = plan.get("authority")
     execution = plan.get("execution")
+    runtime_projection = plan.get("runtime_projection")
     storage = plan.get("storage")
     economics = plan.get("economics")
     if (
         plan.get("schema_version")
-        != "development_causal_observation_full_build_plan/1.2.0"
+        != "development_causal_observation_full_build_plan/1.3.0"
         or plan.get("operation") != CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
         or plan.get("causal_contract_id") != CAUSAL_OBSERVATION_CONTRACT_ID
         or not isinstance(source, Mapping)
         or not isinstance(limits, Mapping)
         or not isinstance(authority, Mapping)
         or not isinstance(execution, Mapping)
+        or not isinstance(runtime_projection, Mapping)
         or not isinstance(storage, Mapping)
         or not isinstance(economics, Mapping)
         or source.get("source_contract_id") != source_contract_id
@@ -484,7 +486,7 @@ def required_full_build_scope(
         or execution.get("maximum_workers") != 1
         or execution.get("maximum_attempts") != 1
         or execution.get("maximum_retries") != 0
-        or execution.get("maximum_runtime_seconds") != 86_400
+        or execution.get("maximum_runtime_seconds") != 216_000
         or storage.get("publication_authorized") is not False
         or storage.get("activation_authorized") is not False
         or economics
@@ -542,7 +544,13 @@ def required_full_build_scope(
                 nonnegative=True,
             )
         ),
-        "maximum_runtime_seconds": "86400",
+        "runtime_projection_id": _digest(
+            runtime_projection.get("projection_id"), "runtime_projection_id"
+        ),
+        "runtime_projection_sha256": _digest(
+            runtime_projection.get("sha256"), "runtime_projection_sha256"
+        ),
+        "maximum_runtime_seconds": "216000",
         "maximum_workers": "1",
         "maximum_attempts": "1",
         "maximum_retries": "0",
