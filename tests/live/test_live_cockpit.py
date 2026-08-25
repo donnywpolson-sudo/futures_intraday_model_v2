@@ -2847,11 +2847,10 @@ def test_self_check_is_offline_and_verifies_assets_and_webview(tmp_path: Path) -
 
 
 def test_cli_self_check_is_provider_free_and_passes(tmp_path: Path) -> None:
-    executable = Path(sys.executable).with_name("futures-live-cockpit.exe")
     env = dict(os.environ)
     env["LOCALAPPDATA"] = str(tmp_path / "localappdata")
     result = subprocess.run(
-        [str(executable), "--self-check"],
+        [sys.executable, "-m", "futures_rebuild.live_cockpit", "--self-check"],
         cwd=Path.cwd(),
         env=env,
         check=False,
