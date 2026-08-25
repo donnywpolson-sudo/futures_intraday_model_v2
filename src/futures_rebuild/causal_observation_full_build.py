@@ -50,7 +50,7 @@ from .foundation.economics import EconomicsRuleBook
 from .research_gateway_policy import CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
 
 
-PLAN_SCHEMA = "development_causal_observation_full_build_plan/1.3.0"
+PLAN_SCHEMA = "development_causal_observation_full_build_plan/1.4.0"
 RESULT_SCHEMA = "development_causal_observation_full_build_result/1.0.0"
 FAILURE_SCHEMA = "development_causal_observation_full_build_failure/1.1.0"
 RUNTIME_PROJECTION_SCHEMA = "causal_full_build_runtime_projection/1.0.0"
@@ -68,6 +68,8 @@ MINIMUM_FREE_AFTER_PEAK_BYTES = 100 * 1024**3
 MAXIMUM_RUNTIME_SECONDS = 216_000
 MAXIMUM_PROJECTED_RUNTIME_HIGH_SECONDS = 181_000
 MINIMUM_MEASURED_WORK_UNIT_COUNT = 64
+WORK_UNIT_PRIORITY_MARKETS = ("ES", "GC", "6E", "CL", "NQ")
+REMAINING_WORK_UNIT_ORDER = "MARKET_LEXICOGRAPHIC_THEN_YEAR_ASCENDING"
 STANDARD_ROOT_COUNT = 41
 DEFERRED_MICRO_COUNT = 17
 DEVELOPMENT_END_EXCLUSIVE = "2025-07-13T22:00:00Z"
@@ -243,6 +245,8 @@ def _validate_plan(root: Path, plan: Mapping[str, object]) -> None:
             "maximum_retries": 0,
             "maximum_runtime_seconds": MAXIMUM_RUNTIME_SECONDS,
             "maximum_workers": 1,
+            "priority_markets": list(WORK_UNIT_PRIORITY_MARKETS),
+            "remaining_order": REMAINING_WORK_UNIT_ORDER,
         }
         or storage.get("required_free_after_peak_bytes")
         != MINIMUM_FREE_AFTER_PEAK_BYTES
@@ -436,6 +440,15 @@ def _market_windows(
     return dict(sorted(windows.items()))
 
 
+def _work_unit_sort_key(key: tuple[str, int]) -> tuple[int, str, int]:
+    market, year = key
+    try:
+        priority = WORK_UNIT_PRIORITY_MARKETS.index(market)
+    except ValueError:
+        priority = len(WORK_UNIT_PRIORITY_MARKETS)
+    return priority, "" if priority < len(WORK_UNIT_PRIORITY_MARKETS) else market, year
+
+
 def _work_units(
     selected: Sequence[Mapping[str, object]],
 ) -> tuple[tuple[str, int, tuple[dict[str, object], ...]], ...]:
@@ -447,7 +460,7 @@ def _work_units(
         if item["kind"] == "DBN":
             families[key].add(str(item["family"]))
     units: list[tuple[str, int, tuple[dict[str, object], ...]]] = []
-    for key in sorted(grouped):
+    for key in sorted(grouped, key=_work_unit_sort_key):
         if "ohlcv_1m" not in families[key]:
             continue
         if "definition" not in families[key]:

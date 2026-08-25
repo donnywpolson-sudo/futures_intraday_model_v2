@@ -465,7 +465,7 @@ def required_full_build_scope(
     economics = plan.get("economics")
     if (
         plan.get("schema_version")
-        != "development_causal_observation_full_build_plan/1.3.0"
+        != "development_causal_observation_full_build_plan/1.4.0"
         or plan.get("operation") != CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
         or plan.get("causal_contract_id") != CAUSAL_OBSERVATION_CONTRACT_ID
         or not isinstance(source, Mapping)
@@ -487,6 +487,9 @@ def required_full_build_scope(
         or execution.get("maximum_attempts") != 1
         or execution.get("maximum_retries") != 0
         or execution.get("maximum_runtime_seconds") != 216_000
+        or execution.get("priority_markets") != ["ES", "GC", "6E", "CL", "NQ"]
+        or execution.get("remaining_order")
+        != "MARKET_LEXICOGRAPHIC_THEN_YEAR_ASCENDING"
         or storage.get("publication_authorized") is not False
         or storage.get("activation_authorized") is not False
         or economics
@@ -551,6 +554,8 @@ def required_full_build_scope(
             runtime_projection.get("sha256"), "runtime_projection_sha256"
         ),
         "maximum_runtime_seconds": "216000",
+        "work_unit_priority_markets": "ES,GC,6E,CL,NQ",
+        "remaining_work_unit_order": "MARKET_LEXICOGRAPHIC_THEN_YEAR_ASCENDING",
         "maximum_workers": "1",
         "maximum_attempts": "1",
         "maximum_retries": "0",

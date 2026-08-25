@@ -46,11 +46,14 @@ from futures_rebuild.causal_observation_full_build import (
     MINIMUM_MEASURED_WORK_UNIT_COUNT,
     MINIMUM_FREE_AFTER_PEAK_BYTES,
     PLAN_SCHEMA,
+    REMAINING_WORK_UNIT_ORDER,
     RUNTIME_PROJECTION_SCHEMA,
     STANDARD_ROOT_COUNT,
+    WORK_UNIT_PRIORITY_MARKETS,
     _month_windows,
     _slice_decoded,
     _validate_runtime_projection,
+    _work_unit_sort_key,
     run_authorized_full_build,
     validate_complete_development_boundary_metadata,
 )
@@ -158,6 +161,8 @@ def _plan(
             "maximum_retries": 0,
             "maximum_runtime_seconds": MAXIMUM_RUNTIME_SECONDS,
             "maximum_workers": 1,
+            "priority_markets": list(WORK_UNIT_PRIORITY_MARKETS),
+            "remaining_order": REMAINING_WORK_UNIT_ORDER,
         },
         "runtime_projection": {
             "path": runtime_projection_path,
@@ -305,12 +310,39 @@ def test_full_build_bounds_include_bounded_2025_before_or_after_activation() -> 
     assert MAXIMUM_RUNTIME_SECONDS == 216_000
     assert MAXIMUM_PROJECTED_RUNTIME_HIGH_SECONDS == 181_000
     assert MINIMUM_MEASURED_WORK_UNIT_COUNT == 64
+    assert WORK_UNIT_PRIORITY_MARKETS == ("ES", "GC", "6E", "CL", "NQ")
+    assert REMAINING_WORK_UNIT_ORDER == "MARKET_LEXICOGRAPHIC_THEN_YEAR_ASCENDING"
     admitted_count = source["selection_policy"]["admitted_standard_dbn_file_count"]
     if source["contract_id"] == ACTIVE_SOURCE_CONTRACT_ID:
         assert admitted_count == 3_966
         assert admitted_count != EXPECTED_DBN_COUNT
     else:
         assert admitted_count == EXPECTED_DBN_COUNT == 4_253
+
+
+def test_work_unit_order_prioritizes_exact_markets_then_is_deterministic() -> None:
+    unordered = [
+        ("ZN", 2011),
+        ("NQ", 2010),
+        ("6A", 2010),
+        ("CL", 2010),
+        ("6E", 2010),
+        ("GC", 2010),
+        ("ES", 2025),
+        ("ES", 2010),
+        ("ZN", 2010),
+    ]
+    assert sorted(unordered, key=_work_unit_sort_key) == [
+        ("ES", 2010),
+        ("ES", 2025),
+        ("GC", 2010),
+        ("6E", 2010),
+        ("CL", 2010),
+        ("NQ", 2010),
+        ("6A", 2010),
+        ("ZN", 2010),
+        ("ZN", 2011),
+    ]
 
 
 def test_runtime_projection_is_hash_bound_and_has_completion_margin(
@@ -327,6 +359,8 @@ def test_runtime_projection_is_hash_bound_and_has_completion_margin(
         "maximum_retries": 0,
         "maximum_runtime_seconds": 216_000,
         "maximum_workers": 1,
+        "priority_markets": ["ES", "GC", "6E", "CL", "NQ"],
+        "remaining_order": "MARKET_LEXICOGRAPHIC_THEN_YEAR_ASCENDING",
     }
     projection = json.loads((tmp_path / path).read_text(encoding="utf-8"))
     assert projection["projected_runtime_high_seconds"] < 216_000
@@ -368,6 +402,24 @@ def test_full_build_operation_is_nonpublic_and_receipt_is_one_use(tmp_path: Path
     plan_path.write_text(json.dumps(plan, sort_keys=True) + "\n", encoding="utf-8")
     plan_sha = sha256_file(plan_path)
     receipt = _receipt(tmp_path, plan, plan_sha)
+    receipt_scope = dict(receipt.scope)
+    assert receipt_scope["work_unit_priority_markets"] == "ES,GC,6E,CL,NQ"
+    assert (
+        receipt_scope["remaining_work_unit_order"]
+        == "MARKET_LEXICOGRAPHIC_THEN_YEAR_ASCENDING"
+    )
+    altered = json.loads(json.dumps(plan))
+    altered["execution"]["priority_markets"] = ["ES", "6E", "GC", "CL", "NQ"]
+    altered["plan_id"] = sha256_json(
+        {key: value for key, value in altered.items() if key != "plan_id"}
+    )
+    with pytest.raises(UnauthorizedOperation, match="authority is invalid"):
+        required_full_build_scope(
+            plan=altered,
+            plan_sha256=plan_sha,
+            source_contract_id=str(altered["source"]["source_contract_id"]),
+            canonical_release_id=str(altered["source"]["canonical_release_id"]),
+        )
     context = authorize_full_build_row_read(
         boundary=RepoBoundary(tmp_path),
         receipt=receipt,
