@@ -31,8 +31,10 @@ if (-not [string]::Equals(
 $previousDistutilsMode = $env:SETUPTOOLS_USE_DISTUTILS
 $backupCreated = $false
 $candidateBuild = [bool]$CandidatePath
+$resultPath = $publishPath
 if ($candidateBuild) {
     $CandidatePath = [IO.Path]::GetFullPath((Join-Path $repoRoot $CandidatePath))
+    $resultPath = $CandidatePath
     $repoPrefix = $repoRoot.TrimEnd('\') + '\'
     if (-not $CandidatePath.StartsWith($repoPrefix, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'CandidatePath must stay inside the repository.'
@@ -105,6 +107,21 @@ try {
         Remove-Item -LiteralPath $backupPath -Recurse -Force
         $backupCreated = $false
     }
+
+    $resultExe = Join-Path $resultPath 'FuturesLiveCockpit.exe'
+    if (-not (Test-Path -LiteralPath $resultExe -PathType Leaf)) {
+        throw "Published cockpit executable is absent: $resultExe"
+    }
+    [ordered]@{
+        status = if ($candidateBuild) { 'CANDIDATE_BUILT' } else { 'CANONICAL_PACKAGE_PUBLISHED' }
+        package_path = $resultPath
+        executable_path = $resultExe
+        executable_sha256 = (
+            Get-FileHash -Algorithm SHA256 -LiteralPath $resultExe
+        ).Hash.ToLowerInvariant()
+        local_appdata_installation_changed = $false
+        shortcut_changes = 0
+    } | ConvertTo-Json -Compress
 }
 finally {
     $env:SETUPTOOLS_USE_DISTUTILS = $previousDistutilsMode

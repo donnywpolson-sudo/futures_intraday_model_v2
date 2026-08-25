@@ -1,0 +1,15 @@
+{
+  "canonical_executable": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2\\FuturesLiveCockpit\\FuturesLiveCockpit.exe",
+  "sha256": "76b1daddb6027c7a2d2d971e2603300ce489bc42aa1e68948a759d6de7776ed1",
+  "size_bytes": 12456985,
+  "package_file_count": 1534,
+  "package_size_bytes": 165632667,
+  "package_inventory_sha256": "3b5b12e016f8b21e73053d85dd23e7a46f168d81ccc5fc43cc051f0935ffdf4e",
+  "build_command": ".\\scripts\\build_live_cockpit.ps1",
+  "requirements_sha256": "6b79656554d85bfe481abc7e6d853faf78ab6b61870839496b78a5322d3638af",
+  "pyproject_sha256": "5dad94ba9067bb9445cc01e9dc9005ab2659138fb59ba6290d13fc4251f20cfa",
+  "packaged_spec_sha256": "0b183debdefb580a97a4cbaa92bfca0273cef8b2e0c1101dc67b99db43223a2d",
+  "authenticode": "NotSigned",
+  "source_reproducible": true,
+  "bit_reproducible": false
+}

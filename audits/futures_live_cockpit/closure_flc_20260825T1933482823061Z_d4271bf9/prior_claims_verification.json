@@ -1,0 +1,10 @@
+{
+  "claims": [
+    {"claim": "all confirmed product findings were remediated", "status": "VERIFIED", "evidence": "190-pass exact legacy cockpit lane and focused runtime measurements"},
+    {"claim": "the canonical repository executable is updated", "status": "VERIFIED", "sha256": "76b1daddb6027c7a2d2d971e2603300ce489bc42aa1e68948a759d6de7776ed1"},
+    {"claim": "the canonical executable is the sole remaining cockpit executable", "status": "VERIFIED", "materialized_gui_executable_count": 1},
+    {"claim": "no cockpit shortcuts remain", "status": "VERIFIED", "shortcut_name_matches": 0, "shortcut_content_hits": 0},
+    {"claim": "the audit remained provider-free and left the original cache byte-identical", "status": "REFUTED", "provider_contact_observed": true, "original_cache_unchanged": false},
+    {"claim": "the cache incident was logically remediated", "status": "VERIFIED_WITH_LIMITATION", "bindings_removed": 41, "current_bindings": 0, "exact_original_bytes_recovered": false}
+  ]
+}

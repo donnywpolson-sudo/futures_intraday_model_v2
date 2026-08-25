@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "validated_behaviors": [
+    "stop during cache initialization closes the connection and publishes nothing",
+    "cache corruption fails closed without renaming or replacing source bytes",
+    "normal packaged UI close leaves zero orphan processes",
+    "repeated fresh and reused profile launches leave zero orphan processes"
+  ],
+  "packaged_launch_count": 8,
+  "orphan_count": 0
+}

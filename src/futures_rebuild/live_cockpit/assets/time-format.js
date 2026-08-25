@@ -23,9 +23,34 @@
       year: "numeric",
       month: "short",
       day: "numeric",
-      hour: "2-digit",
+      hour: "numeric",
       minute: "2-digit",
-      hourCycle: "h23",
+      hour12: true,
+      timeZoneName: "short",
+    }).format(date);
+  }
+
+  function formatLocalEventTime(time, locale) {
+    const date = timestampDate(time);
+    if (!date) return "";
+    return formatter(locale, "event", {
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+      timeZoneName: "short",
+    }).format(date);
+  }
+
+  function formatLocalClock(time, locale) {
+    const date = timestampDate(time);
+    if (!date) return "";
+    return formatter(locale, "clock", {
+      hour: "numeric",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: true,
       timeZoneName: "short",
     }).format(date);
   }
@@ -37,8 +62,8 @@
       0: ["year", { year: "numeric" }],
       1: ["month", { month: "short" }],
       2: ["day", { month: "short", day: "numeric" }],
-      3: ["minute", { hour: "2-digit", minute: "2-digit", hourCycle: "h23" }],
-      4: ["second", { hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }],
+      3: ["minute", { hour: "numeric", minute: "2-digit", hour12: true }],
+      4: ["second", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true }],
     };
     const definition = definitions[Number(tickMarkType)];
     if (!definition) return null;
@@ -46,7 +71,9 @@
   }
 
   window.CockpitTime = Object.freeze({
+    formatLocalClock,
     formatLocalCrosshairTime,
+    formatLocalEventTime,
     formatLocalTickMark,
   });
 })();

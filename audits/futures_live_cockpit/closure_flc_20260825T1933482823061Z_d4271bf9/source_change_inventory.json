@@ -1,0 +1,33 @@
+{
+  "source_commit": "00a3e2e9f910292fb77f0a63a5f8d49f4cbe7668",
+  "source_and_asset_paths": [
+    "FuturesLiveCockpit/_internal/FuturesLiveCockpit.spec",
+    "scripts/build_live_cockpit.ps1",
+    "src/futures_rebuild/live_cockpit/app.py",
+    "src/futures_rebuild/live_cockpit/approval.py",
+    "src/futures_rebuild/live_cockpit/assets/app.js",
+    "src/futures_rebuild/live_cockpit/assets/index.html",
+    "src/futures_rebuild/live_cockpit/assets/styles.css",
+    "src/futures_rebuild/live_cockpit/assets/time-format.js",
+    "src/futures_rebuild/live_cockpit/cache.py",
+    "src/futures_rebuild/live_cockpit/credentials.py",
+    "src/futures_rebuild/live_cockpit/engine.py",
+    "src/futures_rebuild/live_cockpit/feed.py",
+    "src/futures_rebuild/live_cockpit/live_model.py",
+    "src/futures_rebuild/live_cockpit/market_groups.py",
+    "src/futures_rebuild/live_cockpit/model_runtime.py",
+    "src/futures_rebuild/live_cockpit/package_candidate.py",
+    "src/futures_rebuild/live_cockpit/predictions.py",
+    "src/futures_rebuild/live_cockpit/protocol.py",
+    "src/futures_rebuild/live_cockpit/smoke.py"
+  ],
+  "test_paths": [
+    "tests/live/test_live_cockpit.py",
+    "tests/live/test_live_cockpit_build_script.py",
+    "tests/live/test_live_cockpit_credentials.py",
+    "tests/live/test_live_cockpit_history_policy.py",
+    "tests/live/test_live_cockpit_workflow.py",
+    "tests/live/test_live_model_runtime.py"
+  ],
+  "summary": {"files_changed": 25, "insertions": 2391, "deletions": 602}
+}

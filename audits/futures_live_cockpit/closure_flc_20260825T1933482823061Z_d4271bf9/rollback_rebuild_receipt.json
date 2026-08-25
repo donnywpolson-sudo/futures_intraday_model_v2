@@ -1,0 +1,8 @@
+{
+  "rollback_source_commit": "03b9bec78e137898cabc242f3f1198459e8f5f58",
+  "temporary_rollback_executable_sha256": "fcef38a7c9c4b6da22b866656b908c9eef46dd9d04b78565d8bc742cedc8d986",
+  "self_check_exit_code": 0,
+  "temporary_artifact_removed": true,
+  "current_package_preserved": true,
+  "purpose": "prove rebuildability of the prior cockpit state without activating it"
+}

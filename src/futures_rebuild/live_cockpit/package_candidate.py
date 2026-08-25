@@ -1029,10 +1029,25 @@ def _finalize_smoke_plan(
     plan_path = candidate / "_internal/configs/live_cockpit_smoke_plan.json"
     if sha256_file(plan_path) != SMOKE_PLAN_PLACEHOLDER_SHA256:
         raise PackageCandidateError("packaged smoke-plan placeholder drifted")
+    from .live_model import build_live_model_adapter
+
+    adapter = build_live_model_adapter()
+    model_binding = (
+        {
+            "model_id": adapter.spec.model_id,
+            "version": adapter.spec.version,
+            "artifact_sha256": adapter.spec.artifact_sha256,
+            "schema": adapter.spec.schema,
+            "markets": list(adapter.spec.markets),
+        }
+        if adapter is not None
+        else None
+    )
     plan = build_live_smoke_plan(
         sha256_file(executable),
         source_revision=str(package_plan["basis"]["head"]),
         package_inputs=package_plan["inputs"],
+        model_binding=model_binding,
     )
     plan_path.write_bytes(canonical_bytes(plan) + b"\n")
     validate_live_smoke_plan(

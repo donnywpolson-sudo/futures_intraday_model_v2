@@ -1,0 +1,18 @@
+{
+  "packaged_gui_runs": 8,
+  "reused_profile_runs": 5,
+  "fresh_profile_runs": 3,
+  "first_visible_window_ms_min": 787.999,
+  "first_visible_window_ms_max": 1060.739,
+  "first_responsive_ms_min": 788.050,
+  "first_responsive_ms_max": 1060.776,
+  "orphan_processes_total": 0,
+  "functional_observations": [
+    "41 markets visible",
+    "NQ selection replaced ES without stale chart state",
+    "5m interval rendered 865 bars",
+    "1M range rendered",
+    "normal close left no process"
+  ],
+  "os_page_cache": "uncontrolled"
+}

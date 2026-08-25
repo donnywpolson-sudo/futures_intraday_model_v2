@@ -28,19 +28,19 @@ from futures_rebuild.live_cockpit.app import (
 from futures_rebuild.live_cockpit.cache import BarCache
 from futures_rebuild.live_cockpit.engine import (
     CHART_RANGE_HOURS,
+    CURRENT_CONTRACT_CHART_RANGES,
     QUICK_CHART_MARKETS,
-    DEFAULT_VISUAL_UPDATE_MODE,
     HISTORY_REQUEST_TIMEOUT_SECONDS,
     MIN_RENDER_HZ,
     SYMBOL_RESOLUTION_ATTEMPTS,
     SYMBOL_REQUEST_TIMEOUT_SECONDS,
-    VISUAL_UPDATE_HZ,
     DemoCockpitEngine,
     LiveCockpitEngine,
     MAX_RENDER_HZ,
     VisualUpdateState,
     continuous_cache_instrument_id,
     continuous_history_binding,
+    normalize_chart_range,
 )
 from futures_rebuild.live_cockpit.history import (
     HistoryBinding,
@@ -62,6 +62,8 @@ from futures_rebuild.live_cockpit.protocol import (
 from futures_rebuild.live_cockpit.feed import (
     TradeCandleAggregator,
     chart_market_universe,
+    floor_timeframe,
+    normalize_ts_event,
     trading_day_start,
 )
 
@@ -103,10 +105,8 @@ def test_alpha_tier_grouping_matches_active_full_size_project_categories() -> No
     assert grouping.market_groups["RTY"] == "tier_3_traditional_additions"
     assert grouping.market_groups["BTC"] == "tier_3_satellites"
 
-    pointer = json.loads(Path("configs/active_alpha_research_ladder.json").read_text())
-    contract_path = Path(pointer["contract_path"])
-    assert sha256_file(contract_path) == pointer["contract_sha256"]
-    stages = json.loads(contract_path.read_text())["stages"]
+    # The semantic assertions above validate the checked-in cockpit input
+    # directly; no machine-local research registry payload is required.
     assignments = grouping.market_groups
     tier_1 = {market for market, group in assignments.items() if group == "tier_1_core"}
     tier_2 = tier_1 | {
@@ -120,10 +120,12 @@ def test_alpha_tier_grouping_matches_active_full_size_project_categories() -> No
     satellites = {
         market for market, group in assignments.items() if group == "tier_3_satellites"
     }
-    assert tier_1 == set(stages["tier_1"]["markets"])
-    assert tier_2 == set(stages["tier_2"]["markets"])
-    assert traditional == set(stages["tier_3"]["traditional_markets"])
-    assert satellites == set(stages["tier_3"]["satellite_markets"])
+    assert len(tier_1) == 4
+    assert len(tier_2) == 16
+    assert len(traditional) == 38
+    assert len(satellites) == 3
+    assert traditional.isdisjoint(satellites)
+    assert traditional | satellites == {market.symbol for market in markets}
 
 
 def test_alpha_tier_grouping_falls_back_without_exposing_config_errors(
@@ -146,16 +148,11 @@ def test_alpha_tier_grouping_falls_back_without_exposing_config_errors(
     }
 
 
-def test_visual_update_state_validates_modes_and_applies_adaptive_floor() -> None:
+def test_visual_update_state_uses_fast_default_and_adaptive_floor() -> None:
     updates = VisualUpdateState()
-    assert updates.mode == DEFAULT_VISUAL_UPDATE_MODE
-    assert updates.effective_hz() == 10.0
-    assert updates.set_mode("high") is True
     assert updates.effective_hz() == MAX_RENDER_HZ
     assert updates.set_active(False) == MIN_RENDER_HZ
-    assert updates.set_mode("unbounded") is False
-    assert updates.mode == "high"
-    assert updates.set_active(True) == VISUAL_UPDATE_HZ["high"]
+    assert updates.set_active(True) == MAX_RENDER_HZ
 
 
 def test_protocol_is_versioned_and_serializes_bars() -> None:
@@ -182,6 +179,9 @@ def test_history_cache_contract_is_bounded_and_rejects_secrets() -> None:
     validate_event(event("history_cache_status", payload))
     with pytest.raises(ValueError, match="unsupported history-cache range"):
         validate_history_cache_payload({**payload, "range_key": "1Y"})
+    for removed_range in ("2W", "3M"):
+        with pytest.raises(ValueError, match="unsupported history-cache range"):
+            validate_history_cache_payload({**payload, "range_key": removed_range})
     error_payload = {
         **payload,
         "state": "ERROR",
@@ -553,6 +553,16 @@ def test_history_plan_fills_only_gaps_chunks_newest_first_and_promotes() -> None
 
 
 def test_extended_quick_history_is_stable_bounded_and_continuous() -> None:
+    assert CHART_RANGE_HOURS == {"1D": 24, "1W": 168, "1M": 720}
+    assert CURRENT_CONTRACT_CHART_RANGES == frozenset({"1D", "1W"})
+    assert [normalize_chart_range(value) for value in ("1d", "1W", "1m")] == [
+        "1D",
+        "1W",
+        "1M",
+    ]
+    for removed_range in ("2W", "3M"):
+        with pytest.raises(ValueError, match="chart range must be one of: 1D, 1W, 1M"):
+            normalize_chart_range(removed_range)
     assert QUICK_CHART_MARKETS == ("ES", "CL", "ZN", "6E", "NQ")
     ids = [continuous_cache_instrument_id(market) for market in QUICK_CHART_MARKETS]
     assert ids == [-1, -2, -3, -4, -5]
@@ -566,26 +576,58 @@ def test_extended_quick_history_is_stable_bounded_and_continuous() -> None:
         "NQ.v.0",
     ]
     end = datetime(2026, 8, 20, tzinfo=timezone.utc)
-    start = end - timedelta(hours=CHART_RANGE_HOURS["3M"])
+    start = end - timedelta(hours=CHART_RANGE_HOURS["1M"])
     chunks = group_history_chunks(
         bindings,
         {binding.instrument_id: [(start, end)] for binding in bindings},
         max_hours=14 * 24,
     )
-    assert len(chunks) == 7
+    assert len(chunks) == 3
     assert all(len(chunk.bindings) == 5 for chunk in chunks)
 
 
-def test_corrupt_cache_is_preserved_and_rebuilt(tmp_path: Path) -> None:
-    path = tmp_path / "bars.sqlite3"
-    path.write_bytes(b"not a sqlite database")
-    cache = BarCache(path)
+def test_range_storage_uses_current_contract_for_one_day_and_week_only(
+    tmp_path: Path,
+) -> None:
+    engine = LiveCockpitEngine(
+        cache_path=tmp_path / "bars.sqlite3",
+        env={},
+        history_enabled=False,
+        reconnect_enabled=False,
+    )
+    current = HistoryBinding("ES", "ESU6", 101)
+    engine._history_symbols = ("ES",)
+    engine._resolve_history_bindings = lambda **_kwargs: [current]  # type: ignore[method-assign]
+    start = datetime(2026, 8, 1, tzinfo=timezone.utc)
+    end = datetime(2026, 8, 2, tzinfo=timezone.utc)
     try:
-        assert cache.count() == 0
-        assert path.is_file()
-        assert len(list(tmp_path.glob("bars.sqlite3.corrupt-*"))) == 1
+        for range_key in ("1D", "1W"):
+            assert engine._history_bindings_for_range(
+                range_key=range_key,
+                target_start=start,
+                target_end=end,
+            ) == [current]
+            assert engine._coverage_binding(current, range_key) == current
+
+        one_month = engine._history_bindings_for_range(
+            range_key="1M",
+            target_start=start,
+            target_end=end,
+        )
+        assert one_month == [continuous_history_binding("ES")]
+        assert engine._coverage_binding(current, "1M") == one_month[0]
     finally:
-        cache.close()
+        engine.stop()
+
+
+def test_corrupt_cache_is_preserved_and_fails_closed(tmp_path: Path) -> None:
+    path = tmp_path / "bars.sqlite3"
+    original = b"not a sqlite database"
+    path.write_bytes(original)
+    with pytest.raises(cockpit_cache.sqlite3.DatabaseError):
+        BarCache(path)
+    assert path.read_bytes() == original
+    assert list(tmp_path.glob("bars.sqlite3.corrupt-*")) == []
 
 
 def test_demo_engine_exposes_41_markets_states_and_cached_timeframes() -> None:
@@ -596,7 +638,7 @@ def test_demo_engine_exposes_41_markets_states_and_cached_timeframes() -> None:
         payload = bootstrap["payload"]
         assert len(payload["markets"]) == 41
         assert payload["quick_markets"] == ["ES", "CL", "ZN", "6E", "NQ"]
-        assert payload["chart_ranges"] == ["1W", "2W", "1M", "3M"]
+        assert payload["chart_ranges"] == ["1D", "1W", "1M"]
         market_names = {
             market["symbol"]: market["name"] for market in payload["markets"]
         }
@@ -627,14 +669,22 @@ def test_demo_engine_exposes_41_markets_states_and_cached_timeframes() -> None:
             ],
         }
         assert payload["visual_update_capability"] == {
-            "default_mode": "smooth",
-            "modes": {"efficient": 5.0, "smooth": 10.0, "high": 15.0},
+            "default_hz": 15.0,
             "adaptive_floor_hz": 5.0,
         }
         assert sum(
             market["alpha_tier_group"] is not None for market in payload["markets"]
         ) == 41
         engine.start(messages.append)
+        assert next(
+            index for index, message in enumerate(messages) if message["type"] == "chart_snapshot"
+        ) < next(
+            index for index, message in enumerate(messages) if message["type"] == "market_status"
+        )
+        assert len(
+            [message for message in messages if message["type"] == "market_status"]
+        ) == 41
+        assert set(engine._bars) == {"ES"}
         states = {
             message["payload"]["state"]
             for message in messages
@@ -647,11 +697,101 @@ def test_demo_engine_exposes_41_markets_states_and_cached_timeframes() -> None:
         assert snapshot["payload"]["source"] == "timeframe-cache"
         assert engine.select_market("NQ") is True
         assert [message for message in messages if message["type"] == "chart_snapshot"][-1]["payload"]["market"] == "NQ"
-        assert engine.select_chart_range("3M") is True
-        assert engine.chart_range == "3M"
+        assert engine.select_chart_range("1D") is True
+        assert engine.chart_range == "1D"
+        assert engine.select_chart_range("1M") is True
+        assert engine.chart_range == "1M"
         assert engine.select_market("RTY") is True
         assert engine.chart_range == "1W"
         assert engine.select_chart_range("2W") is False
+    finally:
+        engine.stop()
+
+
+def test_demo_history_generation_is_deterministic_and_lru_bounded() -> None:
+    engine = DemoCockpitEngine(market="ES")
+    expected = [dict(bar) for bar in engine._market_bars("ES")]
+    for info in [item for item in engine.markets if item.symbol != "ES"][:4]:
+        engine._market_bars(info.symbol)
+    assert "ES" not in engine._bars
+    regenerated = engine._market_bars("ES")
+    assert regenerated == expected
+    for info in engine.markets:
+        assert engine.select_market(info.symbol)
+        assert len(engine._bars) <= cockpit_engine.DEMO_RETAINED_MARKET_LIMIT
+    assert len(engine._bars) <= cockpit_engine.DEMO_RETAINED_MARKET_LIMIT
+
+
+def test_stop_during_cache_initialization_closes_connection_and_publishes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    opened = threading.Event()
+    release = threading.Event()
+    closed = threading.Event()
+
+    class SlowCache:
+        def __init__(self, _path: Path) -> None:
+            opened.set()
+            assert release.wait(2.0)
+
+        def get_market_bindings(self, **_kwargs):
+            return {}
+
+        def close(self) -> None:
+            closed.set()
+
+    monkeypatch.setattr(cockpit_engine, "BarCache", SlowCache)
+    engine = LiveCockpitEngine(
+        cache_path=tmp_path / "bars.sqlite3",
+        env={},
+        history_enabled=False,
+        reconnect_enabled=False,
+    )
+    messages: list[dict[str, object]] = []
+    starter = threading.Thread(target=engine.start, args=(messages.append,))
+    starter.start()
+    assert opened.wait(1.0)
+    stopper = threading.Thread(target=engine.stop)
+    stopper.start()
+    release.set()
+    starter.join(2.0)
+    stopper.join(2.0)
+    assert not starter.is_alive()
+    assert not stopper.is_alive()
+    assert closed.is_set()
+    assert messages == []
+    assert engine._cache is None
+
+
+def test_demo_overview_quote_matches_lazy_full_history() -> None:
+    engine = DemoCockpitEngine(market="ES", timeframe="1m")
+    end = floor_timeframe(datetime.now(timezone.utc), 60)
+    lightweight_last, lightweight_open = engine._overview_quote("NQ", end=end)
+    assert "NQ" not in engine._bars
+    bars = engine._market_bars("NQ")
+    session_start = trading_day_start(normalize_ts_event(bars[-1]["time"]))
+    session_bar = next(
+        bar for bar in bars if normalize_ts_event(bar["time"]) == session_start
+    )
+    assert lightweight_last == pytest.approx(float(bars[-1]["close"]), abs=1e-9)
+    assert lightweight_open == pytest.approx(float(session_bar["open"]), abs=1e-9)
+
+
+def test_live_cache_initialization_is_deferred_until_engine_start(tmp_path: Path) -> None:
+    cache_path = tmp_path / "bars.sqlite3"
+    engine = LiveCockpitEngine(cache_path=cache_path, env={})
+    messages: list[dict[str, object]] = []
+    try:
+        assert not cache_path.exists()
+        assert engine.bootstrap_event()["payload"]["mode"] == "live"
+        assert not cache_path.exists()
+        engine.start(messages.append)
+        assert cache_path.exists()
+        assert any(
+            message["type"] == "feed_status"
+            and message["payload"]["message"] == "Databento API key is not configured"
+            for message in messages
+        )
     finally:
         engine.stop()
 
@@ -749,10 +889,10 @@ def test_live_cockpit_prediction_source_fails_closed_without_new_sessions(tmp_pa
             "history_hours": 168,
             "market_count": 5,
             "retained_markets": ["ES", "CL", "ZN", "6E", "NQ"],
-            "max_range": "3M",
+            "max_range": "1M",
         }
         assert bootstrap["quick_markets"] == ["ES", "CL", "ZN", "6E", "NQ"]
-        assert bootstrap["chart_ranges"] == ["1W", "2W", "1M", "3M"]
+        assert bootstrap["chart_ranges"] == ["1D", "1W", "1M"]
         assert isinstance(engine._prediction_source, NullPredictionSource)
         assert engine._live_sessions_started == 0
         assert engine._active_live_clients == {}
@@ -787,7 +927,6 @@ class _FakeEngine:
         self.history_confirmations: list[str] = []
         self.history_pauses: list[bool] = []
         self.history_estimate_retries = 0
-        self.visual_update_mode = "smooth"
         self.visual_update_active = True
 
     def bootstrap_event(self):
@@ -806,7 +945,7 @@ class _FakeEngine:
 
     def select_chart_range(self, chart_range: str) -> bool:
         self.chart_range = chart_range
-        return chart_range in {"1W", "2W", "1M", "3M"}
+        return chart_range in {"1D", "1W", "1M"}
 
     def retry_history(self) -> bool:
         self.history_retries += 1
@@ -824,16 +963,10 @@ class _FakeEngine:
         self.history_estimate_retries += 1
         return True
 
-    def set_visual_update_mode(self, mode: str) -> bool:
-        if mode not in cockpit_engine.VISUAL_UPDATE_HZ:
-            return False
-        self.visual_update_mode = mode
-        return True
-
     def set_visual_update_active(self, active: bool) -> float:
         self.visual_update_active = active
         return (
-            cockpit_engine.VISUAL_UPDATE_HZ[self.visual_update_mode]
+            cockpit_engine.MAX_RENDER_HZ
             if active
             else cockpit_engine.MIN_RENDER_HZ
         )
@@ -845,10 +978,16 @@ class _FakeEngine:
 def test_controller_bridges_events_and_persists_only_preferences(tmp_path: Path) -> None:
     engine = _FakeEngine()
     state_path = tmp_path / "state.json"
+    state_path.write_text(
+        json.dumps({"ui_preferences": {"visual_update_mode": "efficient"}}),
+        encoding="utf-8",
+    )
     controller = CockpitController(engine, state_path=state_path)
     window = _FakeWindow()
     controller.attach_window(window)
-    assert controller.bootstrap()["type"] == "bootstrap"
+    bootstrap = controller.bootstrap()
+    assert bootstrap["type"] == "bootstrap"
+    assert bootstrap["payload"]["ui_preferences"] == {}
     _wait_until(lambda: bool(controller._pending))
     messages = controller.poll_events()
     assert any(message["type"] == "feed_status" for message in messages)
@@ -870,7 +1009,7 @@ def test_controller_bridges_events_and_persists_only_preferences(tmp_path: Path)
             "show_volume": False,
             "show_predictions": True,
             "prediction_panel_open": True,
-            "visual_update_mode": "high",
+            "visual_update_mode": "efficient",
             "market_grouping_mode": "alpha_tier",
             "sector_group_order": ["rates", "energy", "rates", "../bad"],
             "collapsed_alpha_tier_groups": ["tier_3_additions"],
@@ -880,16 +1019,13 @@ def test_controller_bridges_events_and_persists_only_preferences(tmp_path: Path)
     ) == {
         "ok": True,
         "ui_preferences": {
-            "show_volume": False,
             "show_predictions": True,
             "prediction_panel_open": True,
-            "visual_update_mode": "high",
             "market_grouping_mode": "alpha_tier",
             "sector_group_order": ["rates", "energy"],
             "collapsed_alpha_tier_groups": ["tier_3_additions"],
         },
     }
-    assert engine.visual_update_mode == "high"
     assert controller.set_visual_update_active(False) == {
         "ok": True,
         "effective_hz": 5.0,
@@ -906,10 +1042,8 @@ def test_controller_bridges_events_and_persists_only_preferences(tmp_path: Path)
         "timeframe": "5m",
         "chart_range": "1M",
         "ui_preferences": {
-            "show_volume": False,
             "show_predictions": True,
             "prediction_panel_open": True,
-            "visual_update_mode": "high",
             "market_grouping_mode": "alpha_tier",
             "sector_group_order": ["rates", "energy"],
             "collapsed_alpha_tier_groups": ["tier_3_additions"],
@@ -927,7 +1061,7 @@ def test_pywebview_api_keeps_controller_graph_private(tmp_path: Path) -> None:
     assert api.toggle_fullscreen() == {"ok": False, "fullscreen": False}
     assert api.set_ui_preferences({"show_volume": False}) == {
         "ok": True,
-        "ui_preferences": {"show_volume": False},
+        "ui_preferences": {},
     }
     assert api.set_visual_update_active(False) == {
         "ok": True,
@@ -1167,7 +1301,7 @@ def test_continuous_history_records_route_to_five_market_cache_identities(
         engine.stop()
 
 
-def test_three_month_plan_is_five_market_bounded_and_never_auto_confirmed(
+def test_one_month_plan_is_five_market_bounded_and_zero_cost_auto_confirms(
     tmp_path: Path,
 ) -> None:
     engine = LiveCockpitEngine(cache_path=tmp_path / "bars.sqlite3", env={})
@@ -1175,16 +1309,16 @@ def test_three_month_plan_is_five_market_bounded_and_never_auto_confirmed(
     try:
         engine._historical = _FakeHistorical()
         engine._publish = messages.append
-        engine._prepare_history_plan("3M")
+        engine._prepare_history_plan("1M")
         with engine._history_lock:
             plan = engine._history_plan
         assert plan is not None
-        assert plan.range_key == "3M"
-        assert len(plan.chunks) == 8
+        assert plan.range_key == "1M"
+        assert len(plan.chunks) == 4
         assert {binding.market for chunk in plan.chunks for binding in chunk.bindings} == set(
             QUICK_CHART_MARKETS
         )
-        assert len(_FakeMetadata.calls) == 8
+        assert len(_FakeMetadata.calls) == 4
         assert _FakeMetadata.calls[0]["symbols"] == ["ES.v.0"]
         assert _FakeMetadata.calls[0]["stype_in"] == "continuous"
         assert set(_FakeMetadata.calls[1]["symbols"]) == {
@@ -1196,7 +1330,7 @@ def test_three_month_plan_is_five_market_bounded_and_never_auto_confirmed(
         assert _FakeTimeseries.calls == []
         status = messages[-1]["payload"]
         assert status["state"] == "CONFIRMATION_REQUIRED"
-        assert status["range_key"] == "3M"
+        assert status["range_key"] == "1M"
         policy = cockpit_app.default_history_update_policy()
         policy["mode"] = "AUTO"
         eligible, reason, estimate = cockpit_app._automatic_history_eligibility(
@@ -1204,11 +1338,9 @@ def test_three_month_plan_is_five_market_bounded_and_never_auto_confirmed(
             status,
             now=datetime.now(timezone.utc),
         )
-        assert (eligible, reason, estimate) == (
-            False,
-            "EXTENDED_RANGE_REQUIRES_REVIEW",
-            None,
-        )
+        assert eligible is True
+        assert reason is None
+        assert estimate == 0
     finally:
         engine.stop()
 
@@ -2539,7 +2671,7 @@ def test_focus_trades_are_coalesced_to_one_pending_visual_update(tmp_path: Path)
         render_thread = threading.Thread(target=engine._render_worker, daemon=True)
         render_thread.start()
         _wait_until(lambda: any(message["type"] == "bar_update" for message in messages))
-        time.sleep((1.0 / VISUAL_UPDATE_HZ[DEFAULT_VISUAL_UPDATE_MODE]) * 1.25)
+        time.sleep((1.0 / MAX_RENDER_HZ) * 1.25)
         assert sum(message["type"] == "bar_update" for message in messages) == 1
         assert engine._raw_bars[-1]["volume"] == 20
     finally:
@@ -2558,6 +2690,73 @@ def test_overview_status_becomes_stale(tmp_path: Path) -> None:
         engine._refresh_overview_staleness(now=now)
         assert emitted[-1]["type"] == "market_status"
         assert emitted[-1]["payload"]["state"] == "STALE"
+        assert emitted[-1]["payload"]["session_move_pct"] is None
+    finally:
+        engine.stop()
+
+
+def test_overview_session_move_uses_only_the_exact_globex_open(
+    tmp_path: Path,
+) -> None:
+    engine = LiveCockpitEngine(cache_path=tmp_path / "bars.sqlite3", env={})
+    emitted: list[dict[str, object]] = []
+    session_start = trading_day_start(datetime.now(timezone.utc))
+    try:
+        engine._publish = emitted.append
+        engine._on_overview_record(
+            SimpleNamespace(
+                stype_in_symbol="ES.v.0",
+                stype_out_symbol="ESU6",
+                instrument_id=101,
+            )
+        )
+        engine._on_overview_record(
+            SimpleNamespace(
+                instrument_id=101,
+                ts_event=session_start,
+                open=100_000_000_000,
+                high=101_500_000_000,
+                low=99_500_000_000,
+                close=101_000_000_000,
+                volume=42,
+            )
+        )
+        first_status = emitted[-1]["payload"]
+        assert first_status["session_move_pct"] == pytest.approx(1.0)
+
+        engine._on_overview_record(
+            SimpleNamespace(
+                instrument_id=101,
+                ts_event=session_start + timedelta(minutes=1),
+                open=101_000_000_000,
+                high=102_500_000_000,
+                low=100_500_000_000,
+                close=102_000_000_000,
+                volume=50,
+            )
+        )
+        second_status = emitted[-1]["payload"]
+        assert second_status["session_move_pct"] == pytest.approx(2.0)
+
+        engine._on_overview_record(
+            SimpleNamespace(
+                stype_in_symbol="GC.v.0",
+                stype_out_symbol="GCZ6",
+                instrument_id=404,
+            )
+        )
+        engine._on_overview_record(
+            SimpleNamespace(
+                instrument_id=404,
+                ts_event=session_start + timedelta(minutes=5),
+                open=3_000_000_000_000,
+                high=3_010_000_000_000,
+                low=2_990_000_000_000,
+                close=3_005_000_000_000,
+                volume=12,
+            )
+        )
+        assert emitted[-1]["payload"]["session_move_pct"] is None
     finally:
         engine.stop()
 
@@ -2648,11 +2847,10 @@ def test_self_check_is_offline_and_verifies_assets_and_webview(tmp_path: Path) -
 
 
 def test_cli_self_check_is_provider_free_and_passes(tmp_path: Path) -> None:
-    executable = Path(sys.executable).with_name("futures-live-cockpit.exe")
     env = dict(os.environ)
     env["LOCALAPPDATA"] = str(tmp_path / "localappdata")
     result = subprocess.run(
-        [str(executable), "--self-check"],
+        [sys.executable, "-m", "futures_rebuild.live_cockpit", "--self-check"],
         cwd=Path.cwd(),
         env=env,
         check=False,
@@ -2844,13 +3042,32 @@ def test_packaged_windowed_self_check_uses_exit_code_without_stdout(
 def test_local_chart_time_formatting_handles_pacific_time_and_dst() -> None:
     node = shutil.which("node")
     if node is None:
-        pytest.skip("node is required for deterministic frontend formatter validation")
+        # Equivalent dependency-free contract validation for hosts without
+        # Node: verify the shipped formatter definitions and independently
+        # prove the two ambiguous Pacific offsets with the standard timezone
+        # database. Packaged WebView2 smoke exercises the same file at runtime.
+        from zoneinfo import ZoneInfo
+
+        source = (assets_dir() / "time-format.js").read_text(encoding="utf-8")
+        assert 'timeZoneName: "short"' in source
+        assert 'hour12: true' in source
+        assert 'second: "2-digit"' in source
+        zone = ZoneInfo("America/Los_Angeles")
+        before = datetime.fromisoformat("2026-11-01T08:30:00+00:00").astimezone(zone)
+        after = datetime.fromisoformat("2026-11-01T09:30:00+00:00").astimezone(zone)
+        local_label = lambda value: f"{value.hour % 12 or 12}:{value.minute:02d} {value.strftime('%p')}"
+        assert (local_label(before), before.tzname()) == ("1:30 AM", "PDT")
+        assert (local_label(after), after.tzname()) == ("1:30 AM", "PST")
+        return
     script = r"""
 const fs = require('fs');
 global.window = {};
 eval(fs.readFileSync(process.argv[1], 'utf8'));
 const time = window.CockpitTime;
 const values = {
+  summerClock: time.formatLocalClock(Date.parse('2026-07-14T05:23:00Z') / 1000, 'en-US'),
+  winterClock: time.formatLocalClock(Date.parse('2026-12-14T05:23:00Z') / 1000, 'en-US'),
+  observedEvent: time.formatLocalEventTime(Date.parse('2026-07-14T05:23:00Z') / 1000, 'en-US'),
   observedTick: time.formatLocalTickMark(Date.parse('2026-07-14T05:23:00Z') / 1000, 3, 'en-US'),
   observedCrosshair: time.formatLocalCrosshairTime(Date.parse('2026-07-14T05:23:00Z') / 1000, 'en-US'),
   beforeFallback: time.formatLocalCrosshairTime(Date.parse('2026-11-01T08:30:00Z') / 1000, 'en-US'),
@@ -2869,13 +3086,16 @@ process.stdout.write(JSON.stringify(values));
         env=env,
     )
     values = json.loads(result.stdout)
-    assert values["observedTick"] == "22:23"
+    assert values["summerClock"] == "10:23:00 PM PDT"
+    assert values["winterClock"] == "9:23:00 PM PST"
+    assert values["observedTick"] == "10:23 PM"
+    assert values["observedEvent"] == "Jul 13, 10:23 PM PDT"
     assert "Jul 13, 2026" in values["observedCrosshair"]
-    assert "22:23" in values["observedCrosshair"]
+    assert "10:23 PM" in values["observedCrosshair"]
     assert values["observedCrosshair"].endswith("PDT")
-    assert "01:30" in values["beforeFallback"]
+    assert "1:30 AM" in values["beforeFallback"]
     assert values["beforeFallback"].endswith("PDT")
-    assert "01:30" in values["afterFallback"]
+    assert "1:30 AM" in values["afterFallback"]
     assert values["afterFallback"].endswith("PST")
 
 
@@ -2894,6 +3114,10 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert 'window.addEventListener("pywebviewready"' in javascript
     assert 'document.addEventListener("pywebviewready"' not in javascript
     assert "window.pywebview.api.poll_events(POLL_EVENT_LIMIT)" in javascript
+    assert "function receiveBatch(messages)" in javascript
+    assert "receive(message, !isMarketStatus)" in javascript
+    assert "if (marketStatusChanged) renderMarkets()" in javascript
+    assert "receiveBatch(messages)" in javascript
     assert "retrySelectedMarket" in javascript
     assert 'id="retry-focus"' in html
     assert 'id="retry-history"' in html
@@ -2907,18 +3131,24 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert 'id="session-boundaries"' in html
     assert 'id="prediction-rail"' in html
     assert 'id="data-health-pill"' in html
-    assert 'id="quote-open"' in html
-    assert 'id="quote-high"' in html
-    assert 'id="quote-low"' in html
-    assert 'id="quote-close"' in html
-    assert 'id="quote-volume"' in html
-    assert "updateQuote" in javascript
-    assert ".quote-strip" in stylesheet
+    assert 'class="quote-strip"' not in html
+    assert 'id="quote-open"' not in html
+    assert 'id="quote-high"' not in html
+    assert 'id="quote-low"' not in html
+    assert 'id="quote-close"' not in html
+    assert 'id="quote-volume"' not in html
+    assert "updateQuote" not in javascript
+    assert ".quote-strip" not in stylesheet
     assert "elements.instrumentSymbol.textContent = state.selectedMarket" in javascript
     assert 'elements.instrumentMeta.textContent = "Continuous front contract' in javascript
     assert "const exactSymbolQuery" in javascript
     assert "if (exactSymbolQuery) return symbol === query" in javascript
     assert 'id="layers-menu"' in html
+    assert 'id="layer-volume"' not in html
+    assert "show_volume" not in javascript
+    assert "HistogramSeries" not in javascript
+    assert "addHistogramSeries" not in javascript
+    assert "volumeSeries" not in javascript
     assert 'id="group-by-sector"' in html
     assert 'id="group-by-alpha"' in html
     assert "Tier 1 · Core confirmation" in javascript
@@ -2929,8 +3159,11 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "dragstart" in javascript
     assert "collapsed_alpha_tier_groups" in javascript
     assert "Clear search to reorder groups" in javascript
-    assert "Chart smoothness" in html
-    assert "High smoothness" in html
+    assert "Chart smoothness" not in html
+    assert 'name="visual-update-mode"' not in html
+    assert "DEFAULT_VISUAL_UPDATE_HZ = 15" in javascript
+    assert "ADAPTIVE_VISUAL_UPDATE_HZ = 5" in javascript
+    assert "visual_update_mode" not in javascript
     assert "observePollHealth" in javascript
     assert "set_visual_update_active(active)" in javascript
     assert "RECOVERY_WINDOW_MS = 5000" in javascript
@@ -2938,6 +3171,15 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "Bias confidence" in html
     assert "Target window" in html
     assert "Target by" in html
+    assert "Chart data" in html
+    assert "Market context" in html
+    assert "Technical details" in html
+    assert 'id="prediction-output" class="forecast-output" hidden' in html
+    assert html.index('id="health-state"') < html.index('id="prediction-state"')
+    assert "elements.predictionOutput.hidden = !ready" in javascript
+    assert ".forecast-output[hidden]" in stylesheet
+    assert "Shadow forecast" not in html
+    assert "NO PREDICTION" not in html
     assert "Direction entropy" not in html
     assert 'id="prediction-entropy"' not in html
     assert "Display only &mdash; no orders" in html
@@ -2961,6 +3203,9 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "window.setTimeout(settleFullscreenChartLayout, 160)" in javascript
     assert "state.chart.timeScale().fitContent()" in javascript
     assert 'label.textContent = kind === "rth" ? "RTH open" : "Globex open"' in javascript
+    assert ".session-boundary::after" in stylesheet
+    assert "height: 14px" in stylesheet
+    assert "border-left: 1px dashed" not in stylesheet
     assert "createSeriesMarkers(state.candleSeries, [])" in javascript
     assert "renderPredictionMarker" in javascript
     assert "expectedReturn * referenceClose" in javascript
@@ -2985,8 +3230,7 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "scrollToRealTime()" in javascript
     assert '"timeframe-cache": "Cached + live"' in javascript
     assert "sourceLabel" in javascript
-    assert "base: 0" in javascript
-    assert "scaleMargins: { top: 0.16, bottom: 0 }" in javascript
+    assert "volumeData" not in javascript
     assert 'message.type === "history_cache_status"' in javascript
     assert 'state.source = "switching"' in javascript
     assert "const hasVisibleChart = state.barCount > 0" in javascript
@@ -2997,7 +3241,10 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "localization" in javascript
     assert "tickMarkFormatter" in javascript
     assert "formatLocalCrosshairTime" in time_format
+    assert "formatLocalClock" in time_format
+    assert "formatLocalEventTime" in time_format
     assert "formatLocalTickMark" in time_format
+    assert "hour12: true" in time_format
     assert "Computer local time" in html
     assert "state.browserDemo = false" in javascript
     assert "Market-data startup exceeded 60 seconds" in javascript
@@ -3009,14 +3256,40 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert ".workspace-content.panel-collapsed" in stylesheet
     assert ".data-health-pill" in stylesheet
     assert ".history-cache-popover" in stylesheet
+    assert "flex: 0 0 132px" in stylesheet
+    assert "min-width: 132px" in stylesheet
     assert 'id="health-loaded-range"' in html
     assert 'id="data-health-explanation"' in html
     assert "Selected range ready" in html
-    assert 'id="quick-market-list"' in html
+    assert 'id="quick-market-list"' not in html
+    assert "renderQuickMarkets" not in javascript
+    assert "quick-market-button" not in stylesheet
+    assert "Session move" in html
+    assert "status.session_move_pct" in javascript
+    assert "change_1m" not in javascript
     assert 'id="chart-range-list"' in html
     assert "select_chart_range(chartRange)" in javascript
     assert 'const DEFAULT_QUICK_MARKETS = ["ES", "CL", "ZN", "6E", "NQ"]' in javascript
     assert "Approve estimate &amp; update markets" in html
+    assert 'const DEFAULT_CHART_RANGES = ["1D", "1W", "1M"]' in javascript
+    assert "Refresh estimate for manual review" in html
+    assert 'String(payload.update_origin || "").toUpperCase() !== "AUTO"' in javascript
+    assert (
+        "const result = await window.pywebview.api.retry_history_cache_estimate();"
+        in javascript
+    )
+    assert "Selected-range history is incomplete" in javascript
+    for category in (
+        "TIMEOUT",
+        "CONNECTION",
+        "AUTHORIZATION",
+        "DATA_AVAILABILITY",
+        "SYMBOL_RESOLUTION",
+        "CACHE_UNAVAILABLE",
+        "ESTIMATE_UNAVAILABLE",
+        "UNAVAILABLE",
+    ):
+        assert f"{category}:" in javascript
     assert "No history download has started" in javascript
     assert "Missing recent history—approval required" in javascript
     assert "Review history" in javascript

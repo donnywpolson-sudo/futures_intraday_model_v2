@@ -1,0 +1,10 @@
+metric,value,unit,condition
+demo_start_median,121.820,ms,provider-free demo
+demo_first_chart_median,117.061,ms,provider-free demo
+retained_markets_max,1,count,selected-market demo run
+retained_bars_max,4320,count,selected-market demo run
+process_tree_count,7,count,packaged GUI plus WebView2
+tree_working_set,540098560,bytes,steady sampled process tree
+tree_private_memory,510369792,bytes,steady sampled process tree
+tree_threads,287,count,steady sampled process tree
+tree_handles,4130,count,steady sampled process tree

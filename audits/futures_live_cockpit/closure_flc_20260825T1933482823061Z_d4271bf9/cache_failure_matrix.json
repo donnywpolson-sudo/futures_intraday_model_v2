@@ -1,0 +1,124 @@
+{
+  "measurement_scope": "isolated provider-free failure-matrix run before the later bare-path launch incident",
+  "closure_override": {
+    "provider_contact_observed_during_full_audit": true,
+    "original_live_cache_unchanged_at_closure": false,
+    "approved_logical_rollback_complete": true,
+    "exact_original_bytes_recovered": false,
+    "detail": "See cache_incident_and_rollback.json; the original_unchanged field below applies only to this isolated matrix run."
+  },
+  "cases": [
+    {
+      "case": "valid",
+      "detail": "validated without provider contact",
+      "expected": "PASS",
+      "input_preserved": true,
+      "observed": "PASS",
+      "provider_contact_observed": false
+    },
+    {
+      "case": "empty",
+      "detail": "validated without provider contact",
+      "expected": "PASS_INITIALIZED_EMPTY",
+      "input_preserved": false,
+      "observed": "PASS",
+      "provider_contact_observed": false
+    },
+    {
+      "case": "missing",
+      "detail": "validated without provider contact",
+      "expected": "PASS_INITIALIZED_EMPTY",
+      "input_preserved": true,
+      "observed": "PASS",
+      "provider_contact_observed": false
+    },
+    {
+      "case": "read_only",
+      "detail": "validated without provider contact",
+      "expected": "PASS_OR_FAIL_CLOSED",
+      "input_preserved": true,
+      "observed": "PASS",
+      "provider_contact_observed": false
+    },
+    {
+      "case": "locked",
+      "detail": "validated without provider contact",
+      "expected": "FAIL_CLOSED",
+      "input_preserved": true,
+      "observed": "PASS",
+      "provider_contact_observed": false
+    },
+    {
+      "case": "truncated",
+      "detail": "DatabaseError: database disk image is malformed",
+      "expected": "FAIL_CLOSED",
+      "input_preserved": true,
+      "observed": "FAIL_CLOSED",
+      "provider_contact_observed": false
+    },
+    {
+      "case": "invalid_header",
+      "detail": "DatabaseError: file is not a database",
+      "expected": "FAIL_CLOSED",
+      "input_preserved": true,
+      "observed": "FAIL_CLOSED",
+      "provider_contact_observed": false
+    },
+    {
+      "case": "quick_check_corruption",
+      "detail": "DatabaseError: SQLite quick_check failed",
+      "expected": "FAIL_CLOSED",
+      "input_preserved": true,
+      "observed": "FAIL_CLOSED",
+      "provider_contact_observed": false
+    },
+    {
+      "case": "missing_required_tables",
+      "detail": "validated without provider contact",
+      "expected": "PASS_SCHEMA_INITIALIZED",
+      "input_preserved": false,
+      "observed": "PASS",
+      "provider_contact_observed": false
+    },
+    {
+      "case": "invalid_binding_schema",
+      "detail": "OperationalError: no such column: market",
+      "expected": "FAIL_CLOSED",
+      "input_preserved": false,
+      "observed": "FAIL_CLOSED",
+      "provider_contact_observed": false
+    },
+    {
+      "case": "oversized_invalid",
+      "detail": "DatabaseError: file is not a database",
+      "expected": "FAIL_CLOSED",
+      "input_preserved": true,
+      "observed": "FAIL_CLOSED",
+      "provider_contact_observed": false
+    },
+    {
+      "case": "initialization_timeout",
+      "detail": "test_stop_during_cache_initialization_closes_connection_and_publishes_nothing",
+      "expected": "FAIL_CLOSED_AND_SHUTDOWN_JOINS",
+      "input_preserved": true,
+      "observed": "PASS_TESTED_BY_PYTEST",
+      "provider_contact_observed": false
+    }
+  ],
+  "original_after": {
+    "ctime_ns": 1785039502525688600,
+    "mtime_ns": 1787677822492355800,
+    "path": "C:\\Users\\donny\\AppData\\Local\\futures_intraday_model_v2\\live_cockpit\\bars.sqlite3",
+    "sha256": "f5ce584f0bd51ab5bdcc35892ca98464742c5e9dab6ab6d5b5b2a46ea52af26c",
+    "size": 41631744
+  },
+  "original_before": {
+    "ctime_ns": 1785039502525688600,
+    "mtime_ns": 1787677822492355800,
+    "path": "C:\\Users\\donny\\AppData\\Local\\futures_intraday_model_v2\\live_cockpit\\bars.sqlite3",
+    "sha256": "f5ce584f0bd51ab5bdcc35892ca98464742c5e9dab6ab6d5b5b2a46ea52af26c",
+    "size": 41631744
+  },
+  "original_unchanged": true,
+  "provider_contact_observed": false
+}

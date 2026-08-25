@@ -1,0 +1,7 @@
+{
+  "root": "FuturesLiveCockpit",
+  "file_count": 1534,
+  "total_bytes": 165632667,
+  "inventory_sha256": "3b5b12e016f8b21e73053d85dd23e7a46f168d81ccc5fc43cc051f0935ffdf4e",
+  "entry_executable": {"relative_path": "FuturesLiveCockpit.exe", "size_bytes": 12456985, "sha256": "76b1daddb6027c7a2d2d971e2603300ce489bc42aa1e68948a759d6de7776ed1"}
+}

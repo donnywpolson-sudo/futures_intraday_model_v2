@@ -1,0 +1,11 @@
+{
+  "exact_command": ".\\scripts\\run_windows_host_root_pytest.ps1 -PytestArguments @('-q','-m','legacy','tests/live')",
+  "exact_lane": {"passed": 190, "failed": 0, "skipped": 0, "deselected": 69, "duration_seconds": 14.36},
+  "focused_module_self_check": {"passed": 1, "failed": 0},
+  "broader_lane": {"passed": 48, "failed": 2, "deselected": 259},
+  "baseline_reproduction": {"both_broader_failures_reproduced": true},
+  "test_corrections": [
+    "eeb9a497ea69d8ffb8a57ef1ae9c696e577b39b8",
+    "583dcb9caaccaf3ecf0786a97054b881a6e6d34d"
+  ]
+}

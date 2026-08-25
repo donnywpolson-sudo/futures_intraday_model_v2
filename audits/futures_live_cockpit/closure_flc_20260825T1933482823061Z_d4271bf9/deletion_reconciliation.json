@@ -1,0 +1,10 @@
+{
+  "authorized_goal": "retain one FuturesLiveCockpit.exe at the canonical repository path",
+  "older_installed_cockpit_directories_deleted": 23,
+  "historical_cockpit_executables_deleted": 109,
+  "start_menu_shortcuts_deleted": 1,
+  "generated_console_launcher_deleted": "C:\\Users\\donny\\Desktop\\futures_intraday_model_v2\\.venv\\Scripts\\futures-live-cockpit.exe",
+  "task_owned_temporary_profiles_and_worktrees_removed": true,
+  "current_cockpit_executable_count": 1,
+  "unrelated_repository_or_evidence_paths_deleted": false
+}

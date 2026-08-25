@@ -31,6 +31,7 @@ def _repo(tmp_path: Path) -> Path:
         "AGENTS.md": "rules\n",
         "PROJECT_OUTLINE.md": "outline\n",
         "CODEX_HANDOFF.md": "handoff\n",
+        "CURRENT_WORKFLOW.md": "workflow\n",
         "pyproject.toml": '[project]\nname = "futures-intraday-model-v2"\n',
         "configs/source_contract.json": "{}\n",
     }.items():

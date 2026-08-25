@@ -1,0 +1,8 @@
+{
+  "activation_performed": false,
+  "installation_performed": false,
+  "shortcut_created": false,
+  "scheduled_task_created": false,
+  "service_created": false,
+  "reason": "The authorized outcome is the sole updated repository executable; no installed release or activation was requested."
+}
