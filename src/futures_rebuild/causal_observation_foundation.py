@@ -21,6 +21,7 @@ from .data_layout import DataReleaseManifest, PhasePublisher
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
 from .foundation.records import ProviderBar, exact_int, validate_timestamp_ns
 from .research_gateway_policy import (
+    CAUSAL_OBSERVATION_BOUNDED_2025_SMOKE_OPERATION,
     CAUSAL_OBSERVATION_CANARY_OPERATION,
     CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
 )
@@ -269,6 +270,183 @@ def authorize_canary_row_read(
     )
 
 
+def required_bounded_2025_smoke_scope(
+    *,
+    plan: Mapping[str, object],
+    plan_sha256: str,
+    source_contract_id: str,
+    canonical_release_id: str,
+) -> dict[str, str]:
+    """Return the exact one-use scope for the bounded-2025 runtime smoke."""
+
+    source = plan.get("source")
+    limits = plan.get("limits")
+    authority = plan.get("authority")
+    execution = plan.get("execution")
+    storage = plan.get("storage")
+    if (
+        plan.get("schema_version")
+        != "bounded_2025_causal_observation_smoke_plan/1.0.0"
+        or plan.get("operation")
+        != CAUSAL_OBSERVATION_BOUNDED_2025_SMOKE_OPERATION
+        or plan.get("causal_contract_id") != CAUSAL_OBSERVATION_CONTRACT_ID
+        or not isinstance(source, Mapping)
+        or not isinstance(limits, Mapping)
+        or not isinstance(authority, Mapping)
+        or not isinstance(execution, Mapping)
+        or not isinstance(storage, Mapping)
+        or source.get("source_contract_id") != source_contract_id
+        or source.get("canonical_release_id") != canonical_release_id
+        or plan.get("development_end_exclusive") != DEVELOPMENT_END_EXCLUSIVE
+        or plan.get("roots") != ["6A"]
+        or plan.get("holdout_allowed") is not False
+        or plan.get("forward_allowed") is not False
+        or plan.get("provider_calls") != 0
+        or plan.get("execution_authorized") is not False
+        or any(bool(value) for value in authority.values())
+        or execution
+        != {
+            "maximum_attempts": 1,
+            "maximum_retries": 0,
+            "maximum_runtime_seconds": 7_200,
+            "maximum_workers": 1,
+        }
+        or storage.get("publication_authorized") is not False
+        or storage.get("activation_authorized") is not False
+    ):
+        raise UnauthorizedOperation("bounded-2025 smoke plan authority is invalid")
+    plan_id = _digest(plan.get("plan_id"), "plan_id")
+    core = {key: value for key, value in plan.items() if key != "plan_id"}
+    if sha256_json(core) != plan_id:
+        raise IntegrityError("bounded-2025 smoke plan identity differs")
+    return {
+        "operation_kind": "BOUNDED_2025_CAUSAL_OBSERVATION_SMOKE_ONLY",
+        "causal_contract_id": CAUSAL_OBSERVATION_CONTRACT_ID,
+        "source_contract_id": _digest(source_contract_id, "source_contract_id"),
+        "canonical_release_id": _digest(
+            canonical_release_id, "canonical_release_id"
+        ),
+        "exact_source_entries_sha256": _digest(
+            source.get("exact_source_entries_sha256"),
+            "exact_source_entries_sha256",
+        ),
+        "economics_rulebook_sha256": ECONOMICS_RULEBOOK_SHA256,
+        "output_staging_path": _canonical_path(
+            plan.get("output_staging_path"), "output_staging_path"
+        ),
+        "development_end_exclusive": DEVELOPMENT_END_EXCLUSIVE,
+        "maximum_payload_bytes": str(
+            exact_int(
+                limits.get("maximum_payload_bytes"),
+                "maximum_payload_bytes",
+                nonnegative=True,
+            )
+        ),
+        "maximum_decoded_records": str(
+            exact_int(
+                limits.get("maximum_decoded_records"),
+                "maximum_decoded_records",
+                nonnegative=True,
+            )
+        ),
+        "maximum_output_bytes": str(
+            exact_int(
+                limits.get("maximum_output_bytes"),
+                "maximum_output_bytes",
+                nonnegative=True,
+            )
+        ),
+        "maximum_partition_count": str(
+            exact_int(
+                limits.get("maximum_partition_count"),
+                "maximum_partition_count",
+                nonnegative=True,
+            )
+        ),
+        "maximum_runtime_seconds": "7200",
+        "maximum_workers": "1",
+        "maximum_attempts": "1",
+        "maximum_retries": "0",
+        "provider_calls": "0",
+        "holdout": "false",
+        "forward": "false",
+        "outcomes": "false",
+        "features": "false",
+        "wfa": "false",
+        "fitting": "false",
+        "prediction": "false",
+        "evaluation": "false",
+        "mechanism": "false",
+        "publication": "false",
+        "activation": "false",
+        "approval_command": CAUSAL_OBSERVATION_BOUNDED_2025_SMOKE_OPERATION,
+        "approval_plan_id": plan_id,
+        "approval_plan_sha256": _digest(plan_sha256, "plan_sha256"),
+    }
+
+
+def _active_source_identity(boundary: RepoBoundary) -> tuple[str, str]:
+    contract_path = boundary.active_root / "configs/source_contract.json"
+    try:
+        contract = json.loads(contract_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise IntegrityError("active causal-observation source contract is invalid") from exc
+    if not isinstance(contract, dict):
+        raise IntegrityError("active causal-observation source contract is not an object")
+    source_contract_id = contract.get("contract_id")
+    source = contract.get("active_canonical_source")
+    core = {key: value for key, value in contract.items() if key != "contract_id"}
+    if (
+        type(source_contract_id) is not str
+        or sha256_json(core) != source_contract_id
+        or not isinstance(source, Mapping)
+        or type(source.get("release_id")) is not str
+    ):
+        raise IntegrityError("active causal-observation source identity differs")
+    return source_contract_id, str(source["release_id"])
+
+
+def authorize_bounded_2025_smoke_row_read(
+    *,
+    boundary: RepoBoundary,
+    receipt: OperationReceipt,
+    plan: Mapping[str, object],
+    plan_sha256: str,
+) -> CausalObservationOperationContext:
+    """Consume one smoke approval before the first bounded-2025 DBN open."""
+
+    source_contract_id, canonical_release_id = _active_source_identity(boundary)
+    scope = required_bounded_2025_smoke_scope(
+        plan=plan,
+        plan_sha256=plan_sha256,
+        source_contract_id=source_contract_id,
+        canonical_release_id=canonical_release_id,
+    )
+    receipt.consume(
+        boundary,
+        operation=CAUSAL_OBSERVATION_BOUNDED_2025_SMOKE_OPERATION,
+        classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
+        required_scope=scope,
+    )
+    return CausalObservationOperationContext(
+        operation=CAUSAL_OBSERVATION_BOUNDED_2025_SMOKE_OPERATION,
+        classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
+        source_contract_id=source_contract_id,
+        causal_contract_id=CAUSAL_OBSERVATION_CONTRACT_ID,
+        source_release_id=canonical_release_id,
+        plan_id=str(plan["plan_id"]),
+        plan_sha256=plan_sha256,
+        exact_source_entries_sha256=str(
+            plan["source"]["exact_source_entries_sha256"]
+        ),
+        economics_rulebook_sha256=ECONOMICS_RULEBOOK_SHA256,
+        output_staging_path=str(plan["output_staging_path"]),
+        receipt_id=receipt.receipt_id,
+        synthetic=False,
+        _seal=_SEAL,
+    )
+
+
 def required_full_build_scope(
     *,
     plan: Mapping[str, object],
@@ -395,24 +573,7 @@ def authorize_full_build_row_read(
 ) -> CausalObservationOperationContext:
     """Consume one exact full-build approval before the first DBN open."""
 
-    contract_path = boundary.active_root / "configs/source_contract.json"
-    try:
-        contract = json.loads(contract_path.read_text(encoding="utf-8"))
-    except (OSError, UnicodeDecodeError, ValueError) as exc:
-        raise IntegrityError("active full-build source contract is invalid") from exc
-    if not isinstance(contract, dict):
-        raise IntegrityError("active full-build source contract is not an object")
-    source_contract_id = contract.get("contract_id")
-    source = contract.get("active_canonical_source")
-    core = {key: value for key, value in contract.items() if key != "contract_id"}
-    if (
-        type(source_contract_id) is not str
-        or sha256_json(core) != source_contract_id
-        or not isinstance(source, Mapping)
-        or type(source.get("release_id")) is not str
-    ):
-        raise IntegrityError("active full-build source identity differs")
-    canonical_release_id = str(source["release_id"])
+    source_contract_id, canonical_release_id = _active_source_identity(boundary)
     scope = required_full_build_scope(
         plan=plan,
         plan_sha256=plan_sha256,
@@ -498,6 +659,14 @@ def _require_context(context: CausalObservationOperationContext) -> None:
                 is OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION
                 and context.source_contract_id == CANARY_SOURCE_CONTRACT_ID
                 and context.source_release_id == CANARY_CANONICAL_RELEASE_ID
+            )
+        elif context.operation == CAUSAL_OBSERVATION_BOUNDED_2025_SMOKE_OPERATION:
+            identity_valid = (
+                context.classification
+                is OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION
+                and _SHA256.fullmatch(context.source_contract_id) is not None
+                and _SHA256.fullmatch(context.source_release_id) is not None
+                and context.source_release_id != SYNTHETIC_RELEASE_ID
             )
         elif context.operation == CAUSAL_OBSERVATION_FULL_BUILD_OPERATION:
             identity_valid = (
