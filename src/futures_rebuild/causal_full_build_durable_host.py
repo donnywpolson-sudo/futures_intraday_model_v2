@@ -73,6 +73,8 @@ def expected_durable_host_plan(market: str, attempt_id: str) -> dict[str, object
         "evidence_path": f"{DURABLE_HOST_EVIDENCE_ROOT}/{market}/{attempt_id}",
         "heartbeat_interval_seconds": DURABLE_HOST_HEARTBEAT_INTERVAL_SECONDS,
         "stale_after_seconds": DURABLE_HOST_STALE_AFTER_SECONDS,
+        "launch_mode": "SCHEDULED_SERVICE_TRIGGER_AFTER_LAUNCHER_EXIT",
+        "minimum_trigger_delay_seconds": 120,
         "interactive_parent_independent": True,
         "task_overwrite_allowed": False,
         "automatic_restart_allowed": False,

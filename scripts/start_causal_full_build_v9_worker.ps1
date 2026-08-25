@@ -31,7 +31,8 @@ if (-not (Test-Path -LiteralPath $PowerShell -PathType Leaf)) {
 }
 $Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"' -f $WorkerPath
 $Action = New-ScheduledTaskAction -Execute $PowerShell -Argument $Arguments -WorkingDirectory $RepositoryRoot
-$Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddDays(1)
+$ScheduledAt = (Get-Date).AddMinutes(2)
+$Trigger = New-ScheduledTaskTrigger -Once -At $ScheduledAt
 $Settings = New-ScheduledTaskSettingsSet `
     -AllowStartIfOnBatteries `
     -DontStopIfGoingOnBatteries `
@@ -44,14 +45,12 @@ $Principal = New-ScheduledTaskPrincipal `
     -RunLevel Limited
 $Task = New-ScheduledTask -Action $Action -Trigger $Trigger -Settings $Settings -Principal $Principal
 Register-ScheduledTask -TaskName $TaskName -InputObject $Task | Out-Null
-Start-ScheduledTask -TaskName $TaskName
-
-$StartedPath = Join-Path $RepositoryRoot ('state/causal_full_build_host/causal_observation_full_development_bounded_2025_v9/{0}/{1}/started.json' -f $Market, $AttemptId)
-$Deadline = (Get-Date).AddSeconds(60)
-while ((Get-Date) -lt $Deadline -and -not (Test-Path -LiteralPath $StartedPath)) {
-    Start-Sleep -Seconds 1
-}
-if (-not (Test-Path -LiteralPath $StartedPath)) {
-    throw 'V9 task was started but did not create its durable start record within 60 seconds.'
-}
-Get-Content -LiteralPath $StartedPath -Raw
+[ordered]@{
+    status = 'REGISTERED_FOR_SERVICE_TRIGGER_AFTER_LAUNCHER_EXIT'
+    task_name = $TaskName
+    market = $Market
+    attempt_id = $AttemptId
+    scheduled_at = $ScheduledAt.ToUniversalTime().ToString('o')
+    manual_start = $false
+    interactive_parent_independent = $true
+} | ConvertTo-Json -Compress

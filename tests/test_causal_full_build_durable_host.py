@@ -154,7 +154,10 @@ def test_scheduler_launcher_is_nonoverwriting_and_not_restartable() -> None:
     assert "Get-ScheduledTask" in text
     assert "refusing to overwrite or restart" in text
     assert "Register-ScheduledTask" in text
-    assert "Start-ScheduledTask" in text
+    assert "AddMinutes(2)" in text
+    assert "Start-ScheduledTask" not in text
+    assert "manual_start = $false" in text
+    assert "REGISTERED_FOR_SERVICE_TRIGGER_AFTER_LAUNCHER_EXIT" in text
     assert "System32/WindowsPowerShell/v1.0/powershell.exe" in text
     assert "Unregister-ScheduledTask" not in text
     assert "Start-Process" not in text
