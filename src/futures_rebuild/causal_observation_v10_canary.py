@@ -368,6 +368,7 @@ def _replay_plan(plan_path: Path, root: Path, plan: Mapping[str, object]) -> dic
         "target_market": "ES",
         "attempt_id": plan["attempt_id"],
         "checkpoint_set_id": plan["checkpoint_set_id"],
+        "causal_contract_id": plan["causal_contract_id"],
         "build_plan_path": plan_path.relative_to(root).as_posix(),
         "build_plan_sha256": sha256_file(plan_path),
         "source": dict(plan["source"]),

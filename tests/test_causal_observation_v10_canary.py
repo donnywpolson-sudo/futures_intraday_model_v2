@@ -25,6 +25,7 @@ from futures_rebuild.causal_observation_v10_canary import (
     MAXIMUM_DECODED_RECORDS,
     REQUIRED_CANARY_BINDINGS,
     _load_entries,
+    _replay_plan,
     _validate_entry_set,
     validate_v10_es_2025_canary_plan,
     v10_es_2025_inventory_document,
@@ -275,6 +276,28 @@ def test_sealed_v10_canary_context_is_accepted_by_shared_observation_guard() -> 
     )
 
     foundation._require_context(context)
+
+
+def test_canary_replay_plan_contains_every_independent_replay_identity(
+    tmp_path: Path,
+) -> None:
+    plan = _plan()
+    plan_path = tmp_path / "canary-plan.json"
+    plan_path.write_bytes(canonical_bytes(plan) + b"\n")
+
+    replay = _replay_plan(plan_path, tmp_path, plan)
+
+    assert set(replay) == {
+        "target_market",
+        "attempt_id",
+        "checkpoint_set_id",
+        "causal_contract_id",
+        "build_plan_path",
+        "build_plan_sha256",
+        "source",
+    }
+    assert replay["causal_contract_id"] == CAUSAL_OBSERVATION_CONTRACT_ID
+    assert replay["build_plan_sha256"] == sha256_file(plan_path)
 
 
 @pytest.mark.parametrize("mutation", ("missing", "extra", "wrong_market", "wrong_family"))
