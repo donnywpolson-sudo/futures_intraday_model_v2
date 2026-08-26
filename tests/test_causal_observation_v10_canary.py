@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from futures_rebuild.canonical import sha256_file, sha256_json
+from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
 from futures_rebuild.causal_full_build_durable_host import expected_durable_host_plan
 from futures_rebuild.causal_observation_foundation import (
     CAUSAL_OBSERVATION_CONTRACT_ID,
@@ -23,6 +23,7 @@ from futures_rebuild.causal_observation_v10_campaign import CampaignState, trans
 from futures_rebuild.causal_observation_v10_canary import (
     MAXIMUM_DECODED_RECORDS,
     REQUIRED_CANARY_BINDINGS,
+    _load_entries,
     _validate_entry_set,
     validate_v10_es_2025_canary_plan,
     v10_es_2025_inventory_document,
@@ -190,6 +191,66 @@ def test_active_metadata_selects_exact_seven_es_2025_source_pairs_without_rows()
         "definition", "ohlcv_1d", "ohlcv_1h", "ohlcv_1m", "ohlcv_1s",
         "statistics", "status",
     }
+
+
+def test_canary_loader_accepts_exact_registered_hardlinked_sidecars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import futures_rebuild.causal_observation_v10_canary as canary
+
+    entries: list[dict[str, object]] = []
+    payload_bytes = 0
+    for family in sorted(canary.BOUNDARY_SOURCE_FAMILIES):
+        dbn = tmp_path / "data" / f"{family}.dbn.zst"
+        dbn.parent.mkdir(parents=True, exist_ok=True)
+        dbn.write_bytes(family.encode("ascii"))
+        payload_bytes += dbn.stat().st_size
+        sidecar_seed = tmp_path / "seeds" / f"{family}.json"
+        sidecar_seed.parent.mkdir(parents=True, exist_ok=True)
+        sidecar_seed.write_bytes(canonical_bytes({"family": family}) + b"\n")
+        sidecar = tmp_path / "data" / f"{family}.dbn.zst.manifest.json"
+        try:
+            sidecar.hardlink_to(sidecar_seed)
+        except OSError as exc:
+            pytest.skip(f"hard links unavailable: {exc}")
+        common = {
+            "market": "ES",
+            "year": 2025,
+            "family": family,
+            "interval_start_inclusive": canary.START,
+            "interval_end_exclusive": canary.END,
+            "lane": "STANDARD_41",
+            "admitted_standard_foundation": True,
+        }
+        entries.extend(
+            (
+                {**common, "kind": "DBN", "path": dbn.relative_to(tmp_path).as_posix(), "size_bytes": dbn.stat().st_size},
+                {
+                    **common,
+                    "kind": "SIDECAR",
+                    "path": sidecar.relative_to(tmp_path).as_posix(),
+                    "size_bytes": sidecar.stat().st_size,
+                    "sha256": sha256_file(sidecar, reject_hardlinks=False),
+                },
+            )
+        )
+    source_bytes = sum(int(item["size_bytes"]) for item in entries)
+    monkeypatch.setattr(canary, "SOURCE_BYTES", source_bytes)
+    monkeypatch.setattr(canary, "PAYLOAD_BYTES_PER_DECODE", payload_bytes)
+    selected = tuple(sorted(entries, key=lambda item: str(item["path"])))
+    dbns = tuple(item for item in selected if item["kind"] == "DBN")
+    inventory = tmp_path / "inventory.json"
+    inventory.write_bytes(canonical_bytes({"entries": list(selected)}) + b"\n")
+    plan = {
+        "source": {
+            "inventory_path": inventory.relative_to(tmp_path).as_posix(),
+            "inventory_sha256": sha256_file(inventory),
+            "exact_source_entries_sha256": sha256_json(selected),
+            "exact_dbn_entries_sha256": sha256_json(dbns),
+        }
+    }
+
+    assert len(_load_entries(tmp_path, plan)) == 14
 
 
 @pytest.mark.parametrize("mutation", ("missing", "extra", "wrong_market", "wrong_family"))

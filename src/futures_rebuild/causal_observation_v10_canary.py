@@ -264,7 +264,10 @@ def _load_entries(root: Path, plan: Mapping[str, object]) -> tuple[dict[str, obj
         path = _contained(root, item["path"])
         if io_path(path).stat().st_size != item["size_bytes"]:
             raise IntegrityError("V10 canary source file identity differs")
-        if item["kind"] == "SIDECAR" and sha256_file(path) != item["sha256"]:
+        if (
+            item["kind"] == "SIDECAR"
+            and sha256_file(path, reject_hardlinks=False) != item["sha256"]
+        ):
             raise IntegrityError("V10 canary sidecar identity differs")
     return selected
 
