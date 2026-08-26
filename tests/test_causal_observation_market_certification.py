@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import json
+import multiprocessing
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,7 @@ from futures_rebuild.causal_observation_market_certification import (
     run_authorized_market_certification,
     _io_path,
     _partition_manifest,
+    _receive_replay_process_result,
     _reconstruct_tables,
     _run_replay_in_fresh_process,
     MARKET_CERTIFICATION_PLAN_OPERATION,
@@ -48,6 +50,10 @@ from futures_rebuild.research_gateway_policy import (
 
 H = "a" * 64
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def _put_large_replay_evidence(result_queue: object) -> None:
+    result_queue.put(("PASS", {"blob": "x" * (4 * 1024 * 1024)}))  # type: ignore[attr-defined]
 
 
 def _checkpoint_set() -> dict[str, object]:
@@ -217,6 +223,32 @@ def test_independent_replay_process_transports_failure_without_parent_fallback(
             {"target_market": "ES", "build_plan_path": "missing.json"},
             {},
         )
+
+
+def test_independent_replay_process_drains_large_evidence_before_join() -> None:
+    context = multiprocessing.get_context("spawn")
+    result_queue = context.Queue(maxsize=1)
+    process = context.Process(
+        target=_put_large_replay_evidence,
+        args=(result_queue,),
+    )
+    process.start()
+    try:
+        status, payload = _receive_replay_process_result(
+            process,
+            result_queue,
+            timeout_seconds=15,
+        )
+    finally:
+        if process.is_alive():
+            process.terminate()
+            process.join()
+        result_queue.close()
+        result_queue.join_thread()
+    assert status == "PASS"
+    assert isinstance(payload, dict)
+    assert len(payload["blob"]) == 4 * 1024 * 1024
+    assert process.exitcode == 0
 
 
 def test_plan_binds_exact_market_checkpoint_and_two_complete_replays() -> None:

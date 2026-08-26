@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import multiprocessing
 import queue
+import time as monotonic_time
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
@@ -1197,6 +1198,53 @@ def _replay_process_worker(
         )
 
 
+def _receive_replay_process_result(
+    process: object,
+    result_queue: object,
+    *,
+    timeout_seconds: float | None,
+) -> tuple[object, object]:
+    """Drain child evidence before joining so large queue payloads cannot deadlock."""
+
+    deadline = (
+        None
+        if timeout_seconds is None
+        else monotonic_time.monotonic() + timeout_seconds
+    )
+    while True:
+        if deadline is None:
+            wait_seconds = 0.1
+        else:
+            remaining = deadline - monotonic_time.monotonic()
+            if remaining <= 0:
+                if process.is_alive():  # type: ignore[attr-defined]
+                    process.terminate()  # type: ignore[attr-defined]
+                    process.join()  # type: ignore[attr-defined]
+                raise IntegrityError(
+                    "independent replay process exceeded its runtime ceiling"
+                )
+            wait_seconds = min(0.1, remaining)
+        try:
+            status, payload = result_queue.get(timeout=wait_seconds)  # type: ignore[attr-defined]
+            break
+        except queue.Empty as exc:
+            if not process.is_alive():  # type: ignore[attr-defined]
+                process.join()  # type: ignore[attr-defined]
+                raise IntegrityError(
+                    "independent replay process exited without evidence: "
+                    f"{process.exitcode}"  # type: ignore[attr-defined]
+                ) from exc
+
+    process.join(timeout=5)  # type: ignore[attr-defined]
+    if process.is_alive():  # type: ignore[attr-defined]
+        process.terminate()  # type: ignore[attr-defined]
+        process.join()  # type: ignore[attr-defined]
+        raise IntegrityError(
+            "independent replay process did not exit after delivering evidence"
+        )
+    return status, payload
+
+
 def _run_replay_in_fresh_process(
     root: Path,
     plan: Mapping[str, object],
@@ -1215,22 +1263,16 @@ def _run_replay_in_fresh_process(
     )
     process.start()
     try:
-        process.join(timeout=timeout_seconds)
-        if process.is_alive():
-            process.terminate()
-            process.join()
-            raise IntegrityError("independent replay process exceeded its runtime ceiling")
+        status, payload = _receive_replay_process_result(
+            process,
+            result_queue,
+            timeout_seconds=timeout_seconds,
+        )
     except BaseException:
         if process.is_alive():
             process.terminate()
             process.join()
         raise
-    try:
-        status, payload = result_queue.get(timeout=5)
-    except queue.Empty as exc:
-        raise IntegrityError(
-            f"independent replay process exited without evidence: {process.exitcode}"
-        ) from exc
     finally:
         result_queue.close()
         result_queue.join_thread()
