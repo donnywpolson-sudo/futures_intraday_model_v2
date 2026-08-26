@@ -1038,7 +1038,10 @@ def _require_context(context: CausalObservationOperationContext) -> None:
                 and _SHA256.fullmatch(context.source_release_id) is not None
                 and context.source_release_id != SYNTHETIC_RELEASE_ID
             )
-        elif context.operation == CAUSAL_OBSERVATION_FULL_BUILD_OPERATION:
+        elif context.operation in {
+            CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
+            CAUSAL_OBSERVATION_V10_CANARY_OPERATION,
+        }:
             identity_valid = (
                 context.classification
                 is OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION

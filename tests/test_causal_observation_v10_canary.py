@@ -5,6 +5,7 @@ from pathlib import Path
 
 import pytest
 
+from futures_rebuild.boundary import OperationClassification
 from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
 from futures_rebuild.causal_full_build_durable_host import expected_durable_host_plan
 from futures_rebuild.causal_observation_foundation import (
@@ -251,6 +252,29 @@ def test_canary_loader_accepts_exact_registered_hardlinked_sidecars(
     }
 
     assert len(_load_entries(tmp_path, plan)) == 14
+
+
+def test_sealed_v10_canary_context_is_accepted_by_shared_observation_guard() -> None:
+    import futures_rebuild.causal_observation_foundation as foundation
+
+    plan = _plan()
+    context = foundation.CausalObservationOperationContext(
+        operation=CAUSAL_OBSERVATION_V10_CANARY_OPERATION,
+        classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
+        source_contract_id=str(plan["source"]["source_contract_id"]),
+        causal_contract_id=CAUSAL_OBSERVATION_CONTRACT_ID,
+        source_release_id=str(plan["source"]["canonical_release_id"]),
+        plan_id=str(plan["plan_id"]),
+        plan_sha256="4" * 64,
+        exact_source_entries_sha256=str(plan["source"]["exact_source_entries_sha256"]),
+        economics_rulebook_sha256=str(plan["economics"]["rulebook_sha256"]),
+        output_staging_path=str(plan["output_staging_path"]),
+        receipt_id="5" * 64,
+        synthetic=False,
+        _seal=foundation._SEAL,
+    )
+
+    foundation._require_context(context)
 
 
 @pytest.mark.parametrize("mutation", ("missing", "extra", "wrong_market", "wrong_family"))
