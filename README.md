@@ -34,9 +34,10 @@ safety implementation is built, validated, committed, and remotely recoverable.
 The seven-market development canary ran once, passed independent verification,
 and remains unpublished and inactive. The new 41-market causal observation
 release is not built. Later full-build attempts remained inactive and failed
-closed on timing and then storage. A compact Parquet/Zstandard successor is
-being prepared, and the annual 2025 sources remain inadmissible until every
-time-bearing family is exactly bounded before the development cutoff. The
+closed and remain evidence only. The non-active V10 successor performs compact
+Parquet/Zstandard normalization and two-pass independent certification one
+market at a time, with immutable market and sealed-year checkpoints. It is
+synthetic-test proven but has not read real DBNs or started its scheduler. The
 Final Sealed 252-Session Holdout remains pristine and unread. See
 `PROJECT_OUTLINE.md` for the current pipeline and status.
 

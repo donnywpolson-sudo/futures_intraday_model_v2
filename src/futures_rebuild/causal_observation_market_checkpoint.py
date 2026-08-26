@@ -1,4 +1,4 @@
-"""V9 complete-market checkpoints for the development causal foundation."""
+"""V10 complete-market checkpoints for the development causal foundation."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from pathlib import Path
 import databento
 
 from .boundary import OperationReceipt, RepoBoundary
-from .canonical import sha256_file, sha256_json
+from .canonical import io_path, sha256_file, sha256_json
 from .causal_full_build_durable_host import (
     expected_durable_host_plan,
     validate_active_durable_host_evidence,
@@ -22,7 +22,7 @@ from .causal_observation_foundation import (
     CAUSAL_OBSERVATION_CONTRACT_ID,
     ECONOMICS_RULEBOOK_PATH,
     ECONOMICS_RULEBOOK_SHA256,
-    V9_CHECKPOINT_MARKETS,
+    V10_CHECKPOINT_MARKETS,
     authorize_market_checkpoint_row_read,
 )
 from .causal_observation_full_build import (
@@ -35,6 +35,7 @@ from .causal_observation_full_build import (
     _json,
     _load_economics_rulebook,
     _market_windows,
+    _validate_v10_reuse_binding_shape,
     _write_create_only,
     validate_complete_development_boundary_metadata,
     validate_full_build_storage_floor,
@@ -46,15 +47,28 @@ from .foundation_operation_firewall import issue_current_source_closure_context
 from .locking import FileLease
 
 
-PLAN_SCHEMA = "development_causal_observation_market_checkpoint_plan/1.0.0"
-CHECKPOINT_SET_SCHEMA = "development_causal_observation_checkpoint_set/1.0.0"
+PLAN_SCHEMA = "development_causal_observation_market_checkpoint_plan/1.1.0"
+CHECKPOINT_SET_SCHEMA = "development_causal_observation_checkpoint_set/1.1.0"
 CHECKPOINT_SET_CERTIFICATE_SCHEMA = (
     "development_causal_observation_checkpoint_set_certificate/1.0.0"
 )
 OUTPUT_ROOT = (
-    "state/data_publication_staging/causal_observation_full_development_bounded_2025_v9"
+    "data/causally_gated_normalized/v10"
 )
-MARKET_ORDER = V9_CHECKPOINT_MARKETS
+MARKET_ORDER = V10_CHECKPOINT_MARKETS
+CHECKPOINT_SET_REQUIRED_BINDINGS = frozenset(
+    {
+        "scripts/start_causal_full_build_v10_worker.ps1",
+        "src/futures_rebuild/canonical.py",
+        "src/futures_rebuild/causal_full_build_durable_host.py",
+        "src/futures_rebuild/causal_observation_foundation.py",
+        "src/futures_rebuild/causal_observation_full_build.py",
+        "src/futures_rebuild/causal_observation_market_checkpoint.py",
+        "src/futures_rebuild/causal_observation_parquet.py",
+        "src/futures_rebuild/causal_observation_verifier.py",
+        "src/futures_rebuild/data_layout.py",
+    }
+)
 
 
 def checkpoint_set_identity(value: Mapping[str, object]) -> str:
@@ -88,7 +102,7 @@ def _validate_checkpoint_set(root: Path, plan: Mapping[str, object]) -> dict[str
             "partitioning": "market/year/month",
         }
         or not isinstance(bindings, Mapping)
-        or not bindings
+        or not CHECKPOINT_SET_REQUIRED_BINDINGS.issubset(bindings)
         or plan.get("checkpoint_set_id") != checkpoint_set_identity(checkpoint_set)
     ):
         raise UnauthorizedOperation("market checkpoint set is not exact")
@@ -125,7 +139,8 @@ def validate_market_checkpoint_plan(root: Path, plan: Mapping[str, object]) -> N
             "provider_null_fallback_only": True,
             "negative_or_contradictory_provider_value": "FAIL_CLOSED",
         }
-        or plan.get("output_staging_path") != f"{OUTPUT_ROOT}/{market}/{attempt_id}"
+        or plan.get("output_staging_path")
+        != f"{OUTPUT_ROOT}/{plan.get('checkpoint_set_id')}/{market}/{attempt_id}"
         or plan.get("development_end_exclusive") != "2025-07-13T22:00:00Z"
         or plan.get("holdout_allowed") is not False
         or plan.get("forward_allowed") is not False
@@ -164,6 +179,7 @@ def validate_market_checkpoint_plan(root: Path, plan: Mapping[str, object]) -> N
         != source.get("exact_dbn_file_count") + source.get("exact_sidecar_file_count")
     ):
         raise UnauthorizedOperation("market checkpoint plan is not exact")
+    _validate_v10_reuse_binding_shape(plan)
     _validate_checkpoint_set(root, plan)
     validate_durable_host_plan(root, plan)
     plan_id = plan.get("plan_id")
@@ -251,11 +267,6 @@ def run_authorized_market_checkpoint(
     run_lock = root / f"state/locks/causal-observation-market-{market}-{plan['plan_id']}.lock"
     if global_lock.exists() or run_lock.exists():
         raise UnauthorizedOperation("market checkpoint writer lock is active")
-    validate_market_checkpoint_execution_environment(root, plan)
-    economics_rulebook = _load_economics_rulebook(root)
-    context = authorize_market_checkpoint_row_read(
-        boundary=boundary, receipt=receipt, plan=plan, plan_sha256=plan_sha
-    )
     progress: dict[str, object] = {
         "current_market": market,
         "current_year": None,
@@ -271,8 +282,15 @@ def run_authorized_market_checkpoint(
         "complete_partition_count": 0,
         "output_bytes": 0,
     }
-    try:
-        with FileLease(global_lock), FileLease(run_lock):
+    with FileLease(global_lock), FileLease(run_lock):
+        if output.exists():
+            raise IntegrityError("market checkpoint output appeared after lock acquisition")
+        validate_market_checkpoint_execution_environment(root, plan)
+        economics_rulebook = _load_economics_rulebook(root)
+        context = authorize_market_checkpoint_row_read(
+            boundary=boundary, receipt=receipt, plan=plan, plan_sha256=plan_sha
+        )
+        try:
             result = _execute(
                 root=root,
                 boundary=boundary,
@@ -284,44 +302,49 @@ def run_authorized_market_checkpoint(
                 progress=progress,
                 started=time.monotonic(),
             )
-        partitions = result.payload.get("partitions")
-        if (
-            result.payload.get("status") != "PASS_COMPLETE_MARKET_CHECKPOINT_INACTIVE"
-            or result.payload.get("target_market") != market
-            or result.payload.get("complete_work_unit_count")
-            != plan["source"]["work_unit_count"]
-            or result.payload.get("source_entry_count")
-            != plan["source"]["exact_source_entry_count"]
-            or result.payload.get("dbn_file_count")
-            != plan["source"]["exact_dbn_file_count"]
-            or not isinstance(partitions, list)
-            or not partitions
-            or any(item.get("market") != market for item in partitions)
-        ):
-            raise IntegrityError("market checkpoint completion is not exact")
-        return result
-    except (Exception, KeyboardInterrupt) as exc:
-        output.mkdir(parents=True, exist_ok=True)
-        failure_path = output / "failure.json"
-        if not failure_path.exists():
-            failure = {
-                "schema_version": "development_causal_observation_market_checkpoint_failure/1.0.0",
-                "status": "FAILED_MARKET_TERMINAL_OTHER_CHECKPOINTS_UNAFFECTED",
-                "target_market": market,
-                "checkpoint_set_id": plan["checkpoint_set_id"],
-                "plan_id": plan["plan_id"],
-                "receipt_id": context.receipt_id,
-                "error_type": type(exc).__name__,
-                "error_message": str(exc),
-                "progress": progress,
-                "failed_market_partition_reuse_authorized": False,
-                "completed_other_market_checkpoints_affected": False,
-                "required_retry": "NEW_MARKET_PLAN_NEW_RECEIPT_NEW_MARKET_OUTPUT",
-                "publication_authorized": False,
-                "activation_authorized": False,
-            }
-            _write_create_only(failure_path, failure)
-        raise
+            partitions = result.payload.get("partitions")
+            if (
+                result.payload.get("status") != "PASS_COMPLETE_MARKET_CHECKPOINT_INACTIVE"
+                or result.payload.get("target_market") != market
+                or result.payload.get("complete_work_unit_count")
+                != plan["source"]["work_unit_count"]
+                or result.payload.get("source_entry_count")
+                != plan["source"]["exact_source_entry_count"]
+                or result.payload.get("dbn_file_count")
+                != plan["source"]["exact_dbn_file_count"]
+                or not isinstance(partitions, list)
+                or not partitions
+                or any(item.get("market") != market for item in partitions)
+            ):
+                raise IntegrityError("market checkpoint completion is not exact")
+            return result
+        except (Exception, KeyboardInterrupt) as exc:
+            io_path(output).mkdir(parents=True, exist_ok=True)
+            failure_path = output / "failure.json"
+            if not failure_path.exists():
+                sealed_count = int(progress["complete_work_unit_count"])
+                failure = {
+                    "schema_version": "development_causal_observation_market_checkpoint_failure/1.1.0",
+                    "status": "FAILED_MARKET_TERMINAL_OTHER_CHECKPOINTS_UNAFFECTED",
+                    "target_market": market,
+                    "checkpoint_set_id": plan["checkpoint_set_id"],
+                    "plan_id": plan["plan_id"],
+                    "receipt_id": context.receipt_id,
+                    "error_type": type(exc).__name__,
+                    "error_message": str(exc),
+                    "progress": progress,
+                    "sealed_work_unit_count": sealed_count,
+                    "sealed_work_units_reusable_if_all_bindings_match": (
+                        sealed_count > 0
+                    ),
+                    "unsealed_work_unit_reuse_authorized": False,
+                    "completed_other_market_checkpoints_affected": False,
+                    "required_retry": "FRESH_RECEIPT_REMAINING_UNSEALED_WORK_ONLY",
+                    "publication_authorized": False,
+                    "activation_authorized": False,
+                }
+                _write_create_only(failure_path, failure)
+            raise
 
 
 def certify_complete_checkpoint_set(

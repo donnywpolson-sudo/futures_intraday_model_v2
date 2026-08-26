@@ -12,7 +12,7 @@ import re
 from pathlib import Path
 from typing import Mapping
 
-from .canonical import canonical_bytes, sha256_file, sha256_json
+from .canonical import canonical_bytes, io_path, iter_plain_files, sha256_file, sha256_json
 from .data_layout import DataReleaseManifest
 from .errors import IntegrityError
 from .foundation.economics import EconomicsRuleBook
@@ -43,7 +43,7 @@ _PARQUET_FILENAMES = frozenset(PARQUET_FILENAMES.values())
 
 
 def _read_canonical_lines(path: Path) -> list[dict[str, object]]:
-    raw = path.read_bytes()
+    raw = io_path(path).read_bytes()
     rows: list[dict[str, object]] = []
     for line in raw.splitlines(keepends=True):
         if not line.endswith(b"\n"):
@@ -61,22 +61,28 @@ def _read_canonical_lines(path: Path) -> list[dict[str, object]]:
 def _index_by_filename(
     stage: Path, manifest: DataReleaseManifest, expected: frozenset[str] | set[str]
 ) -> dict[str, tuple[Path, object]]:
+    observed_files = iter_plain_files(stage)
+    by_name: dict[str, list[Path]] = {}
+    for path in observed_files:
+        by_name.setdefault(path.name, []).append(path)
     result: dict[str, tuple[Path, object]] = {}
     for entry in manifest.files:
         filename = Path(entry.logical_path).name
         if filename in result or filename not in expected:
             raise IntegrityError("candidate manifest file set is unexpected or duplicate")
         candidates = [
-            path for path in stage.rglob(filename)
-            if path.is_file() and path.stat().st_size == entry.size and sha256_file(path) == entry.sha256
+            path
+            for path in by_name.get(filename, ())
+            if io_path(path).stat().st_size == entry.size
+            and sha256_file(path) == entry.sha256
         ]
         if len(candidates) != 1:
             raise IntegrityError("candidate file cannot be independently matched to its manifest")
         result[filename] = (candidates[0], entry)
     if set(result) != set(expected):
         raise IntegrityError("candidate manifest omits a required evidence file")
-    observed = {path.resolve() for path in stage.rglob("*") if path.is_file()}
-    matched = {value[0].resolve() for value in result.values()}
+    observed = {path.relative_to(stage).as_posix() for path in observed_files}
+    matched = {value[0].relative_to(stage).as_posix() for value in result.values()}
     if observed != matched:
         raise IntegrityError("candidate stage contains an unmanifested file")
     return result

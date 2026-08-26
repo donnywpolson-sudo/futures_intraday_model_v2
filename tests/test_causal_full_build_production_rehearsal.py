@@ -24,7 +24,7 @@ def test_real_launcher_runs_small_provider_free_production_rehearsal(
 ) -> None:
     rehearsal_root = tmp_path / "rehearsal"
     rehearsal_root.mkdir()
-    launcher = ROOT / "scripts/start_causal_full_build_v9_worker.ps1"
+    launcher = ROOT / "scripts/start_causal_full_build_v10_worker.ps1"
     powershell = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
     completed = subprocess.run(
         [

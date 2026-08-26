@@ -51,12 +51,13 @@ ECONOMICS_RULEBOOK_ID = (
     "83008522be3b959f3c08cc3a9f5ff4d55878210c0e23cff5ceb7bf650ba2ef68"
 )
 DEVELOPMENT_END_EXCLUSIVE = "2025-07-13T22:00:00Z"
-V9_CHECKPOINT_MARKETS = (
+V10_CHECKPOINT_MARKETS = (
     "ES", "GC", "6E", "CL", "NQ", "6A", "6B", "6C", "6J", "6M", "6N",
     "6S", "BTC", "ETH", "GF", "HE", "HG", "HO", "KE", "LE", "NG", "PA",
     "PL", "RB", "RTY", "SI", "SR1", "SR3", "TN", "UB", "YM", "ZB", "ZC",
     "ZF", "ZL", "ZM", "ZN", "ZQ", "ZS", "ZT", "ZW",
 )
+V9_CHECKPOINT_MARKETS = V10_CHECKPOINT_MARKETS
 SYNTHETIC_RELEASE_ID = "0" * 64
 RELEASE_KIND = "development_only_causal_observation_partition"
 SCHEMA_VERSION = "causal_observation_partition/1.1.0"
@@ -634,7 +635,7 @@ def required_market_checkpoint_scope(
     source_contract_id: str,
     canonical_release_id: str,
 ) -> dict[str, str]:
-    """Seal one complete-market V9 checkpoint independently of other markets."""
+    """Seal one complete-market V10 checkpoint independently of other markets."""
 
     market = plan.get("target_market")
     attempt_id = plan.get("attempt_id")
@@ -644,11 +645,11 @@ def required_market_checkpoint_scope(
     authority = plan.get("authority")
     if (
         plan.get("schema_version")
-        != "development_causal_observation_market_checkpoint_plan/1.0.0"
+        != "development_causal_observation_market_checkpoint_plan/1.1.0"
         or plan.get("operation") != CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
         or plan.get("causal_contract_id") != CAUSAL_OBSERVATION_CONTRACT_ID
         or type(market) is not str
-        or market not in V9_CHECKPOINT_MARKETS
+        or market not in V10_CHECKPOINT_MARKETS
         or type(attempt_id) is not str
         or not isinstance(source, Mapping)
         or not isinstance(limits, Mapping)
@@ -674,8 +675,8 @@ def required_market_checkpoint_scope(
         }
         or plan.get("output_staging_path")
         != (
-            "state/data_publication_staging/"
-            f"causal_observation_full_development_bounded_2025_v9/{market}/{attempt_id}"
+            "data/causally_gated_normalized/v10/"
+            f"{plan.get('checkpoint_set_id')}/{market}/{attempt_id}"
         )
         or any(
             type(source.get(name)) is not int or int(source[name]) <= 0

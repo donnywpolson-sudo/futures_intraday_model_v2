@@ -18,6 +18,8 @@ from .canonical import (
     canonical_bytes,
     contained_path,
     fsync_directory,
+    io_path,
+    iter_plain_files,
     is_linklike,
     sha256_file,
     sha256_json,
@@ -298,18 +300,14 @@ class DataReleaseManifest:
         metadata: Mapping[str, object] | None = None,
     ) -> "DataReleaseManifest":
         assert_no_linklike_ancestors(stage)
-        if not stage.is_dir() or is_linklike(stage):
+        if not io_path(stage).is_dir() or is_linklike(stage):
             raise ContractError("data release stage must be a plain directory")
         path_map = dict(logical_paths or {})
         entries: list[DataFileEntry] = []
         observed_stage_files: set[str] = set()
-        for path in sorted(stage.rglob("*")):
+        for path in iter_plain_files(stage):
             if path.name == PUBLICATION_INTENT_FILENAME:
                 raise ContractError("stage contains the reserved publication intent")
-            if is_linklike(path):
-                raise ContractError(f"link-like staged path is forbidden: {path}")
-            if path.is_dir():
-                continue
             assert_plain_file(path)
             relative = path.relative_to(stage).as_posix()
             observed_stage_files.add(relative)
@@ -318,7 +316,9 @@ class DataReleaseManifest:
                 raise ContractError(f"staged file has no logical data path: {relative}")
             if phase in DATA_ROOTS:
                 _logical_data_path(logical, phase)
-            entries.append(DataFileEntry(logical, path.stat().st_size, sha256_file(path)))
+            entries.append(
+                DataFileEntry(logical, io_path(path).stat().st_size, sha256_file(path))
+            )
         if set(path_map) != observed_stage_files:
             raise ContractError("logical path map differs from the exact staged file set")
         core = {

@@ -1,4 +1,4 @@
-"""Durable, auditable Windows host boundary for the V9 causal full build."""
+"""Durable, auditable Windows host boundary for V10 causal market work."""
 
 from __future__ import annotations
 
@@ -19,10 +19,10 @@ from .locking import _local_process_alive
 
 
 DURABLE_HOST_KIND = "WINDOWS_TASK_SCHEDULER_CURRENT_USER"
-DURABLE_HOST_TASK_NAME = "FuturesIntradayModelV2-CausalFullBuild-V9"
-DURABLE_HOST_LAUNCHER_PATH = "scripts/start_causal_full_build_v9_worker.ps1"
+DURABLE_HOST_TASK_NAME_PREFIX = "FIMV2-Causal-V10"
+DURABLE_HOST_LAUNCHER_PATH = "scripts/start_causal_full_build_v10_worker.ps1"
 DURABLE_HOST_EVIDENCE_ROOT = (
-    "state/causal_full_build_host/causal_observation_full_development_bounded_2025_v9"
+    "state/causal_full_build_host/causal_observation_full_development_bounded_2025_v10"
 )
 DURABLE_HOST_ENVIRONMENT_KEY = "FUTURES_CAUSAL_FULL_BUILD_TASK_NAME"
 DURABLE_HOST_HEARTBEAT_INTERVAL_SECONDS = 60
@@ -71,17 +71,18 @@ def expected_durable_host_plan(market: str, attempt_id: str) -> dict[str, object
     if not market or any(
         character not in "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ" for character in market
     ):
-        raise ContractError("V9 durable-host market is invalid")
+        raise ContractError("V10 durable-host market is invalid")
     if (
         len(attempt_id) != 64
         or attempt_id.lower() != attempt_id
         or any(character not in "0123456789abcdef" for character in attempt_id)
     ):
-        raise ContractError("V9 durable-host attempt identity is invalid")
+        raise ContractError("V10 durable-host attempt identity is invalid")
+    task_name = f"{DURABLE_HOST_TASK_NAME_PREFIX}-{market}-{attempt_id[:8]}"
     return {
         "schema_version": DURABLE_HOST_SCHEMA,
         "kind": DURABLE_HOST_KIND,
-        "task_name": DURABLE_HOST_TASK_NAME,
+        "task_name": task_name,
         "launcher_path": DURABLE_HOST_LAUNCHER_PATH,
         "evidence_path": f"{DURABLE_HOST_EVIDENCE_ROOT}/{market}/{attempt_id}",
         "heartbeat_interval_seconds": DURABLE_HOST_HEARTBEAT_INTERVAL_SECONDS,
@@ -103,18 +104,22 @@ def validate_durable_host_plan(root: Path, plan: Mapping[str, object]) -> Path:
         or type(attempt_id) is not str
         or durable != expected_durable_host_plan(market, attempt_id)
     ):
-        raise UnauthorizedOperation("V9 durable-host plan is absent or differs")
+        raise UnauthorizedOperation("V10 durable-host plan is absent or differs")
     launcher = root / DURABLE_HOST_LAUNCHER_PATH
     if not launcher.is_file():
-        raise IntegrityError("V9 durable-host launcher is absent")
+        raise IntegrityError("V10 durable-host launcher is absent")
     return _contained(root, durable["evidence_path"])
 
 
 def validate_durable_host_environment(root: Path, plan: Mapping[str, object]) -> Path:
     evidence = validate_durable_host_plan(root, plan)
-    if os.name != "nt" or os.environ.get(DURABLE_HOST_ENVIRONMENT_KEY) != DURABLE_HOST_TASK_NAME:
+    durable = plan["durable_host"]
+    if (
+        os.name != "nt"
+        or os.environ.get(DURABLE_HOST_ENVIRONMENT_KEY) != durable["task_name"]
+    ):
         raise UnauthorizedOperation(
-            "V9 full build must run inside its packet-bound Windows scheduled task"
+            "V10 causal work must run inside its exact Windows scheduled task"
         )
     return evidence
 
@@ -131,7 +136,7 @@ def validate_active_durable_host_evidence(root: Path, plan: Mapping[str, object]
         or not heartbeat_path.is_file()
         or exit_path.exists()
     ):
-        raise UnauthorizedOperation("V9 durable-host live evidence is absent or terminal")
+        raise UnauthorizedOperation("V10 durable-host live evidence is absent or terminal")
     try:
         started = json.loads(started_path.read_text(encoding="utf-8"))
         heartbeat = json.loads(heartbeat_path.read_text(encoding="utf-8"))
@@ -141,7 +146,7 @@ def validate_active_durable_host_evidence(root: Path, plan: Mapping[str, object]
         }
         observed = datetime.fromisoformat(str(heartbeat["observed_at"]))
     except (OSError, UnicodeDecodeError, ValueError, KeyError, TypeError) as exc:
-        raise IntegrityError("V9 durable-host live evidence is invalid") from exc
+        raise IntegrityError("V10 durable-host live evidence is invalid") from exc
     current_pid = os.getpid()
     current_time = _utc_now()
     if (
@@ -170,7 +175,7 @@ def validate_active_durable_host_evidence(root: Path, plan: Mapping[str, object]
         or started.get("schema_version") != DURABLE_HOST_STARTED_SCHEMA
         or started.get("status") != "STARTED"
         or started.get("plan_id") != plan.get("plan_id")
-        or started.get("task_name") != DURABLE_HOST_TASK_NAME
+        or started.get("task_name") != plan["durable_host"]["task_name"]
         or started.get("pid") != current_pid
         or started.get("started_id") != sha256_json(started_core)
         or heartbeat.get("schema_version") != DURABLE_HOST_HEARTBEAT_SCHEMA
@@ -183,7 +188,7 @@ def validate_active_durable_host_evidence(root: Path, plan: Mapping[str, object]
         or current_time - observed
         > timedelta(seconds=DURABLE_HOST_LIVE_MAX_AGE_SECONDS)
     ):
-        raise UnauthorizedOperation("V9 durable-host live evidence differs or is stale")
+        raise UnauthorizedOperation("V10 durable-host live evidence differs or is stale")
 
 
 def _write_create_only(path: Path, value: Mapping[str, object]) -> None:
@@ -238,7 +243,7 @@ class _Heartbeat:
         self.stop = threading.Event()
         self.sequence = 0
         self.failure: BaseException | None = None
-        self.thread = threading.Thread(target=self._run, name="causal-v9-heartbeat", daemon=True)
+        self.thread = threading.Thread(target=self._run, name="causal-v10-heartbeat", daemon=True)
 
     def _write(self, status: str) -> None:
         self.sequence += 1
@@ -269,9 +274,9 @@ class _Heartbeat:
         self.stop.set()
         self.thread.join(timeout=max(5.0, self.interval_seconds + 1.0))
         if self.thread.is_alive():
-            raise IntegrityError("V9 durable-host heartbeat thread did not stop")
+            raise IntegrityError("V10 durable-host heartbeat thread did not stop")
         if self.failure is not None:
-            raise IntegrityError("V9 durable-host heartbeat writer failed") from self.failure
+            raise IntegrityError("V10 durable-host heartbeat writer failed") from self.failure
         self._write("TERMINAL")
 
 
@@ -284,7 +289,7 @@ def run_durable_full_build_worker(
     evidence = validate_durable_host_environment(root, plan)
     evidence_io = _host_io_path(evidence)
     if evidence_io.exists():
-        raise IntegrityError("V9 durable-host evidence path already exists")
+        raise IntegrityError("V10 durable-host evidence path already exists")
     evidence_io.mkdir(parents=True)
     started_at = _utc_now()
     plan_id = str(plan.get("plan_id", ""))
@@ -292,7 +297,7 @@ def run_durable_full_build_worker(
         "schema_version": DURABLE_HOST_STARTED_SCHEMA,
         "status": "STARTED",
         "plan_id": plan_id,
-        "task_name": DURABLE_HOST_TASK_NAME,
+        "task_name": plan["durable_host"]["task_name"],
         "pid": os.getpid(),
         "parent_pid": os.getppid(),
         "started_at": started_at.isoformat(),
@@ -341,7 +346,7 @@ def run_durable_full_build_worker(
         "schema_version": DURABLE_HOST_EXIT_SCHEMA,
         "status": status,
         "plan_id": plan_id,
-        "task_name": DURABLE_HOST_TASK_NAME,
+        "task_name": plan["durable_host"]["task_name"],
         "pid": os.getpid(),
         "started_at": started_at.isoformat(),
         "finished_at": _utc_now().isoformat(),
@@ -365,7 +370,7 @@ def run_durable_full_build_worker(
 def inspect_durable_full_build_worker(
     *, repository_root: Path, plan: Mapping[str, object], now: datetime | None = None
 ) -> dict[str, object]:
-    """Classify V9 without opening DBNs or output rows."""
+    """Classify V10 without opening DBNs or output rows."""
 
     root = repository_root.resolve(strict=True)
     evidence = validate_durable_host_plan(root, plan)

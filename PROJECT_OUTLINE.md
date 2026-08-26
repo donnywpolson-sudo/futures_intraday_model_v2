@@ -23,7 +23,7 @@ authority.
 | Observation-only safety implementation | **BUILT / VALIDATED / REMOTELY RECOVERABLE** |
 | Causal observation release | **NOT BUILT** |
 | Development-only canary | **EXECUTED ONCE / PASSED / INACTIVE** |
-| Full development builder | **IMPLEMENTED / FIRST ATTEMPT FAILED CLOSED / CORRECTION PREPARED** |
+| Full development builder | **V10 MARKET-BY-MARKET IMPLEMENTED / SYNTHETICALLY VALIDATED / NOT EXECUTED** |
 | Outcomes | **NOT STARTED** |
 | Features | **NOT STARTED** |
 | WFA | **NOT STARTED** |
@@ -108,18 +108,20 @@ remained `UNKNOWN_FAIL_CLOSED`; one ES roll discontinuity was recorded, and
 cadence comparisons never overwrote source evidence. No real negative-price
 row appeared, so negative-price support remains synthetic-test proven.
 
-The remotely recoverable non-public full development builder processes one
-market-year at a time. Its V3 timing failure and later V4 storage-ceiling
-failure are preserved inactive evidence and cannot seed a retry. The compact
-successor representation is designed and benchmarked as five logical
-Parquet/Zstandard tables per market-year, with monthly row groups and
-deterministic evidence identities reconstructed rather than repeated
-physically. The existing annual 2025 DBNs cover through 2026 and
-therefore cross the sealed boundary. Before another row-read packet, an exact
-source successor must end every time-bearing family (`definition`, OHLCV,
-`statistics`, and `status`) at `2025-07-13T22:00:00Z` exclusively and bind each
-DBN through its sidecar. This document grants no acquisition, row-read,
-publication, or activation authority.
+V10 uses one frozen 41-market order and writes inactive candidates below
+`data/causally_gated_normalized/v10/<checkpoint-set>/<market>/<attempt>/`.
+Normalization seals each completed year; a fresh attempt can reuse only a
+hash-bound contiguous sealed-year prefix after rechecking its predecessor
+failure, complete file inventory, source identity, and continuity state. A
+market advances only after two full independent replays in separate processes
+produce identical evidence and an immutable market certificate. Later-market
+failure cannot change an earlier certificate. After all 41 pass, one inactive
+release-wide certificate must re-open every certified artifact and prove exact
+set compatibility. Synthetic fault injection covers every market and major
+phase, and the provider-free production rehearsal covers terminal Windows path
+depth without registering a task. No V10 real DBN read, ES-2025 canary,
+scheduler campaign, publication, or activation has occurred; each remains at
+its applicable approval boundary.
 
 ## 6. Universe, tiers, and time boundaries
 
@@ -183,4 +185,4 @@ Current contracts hold detailed evidence requirements. Git history and
 foundation releases remain evidence only and do not override active pointers,
 contracts, or closure.
 
-NEXT GATE AFTER DOCUMENTATION COMMIT AND PUSH: REBOUND FULL DEVELOPMENT BUILD PACKET PREPARATION
+NEXT REAL-DATA GATE: FRESH BOUNDED ES-2025 V10 CANARY AUTHORITY

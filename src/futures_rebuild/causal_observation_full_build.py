@@ -23,7 +23,13 @@ from pathlib import Path
 import databento
 
 from .boundary import OperationReceipt, RepoBoundary
-from .canonical import canonical_bytes, sha256_file, sha256_json
+from .canonical import (
+    canonical_bytes,
+    io_path,
+    iter_plain_files,
+    sha256_file,
+    sha256_json,
+)
 from .causal_observation_canary import (
     DecodedMarket,
     _CanaryStageCreator,
@@ -90,12 +96,204 @@ BOUNDARY_SOURCE_FAMILIES = frozenset(
         "status",
     }
 )
+WORK_UNIT_SEAL_SCHEMA = "causal_observation_v10_work_unit_seal/1.0.0"
+WORK_UNIT_REUSE_SCHEMA = "causal_observation_v10_work_unit_reuse/1.0.0"
 
 
 @dataclass(frozen=True, slots=True)
 class FullBuildRunResult:
     result_path: Path
     payload: Mapping[str, object]
+
+
+class _V10StageCreator:
+    """Create one exact inactive V10 data stage with no publication capability."""
+
+    def __init__(self, *, boundary: RepoBoundary, relative: str) -> None:
+        path = Path(relative)
+        if (
+            path.is_absolute()
+            or ".." in path.parts
+            or path.as_posix() != relative
+            or not relative.startswith("data/causally_gated_normalized/v10/")
+        ):
+            raise ContractError("V10 causal stage path is not exact and contained")
+        self.boundary = boundary
+        self.relative = relative
+        self.created = False
+
+    def create_stage(self, purpose: str) -> Path:
+        if purpose != "causal_observation" or self.created:
+            raise UnauthorizedOperation("V10 causal stage creator is exact and one-use")
+        stage = self.boundary.assert_active_path(
+            self.boundary.active_root / self.relative,
+            purpose="inactive V10 causal-observation stage",
+            subtree="data/causally_gated_normalized/v10",
+        )
+        io_path(stage.parent).mkdir(parents=True, exist_ok=True)
+        io_path(stage).mkdir()
+        self.created = True
+        return stage
+
+
+def _v10_file_inventory(root: Path, directory: Path) -> list[dict[str, object]]:
+    return [
+        {
+            "path": path.relative_to(root).as_posix(),
+            "size": io_path(path).stat().st_size,
+            "sha256": sha256_file(path),
+        }
+        for path in iter_plain_files(directory)
+    ]
+
+
+def _validate_v10_reuse_binding_shape(plan: Mapping[str, object]) -> None:
+    binding = plan.get("sealed_work_unit_reuse")
+    if binding is None:
+        return
+    seals = binding.get("seals") if isinstance(binding, Mapping) else None
+    if (
+        not isinstance(binding, Mapping)
+        or set(binding)
+        != {
+            "schema_version",
+            "predecessor_output_staging_path",
+            "predecessor_plan_id",
+            "predecessor_failure_path",
+            "predecessor_failure_sha256",
+            "seals",
+        }
+        or binding.get("schema_version") != WORK_UNIT_REUSE_SCHEMA
+        or type(binding.get("predecessor_plan_id")) is not str
+        or type(binding.get("predecessor_failure_sha256")) is not str
+        or not isinstance(seals, list)
+        or not seals
+        or any(
+            not isinstance(item, Mapping)
+            or set(item) != {"year", "path", "sha256"}
+            or type(item.get("year")) is not int
+            or type(item.get("path")) is not str
+            or type(item.get("sha256")) is not str
+            for item in seals
+        )
+    ):
+        raise UnauthorizedOperation("V10 sealed work-unit reuse binding is invalid")
+
+
+def _load_v10_reused_work_units(
+    *,
+    root: Path,
+    plan: Mapping[str, object],
+    selected: Sequence[Mapping[str, object]],
+    current_output: Path,
+) -> dict[int, dict[str, object]]:
+    """Validate and load only a contiguous prefix of immutable sealed years."""
+
+    _validate_v10_reuse_binding_shape(plan)
+    binding = plan.get("sealed_work_unit_reuse")
+    if binding is None:
+        return {}
+    assert isinstance(binding, Mapping)
+    predecessor = _contained(root, binding["predecessor_output_staging_path"])
+    expected_parent = (
+        root
+        / "data/causally_gated_normalized/v10"
+        / str(plan["checkpoint_set_id"])
+        / str(plan["target_market"])
+    )
+    if (
+        predecessor == current_output
+        or predecessor.parent != expected_parent
+        or current_output.parent != expected_parent
+    ):
+        raise UnauthorizedOperation("V10 sealed work-unit predecessor is not exact")
+    failure_path = _contained(root, binding["predecessor_failure_path"])
+    if (
+        failure_path != predecessor / "failure.json"
+        or sha256_file(failure_path) != binding["predecessor_failure_sha256"]
+    ):
+        raise IntegrityError("V10 predecessor failure evidence differs")
+    failure = _json(failure_path)
+    if (
+        failure.get("status")
+        != "FAILED_MARKET_TERMINAL_OTHER_CHECKPOINTS_UNAFFECTED"
+        or failure.get("target_market") != plan["target_market"]
+        or failure.get("checkpoint_set_id") != plan["checkpoint_set_id"]
+        or failure.get("plan_id") != binding["predecessor_plan_id"]
+        or failure.get("sealed_work_units_reusable_if_all_bindings_match") is not True
+    ):
+        raise IntegrityError("V10 predecessor is not reusable failure evidence")
+
+    ordered_units = list(
+        _work_units(selected, expected_count=int(plan["source"]["work_unit_count"]))
+    )
+    seals = binding["seals"]
+    assert isinstance(seals, list)
+    years = [int(item["year"]) for item in seals]
+    expected_years = [year for _, year, _ in ordered_units[: len(years)]]
+    if years != expected_years or len(set(years)) != len(years):
+        raise UnauthorizedOperation("V10 reusable work units are not an exact prefix")
+
+    entries_by_year = {year: entries for _, year, entries in ordered_units}
+    result: dict[int, dict[str, object]] = {}
+    for reference in seals:
+        year = int(reference["year"])
+        seal_path = _contained(root, reference["path"])
+        if (
+            seal_path != predecessor / "work_unit_seals" / f"{year}.json"
+            or sha256_file(seal_path) != reference["sha256"]
+        ):
+            raise IntegrityError("V10 work-unit seal binding differs")
+        seal = _json(seal_path)
+        seal_core = {key: value for key, value in seal.items() if key != "seal_id"}
+        partitions = seal.get("partitions")
+        files = seal.get("files")
+        last_observation = seal.get("last_observation")
+        carried_support = seal.get("carried_support")
+        sealed_year = predecessor / "sealed" / str(year)
+        if (
+            seal.get("schema_version") != WORK_UNIT_SEAL_SCHEMA
+            or seal.get("status") != "PASS_SEALED_INACTIVE_WORK_UNIT"
+            or seal.get("seal_id") != sha256_json(seal_core)
+            or seal.get("market") != plan["target_market"]
+            or seal.get("year") != year
+            or seal.get("checkpoint_set_id") != plan["checkpoint_set_id"]
+            or seal.get("plan_id") != binding["predecessor_plan_id"]
+            or seal.get("source_entries_sha256")
+            != sha256_json(list(entries_by_year[year]))
+            or type(seal.get("decoded_record_count")) is not int
+            or int(seal["decoded_record_count"]) <= 0
+            or not isinstance(partitions, list)
+            or not partitions
+            or seal.get("partition_count") != len(partitions)
+            or seal.get("partitions_sha256") != sha256_json(partitions)
+            or not isinstance(files, list)
+            or seal.get("files_sha256") != sha256_json(files)
+            or not isinstance(last_observation, Mapping)
+            or seal.get("last_observation_sha256")
+            != sha256_json(dict(last_observation))
+            or not isinstance(carried_support, list)
+            or seal.get("carried_support_sha256") != sha256_json(carried_support)
+            or seal.get("publication_authorized") is not False
+            or seal.get("activation_authorized") is not False
+        ):
+            raise IntegrityError("V10 work-unit seal identity is invalid")
+        actual_files = _v10_file_inventory(root, sealed_year)
+        if files != actual_files:
+            raise IntegrityError("V10 sealed work-unit files differ")
+        stage_prefix = sealed_year.relative_to(root).as_posix() + "/"
+        if any(
+            not isinstance(item, Mapping)
+            or item.get("market") != plan["target_market"]
+            or item.get("year") != year
+            or not str(item.get("stage", "")).startswith(stage_prefix)
+            for item in partitions
+        ):
+            raise IntegrityError("V10 sealed partition inventory is invalid")
+        if seal.get("output_bytes") != sum(int(item["size"]) for item in files):
+            raise IntegrityError("V10 sealed work-unit byte total differs")
+        result[year] = dict(seal)
+    return result
 
 
 def validate_full_build_storage_floor(
@@ -123,7 +321,7 @@ def validate_full_build_storage_floor(
 
 def _json(path: Path) -> dict[str, object]:
     try:
-        value = json.loads(path.read_text(encoding="utf-8"))
+        value = json.loads(io_path(path).read_text(encoding="utf-8"))
     except (OSError, UnicodeDecodeError, ValueError) as exc:
         raise IntegrityError(f"full-build JSON is invalid: {path}") from exc
     if not isinstance(value, dict):
@@ -146,9 +344,10 @@ def _contained(root: Path, relative: object) -> Path:
 
 
 def _write_create_only(path: Path, payload: Mapping[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    physical = io_path(path)
+    physical.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(
-        path,
+        physical,
         os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0),
     )
     try:
@@ -415,8 +614,8 @@ def validate_complete_development_boundary_metadata(
             sidecar = boundary[(market, family, "SIDECAR")]
             dbn_path = _contained(root, dbn.get("path"))
             sidecar_path = _contained(root, sidecar.get("path"))
-            dbn_stat = dbn_path.stat()
-            sidecar_stat = sidecar_path.stat()
+            dbn_stat = io_path(dbn_path).stat()
+            sidecar_stat = io_path(sidecar_path).stat()
             if (
                 not dbn_path.is_file()
                 or dbn_path.is_symlink()
@@ -633,7 +832,14 @@ def _execute(
     started: float,
 ) -> FullBuildRunResult:
     output = _contained(root, plan["output_staging_path"])
-    relative_output = output.relative_to(root / STAGING_ROOT).as_posix()
+    v10_market = type(plan.get("target_market")) is str and output.is_relative_to(
+        root / "data/causally_gated_normalized/v10"
+    )
+    relative_output = (
+        output.relative_to(root).as_posix()
+        if v10_market
+        else output.relative_to(root / STAGING_ROOT).as_posix()
+    )
     source_contract = _json(root / "configs/source_contract.json")
     standard_roots = frozenset(source_contract["universe"]["standard_roots"])
     prior_observation: dict[str, Mapping[str, object]] = {}
@@ -642,6 +848,16 @@ def _execute(
     decoded_records = 0
     output_bytes = 0
     complete_work_units = 0
+    reused = (
+        _load_v10_reused_work_units(
+            root=root,
+            plan=plan,
+            selected=selected,
+            current_output=output,
+        )
+        if v10_market
+        else {}
+    )
 
     for market, year, unit_entries in _work_units(
         selected, expected_count=int(plan["source"]["work_unit_count"])
@@ -649,6 +865,7 @@ def _execute(
         if time.monotonic() - started > MAXIMUM_RUNTIME_SECONDS:
             raise UnauthorizedOperation("full development runtime ceiling exceeded")
         window = _work_unit_window(unit_entries)
+        unit_partition_start = len(partitions)
         unit_dbns = tuple(item for item in unit_entries if item["kind"] == "DBN")
         progress.update(
             {
@@ -660,6 +877,36 @@ def _execute(
                 "current_work_unit_state": "STARTED",
             }
         )
+        if year in reused:
+            seal = reused[year]
+            reused_partitions = seal["partitions"]
+            assert isinstance(reused_partitions, list)
+            partitions.extend(dict(item) for item in reused_partitions)
+            output_bytes += int(seal["output_bytes"])
+            decoded_records += int(seal["decoded_record_count"])
+            prior_observation[market] = dict(seal["last_observation"])
+            carried_support[market] = tuple(
+                (int(item[0]), str(item[1]), str(item[2]))
+                for item in seal["carried_support"]
+            )
+            complete_work_units += 1
+            progress.update(
+                {
+                    "current_work_unit_decode_state": "REUSED_SEALED",
+                    "current_work_unit_state": "COMPLETE_REUSED_SEALED",
+                    "decoded_record_count": decoded_records,
+                    "complete_work_unit_count": complete_work_units,
+                    "complete_partition_count": len(partitions),
+                    "output_bytes": output_bytes,
+                }
+            )
+            if (
+                decoded_records > int(plan["limits"]["maximum_decoded_records"])
+                or len(partitions) > int(plan["limits"]["maximum_partition_count"])
+                or output_bytes > int(plan["limits"]["maximum_output_bytes"])
+            ):
+                raise UnauthorizedOperation("V10 reused work-unit limits are exceeded")
+            continue
 
         def record_dbn_open(path: Path) -> None:
             relative = path.resolve(strict=True).relative_to(root).as_posix()
@@ -670,7 +917,7 @@ def _execute(
             progress["dbn_files_opened"] = int(progress["dbn_files_opened"]) + 1
             progress["dbn_payload_bytes_opened"] = int(
                 progress["dbn_payload_bytes_opened"]
-            ) + path.stat().st_size
+            ) + io_path(path).stat().st_size
 
         decoded = _decode_selected_sources(
             root=root,
@@ -698,13 +945,19 @@ def _execute(
             if not month.primary_1m:
                 continue
             partition_relative = (
-                f"{relative_output}/{year}/{interval}"
+                f"{relative_output}/work/{year}/{interval}"
+                if v10_market
+                else f"{relative_output}/{year}/{interval}"
                 if type(plan.get("target_market")) is str
                 else f"{relative_output}/{market}/{year}/{interval}"
             )
-            creator = _CanaryStageCreator(
-                boundary=boundary,
-                relative=partition_relative,
+            creator = (
+                _V10StageCreator(boundary=boundary, relative=partition_relative)
+                if v10_market
+                else _CanaryStageCreator(
+                    boundary=boundary,
+                    relative=partition_relative,
+                )
             )
             built = _build_market_candidate_with_state(
                 publisher=creator,
@@ -749,6 +1002,52 @@ def _execute(
                 raise UnauthorizedOperation("full development partition ceiling exceeded")
             if output_bytes > int(plan["limits"]["maximum_output_bytes"]):
                 raise UnauthorizedOperation("full development output byte ceiling exceeded")
+        if v10_market:
+            if len(partitions) == unit_partition_start:
+                raise IntegrityError("V10 work unit produced no certifiable partitions")
+            work_year = output / "work" / str(year)
+            sealed_year = output / "sealed" / str(year)
+            if io_path(work_year).exists():
+                if io_path(sealed_year).exists():
+                    raise IntegrityError("V10 sealed work-unit destination already exists")
+                io_path(sealed_year.parent).mkdir(parents=True, exist_ok=True)
+                os.replace(io_path(work_year), io_path(sealed_year))
+                for item in partitions[unit_partition_start:]:
+                    item["stage"] = str(item["stage"]).replace(
+                        f"/{relative_output}/work/{year}/".removeprefix("/"),
+                        f"{relative_output}/sealed/{year}/",
+                        1,
+                    )
+            unit_partitions = partitions[unit_partition_start:]
+            last_observation = dict(prior_observation[market])
+            support = [list(item) for item in carried_support.get(market, ())]
+            files = _v10_file_inventory(root, sealed_year)
+            seal_core = {
+                "schema_version": WORK_UNIT_SEAL_SCHEMA,
+                "status": "PASS_SEALED_INACTIVE_WORK_UNIT",
+                "market": market,
+                "year": year,
+                "checkpoint_set_id": plan.get("checkpoint_set_id"),
+                "plan_id": plan["plan_id"],
+                "source_entries_sha256": sha256_json(list(unit_entries)),
+                "decoded_record_count": decoded.decoded_record_count,
+                "partition_count": len(unit_partitions),
+                "partitions": unit_partitions,
+                "partitions_sha256": sha256_json(unit_partitions),
+                "files": files,
+                "files_sha256": sha256_json(files),
+                "output_bytes": sum(int(item["size"]) for item in files),
+                "last_observation": last_observation,
+                "last_observation_sha256": sha256_json(last_observation),
+                "carried_support": support,
+                "carried_support_sha256": sha256_json(support),
+                "publication_authorized": False,
+                "activation_authorized": False,
+            }
+            _write_create_only(
+                output / "work_unit_seals" / f"{year}.json",
+                {**seal_core, "seal_id": sha256_json(seal_core)},
+            )
         complete_work_units += 1
         progress["complete_work_unit_count"] = complete_work_units
         progress["current_work_unit_state"] = "COMPLETE"
@@ -900,7 +1199,7 @@ def run_authorized_full_build(
             "publication_authorized": False,
             "activation_authorized": False,
         }
-        output.mkdir(parents=True, exist_ok=True)
+        io_path(output).mkdir(parents=True, exist_ok=True)
         failure_path = output / "failure.json"
         if not failure_path.exists():
             _write_create_only(failure_path, failure)

@@ -14,7 +14,7 @@ from typing import Iterable, Mapping, Sequence
 import pyarrow as pa
 import pyarrow.parquet as pq
 
-from .canonical import sha256_json
+from .canonical import io_path, sha256_json
 from .errors import ContractError, IntegrityError
 
 
@@ -181,14 +181,7 @@ def _decode_physical(name: str, row: Mapping[str, object]) -> dict[str, object]:
 def _parquet_io_path(path: Path) -> Path | str:
     """Give Arrow an extended-length absolute path on Windows."""
 
-    if os.name != "nt":
-        return path
-    value = str(path.resolve(strict=False))
-    if value.startswith("\\\\?\\"):
-        return value
-    if value.startswith("\\\\"):
-        return "\\\\?\\UNC\\" + value.lstrip("\\")
-    return "\\\\?\\" + value
+    return str(io_path(path)) if os.name == "nt" else path
 
 
 def _writer(path: Path, schema: pa.Schema) -> pq.ParquetWriter:
@@ -242,7 +235,7 @@ def write_table(
         raise
     else:
         writer.close()
-    if count <= 0:
+    if count <= 0 and name != "cadence":
         if io_path.is_file():
             io_path.unlink()
         raise IntegrityError("causal-observation Parquet table cannot be empty")
@@ -399,8 +392,12 @@ def _parquet(path: Path, name: str) -> pq.ParquetFile:
         raise IntegrityError("causal-observation Parquet file is unreadable") from exc
     if not parquet.schema_arrow.equals(SCHEMAS[name], check_metadata=True):
         raise IntegrityError("causal-observation Parquet schema differs")
-    if parquet.metadata.num_rows <= 0 or parquet.metadata.num_row_groups <= 0:
+    if name != "cadence" and (
+        parquet.metadata.num_rows <= 0 or parquet.metadata.num_row_groups <= 0
+    ):
         raise IntegrityError("causal-observation Parquet file is empty")
+    if name == "cadence" and parquet.metadata.num_rows < 0:
+        raise IntegrityError("causal-observation cadence row count is invalid")
     return parquet
 
 
@@ -505,8 +502,17 @@ def read_bundle(directory: Path) -> dict[str, list[dict[str, object]]]:
         for name, filename in FILENAMES.items()
     }
     count = len(physical["observations"])
-    if any(len(groups) != count for groups in physical.values()):
+    required = ("missingness", "roll", "quality")
+    if any(len(physical[name]) != count for name in required):
         raise IntegrityError("causal-observation Parquet row groups are misaligned")
+    cadence_count = len(physical["cadence"])
+    if cadence_count not in {0, count}:
+        raise IntegrityError("causal-observation Parquet row groups are misaligned")
+    if cadence_count == 0:
+        # Cadence comparisons are optional.  Keep the physical empty-table
+        # representation while supplying one empty logical group per
+        # observation group for the aligned decoder below.
+        physical["cadence"] = [[] for _ in range(count)]
     logical: dict[str, list[dict[str, object]]] = {name: [] for name in FILENAMES}
     for index in range(count):
         observations = _decode_group(

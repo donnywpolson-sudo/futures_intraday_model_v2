@@ -12,6 +12,18 @@ from typing import Any
 from .errors import ContractError, IntegrityError
 
 
+def io_path(path: Path) -> Path:
+    """Return a Windows extended-length path without changing its identity."""
+
+    rendered = str(path)
+    if os.name != "nt" or rendered.startswith("\\\\?\\"):
+        return path
+    absolute = str(path.resolve(strict=False))
+    if absolute.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + absolute.lstrip("\\"))
+    return Path("\\\\?\\" + absolute)
+
+
 def canonical_bytes(value: Any) -> bytes:
     """Return the one permitted JSON encoding for hashed artifacts."""
 
@@ -35,18 +47,20 @@ def sha256_json(value: Any) -> str:
 def is_linklike(path: Path) -> bool:
     """Detect symbolic links and Windows reparse points (including junctions)."""
 
-    info = path.lstat()
+    physical = io_path(path)
+    info = physical.lstat()
     file_attributes = getattr(info, "st_file_attributes", 0)
     reparse_point = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
-    return path.is_symlink() or bool(file_attributes & reparse_point)
+    return physical.is_symlink() or bool(file_attributes & reparse_point)
 
 
 def assert_plain_file(path: Path, *, reject_hardlinks: bool = True) -> os.stat_result:
-    if not path.exists():
+    physical = io_path(path)
+    if not physical.exists():
         raise IntegrityError(f"required file does not exist: {path}")
     if is_linklike(path):
         raise ContractError(f"links and junctions are forbidden: {path}")
-    info = path.stat()
+    info = physical.stat()
     if not stat.S_ISREG(info.st_mode):
         raise ContractError(f"expected a regular file: {path}")
     if reject_hardlinks and info.st_nlink != 1:
@@ -61,17 +75,49 @@ def assert_no_linklike_ancestors(path: Path) -> None:
     current = Path(absolute.anchor)
     for part in absolute.parts[1:]:
         current = current / part
-        if current.exists() and is_linklike(current):
+        if io_path(current).exists() and is_linklike(current):
             raise ContractError(f"path crosses a link or junction: {current}")
 
 
 def sha256_file(path: Path, *, reject_hardlinks: bool = True) -> str:
     assert_plain_file(path, reject_hardlinks=reject_hardlinks)
     digest = hashlib.sha256()
-    with path.open("rb") as handle:
+    with io_path(path).open("rb") as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def iter_plain_files(root: Path) -> tuple[Path, ...]:
+    """Enumerate exact regular files beneath ``root`` with long-path-safe I/O."""
+
+    if not io_path(root).is_dir() or is_linklike(root):
+        raise ContractError(f"expected a plain directory: {root}")
+    files: list[Path] = []
+    pending = [Path()]
+    while pending:
+        relative = pending.pop()
+        directory = root / relative
+        try:
+            entries = sorted(os.scandir(io_path(directory)), key=lambda item: item.name)
+        except OSError as exc:
+            raise IntegrityError(f"directory inventory is unreadable: {directory}") from exc
+        for entry in entries:
+            child_relative = relative / entry.name
+            child = root / child_relative
+            try:
+                if is_linklike(child):
+                    raise ContractError(f"links and junctions are forbidden: {child}")
+                if entry.is_dir(follow_symlinks=False):
+                    pending.append(child_relative)
+                elif entry.is_file(follow_symlinks=False):
+                    assert_plain_file(child)
+                    files.append(child)
+                else:
+                    raise ContractError(f"unsupported filesystem entry: {child}")
+            except OSError as exc:
+                raise IntegrityError(f"filesystem entry is unreadable: {child}") from exc
+    return tuple(sorted(files, key=lambda path: path.relative_to(root).as_posix()))
 
 
 def contained_path(root: Path, relative: str) -> Path:

@@ -33,16 +33,17 @@ observation-only safety implementation is built, validated, committed, and
 remotely recoverable. The causal observation release is not built. The
 seven-market development-only canary ran once under consumed authority,
 passed independent verification, and remains unpublished and inactive. The
-non-public full development builder is remotely recoverable. The later V4
-attempt also consumed its one-use authority and failed closed at its output
-ceiling while still processing the first market. Its JSONL candidates remain
-inactive failure evidence and grant no reuse authority. A compact five-table
-Parquet/Zstandard successor now preserves the logical evidence while deriving
-redundant deterministic identities instead of storing them repeatedly. The
-current annual 2025 DBNs cross the sealed boundary, so they are rejected before
-authorization consumption, output creation, or decoding. A future source
-successor must bind every time-bearing family and its identity sidecar to
-`2025-07-13T22:00:00Z` exclusively before another full-build row-read packet.
+historical full-build attempts and V9 evidence remain immutable and grant no
+fresh authority. V10 is the current non-active implementation: it processes
+and maximum-robustness-certifies one complete market at a time in a frozen
+41-market order, stores inactive output below
+`data/causally_gated_normalized/v10/`, and cannot advance until the preceding
+market certificate remains valid. Each completed year is sealed with exact
+source, state, partition, and file identities; a fresh attempt may reuse only
+an unchanged contiguous sealed-year prefix. Two independent certification
+replays run in separate processes. The controller and provider-free production
+rehearsal are synthetic-test proven, but no V10 real DBN read, ES-2025 canary,
+scheduler campaign, publication, or activation has occurred.
 
 Real research still needs its durable trial declaration and immutable evidence.
 Before registration, every row-dependent sample, fold, feature, execution,
@@ -171,19 +172,16 @@ committed, and remotely recoverable, but the new clean-restart 41-market causal
 observation release is not built. Raw DBN cannot feed features, models, WFA,
 or backtests directly; it may feed only that exact approved causal builder.
 
-Old derived releases and the retired foundation runner remain no-read. The
-representative development-only canary passed once; its one-use authorization
-is consumed and its candidates cannot be reused as full-build partitions. The
-full 41-market development release remains incomplete and has no current
-row-read authority. Its non-public runner is remotely recoverable. The prior
-timing correction is committed and remotely recoverable at the current
-baseline. The later V4 attempt consumed its one-use authorization and failed
-closed at its storage ceiling; its inactive candidates cannot authorize or
-seed a retry. Compact Parquet storage and the exact 2025 boundary guard are
-prepared but remain uncommitted until their successor packet is approved. A
-new exact packet and fresh one-use authorization would require separate
-approval. The Final Sealed 252-Session Holdout and forward values remain
-inaccessible.
+Old derived releases and retired foundation runners remain no-read. Historical
+canary and full-build authorizations are consumed; their inactive outputs and
+V9 artifacts remain evidence only. The V10 market-by-market controller,
+checkpoint writer, sealed-year recovery, independent market certifier, and
+long-path-safe provider-free rehearsal are implemented locally. The full
+41-market release remains unbuilt and V10 has no current real-row authority.
+Its next real-data boundary is a fresh bounded ES-2025 canary; scheduler
+activation and each later row-reading or publishing action still require the
+applicable approval. The Final Sealed 252-Session Holdout and forward values
+remain inaccessible.
 
 When a milestone changes the active stage, status, or next goal, check
 `PROJECT_OUTLINE.md`, `CURRENT_WORKFLOW.md`, and `README.md`; update only

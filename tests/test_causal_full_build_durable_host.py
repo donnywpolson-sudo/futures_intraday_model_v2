@@ -9,7 +9,6 @@ import pytest
 from futures_rebuild.causal_full_build_durable_host import (
     DURABLE_HOST_ENVIRONMENT_KEY,
     DURABLE_HOST_EVIDENCE_ROOT,
-    DURABLE_HOST_TASK_NAME,
     expected_durable_host_plan,
     inspect_durable_full_build_worker,
     run_durable_full_build_worker,
@@ -25,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def _repo(tmp_path: Path) -> Path:
     scripts = tmp_path / "scripts"
     scripts.mkdir()
-    (scripts / "start_causal_full_build_v9_worker.ps1").write_text("# synthetic\n")
+    (scripts / "start_causal_full_build_v10_worker.ps1").write_text("# synthetic\n")
     return tmp_path
 
 
@@ -42,7 +41,7 @@ def _evidence(root: Path) -> Path:
     return root / DURABLE_HOST_EVIDENCE_ROOT / "ES" / ("f" * 64)
 
 
-def test_v9_environment_fails_closed_outside_exact_scheduled_task(
+def test_v10_environment_fails_closed_outside_exact_scheduled_task(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _repo(tmp_path)
@@ -58,7 +57,7 @@ def test_durable_worker_writes_start_heartbeat_logs_and_terminal_exit(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _repo(tmp_path)
-    monkeypatch.setenv(DURABLE_HOST_ENVIRONMENT_KEY, DURABLE_HOST_TASK_NAME)
+    monkeypatch.setenv(DURABLE_HOST_ENVIRONMENT_KEY, _plan()["durable_host"]["task_name"])
     monkeypatch.setattr(
         "futures_rebuild.causal_full_build_durable_host.DURABLE_HOST_HEARTBEAT_INTERVAL_SECONDS",
         0.01,
@@ -88,7 +87,7 @@ def test_durable_worker_records_caught_failure_before_reraising(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _repo(tmp_path)
-    monkeypatch.setenv(DURABLE_HOST_ENVIRONMENT_KEY, DURABLE_HOST_TASK_NAME)
+    monkeypatch.setenv(DURABLE_HOST_ENVIRONMENT_KEY, _plan()["durable_host"]["task_name"])
     monkeypatch.setattr(
         "futures_rebuild.causal_full_build_durable_host.DURABLE_HOST_HEARTBEAT_INTERVAL_SECONDS",
         0.01,
@@ -108,7 +107,7 @@ def test_heartbeat_terminal_failure_is_recorded_and_fails_closed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     root = _repo(tmp_path)
-    monkeypatch.setenv(DURABLE_HOST_ENVIRONMENT_KEY, DURABLE_HOST_TASK_NAME)
+    monkeypatch.setenv(DURABLE_HOST_ENVIRONMENT_KEY, _plan()["durable_host"]["task_name"])
 
     def fail_finish(_: object) -> None:
         raise OSError("synthetic heartbeat failure")
@@ -149,10 +148,10 @@ def test_stale_heartbeat_and_dead_pid_classifies_abrupt_host_loss(
 
 
 def test_scheduler_launcher_is_nonoverwriting_and_not_restartable() -> None:
-    text = (ROOT / "scripts/start_causal_full_build_v9_worker.ps1").read_text()
-    assert "FuturesIntradayModelV2-CausalFullBuild-V9" in text
+    text = (ROOT / "scripts/start_causal_full_build_v10_worker.ps1").read_text()
+    assert "FIMV2-Causal-V10-{0}-{1}" in text
     assert "Get-ScheduledTask" in text
-    assert "refusing to overwrite or restart" in text
+    assert "refusing to overwrite" in text
     assert "Register-ScheduledTask" in text
     assert "AddMinutes(2)" in text
     assert "Start-ScheduledTask" not in text

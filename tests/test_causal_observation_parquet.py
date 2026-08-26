@@ -165,6 +165,13 @@ def test_truncated_parquet_is_rejected(tmp_path: Path) -> None:
         read_table(path, name="observations")
 
 
+def test_empty_optional_cadence_table_is_schema_valid(tmp_path: Path) -> None:
+    tables = _tables()
+    tables["cadence"] = []
+    write_bundle(tmp_path, tables=tables)
+    assert read_bundle(tmp_path)["cadence"] == []
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows extended-length path contract")
 def test_exact_bounded_2025_layout_supports_265_character_parquet_path(
     tmp_path: Path,

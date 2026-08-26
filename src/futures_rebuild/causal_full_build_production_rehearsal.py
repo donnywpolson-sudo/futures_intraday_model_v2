@@ -14,7 +14,6 @@ from typing import Iterator
 from .canonical import sha256_file, sha256_json
 from .causal_full_build_durable_host import (
     DURABLE_HOST_ENVIRONMENT_KEY,
-    DURABLE_HOST_TASK_NAME,
     expected_durable_host_plan,
     run_durable_full_build_worker,
 )
@@ -137,8 +136,8 @@ def run_production_rehearsal(*, rehearsal_root: Path, source_root: Path) -> dict
     if any(root.iterdir()):
         raise IntegrityError("rehearsal root is not empty")
 
-    source_launcher = source / "scripts/start_causal_full_build_v9_worker.ps1"
-    launcher = root / "scripts/start_causal_full_build_v9_worker.ps1"
+    source_launcher = source / "scripts/start_causal_full_build_v10_worker.ps1"
+    launcher = root / "scripts/start_causal_full_build_v10_worker.ps1"
     launcher.parent.mkdir(parents=True)
     shutil.copyfile(source_launcher, launcher)
 
@@ -235,7 +234,9 @@ def run_production_rehearsal(*, rehearsal_root: Path, source_root: Path) -> dict
         }
 
     previous_task = os.environ.get(DURABLE_HOST_ENVIRONMENT_KEY)
-    os.environ[DURABLE_HOST_ENVIRONMENT_KEY] = DURABLE_HOST_TASK_NAME
+    os.environ[DURABLE_HOST_ENVIRONMENT_KEY] = str(
+        plan["durable_host"]["task_name"]
+    )
     try:
         with _network_denied():
             operation_result = run_durable_full_build_worker(
@@ -266,7 +267,7 @@ def run_production_rehearsal(*, rehearsal_root: Path, source_root: Path) -> dict
     core = {
         "schema_version": REHEARSAL_SCHEMA,
         "status": "PASS_CAUSAL_FULL_BUILD_PRODUCTION_REHEARSAL",
-        "real_launcher_path": "scripts/start_causal_full_build_v9_worker.ps1",
+        "real_launcher_path": "scripts/start_causal_full_build_v10_worker.ps1",
         "real_launcher_sha256": sha256_file(source_launcher),
         "durable_host_exit_id": terminal["exit_id"],
         "durable_host_heartbeat_terminal": True,

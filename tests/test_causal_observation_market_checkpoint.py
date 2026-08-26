@@ -6,11 +6,16 @@ from types import SimpleNamespace
 
 import pytest
 
-from futures_rebuild.canonical import sha256_json
+from futures_rebuild.canonical import io_path, sha256_file, sha256_json
 from futures_rebuild.causal_full_build_durable_host import expected_durable_host_plan
 from futures_rebuild.causal_observation_foundation import (
     CAUSAL_OBSERVATION_CONTRACT_ID,
     required_market_checkpoint_scope,
+)
+from futures_rebuild.causal_observation_full_build import (
+    WORK_UNIT_REUSE_SCHEMA,
+    WORK_UNIT_SEAL_SCHEMA,
+    _load_v10_reused_work_units,
 )
 from futures_rebuild.causal_observation_market_checkpoint import (
     CHECKPOINT_SET_SCHEMA,
@@ -73,8 +78,8 @@ def _plan(market: str = "ES", attempt_id: str = ATTEMPT_ID) -> dict[str, object]
             "work_unit_count": 2,
         },
         "output_staging_path": (
-            "state/data_publication_staging/"
-            f"causal_observation_full_development_bounded_2025_v9/{market}/{attempt_id}"
+            "data/causally_gated_normalized/v10/"
+            f"{checkpoint_set_identity(checkpoint_set)}/{market}/{attempt_id}"
         ),
         "development_end_exclusive": "2025-07-13T22:00:00Z",
         "holdout_allowed": False,
@@ -189,6 +194,137 @@ def test_failed_market_retry_has_new_plan_scope_output_and_host_evidence() -> No
     assert first["durable_host"] != retry["durable_host"]
 
 
+def _sealed_reuse_fixture(
+    root: Path,
+) -> tuple[dict[str, object], tuple[dict[str, object], ...], Path, Path]:
+    predecessor_attempt = "e" * 64
+    retry_attempt = "f" * 64
+    plan = _plan("ES", retry_attempt)
+    checkpoint_set_id = str(plan["checkpoint_set_id"])
+    predecessor = (
+        root
+        / "data/causally_gated_normalized/v10"
+        / checkpoint_set_id
+        / "ES"
+        / predecessor_attempt
+    )
+    candidate = predecessor / "sealed/2010/2010-01-01_2010-02-01/candidate"
+    io_path(candidate).mkdir(parents=True)
+    output_file = candidate / "observations.parquet"
+    io_path(output_file).write_bytes(b"sealed-year")
+    file_entry = {
+        "path": output_file.relative_to(root).as_posix(),
+        "size": io_path(output_file).stat().st_size,
+        "sha256": sha256_file(output_file),
+    }
+    partitions = [
+        {
+            "market": "ES",
+            "year": 2010,
+            "interval": "2010-01-01_2010-02-01",
+            "release_id": "1" * 64,
+            "certificate_id": "2" * 64,
+            "inventory_sha256": "3" * 64,
+            "output_bytes": io_path(output_file).stat().st_size,
+            "stage": candidate.parent.relative_to(root).as_posix(),
+        }
+    ]
+    selected = tuple(
+        {
+            "market": "ES",
+            "year": year,
+            "family": family,
+            "kind": "DBN",
+            "path": f"source/{year}/{family}.dbn.zst",
+            "size_bytes": 10,
+        }
+        for year in (2010, 2011)
+        for family in ("definition", "ohlcv_1m")
+    )
+    unit_entries = tuple(sorted(selected[:2], key=lambda item: str(item["path"])))
+    last = {"bar_end_ns": 100, "row_id": "4" * 64}
+    support = [[100, "STATUS", "5" * 64]]
+    seal_core = {
+        "schema_version": WORK_UNIT_SEAL_SCHEMA,
+        "status": "PASS_SEALED_INACTIVE_WORK_UNIT",
+        "market": "ES",
+        "year": 2010,
+        "checkpoint_set_id": checkpoint_set_id,
+        "plan_id": "6" * 64,
+        "source_entries_sha256": sha256_json(list(unit_entries)),
+        "decoded_record_count": 20,
+        "partition_count": 1,
+        "partitions": partitions,
+        "partitions_sha256": sha256_json(partitions),
+        "files": [file_entry],
+        "files_sha256": sha256_json([file_entry]),
+        "output_bytes": io_path(output_file).stat().st_size,
+        "last_observation": last,
+        "last_observation_sha256": sha256_json(last),
+        "carried_support": support,
+        "carried_support_sha256": sha256_json(support),
+        "publication_authorized": False,
+        "activation_authorized": False,
+    }
+    seal = {**seal_core, "seal_id": sha256_json(seal_core)}
+    seal_path = predecessor / "work_unit_seals/2010.json"
+    io_path(seal_path.parent).mkdir(parents=True)
+    io_path(seal_path).write_text(
+        json.dumps(seal, sort_keys=True, separators=(",", ":")) + "\n"
+    )
+    failure = {
+        "status": "FAILED_MARKET_TERMINAL_OTHER_CHECKPOINTS_UNAFFECTED",
+        "target_market": "ES",
+        "checkpoint_set_id": checkpoint_set_id,
+        "plan_id": "6" * 64,
+        "sealed_work_units_reusable_if_all_bindings_match": True,
+    }
+    failure_path = predecessor / "failure.json"
+    io_path(failure_path).write_text(
+        json.dumps(failure, sort_keys=True, separators=(",", ":")) + "\n"
+    )
+    core = {key: value for key, value in plan.items() if key != "plan_id"}
+    core["sealed_work_unit_reuse"] = {
+        "schema_version": WORK_UNIT_REUSE_SCHEMA,
+        "predecessor_output_staging_path": predecessor.relative_to(root).as_posix(),
+        "predecessor_plan_id": "6" * 64,
+        "predecessor_failure_path": failure_path.relative_to(root).as_posix(),
+        "predecessor_failure_sha256": sha256_file(failure_path),
+        "seals": [
+            {
+                "year": 2010,
+                "path": seal_path.relative_to(root).as_posix(),
+                "sha256": sha256_file(seal_path),
+            }
+        ],
+    }
+    retry = {**core, "plan_id": sha256_json(core)}
+    current = root / str(retry["output_staging_path"])
+    return retry, selected, current, output_file
+
+
+def test_fresh_attempt_reuses_only_an_exact_immutable_sealed_year_prefix(
+    tmp_path: Path,
+) -> None:
+    plan, selected, current, output_file = _sealed_reuse_fixture(tmp_path)
+    reused = _load_v10_reused_work_units(
+        root=tmp_path,
+        plan=plan,
+        selected=selected,
+        current_output=current,
+    )
+    assert list(reused) == [2010]
+    assert reused[2010]["decoded_record_count"] == 20
+    io_path(output_file).write_bytes(b"changed")
+    with pytest.raises(IntegrityError, match="files differ"):
+        _load_v10_reused_work_units(
+            root=tmp_path,
+            plan=plan,
+            selected=selected,
+            current_output=current,
+        )
+
+
 def test_final_set_requires_all_41_same_semantic_identity() -> None:
     checkpoint_set = _checkpoint_set()
     identity = checkpoint_set_identity(checkpoint_set)
@@ -217,8 +353,8 @@ def test_failed_market_does_not_mutate_completed_other_checkpoint(
     plan_path = tmp_path / "plan.json"
     plan_path.write_text(json.dumps(plan, sort_keys=True) + "\n")
     es = tmp_path / (
-        "state/data_publication_staging/"
-        f"causal_observation_full_development_bounded_2025_v9/ES/{ATTEMPT_ID}/"
+        "data/causally_gated_normalized/v10/"
+        f"{checkpoint_set_identity(_checkpoint_set())}/ES/{ATTEMPT_ID}/"
         "market_checkpoint.json"
     )
     es.parent.mkdir(parents=True)
@@ -275,11 +411,14 @@ def test_failed_market_does_not_mutate_completed_other_checkpoint(
     gc_failure = json.loads(
         (
             tmp_path
-            / "state/data_publication_staging/"
-            f"causal_observation_full_development_bounded_2025_v9/GC/{ATTEMPT_ID}/"
+            / "data/causally_gated_normalized/v10/"
+            / checkpoint_set_identity(_checkpoint_set())
+            / f"GC/{ATTEMPT_ID}/"
             "failure.json"
         ).read_text()
     )
     assert gc_failure["target_market"] == "GC"
     assert gc_failure["completed_other_market_checkpoints_affected"] is False
-    assert gc_failure["failed_market_partition_reuse_authorized"] is False
+    assert gc_failure["sealed_work_unit_count"] == 0
+    assert gc_failure["sealed_work_units_reusable_if_all_bindings_match"] is False
+    assert gc_failure["unsealed_work_unit_reuse_authorized"] is False
