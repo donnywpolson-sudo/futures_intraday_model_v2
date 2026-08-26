@@ -17,6 +17,7 @@ from futures_rebuild.causal_observation_market_certification import (
     required_market_certification_scope,
     run_authorized_market_certification,
     _io_path,
+    _partition_manifest,
     _reconstruct_tables,
     _run_replay_in_fresh_process,
     MARKET_CERTIFICATION_PLAN_OPERATION,
@@ -274,6 +275,58 @@ def test_independent_reconstruction_matches_producer_without_calling_producer_ve
         prior=None,
     )
     assert read_bundle(prepared.stage / "candidate") == expected
+
+
+def test_partial_day_checkpoint_selector_reconstructs_foundation_logical_identity(
+    tmp_path: Path,
+) -> None:
+    context = issue_synthetic_observation_context(
+        boundary=RepoBoundary(tmp_path), fixture_id="4" * 64
+    )
+    decoded = DecodedMarket(
+        definitions=(_definition(),),
+        primary_1m=(_bar(0, row_digit="2"), _bar(2, row_digit="3")),
+        reference_1s={},
+        reference_1h={},
+        reference_1d={},
+        support_rows=(),
+        decoded_record_count=3,
+    )
+    start_ns = 1_709_510_400_000_000_000
+    end_ns = 1_709_589_600_000_000_000  # 2024-03-04T22:00:00Z
+    prepared = build_market_candidate(
+        publisher=_SyntheticPublisher(tmp_path),  # type: ignore[arg-type]
+        context=context,
+        market="ES",
+        window={"start": "2024-03-04T00:00:00Z", "end": "2024-03-04T22:00:00Z"},
+        decoded=decoded,
+        economics_rulebook=RULEBOOK,
+    )
+    tables = read_bundle(prepared.stage / "candidate")
+    manifest, files = _partition_manifest(
+        stage=prepared.stage / "candidate",
+        market="ES",
+        year=2024,
+        start_ns=start_ns,
+        end_ns=end_ns,
+        plan={
+            "causal_contract_id": context.causal_contract_id,
+            "source": {
+                "source_contract_id": context.source_contract_id,
+                "canonical_release_id": context.source_release_id,
+                "exact_source_entries_sha256": context.exact_source_entries_sha256,
+            },
+            "_build_plan": {"plan_id": context.plan_id},
+            "build_plan_sha256": context.plan_sha256,
+        },
+        tables=tables,
+    )
+    assert manifest["release_id"] == prepared.manifest.release_id
+    assert files == [entry.as_dict() for entry in prepared.manifest.files]
+    assert all(
+        "/2024-03-04_2024-03-04/" in str(item["logical_path"])
+        for item in files
+    )
 
 
 def test_final_certificate_requires_all_41_compatible_robust_certificates(tmp_path: Path) -> None:

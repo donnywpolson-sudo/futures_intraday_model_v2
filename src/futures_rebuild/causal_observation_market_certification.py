@@ -871,8 +871,22 @@ def _reconstruct_tables(
 
 
 def _partition_manifest(
-    *, stage: Path, market: str, year: int, interval: str, plan: Mapping[str, object], tables: Mapping[str, Sequence[Mapping[str, object]]]
+    *,
+    stage: Path,
+    market: str,
+    year: int,
+    start_ns: int,
+    end_ns: int,
+    plan: Mapping[str, object],
+    tables: Mapping[str, Sequence[Mapping[str, object]]],
 ) -> tuple[dict[str, object], list[dict[str, object]]]:
+    # Logical release identities use the foundation contract's date-bounded
+    # interval.  The physical checkpoint selector may additionally carry a
+    # filesystem-safe time when the development cutoff is mid-day.
+    logical_interval = (
+        f"{datetime.fromtimestamp(start_ns // 1_000_000_000, tz=timezone.utc).date().isoformat()}_"
+        f"{datetime.fromtimestamp(end_ns // 1_000_000_000, tz=timezone.utc).date().isoformat()}"
+    )
     expected_files = set(FILENAMES.values())
     io_stage = _io_path(stage)
     observed = {path.name for path in io_stage.iterdir() if path.is_file()}
@@ -880,7 +894,7 @@ def _partition_manifest(
         raise IntegrityError("certified partition file set is not exact")
     files = sorted(
         ({
-            "logical_path": f"data/causally_gated_normalized/{market}/{year}/{interval}/{filename}",
+            "logical_path": f"data/causally_gated_normalized/{market}/{year}/{logical_interval}/{filename}",
             "sha256": sha256_file(_io_path(stage / filename)),
             "size": _io_path(stage / filename).stat().st_size,
         } for filename in expected_files),
@@ -1059,7 +1073,8 @@ def _replay_once(root: Path, plan: Mapping[str, object], checkpoint: Mapping[str
                 stage=candidate,
                 market=market,
                 year=year,
-                interval=interval,
+                start_ns=start_ns,
+                end_ns=end_ns,
                 plan=internal_plan,
                 tables=actual,
             )
