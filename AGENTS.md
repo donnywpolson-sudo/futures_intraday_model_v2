@@ -5,14 +5,16 @@ the durable safety and research rules that apply to every task.
 
 ## Work normally
 
-- A user request authorizes ordinary local work: inspect, edit, test, and create
-  non-research artifacts. Staging and local commits are separate actions; each
-  requires explicit user authorization.
+- A user request to change, fix, build, implement, or complete an outcome
+  authorizes ordinary local work: inspect, edit, test, create non-research
+  artifacts, stage exact task paths, and make a scoped local commit when needed
+  to deliver that outcome.
 - Keep working in the same task until it is complete or reaches a real high-risk boundary. Do not ask the user to copy a plan ID, hash, command, approval line, token, or continuation prompt.
 - Preserve unrelated work, check repository identity and status before writing,
-  and never use broad staging. Stage only explicitly authorized paths. A local
-  commit never authorizes a push. Report unrelated problems instead of fixing
-  or cleaning them up.
+  and never use broad staging. If an intended task path overlaps a pre-existing
+  user change, ask once before staging or committing it. A local commit never
+  authorizes a push. Report unrelated problems instead of fixing or cleaning
+  them up.
 
 ## Pause only for high risk
 

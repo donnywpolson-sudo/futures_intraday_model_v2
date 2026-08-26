@@ -6,11 +6,13 @@ requirements still apply to real research.
 
 ## Normal local work
 
-Ask Codex for the outcome. It may inspect the repository, edit code or docs,
-run tests, and create non-research local artifacts. Staging and local commits
-are separate actions; each requires explicit user authorization. You do not
-need to copy commands, hashes, plan IDs, or approval lines for ordinary local
-work. A local commit never includes a push.
+Ask Codex to change, fix, build, implement, or complete an outcome. That request
+authorizes inspection, editing, testing, non-research local artifacts, exact-path
+staging, and a scoped local commit when needed to deliver the outcome. Preserve
+unrelated work and never use broad staging. If an intended task path overlaps a
+pre-existing user change, Codex asks once before staging or committing it. You
+do not need to copy commands, hashes, plan IDs, or approval lines for ordinary
+local work. A local commit never includes a push.
 
 ## High-risk work
 
