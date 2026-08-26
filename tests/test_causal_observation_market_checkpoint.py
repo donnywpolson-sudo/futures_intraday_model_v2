@@ -57,6 +57,7 @@ def _plan(market: str = "ES", attempt_id: str = ATTEMPT_ID) -> dict[str, object]
     checkpoint_set = _checkpoint_set()
     core: dict[str, object] = {
         "schema_version": PLAN_SCHEMA,
+        "execution_role": "COMPLETE_MARKET_CHECKPOINT",
         "operation": CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
         "target_market": market,
         "attempt_id": attempt_id,

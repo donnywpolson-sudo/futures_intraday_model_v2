@@ -26,6 +26,7 @@ from .causal_observation_foundation import (
     authorize_market_checkpoint_row_read,
 )
 from .causal_observation_full_build import (
+    COMPLETE_MARKET_EXECUTION_ROLE,
     MAXIMUM_OUTPUT_BYTES,
     MAXIMUM_PARTITION_COUNT,
     MAXIMUM_RUNTIME_SECONDS,
@@ -123,6 +124,7 @@ def validate_market_checkpoint_plan(root: Path, plan: Mapping[str, object]) -> N
     economics = plan.get("economics")
     if (
         plan.get("schema_version") != PLAN_SCHEMA
+        or plan.get("execution_role") != COMPLETE_MARKET_EXECUTION_ROLE
         or plan.get("operation") != "BUILD_DEVELOPMENT_CAUSAL_OBSERVATION_FOUNDATION_ONCE"
         or plan.get("causal_contract_id") != CAUSAL_OBSERVATION_CONTRACT_ID
         or market not in MARKET_ORDER

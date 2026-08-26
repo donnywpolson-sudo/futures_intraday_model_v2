@@ -25,6 +25,7 @@ from .research_gateway_policy import (
     CAUSAL_OBSERVATION_BOUNDED_2025_SMOKE_OPERATION,
     CAUSAL_OBSERVATION_CANARY_OPERATION,
     CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
+    CAUSAL_OBSERVATION_V10_CANARY_OPERATION,
 )
 
 
@@ -646,6 +647,7 @@ def required_market_checkpoint_scope(
     if (
         plan.get("schema_version")
         != "development_causal_observation_market_checkpoint_plan/1.1.0"
+        or plan.get("execution_role") != "COMPLETE_MARKET_CHECKPOINT"
         or plan.get("operation") != CAUSAL_OBSERVATION_FULL_BUILD_OPERATION
         or plan.get("causal_contract_id") != CAUSAL_OBSERVATION_CONTRACT_ID
         or type(market) is not str
@@ -795,6 +797,167 @@ def authorize_market_checkpoint_row_read(
     )
     return CausalObservationOperationContext(
         operation=CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
+        classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
+        source_contract_id=source_contract_id,
+        causal_contract_id=CAUSAL_OBSERVATION_CONTRACT_ID,
+        source_release_id=canonical_release_id,
+        plan_id=str(plan["plan_id"]),
+        plan_sha256=plan_sha256,
+        exact_source_entries_sha256=str(plan["source"]["exact_source_entries_sha256"]),
+        economics_rulebook_sha256=ECONOMICS_RULEBOOK_SHA256,
+        output_staging_path=str(plan["output_staging_path"]),
+        receipt_id=receipt.receipt_id,
+        synthetic=False,
+        _seal=_SEAL,
+    )
+
+
+def required_v10_es_2025_canary_scope(
+    *,
+    plan: Mapping[str, object],
+    plan_sha256: str,
+    source_contract_id: str,
+    canonical_release_id: str,
+) -> dict[str, str]:
+    """Bind one producer decode plus one independent replay to ES-2025 only."""
+
+    source = plan.get("source")
+    limits = plan.get("limits")
+    execution = plan.get("execution")
+    authority = plan.get("authority")
+    if (
+        plan.get("schema_version")
+        != "development_causal_observation_v10_es_2025_canary_plan/1.0.0"
+        or plan.get("operation") != CAUSAL_OBSERVATION_V10_CANARY_OPERATION
+        or plan.get("execution_role") != "V10_ES_2025_CANARY"
+        or plan.get("target_market") != "ES"
+        or plan.get("target_year") != 2025
+        or plan.get("causal_contract_id") != CAUSAL_OBSERVATION_CONTRACT_ID
+        or not isinstance(source, Mapping)
+        or not isinstance(limits, Mapping)
+        or not isinstance(execution, Mapping)
+        or not isinstance(authority, Mapping)
+        or any(bool(value) for value in authority.values())
+        or source.get("source_contract_id") != source_contract_id
+        or source.get("canonical_release_id") != canonical_release_id
+        or source.get("exact_source_entry_count") != 14
+        or source.get("exact_dbn_file_count") != 7
+        or source.get("exact_sidecar_file_count") != 7
+        or source.get("total_source_bytes") != 69_984_372
+        or source.get("maximum_payload_bytes") != 69_971_994
+        or source.get("work_unit_count") != 1
+        or limits.get("maximum_payload_bytes_per_decode") != 69_971_994
+        or limits.get("maximum_payload_bytes_total") != 139_943_988
+        or limits.get("maximum_output_bytes") != 800_000_000
+        or limits.get("maximum_partition_count") != 7
+        or execution
+        != {
+            "producer_decodes": 1,
+            "independent_replay_decodes": 1,
+            "maximum_attempts": 1,
+            "maximum_retries": 0,
+            "maximum_runtime_seconds": 21_600,
+            "maximum_workers": 1,
+            "python_executable": ".venv/Scripts/python.exe",
+            "databento_version": "0.78.0",
+        }
+        or plan.get("development_start_inclusive") != "2025-01-01T00:00:00Z"
+        or plan.get("development_end_exclusive") != DEVELOPMENT_END_EXCLUSIVE
+        or plan.get("holdout_allowed") is not False
+        or plan.get("forward_allowed") is not False
+        or plan.get("provider_calls") != 0
+        or plan.get("execution_authorized") is not False
+        or plan.get("complete_market_checkpoint") is not False
+        or plan.get("reusable_in_same_checkpoint_set") is not False
+        or plan.get("can_seed_complete_market_checkpoint") is not False
+        or not isinstance(plan.get("durable_host"), Mapping)
+        or not isinstance(plan.get("task_cleanup"), Mapping)
+        or plan["task_cleanup"].get("task_name")
+        != plan.get("durable_host", {}).get("task_name")
+        or plan["task_cleanup"].get("unregister_after_terminal_evidence") is not True
+        or plan["task_cleanup"].get("unregister_before_terminal_evidence") is not False
+    ):
+        raise UnauthorizedOperation("V10 ES-2025 canary authority is invalid")
+    plan_id = _digest(plan.get("plan_id"), "plan_id")
+    attempt_id = _digest(plan.get("attempt_id"), "attempt_id")
+    checkpoint_set_id = _digest(plan.get("checkpoint_set_id"), "checkpoint_set_id")
+    if sha256_json({key: value for key, value in plan.items() if key != "plan_id"}) != plan_id:
+        raise IntegrityError("V10 ES-2025 canary plan identity differs")
+    return {
+        "operation_kind": "V10_ES_2025_PRODUCER_AND_INDEPENDENT_REPLAY_ONLY",
+        "target_market": "ES",
+        "target_year": "2025",
+        "attempt_id": attempt_id,
+        "checkpoint_set_id": checkpoint_set_id,
+        "causal_contract_id": CAUSAL_OBSERVATION_CONTRACT_ID,
+        "source_contract_id": _digest(source_contract_id, "source_contract_id"),
+        "canonical_release_id": _digest(canonical_release_id, "canonical_release_id"),
+        "exact_source_entries_sha256": _digest(
+            source.get("exact_source_entries_sha256"), "exact_source_entries_sha256"
+        ),
+        "exact_dbn_entries_sha256": _digest(
+            source.get("exact_dbn_entries_sha256"), "exact_dbn_entries_sha256"
+        ),
+        "exact_source_entry_count": "14",
+        "exact_dbn_file_count": "7",
+        "exact_sidecar_file_count": "7",
+        "total_source_bytes": "69984372",
+        "maximum_payload_bytes_per_decode": "69971994",
+        "maximum_payload_bytes_total": "139943988",
+        "producer_decodes": "1",
+        "independent_replay_decodes": "1",
+        "maximum_output_bytes": "800000000",
+        "maximum_partition_count": "7",
+        "maximum_runtime_seconds": "21600",
+        "maximum_workers": "1",
+        "maximum_attempts": "1",
+        "maximum_retries": "0",
+        "output_staging_path": _canonical_path(
+            plan.get("output_staging_path"), "output_staging_path"
+        ),
+        "development_start_inclusive": "2025-01-01T00:00:00Z",
+        "development_end_exclusive": DEVELOPMENT_END_EXCLUSIVE,
+        "economics_rulebook_sha256": ECONOMICS_RULEBOOK_SHA256,
+        "durable_host_task_name": str(plan["durable_host"]["task_name"]),
+        "durable_host_evidence_path": str(plan["durable_host"]["evidence_path"]),
+        "task_unregister_after_terminal_evidence": "true",
+        "provider_calls": "0",
+        "holdout": "false",
+        "forward": "false",
+        "research_outputs": "false",
+        "complete_market_checkpoint": "false",
+        "reusable_in_same_checkpoint_set": "false",
+        "can_seed_complete_market_checkpoint": "false",
+        "approval_command": CAUSAL_OBSERVATION_V10_CANARY_OPERATION,
+        "approval_plan_id": plan_id,
+        "approval_plan_sha256": _digest(plan_sha256, "plan_sha256"),
+    }
+
+
+def authorize_v10_es_2025_canary_row_read(
+    *,
+    boundary: RepoBoundary,
+    receipt: OperationReceipt,
+    plan: Mapping[str, object],
+    plan_sha256: str,
+) -> CausalObservationOperationContext:
+    """Consume one exact receipt before either of the two canary decodes."""
+
+    source_contract_id, canonical_release_id = _active_source_identity(boundary)
+    scope = required_v10_es_2025_canary_scope(
+        plan=plan,
+        plan_sha256=plan_sha256,
+        source_contract_id=source_contract_id,
+        canonical_release_id=canonical_release_id,
+    )
+    receipt.consume(
+        boundary,
+        operation=CAUSAL_OBSERVATION_V10_CANARY_OPERATION,
+        classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
+        required_scope=scope,
+    )
+    return CausalObservationOperationContext(
+        operation=CAUSAL_OBSERVATION_V10_CANARY_OPERATION,
         classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
         source_contract_id=source_contract_id,
         causal_contract_id=CAUSAL_OBSERVATION_CONTRACT_ID,

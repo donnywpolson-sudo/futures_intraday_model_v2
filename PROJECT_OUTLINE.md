@@ -23,7 +23,7 @@ authority.
 | Observation-only safety implementation | **BUILT / VALIDATED / REMOTELY RECOVERABLE** |
 | Causal observation release | **NOT BUILT** |
 | Development-only canary | **EXECUTED ONCE / PASSED / INACTIVE** |
-| Full development builder | **V10 MARKET-BY-MARKET IMPLEMENTED / SYNTHETICALLY VALIDATED / NOT EXECUTED** |
+| Full development builder | **V10 MARKET-BY-MARKET AND ES-2025 CANARY SUPPORT IMPLEMENTED / SYNTHETICALLY VALIDATED / NOT EXECUTED** |
 | Outcomes | **NOT STARTED** |
 | Features | **NOT STARTED** |
 | WFA | **NOT STARTED** |
@@ -122,6 +122,14 @@ phase, and the provider-free production rehearsal covers terminal Windows path
 depth without registering a task. No V10 real DBN read, ES-2025 canary,
 scheduler campaign, publication, or activation has occurred; each remains at
 its applicable approval boundary.
+
+The V10 ES-2025 canary is a separate inactive role below
+`data/causally_gated_normalized/v10/_canary/ES/<attempt>/`. It is bounded to
+seven registered source families, one producer decode, one fresh-process
+independent replay, seven monthly partitions, and a six-hour total runtime.
+Even on PASS its bytes cannot count as, seed, or be reused by the complete ES
+market checkpoint; only its exact verified terminal identity may advance the
+campaign from canary to ES normalization.
 
 ## 6. Universe, tiers, and time boundaries
 

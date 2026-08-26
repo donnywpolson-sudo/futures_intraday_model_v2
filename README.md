@@ -37,7 +37,10 @@ release is not built. Later full-build attempts remained inactive and failed
 closed and remain evidence only. The non-active V10 successor performs compact
 Parquet/Zstandard normalization and two-pass independent certification one
 market at a time, with immutable market and sealed-year checkpoints. It is
-synthetic-test proven but has not read real DBNs or started its scheduler. The
+synthetic-test proven but has not read real DBNs or started its scheduler. A
+dedicated ES-2025 canary successor is implemented locally with one producer
+decode, one fresh-process independent replay, a six-hour ceiling, and an
+inactive `_canary` destination that cannot seed the complete ES checkpoint. The
 Final Sealed 252-Session Holdout remains pristine and unread. See
 `PROJECT_OUTLINE.md` for the current pipeline and status.
 

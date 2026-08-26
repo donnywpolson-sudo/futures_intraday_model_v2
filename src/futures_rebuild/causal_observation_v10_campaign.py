@@ -10,6 +10,7 @@ from typing import Mapping, Sequence
 from .canonical import canonical_bytes, io_path, sha256_json
 from .causal_observation_market_checkpoint import MARKET_ORDER
 from .errors import IntegrityError, UnauthorizedOperation
+from .causal_observation_v10_canary import TERMINAL_STATUS as CANARY_TERMINAL_STATUS
 
 
 SCHEMA_VERSION = "causal_observation_v10_campaign_state/1.0.0"
@@ -71,7 +72,33 @@ def _validate(state: CampaignState) -> None:
         raise IntegrityError("V10 campaign state is invalid or skipped a market")
 
 
-def transition(state: CampaignState, event: str) -> CampaignState:
+def _validate_canary_result(result: Mapping[str, object] | None) -> None:
+    if not isinstance(result, Mapping):
+        raise UnauthorizedOperation("V10 campaign requires exact canary evidence")
+    core = {key: value for key, value in result.items() if key != "result_id"}
+    if (
+        result.get("schema_version")
+        != "development_causal_observation_v10_es_2025_canary_result/1.0.0"
+        or result.get("status") != CANARY_TERMINAL_STATUS
+        or result.get("target_market") != "ES"
+        or result.get("target_year") != 2025
+        or result.get("complete_market_checkpoint") is not False
+        or result.get("reusable_in_same_checkpoint_set") is not False
+        or result.get("can_seed_complete_market_checkpoint") is not False
+        or result.get("campaign_advancement_eligible") is not True
+        or result.get("publication_authorized") is not False
+        or result.get("activation_authorized") is not False
+        or result.get("result_id") != sha256_json(core)
+    ):
+        raise IntegrityError("V10 campaign canary evidence differs")
+
+
+def transition(
+    state: CampaignState,
+    event: str,
+    *,
+    evidence: Mapping[str, object] | None = None,
+) -> CampaignState:
     """Apply one exact event; no unknown outcome can advance the campaign."""
 
     _validate(state)
@@ -124,11 +151,17 @@ def transition(state: CampaignState, event: str) -> CampaignState:
 
     expected: dict[str, tuple[str, str]] = {
         "PREFLIGHT": ("PASS", "ES_2025_CANARY"),
-        "ES_2025_CANARY": ("PASS", "NORMALIZATION"),
         "NORMALIZATION": ("PASS", "CERTIFICATION_PASS_1"),
         "CERTIFICATION_PASS_1": ("PASS", "CERTIFICATION_PASS_2"),
         "CERTIFICATION_PASS_2": ("PASS", "CERTIFICATE_FINALIZATION"),
     }
+    if state.phase == "ES_2025_CANARY":
+        if event != "CANARY_VERIFIED":
+            raise UnauthorizedOperation("V10 campaign requires the exact canary result")
+        _validate_canary_result(evidence)
+        advanced = replace(state, phase="NORMALIZATION", recovery_count=0)
+        _validate(advanced)
+        return advanced
     if state.phase in expected:
         required, destination = expected[state.phase]
         if event != required:
@@ -170,7 +203,23 @@ def simulate_complete_campaign(
 
     state = CampaignState()
     state = transition(state, "PASS")
-    state = transition(state, "PASS")
+    canary_core = {
+        "schema_version": "development_causal_observation_v10_es_2025_canary_result/1.0.0",
+        "status": CANARY_TERMINAL_STATUS,
+        "target_market": "ES",
+        "target_year": 2025,
+        "complete_market_checkpoint": False,
+        "reusable_in_same_checkpoint_set": False,
+        "can_seed_complete_market_checkpoint": False,
+        "campaign_advancement_eligible": True,
+        "publication_authorized": False,
+        "activation_authorized": False,
+    }
+    state = transition(
+        state,
+        "CANARY_VERIFIED",
+        evidence={**canary_core, "result_id": sha256_json(canary_core)},
+    )
     phases = (
         "NORMALIZATION",
         "CERTIFICATION_PASS_1",

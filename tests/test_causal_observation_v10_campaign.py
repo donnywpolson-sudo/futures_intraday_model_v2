@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from futures_rebuild.boundary import RepoBoundary
-from futures_rebuild.canonical import io_path
+from futures_rebuild.canonical import io_path, sha256_json
 from futures_rebuild.causal_observation_canary import (
     DecodedMarket,
     build_market_candidate,
@@ -28,6 +28,22 @@ from futures_rebuild.causal_observation_verifier import verify_observation_candi
 from futures_rebuild.data_layout import DataReleaseManifest
 from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 from tests.test_causal_observation_canary import RULEBOOK, _bar, _definition
+
+
+def _canary_result() -> dict[str, object]:
+    core = {
+        "schema_version": "development_causal_observation_v10_es_2025_canary_result/1.0.0",
+        "status": "PASS_V10_ES_2025_CANARY_VERIFIED_INACTIVE",
+        "target_market": "ES",
+        "target_year": 2025,
+        "complete_market_checkpoint": False,
+        "reusable_in_same_checkpoint_set": False,
+        "can_seed_complete_market_checkpoint": False,
+        "campaign_advancement_eligible": True,
+        "publication_authorized": False,
+        "activation_authorized": False,
+    }
+    return {**core, "result_id": sha256_json(core)}
 
 
 def _deep_candidate(
@@ -96,7 +112,8 @@ def test_every_later_market_failure_preserves_exact_certified_prefix(phase: str)
 
 
 def test_one_infrastructure_recovery_resumes_exact_stage_then_repetition_stops() -> None:
-    state = transition(transition(CampaignState(), "PASS"), "PASS")
+    state = transition(CampaignState(), "PASS")
+    state = transition(state, "CANARY_VERIFIED", evidence=_canary_result())
     assert state.phase == "NORMALIZATION" and state.market == "ES"
     stopped = transition(state, "INFRASTRUCTURE_FAILURE")
     assert stopped.phase == "RECOVERABLE_STOP"
@@ -122,7 +139,9 @@ def test_hash_chained_journal_reconstructs_and_rejects_mutation(tmp_path: Path) 
         event="PREFLIGHT_PASS",
         state=first_state,
     )
-    second_state = transition(first_state, "PASS")
+    second_state = transition(
+        first_state, "CANARY_VERIFIED", evidence=_canary_result()
+    )
     second_path = tmp_path / "journal/0002.json"
     append_journal_event(
         second_path,

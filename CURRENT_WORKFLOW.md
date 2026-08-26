@@ -42,8 +42,12 @@ market certificate remains valid. Each completed year is sealed with exact
 source, state, partition, and file identities; a fresh attempt may reuse only
 an unchanged contiguous sealed-year prefix. Two independent certification
 replays run in separate processes. The controller and provider-free production
-rehearsal are synthetic-test proven, but no V10 real DBN read, ES-2025 canary,
-scheduler campaign, publication, or activation has occurred.
+rehearsal are synthetic-test proven. A dedicated ES-2025 canary successor is
+implemented locally: it binds seven exact registered DBNs plus sidecars,
+permits one producer decode and one fresh-process independent replay, writes
+only below the V10 `_canary` lane, and cannot seed or complete the ES market
+checkpoint. No V10 real DBN read, ES-2025 canary execution, scheduler campaign,
+publication, or activation has occurred.
 
 Real research still needs its durable trial declaration and immutable evidence.
 Before registration, every row-dependent sample, fold, feature, execution,
@@ -178,9 +182,10 @@ V9 artifacts remain evidence only. The V10 market-by-market controller,
 checkpoint writer, sealed-year recovery, independent market certifier, and
 long-path-safe provider-free rehearsal are implemented locally. The full
 41-market release remains unbuilt and V10 has no current real-row authority.
-Its next real-data boundary is a fresh bounded ES-2025 canary; scheduler
-activation and each later row-reading or publishing action still require the
-applicable approval. The Final Sealed 252-Session Holdout and forward values
+Its next boundary is remote recovery of the local canary-support commit,
+followed by preparation and approval of a fresh bounded ES-2025 canary.
+Scheduler activation and each later row-reading or publishing action still
+require the applicable approval. The Final Sealed 252-Session Holdout and forward values
 remain inaccessible.
 
 When a milestone changes the active stage, status, or next goal, check

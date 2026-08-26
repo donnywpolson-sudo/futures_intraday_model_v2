@@ -53,7 +53,7 @@ if ($Rehearsal) {
 }
 $TaskName = 'FIMV2-Causal-V10-{0}-{1}' -f $Market, $AttemptId.Substring(0, 8)
 $NormalizedWorker = $WorkerScriptRelativePath.Replace('\', '/')
-$ExpectedPattern = '^reports/bounded_2025_full_build_v10_preparation/[0-9A-Za-z_\-]+/run_scheduled_worker_v10\.ps1$'
+$ExpectedPattern = '^reports/(bounded_2025_full_build_v10_preparation|bounded_2025_v10_es_canary_preparation)/[0-9A-Za-z_\-]+/(run_scheduled_worker_v10|run_scheduled_es_2025_canary_v10)\.ps1$'
 if ($NormalizedWorker -cnotmatch $ExpectedPattern) {
     throw 'V10 worker path is outside the exact preparation layout.'
 }

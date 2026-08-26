@@ -71,6 +71,7 @@ def _build_plan(market: str = "ES", attempt: str = "d" * 64) -> dict[str, object
     checkpoint_set = _checkpoint_set()
     return {
         "plan_id": "e" * 64,
+        "execution_role": "COMPLETE_MARKET_CHECKPOINT",
         "target_market": market,
         "attempt_id": attempt,
         "checkpoint_set": checkpoint_set,

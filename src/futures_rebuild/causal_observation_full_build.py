@@ -98,6 +98,25 @@ BOUNDARY_SOURCE_FAMILIES = frozenset(
 )
 WORK_UNIT_SEAL_SCHEMA = "causal_observation_v10_work_unit_seal/1.0.0"
 WORK_UNIT_REUSE_SCHEMA = "causal_observation_v10_work_unit_reuse/1.0.0"
+COMPLETE_MARKET_EXECUTION_ROLE = "COMPLETE_MARKET_CHECKPOINT"
+ES_2025_CANARY_EXECUTION_ROLE = "V10_ES_2025_CANARY"
+
+
+def _execution_outcome(plan: Mapping[str, object]) -> tuple[str, str, bool]:
+    role = plan.get("execution_role")
+    if role == COMPLETE_MARKET_EXECUTION_ROLE:
+        return "PASS_COMPLETE_MARKET_CHECKPOINT_INACTIVE", "market_checkpoint.json", True
+    if role == ES_2025_CANARY_EXECUTION_ROLE:
+        return (
+            "PASS_V10_ES_2025_CANARY_PRODUCER_INACTIVE",
+            "canary_producer_result.json",
+            False,
+        )
+    return (
+        "PASS_AUTHORIZED_FULL_DEVELOPMENT_CANDIDATE_NOT_PUBLISHED_NOT_ACTIVE",
+        "full_build_result.json",
+        False,
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -832,7 +851,11 @@ def _execute(
     started: float,
 ) -> FullBuildRunResult:
     output = _contained(root, plan["output_staging_path"])
-    v10_market = type(plan.get("target_market")) is str and output.is_relative_to(
+    execution_role = plan.get("execution_role")
+    v10_market = execution_role in {
+        COMPLETE_MARKET_EXECUTION_ROLE,
+        ES_2025_CANARY_EXECUTION_ROLE,
+    } and output.is_relative_to(
         root / "data/causally_gated_normalized/v10"
     )
     relative_output = (
@@ -862,7 +885,12 @@ def _execute(
     for market, year, unit_entries in _work_units(
         selected, expected_count=int(plan["source"]["work_unit_count"])
     ):
-        if time.monotonic() - started > MAXIMUM_RUNTIME_SECONDS:
+        runtime_ceiling = int(
+            plan.get("execution", {}).get(
+                "maximum_runtime_seconds", MAXIMUM_RUNTIME_SECONDS
+            )
+        )
+        if time.monotonic() - started > runtime_ceiling:
             raise UnauthorizedOperation("full development runtime ceiling exceeded")
         window = _work_unit_window(unit_entries)
         unit_partition_start = len(partitions)
@@ -1052,14 +1080,10 @@ def _execute(
         progress["complete_work_unit_count"] = complete_work_units
         progress["current_work_unit_state"] = "COMPLETE"
     checkpoint_market = plan.get("target_market")
-    is_market_checkpoint = type(checkpoint_market) is str
+    status, result_filename, is_market_checkpoint = _execution_outcome(plan)
     core: dict[str, object] = {
         "schema_version": RESULT_SCHEMA,
-        "status": (
-            "PASS_COMPLETE_MARKET_CHECKPOINT_INACTIVE"
-            if is_market_checkpoint
-            else "PASS_AUTHORIZED_FULL_DEVELOPMENT_CANDIDATE_NOT_PUBLISHED_NOT_ACTIVE"
-        ),
+        "status": status,
         "plan_id": plan["plan_id"],
         "plan_sha256": plan_sha256,
         "receipt_id": context.receipt_id,
@@ -1094,11 +1118,11 @@ def _execute(
         "checkpoint_set_id": plan.get("checkpoint_set_id"),
         "complete_market_checkpoint": is_market_checkpoint,
         "reusable_in_same_checkpoint_set": is_market_checkpoint,
+        "execution_role": execution_role,
+        "can_seed_complete_market_checkpoint": False,
     }
     payload = {**core, "result_id": sha256_json(core)}
-    result_path = output / (
-        "market_checkpoint.json" if is_market_checkpoint else "full_build_result.json"
-    )
+    result_path = output / result_filename
     _write_create_only(result_path, payload)
     return FullBuildRunResult(result_path=result_path, payload=payload)
 

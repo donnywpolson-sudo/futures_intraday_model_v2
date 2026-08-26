@@ -1183,7 +1183,11 @@ def _replay_process_worker(
 
 
 def _run_replay_in_fresh_process(
-    root: Path, plan: Mapping[str, object], checkpoint: Mapping[str, object]
+    root: Path,
+    plan: Mapping[str, object],
+    checkpoint: Mapping[str, object],
+    *,
+    timeout_seconds: float | None = None,
 ) -> ReplayEvidence:
     """Run one replay in a fresh spawned interpreter and return canonical evidence."""
 
@@ -1196,7 +1200,11 @@ def _run_replay_in_fresh_process(
     )
     process.start()
     try:
-        process.join()
+        process.join(timeout=timeout_seconds)
+        if process.is_alive():
+            process.terminate()
+            process.join()
+            raise IntegrityError("independent replay process exceeded its runtime ceiling")
     except BaseException:
         if process.is_alive():
             process.terminate()
