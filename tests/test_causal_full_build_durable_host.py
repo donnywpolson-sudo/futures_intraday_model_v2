@@ -158,5 +158,8 @@ def test_scheduler_launcher_is_nonoverwriting_and_not_restartable() -> None:
     assert "manual_start = $false" in text
     assert "REGISTERED_FOR_SERVICE_TRIGGER_AFTER_LAUNCHER_EXIT" in text
     assert "System32/WindowsPowerShell/v1.0/powershell.exe" in text
+    assert "-WindowStyle Hidden" in text
+    assert "-DontStopOnIdleEnd" in text
+    assert "-DisallowHardTerminate" in text
     assert "Unregister-ScheduledTask" not in text
     assert "Start-Process" not in text

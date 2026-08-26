@@ -68,10 +68,10 @@ $PowerShell = Join-Path $env:SystemRoot 'System32/WindowsPowerShell/v1.0/powersh
 if (-not (Test-Path -LiteralPath $PowerShell -PathType Leaf)) {
     throw 'The stable Windows PowerShell scheduled-task host is absent.'
 }
-$Arguments = '-NoProfile -NonInteractive -ExecutionPolicy Bypass -File "{0}"' -f $WorkerPath
+$Arguments = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File "{0}"' -f $WorkerPath
 $Action = New-ScheduledTaskAction -Execute $PowerShell -Argument $Arguments -WorkingDirectory $RepositoryRoot
 $Trigger = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(2)
-$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -ExecutionTimeLimit (New-TimeSpan -Hours 72) -MultipleInstances IgnoreNew -RestartCount 0
+$Settings = New-ScheduledTaskSettingsSet -AllowStartIfOnBatteries -DontStopIfGoingOnBatteries -DontStopOnIdleEnd -DisallowHardTerminate -ExecutionTimeLimit (New-TimeSpan -Hours 72) -MultipleInstances IgnoreNew -RestartCount 0
 $Principal = New-ScheduledTaskPrincipal -UserId ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType Interactive -RunLevel Limited
 $Task = New-ScheduledTask -Action $Action -Trigger $Trigger -Settings $Settings -Principal $Principal
 Register-ScheduledTask -TaskName $TaskName -InputObject $Task | Out-Null
