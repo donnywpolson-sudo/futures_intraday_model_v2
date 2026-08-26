@@ -40,6 +40,19 @@ def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+def _host_io_path(path: Path) -> Path:
+    """Return an extended-length absolute host-evidence path on Windows."""
+
+    if os.name != "nt":
+        return path
+    value = str(path.resolve(strict=False))
+    if value.startswith("\\\\?\\"):
+        return Path(value)
+    if value.startswith("\\\\"):
+        return Path("\\\\?\\UNC\\" + value.lstrip("\\"))
+    return Path("\\\\?\\" + value)
+
+
 def _contained(root: Path, relative: object) -> Path:
     if type(relative) is not str or not relative:
         raise ContractError("durable-host evidence path is absent")
@@ -110,12 +123,13 @@ def validate_active_durable_host_evidence(root: Path, plan: Mapping[str, object]
     """Require the current scheduled worker's live, hash-bound heartbeat."""
 
     evidence = validate_durable_host_environment(root, plan)
-    started_path = evidence / "started.json"
-    heartbeat_path = evidence / "heartbeat.json"
+    started_path = _host_io_path(evidence / "started.json")
+    heartbeat_path = _host_io_path(evidence / "heartbeat.json")
+    exit_path = _host_io_path(evidence / "exit.json")
     if (
         not started_path.is_file()
         or not heartbeat_path.is_file()
-        or (evidence / "exit.json").exists()
+        or exit_path.exists()
     ):
         raise UnauthorizedOperation("V9 durable-host live evidence is absent or terminal")
     try:
@@ -173,9 +187,10 @@ def validate_active_durable_host_evidence(root: Path, plan: Mapping[str, object]
 
 
 def _write_create_only(path: Path, value: Mapping[str, object]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
+    io_path = _host_io_path(path)
+    io_path.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(
-        path,
+        io_path,
         os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0),
     )
     try:
@@ -183,11 +198,12 @@ def _write_create_only(path: Path, value: Mapping[str, object]) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
-    fsync_directory(path.parent)
+    fsync_directory(io_path.parent)
 
 
 def _write_atomic(path: Path, value: Mapping[str, object]) -> None:
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    io_path = _host_io_path(path)
+    temporary = io_path.with_name(f".{io_path.name}.{os.getpid()}.tmp")
     if temporary.exists():
         raise IntegrityError("durable-host heartbeat temporary path already exists")
     try:
@@ -202,13 +218,13 @@ def _write_atomic(path: Path, value: Mapping[str, object]) -> None:
             os.close(descriptor)
         for attempt in range(20):
             try:
-                os.replace(temporary, path)
+                os.replace(temporary, io_path)
                 break
             except PermissionError:
                 if attempt == 19:
                     raise
                 time.sleep(0.01)
-        fsync_directory(path.parent)
+        fsync_directory(io_path.parent)
     finally:
         if temporary.exists():
             temporary.unlink()
@@ -266,9 +282,10 @@ def run_durable_full_build_worker(
 
     root = repository_root.resolve(strict=True)
     evidence = validate_durable_host_environment(root, plan)
-    if evidence.exists():
+    evidence_io = _host_io_path(evidence)
+    if evidence_io.exists():
         raise IntegrityError("V9 durable-host evidence path already exists")
-    evidence.mkdir(parents=True)
+    evidence_io.mkdir(parents=True)
     started_at = _utc_now()
     plan_id = str(plan.get("plan_id", ""))
     started_core = {
@@ -297,11 +314,13 @@ def run_durable_full_build_worker(
     operation_traceback = None
     result: T | None = None
     try:
-        with (evidence / "stdout.log").open("x", encoding="utf-8") as stdout, (
-            evidence / "stderr.log"
-        ).open("x", encoding="utf-8") as stderr, contextlib.redirect_stdout(
-            stdout
-        ), contextlib.redirect_stderr(stderr):
+        stdout_path = _host_io_path(evidence / "stdout.log")
+        stderr_path = _host_io_path(evidence / "stderr.log")
+        with stdout_path.open("x", encoding="utf-8") as stdout, stderr_path.open(
+            "x", encoding="utf-8"
+        ) as stderr, contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(
+            stderr
+        ):
             result = operation()
             status = "PASS"
     except BaseException as exc:
@@ -350,9 +369,9 @@ def inspect_durable_full_build_worker(
 
     root = repository_root.resolve(strict=True)
     evidence = validate_durable_host_plan(root, plan)
-    started_path = evidence / "started.json"
-    heartbeat_path = evidence / "heartbeat.json"
-    exit_path = evidence / "exit.json"
+    started_path = _host_io_path(evidence / "started.json")
+    heartbeat_path = _host_io_path(evidence / "heartbeat.json")
+    exit_path = _host_io_path(evidence / "exit.json")
     relative = evidence.relative_to(root).as_posix()
     if not started_path.is_file():
         return {"status": "NOT_STARTED", "evidence_path": relative}

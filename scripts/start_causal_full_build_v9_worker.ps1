@@ -1,18 +1,57 @@
-[CmdletBinding()]
+[CmdletBinding(DefaultParameterSetName = 'Production')]
 param(
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, ParameterSetName = 'Production')]
     [string]$WorkerScriptRelativePath,
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, ParameterSetName = 'Production')]
     [ValidatePattern('^[0-9A-Z]{1,16}$')]
     [string]$Market,
-    [Parameter(Mandatory = $true)]
+    [Parameter(Mandatory = $true, ParameterSetName = 'Production')]
     [ValidatePattern('^[0-9a-f]{64}$')]
-    [string]$AttemptId
+    [string]$AttemptId,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Rehearsal')]
+    [switch]$Rehearsal,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Rehearsal')]
+    [string]$RehearsalRoot,
+    [Parameter(Mandatory = $true, ParameterSetName = 'Rehearsal')]
+    [string]$RehearsalPythonExecutable
 )
 
 $ErrorActionPreference = 'Stop'
 $TaskName = 'FuturesIntradayModelV2-CausalFullBuild-V9'
 $RepositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..')).Path
+if ($Rehearsal) {
+    $ResolvedRehearsalRoot = (Resolve-Path -LiteralPath $RehearsalRoot).Path
+    $ResolvedPython = (Resolve-Path -LiteralPath $RehearsalPythonExecutable).Path
+    if (-not (Test-Path -LiteralPath $ResolvedRehearsalRoot -PathType Container)) {
+        throw 'The production rehearsal root is absent.'
+    }
+    if (-not (Test-Path -LiteralPath $ResolvedPython -PathType Leaf)) {
+        throw 'The production rehearsal Python executable is absent.'
+    }
+    if ($ResolvedRehearsalRoot.StartsWith(
+        $RepositoryRoot + [IO.Path]::DirectorySeparatorChar,
+        [StringComparison]::OrdinalIgnoreCase
+    )) {
+        throw 'The production rehearsal root must be outside the canonical repository.'
+    }
+    $PriorPythonPath = $env:PYTHONPATH
+    $env:PYTHONPATH = Join-Path $RepositoryRoot 'src'
+    if (-not [string]::IsNullOrWhiteSpace($PriorPythonPath)) {
+        $env:PYTHONPATH += [IO.Path]::PathSeparator + $PriorPythonPath
+    }
+    try {
+        & $ResolvedPython -m futures_rebuild.causal_full_build_production_rehearsal `
+            --rehearsal-root $ResolvedRehearsalRoot `
+            --source-root $RepositoryRoot
+        if ($LASTEXITCODE -ne 0) {
+            throw "The production rehearsal failed with exit code $LASTEXITCODE."
+        }
+    }
+    finally {
+        $env:PYTHONPATH = $PriorPythonPath
+    }
+    return
+}
 $NormalizedWorker = $WorkerScriptRelativePath.Replace('\', '/')
 $ExpectedPattern = '^reports/bounded_2025_full_build_v9_preparation/b25fbv9p_[0-9TZ]+_[0-9a-f]{8}/run_scheduled_worker_v9\.ps1$'
 if ($NormalizedWorker -cnotmatch $ExpectedPattern) {

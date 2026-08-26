@@ -98,6 +98,29 @@ class FullBuildRunResult:
     payload: Mapping[str, object]
 
 
+def validate_full_build_storage_floor(
+    *,
+    free_bytes: int,
+    maximum_peak_additional_bytes: int = MAXIMUM_PEAK_ADDITIONAL_BYTES,
+    minimum_free_after_peak_bytes: int = MINIMUM_FREE_AFTER_PEAK_BYTES,
+) -> int:
+    """Return projected free bytes or fail before any payload access."""
+
+    if (
+        type(free_bytes) is not int
+        or type(maximum_peak_additional_bytes) is not int
+        or type(minimum_free_after_peak_bytes) is not int
+        or free_bytes < 0
+        or maximum_peak_additional_bytes < 0
+        or minimum_free_after_peak_bytes < 0
+    ):
+        raise ContractError("full development storage budget is invalid")
+    projected = free_bytes - maximum_peak_additional_bytes
+    if projected < minimum_free_after_peak_bytes:
+        raise UnauthorizedOperation("full development storage floor would be breached")
+    return projected
+
+
 def _json(path: Path) -> dict[str, object]:
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -817,9 +840,7 @@ def run_authorized_full_build(
     output = _contained(root, plan["output_staging_path"])
     if output.exists():
         raise IntegrityError("full development output staging path already exists")
-    free = shutil.disk_usage(root).free
-    if free - MAXIMUM_PEAK_ADDITIONAL_BYTES < MINIMUM_FREE_AFTER_PEAK_BYTES:
-        raise UnauthorizedOperation("full development storage floor would be breached")
+    validate_full_build_storage_floor(free_bytes=shutil.disk_usage(root).free)
     global_lock = root / "state/locks/foundation-build.lock"
     run_lock = root / f"state/locks/causal-observation-{plan['plan_id']}.lock"
     if global_lock.exists() or run_lock.exists():

@@ -28,9 +28,7 @@ from .causal_observation_foundation import (
 from .causal_observation_full_build import (
     MAXIMUM_OUTPUT_BYTES,
     MAXIMUM_PARTITION_COUNT,
-    MAXIMUM_PEAK_ADDITIONAL_BYTES,
     MAXIMUM_RUNTIME_SECONDS,
-    MINIMUM_FREE_AFTER_PEAK_BYTES,
     PINNED_PYTHON_EXECUTABLE,
     _contained,
     _execute,
@@ -39,6 +37,7 @@ from .causal_observation_full_build import (
     _market_windows,
     _write_create_only,
     validate_complete_development_boundary_metadata,
+    validate_full_build_storage_floor,
 )
 from .causal_source_closure import select_exact_standard_source_entries
 from .errors import ContractError, IntegrityError, UnauthorizedOperation
@@ -247,8 +246,7 @@ def run_authorized_market_checkpoint(
     output = _contained(root, plan["output_staging_path"])
     if output.exists():
         raise IntegrityError("market checkpoint output already exists")
-    if shutil.disk_usage(root).free - MAXIMUM_PEAK_ADDITIONAL_BYTES < MINIMUM_FREE_AFTER_PEAK_BYTES:
-        raise UnauthorizedOperation("market checkpoint storage floor would be breached")
+    validate_full_build_storage_floor(free_bytes=shutil.disk_usage(root).free)
     global_lock = root / "state/locks/foundation-build.lock"
     run_lock = root / f"state/locks/causal-observation-market-{market}-{plan['plan_id']}.lock"
     if global_lock.exists() or run_lock.exists():
