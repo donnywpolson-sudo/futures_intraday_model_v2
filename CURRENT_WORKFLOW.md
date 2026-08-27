@@ -43,11 +43,28 @@ source, state, partition, and file identities; a fresh attempt may reuse only
 an unchanged contiguous sealed-year prefix. Two independent certification
 replays run in separate processes. The controller and provider-free production
 rehearsal are synthetic-test proven. A dedicated ES-2025 canary successor is
-implemented locally: it binds seven exact registered DBNs plus sidecars,
-permits one producer decode and one fresh-process independent replay, writes
-only below the V10 `_canary` lane, and cannot seed or complete the ES market
-checkpoint. No V10 real DBN read, ES-2025 canary execution, scheduler campaign,
-publication, or activation has occurred.
+implemented and passed under consumed authority: it bound seven exact
+registered DBNs plus sidecars, performed one producer decode and one
+fresh-process independent replay, wrote only below the V10 `_canary` lane, and
+did not seed the complete ES checkpoint. The complete ES 2010-2025 checkpoint
+and its two-pass maximum-robustness certification passed and remain inactive.
+The complete GC 2010-2025 checkpoint also passed with all 16 years sealed and
+remains inactive; GC maximum-robustness certification is the next gate. The
+other 39 markets have not started. No V10 publication or activation has
+occurred.
+
+After all 41 individual market certificates and the inactive release-wide
+certificate pass, prepare a separate annual active-view publication. The
+research-facing layout is exactly
+`data/active/causally_gated_normalized/{market}/{year}/{year}.parquet` with one
+adjacent `{year}.parquet.manifest.json` per market-year. The annual materializer
+must reconstruct only from the certified V10 artifacts, preserve exact logical
+rows, causal and source identities, counts, ordering, and development
+boundaries, and independently read back every annual file before activation.
+Publication and activation remain separately approved, atomic, rollback-safe,
+and catalog/pointer-last. The certified month-partitioned V10 checkpoint tree
+remains immutable audit and recovery evidence; the active annual view does not
+replace or authorize deletion of that evidence.
 
 Real research still needs its durable trial declaration and immutable evidence.
 Before registration, every row-dependent sample, fold, feature, execution,
@@ -180,12 +197,14 @@ Old derived releases and retired foundation runners remain no-read. Historical
 canary and full-build authorizations are consumed; their inactive outputs and
 V9 artifacts remain evidence only. The V10 market-by-market controller,
 checkpoint writer, sealed-year recovery, independent market certifier, and
-long-path-safe provider-free rehearsal are implemented locally. The full
-41-market release remains unbuilt and V10 has no current real-row authority.
-Its next boundary is remote recovery of the local canary-support commit,
-followed by preparation and approval of a fresh bounded ES-2025 canary.
-Scheduler activation and each later row-reading or publishing action still
-require the applicable approval. The Final Sealed 252-Session Holdout and forward values
+long-path-safe provider-free rehearsal are implemented. The ES-2025 canary and
+complete ES 2010-2025 checkpoint and maximum-robustness certification passed
+under consumed authority and remain inactive. The complete GC 2010-2025
+checkpoint also passed under consumed authority and remains inactive; GC
+maximum-robustness certification has not started. The other 39 markets and the
+complete 41-market release remain unbuilt. Each later market row read,
+certification, scheduler action, publication, and activation still requires the
+applicable approval. The Final Sealed 252-Session Holdout and forward values
 remain inaccessible.
 
 When a milestone changes the active stage, status, or next goal, check

@@ -22,8 +22,8 @@ authority.
 | Causal-observation contract | **FROZEN** |
 | Observation-only safety implementation | **BUILT / VALIDATED / REMOTELY RECOVERABLE** |
 | Causal observation release | **NOT BUILT** |
-| Development-only canary | **EXECUTED ONCE / PASSED / INACTIVE** |
-| Full development builder | **V10 MARKET-BY-MARKET AND ES-2025 CANARY SUPPORT IMPLEMENTED / SYNTHETICALLY VALIDATED / NOT EXECUTED** |
+| Development-only canary | **V10 ES-2025 EXECUTED / PASSED / INACTIVE** |
+| Full development builder | **ES CERTIFIED / GC 2010-2025 CHECKPOINT PASSED / GC CERTIFICATION NOT STARTED / OTHER 39 NOT STARTED** |
 | Outcomes | **NOT STARTED** |
 | Features | **NOT STARTED** |
 | WFA | **NOT STARTED** |
@@ -119,9 +119,26 @@ failure cannot change an earlier certificate. After all 41 pass, one inactive
 release-wide certificate must re-open every certified artifact and prove exact
 set compatibility. Synthetic fault injection covers every market and major
 phase, and the provider-free production rehearsal covers terminal Windows path
-depth without registering a task. No V10 real DBN read, ES-2025 canary,
-scheduler campaign, publication, or activation has occurred; each remains at
-its applicable approval boundary.
+depth without registering a task. The V10 ES-2025 canary and complete ES
+2010-2025 checkpoint and maximum-robustness certification passed under consumed
+authority and remain inactive. The complete GC 2010-2025 checkpoint also passed
+under consumed authority and remains inactive; GC maximum-robustness
+certification has not started. The other 39 markets have not started.
+Publication and activation remain at their separate approval boundaries.
+
+After the 41 individual certificates and release-wide certificate pass, a
+separate publication phase must materialize the research-facing annual active
+view at
+`data/active/causally_gated_normalized/{market}/{year}/{year}.parquet`, with an
+adjacent `{year}.parquet.manifest.json`. Each annual file must be derived only
+from the compatible certified V10 monthly artifacts and independently prove
+the same logical rows, ordering, counts, timestamps, source release, source
+contract, causal contract, and development cutoff. The active layout contains
+no month directories. Publication is inactive first, read back completely,
+independently certified, and activated catalog/pointer-last under separate
+approval with rollback evidence. The month-partitioned V10 tree remains
+immutable certification and recovery evidence and is not deleted by active-view
+publication.
 
 The V10 ES-2025 canary is a separate inactive role below
 `data/causally_gated_normalized/v10/_canary/ES/<attempt>/`. It is bounded to
@@ -193,4 +210,4 @@ Current contracts hold detailed evidence requirements. Git history and
 foundation releases remain evidence only and do not override active pointers,
 contracts, or closure.
 
-NEXT REAL-DATA GATE: FRESH BOUNDED ES-2025 V10 CANARY AUTHORITY
+NEXT REAL-DATA GATE: GC MAXIMUM-ROBUSTNESS CERTIFICATION PREPARATION

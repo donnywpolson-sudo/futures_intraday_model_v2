@@ -37,11 +37,15 @@ release is not built. Later full-build attempts remained inactive and failed
 closed and remain evidence only. The non-active V10 successor performs compact
 Parquet/Zstandard normalization and two-pass independent certification one
 market at a time, with immutable market and sealed-year checkpoints. It is
-synthetic-test proven but has not read real DBNs or started its scheduler. A
-dedicated ES-2025 canary successor is implemented locally with one producer
-decode, one fresh-process independent replay, a six-hour ceiling, and an
-inactive `_canary` destination that cannot seed the complete ES checkpoint. The
-Final Sealed 252-Session Holdout remains pristine and unread. See
+synthetic-test proven. Its ES-2025 canary and complete ES 2010-2025 checkpoint
+and two-pass maximum-robustness certification passed under consumed authority
+and remain inactive. The complete GC 2010-2025 checkpoint also passed and
+remains inactive; GC maximum-robustness certification has not started. The
+other 39 markets have not started. After all 41 markets and the release-wide
+certificate pass, a separately approved publication phase will create one annual active Parquet at
+`data/active/causally_gated_normalized/{market}/{year}/{year}.parquet` plus its
+manifest while preserving the certified V10 monthly evidence. The Final Sealed
+252-Session Holdout remains pristine and unread. See
 `PROJECT_OUTLINE.md` for the current pipeline and status.
 
 ## Repository map
