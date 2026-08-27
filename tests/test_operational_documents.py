@@ -573,7 +573,7 @@ def _assert_project_outline_is_concise_current_runbook() -> None:
         "seven-market development canary ran once under consumed authority",
         "Final Sealed 252-Session Holdout",
         "SEALED / PRISTINE / UNREAD",
-            "NEXT REAL-DATA GATE: FRESH BOUNDED ES-2025 V10 CANARY AUTHORITY",
+        "NEXT REAL-DATA GATE: GC MAXIMUM-ROBUSTNESS CERTIFICATION PREPARATION",
     ):
         assert required.lower() in lowered
 
