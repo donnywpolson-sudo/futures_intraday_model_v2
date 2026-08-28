@@ -63,6 +63,25 @@ PIPELINE_FOLDER_MAP_PATH = ROOT / "PIPELINE_FOLDER_MAP.md"
 ACTIVE_SOURCE_FILES_PATH = ROOT / "ACTIVE_SOURCE_FILES.txt"
 pytestmark = pytest.mark.current
 
+GIT_REPOSITORY_ROUTING_ENV_KEYS = (
+    "GIT_INDEX_FILE",
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_QUARANTINE_PATH",
+)
+
+
+def _nested_git_environment(
+    source: dict[str, str] | None = None,
+) -> dict[str, str]:
+    env = dict(os.environ if source is None else source)
+    for key in GIT_REPOSITORY_ROUTING_ENV_KEYS:
+        env.pop(key, None)
+    return env
+
 
 def _surface() -> dict[str, object]:
     return copy.deepcopy(load_repository_surface(ROOT))
@@ -136,7 +155,8 @@ def test_active_alpha_authority_is_tracked_and_loadable() -> None:
     assert prospective["valid"] is True
     assert set(prospective["required_paths"]) == {
         "configs/research_universe_contract.json",
-        "state/alpha_ladder_registry/53252c8d2351937105103aa6884719f9599cc1448a7908c63795b8fbd2362815/alpha_tiered.yaml",
+        "state/alpha_ladder_registry/c053756ad32d722e290b2ab1d95c97f1ee070a29afba4b1daaeda819d751c18b/alpha_tiered.yaml",
+        "state/alpha_ladder_registry/c053756ad32d722e290b2ab1d95c97f1ee070a29afba4b1daaeda819d751c18b/universe_contract.json",
         "state/alpha_ladder_registry/53252c8d2351937105103aa6884719f9599cc1448a7908c63795b8fbd2362815/universe_contract.json",
         "state/alpha_ladder_registry/d3ab84356351568473ccdef935b20eda6779dcd681478415125a668d913dfd18/universe_contract.json",
     }
@@ -145,7 +165,8 @@ def test_active_alpha_authority_is_tracked_and_loadable() -> None:
 
 ALPHA_AUTHORITY_FIXTURE_PATHS = {
     "configs/research_universe_contract.json",
-    "state/alpha_ladder_registry/53252c8d2351937105103aa6884719f9599cc1448a7908c63795b8fbd2362815/alpha_tiered.yaml",
+    "state/alpha_ladder_registry/c053756ad32d722e290b2ab1d95c97f1ee070a29afba4b1daaeda819d751c18b/alpha_tiered.yaml",
+    "state/alpha_ladder_registry/c053756ad32d722e290b2ab1d95c97f1ee070a29afba4b1daaeda819d751c18b/universe_contract.json",
     "state/alpha_ladder_registry/53252c8d2351937105103aa6884719f9599cc1448a7908c63795b8fbd2362815/universe_contract.json",
     "state/alpha_ladder_registry/d3ab84356351568473ccdef935b20eda6779dcd681478415125a668d913dfd18/universe_contract.json",
 }
@@ -161,10 +182,12 @@ def _write_alpha_authority_fixture(root: Path) -> dict[str, object]:
         target = root / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / relative, target)
-    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    git_env = _nested_git_environment()
+    subprocess.run(["git", "init", "-q"], cwd=root, env=git_env, check=True)
     subprocess.run(
         ["git", "add", "--", *sorted(ALPHA_AUTHORITY_FIXTURE_PATHS)],
         cwd=root,
+        env=git_env,
         check=True,
     )
     return pointer
@@ -181,8 +204,13 @@ def _write_alpha_authority_fixture(root: Path) -> dict[str, object]:
     ],
 )
 def test_active_alpha_authority_candidate_fails_closed(
-    tmp_path: Path, case: str, message: str
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    case: str,
+    message: str,
 ) -> None:
+    for key in GIT_REPOSITORY_ROUTING_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
     pointer = _write_alpha_authority_fixture(tmp_path)
     contract = tmp_path / str(pointer["contract_path"])
     transitive = tmp_path / "configs/research_universe_contract.json"
@@ -194,6 +222,7 @@ def test_active_alpha_authority_candidate_fails_closed(
         subprocess.run(
             ["git", "rm", "--cached", "-q", "--", str(pointer["contract_path"])],
             cwd=tmp_path,
+            env=_nested_git_environment(),
             check=True,
         )
     elif case == "transitive_absent":
@@ -895,6 +924,7 @@ def test_clean_export_rendering_needs_no_local_pointer_or_payload(
 
 def test_default_cli_reports_all_generated_surface_validity() -> None:
     env = os.environ.copy()
+    env["PYTHONPATH"] = str(ROOT / "src")
     result = subprocess.run(
         [sys.executable, "-B", "-m", "futures_rebuild.repository_surface"],
         cwd=ROOT,
@@ -1265,27 +1295,104 @@ def test_active_source_registry_contract_fails_closed(
         validate_repository_surface(surface)
 
 
-def test_git_backed_tracked_inventory_collection_is_binary_safe(tmp_path: Path) -> None:
+def test_git_backed_tracked_inventory_collection_is_binary_safe(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    outer = tmp_path / "outer"
+    outer.mkdir()
+    clean_env = _nested_git_environment()
     subprocess.run(
         ["git", "-c", "core.longpaths=true", "init", "-q"],
-        cwd=tmp_path,
+        cwd=outer,
+        env=clean_env,
         check=True,
         capture_output=True,
     )
-    (tmp_path / "src").mkdir()
-    (tmp_path / "src" / "alpha file.py").write_text("pass\n", encoding="utf-8")
-    (tmp_path / "README.md").write_text("read me\n", encoding="utf-8")
+    (outer / "outer-base.txt").write_text("base\n", encoding="utf-8")
     subprocess.run(
-        ["git", "add", "--", "README.md", "src/alpha file.py"],
-        cwd=tmp_path,
+        ["git", "add", "--", "outer-base.txt"],
+        cwd=outer,
+        env=clean_env,
         check=True,
         capture_output=True,
     )
-
-    assert collect_tracked_repository_paths(tmp_path) == [
-        "README.md",
-        "src/alpha file.py",
+    alternate_index = outer / "prospective.index"
+    shutil.copyfile(outer / ".git" / "index", alternate_index)
+    (outer / "outer-prospective.txt").write_text("prospective\n", encoding="utf-8")
+    prospective_env = clean_env | {"GIT_INDEX_FILE": str(alternate_index)}
+    subprocess.run(
+        ["git", "add", "--", "outer-prospective.txt"],
+        cwd=outer,
+        env=prospective_env,
+        check=True,
+        capture_output=True,
+    )
+    alternate_sha = hashlib.sha256(alternate_index.read_bytes()).hexdigest()
+    monkeypatch.chdir(outer)
+    for key in GIT_REPOSITORY_ROUTING_ENV_KEYS:
+        monkeypatch.delenv(key, raising=False)
+    monkeypatch.setenv("GIT_INDEX_FILE", str(alternate_index))
+    assert collect_tracked_repository_paths(outer) == [
+        "outer-base.txt",
+        "outer-prospective.txt",
     ]
+
+    for name in ("nested-one", "nested-two"):
+        nested = tmp_path / name
+        nested.mkdir()
+        subprocess.run(
+            ["git", "-c", "core.longpaths=true", "init", "-q"],
+            cwd=nested,
+            env=_nested_git_environment(),
+            check=True,
+            capture_output=True,
+        )
+        (nested / "src").mkdir()
+        (nested / "src" / f"{name} file.py").write_text("pass\n", encoding="utf-8")
+        (nested / "README.md").write_text("read me\n", encoding="utf-8")
+        subprocess.run(
+            ["git", "add", "--", "README.md", f"src/{name} file.py"],
+            cwd=nested,
+            env=_nested_git_environment(),
+            check=True,
+            capture_output=True,
+        )
+        leaked = subprocess.run(
+            ["git", "ls-files"],
+            cwd=nested,
+            env=os.environ.copy(),
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        assert "outer-prospective.txt" in leaked
+        assert f"src/{name} file.py" not in leaked
+        with monkeypatch.context() as nested_context:
+            for key in GIT_REPOSITORY_ROUTING_ENV_KEYS:
+                nested_context.delenv(key, raising=False)
+            assert collect_tracked_repository_paths(nested) == [
+                "README.md",
+                f"src/{name} file.py",
+            ]
+            nested_env = _nested_git_environment()
+            assert subprocess.run(
+                ["git", "rev-parse", "--show-toplevel"],
+                cwd=nested,
+                env=nested_env,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip().replace("\\", "/") == nested.as_posix()
+            git_dir = subprocess.run(
+                ["git", "rev-parse", "--git-dir"],
+                cwd=nested,
+                env=nested_env,
+                check=True,
+                capture_output=True,
+                text=True,
+            ).stdout.strip()
+            assert (nested / git_dir).resolve().is_relative_to(nested.resolve())
+    assert hashlib.sha256(alternate_index.read_bytes()).hexdigest() == alternate_sha
 
 
 def test_active_source_rendering_is_deterministic_complete_and_exact() -> None:

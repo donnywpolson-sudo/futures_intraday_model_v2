@@ -864,3 +864,28 @@ def test_micro_preflight_is_metadata_only_and_download_has_no_public_command() -
     pyproject = _text("pyproject.toml")
     assert "futures-pipeline = \"futures_rebuild.pipeline:main\"" in pyproject
     assert "apex-micro-download" not in pyproject
+
+
+def test_current_documents_describe_the_future_mechanism_ladder_without_overclaim() -> None:
+    documents = {
+        name: _text(name)
+        for name in ("CURRENT_WORKFLOW.md", "PROJECT_OUTLINE.md", "README.md")
+    }
+    combined = "\n".join(documents.values())
+    normalized = " ".join(combined.split())
+    for required in (
+        "synthetic engineering",
+        "NQ, CL, GC",
+        "ZN or 6E",
+        "one equity family",
+        "balanced 16",
+        "41-market scientific universe",
+        "UNRESOLVED_AUTHORITY_HOLDOUT_ACCESS_FORBIDDEN",
+        "No new mechanism has started",
+    ):
+        assert required.lower() in normalized.lower()
+    assert "no macro is selected yet" in normalized.lower()
+    assert "NQ cannot rescue" in normalized
+    assert "automatic deployment list" in normalized
+    assert "Final-252 authority is active" not in normalized
+    assert "all 41 markets are live-trading eligible" not in normalized

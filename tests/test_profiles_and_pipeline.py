@@ -81,8 +81,8 @@ def test_cli_profile_validation_includes_the_active_alpha_ladder(capsys) -> None
     assert main(["validate-profiles"]) == 0
     payload = json.loads(capsys.readouterr().out)
     assert payload["active_alpha_ladder"] == {
-        "contract_id": "53252c8d2351937105103aa6884719f9599cc1448a7908c63795b8fbd2362815",
-        "profile_id": "18fbb7a3a405ee2bcaef5dd7d6e757cfb3a69ec8485afd34e5fcf1f627aaeca6",
+        "contract_id": "c053756ad32d722e290b2ab1d95c97f1ee070a29afba4b1daaeda819d751c18b",
+        "profile_id": "afcb79549f4dd45e7853c54db35ead3ea224d48a2b79028a2b8dadd241969d44",
         "state": "ACTIVE_HASH_BOUND",
     }
     assert payload["active_prop_firm_profile"]["profile_id"] == (

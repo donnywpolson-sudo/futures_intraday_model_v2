@@ -1,0 +1,218 @@
+schema_version: alpha_research_ladder_profile/4.0.0
+classification: PRE_RESEARCH_DESIGN_PRIOR
+state: ACTIVE_ONLY_WHEN_REFERENCED_BY_VALID_POINTER
+applies_to: FUTURE_COUNTED_MECHANISMS_ONLY
+contract_binding:
+  path: state/alpha_ladder_registry/c053756ad32d722e290b2ab1d95c97f1ee070a29afba4b1daaeda819d751c18b/universe_contract.json
+  sha256: 8587086283e57030a878217a7502cac681a1a85079ec86cf0dbb7ae424d6b6bb
+  contract_id: c053756ad32d722e290b2ab1d95c97f1ee070a29afba4b1daaeda819d751c18b
+market_sets:
+  tier_0:
+  - ES
+  tier_1_fixed:
+  - NQ
+  - CL
+  - GC
+  macro_candidates:
+  - ZN
+  - 6E
+  balanced:
+  - ES
+  - NQ
+  - CL
+  - NG
+  - RB
+  - GC
+  - HG
+  - SR3
+  - ZN
+  - ZB
+  - 6E
+  - 6J
+  - ZC
+  - ZS
+  - LE
+  - HE
+  traditional:
+  - ES
+  - NQ
+  - RTY
+  - YM
+  - CL
+  - NG
+  - RB
+  - HO
+  - GC
+  - SI
+  - HG
+  - PL
+  - SR3
+  - SR1
+  - ZQ
+  - TN
+  - ZT
+  - ZF
+  - ZN
+  - ZB
+  - UB
+  - 6A
+  - 6B
+  - 6C
+  - 6E
+  - 6J
+  - 6M
+  - 6N
+  - 6S
+  - ZC
+  - ZS
+  - ZL
+  - ZM
+  - ZW
+  - KE
+  - LE
+  - HE
+  - GF
+  satellite:
+  - BTC
+  - ETH
+  - PA
+  standard:
+  - ES
+  - NQ
+  - RTY
+  - YM
+  - CL
+  - NG
+  - RB
+  - HO
+  - GC
+  - SI
+  - HG
+  - PL
+  - SR3
+  - SR1
+  - ZQ
+  - TN
+  - ZT
+  - ZF
+  - ZN
+  - ZB
+  - UB
+  - 6A
+  - 6B
+  - 6C
+  - 6E
+  - 6J
+  - 6M
+  - 6N
+  - 6S
+  - ZC
+  - ZS
+  - ZL
+  - ZM
+  - ZW
+  - KE
+  - LE
+  - HE
+  - GF
+  - BTC
+  - ETH
+  - PA
+  deferred_micros:
+  - MES
+  - MCL
+  - MGC
+  - M6E
+  - MNQ
+  - MYM
+  - M2K
+  - M6A
+  - SIL
+  - MBT
+  - MET
+  - M6B
+  - MJY
+  - MCD
+  - MSF
+  - MNG
+  - MHG
+profiles:
+  synthetic_engineering:
+    data: SYNTHETIC_ONLY
+    alpha_claim: false
+    mechanism_freeze_required_before_next_stage: true
+  tier_0:
+    evaluation_pack:
+    - ES
+    mandatory_pass:
+    - ES
+    failure_action: CLOSE_MECHANISM
+    nq_rescue_forbidden: true
+  tier_1:
+    incremental_market_set: tier_1_fixed
+    macro_candidates_market_set: macro_candidates
+    macro_selection_status: PENDING_PRE_RESULT_EXECUTION_GATE
+    cumulative_prior_result_reuse:
+    - ES
+    same_frozen_mechanism_required: true
+    between_market_tuning_forbidden: true
+  tier_2:
+    market_set: balanced
+    preserve_predecessor_promotion_thresholds: true
+    report_per_market_and_family: true
+  tier_3:
+    market_set: standard
+    mandatory_subgroups:
+    - traditional
+    - satellite
+    traditional_must_pass_independently: true
+    satellite_can_rescue_traditional_failure: false
+    deferred_micros_can_rescue_failure: false
+    deferred_micros_create_holdout: false
+  final_historical_evaluation:
+    status: BLOCKED_FINAL_252_AUTHORITY_UNRESOLVED
+    access_allowed: false
+  forward_monitoring:
+    requires_alpha_and_live_execution_eligibility: true
+    monitoring_only: true
+family_validation:
+  equity:
+    anchor: ES
+    correlated_extension: NQ
+    maximum_independent_credit: 1
+    nq_cannot_rescue_es: true
+  energy:
+    anchor: CL
+    maximum_independent_credit: 1
+  metals:
+    anchor: GC
+    maximum_independent_credit: 1
+  macro:
+    candidates:
+    - ZN
+    - 6E
+    selected_root: null
+    selection_status: PENDING_PRE_RESULT_EXECUTION_GATE
+    maximum_independent_credit: 1
+per_market_qualification:
+  default_alpha_status: NOT_EVALUATED
+  default_execution_proxy_status: NOT_EVALUATED
+  default_live_execution_status: UNCLASSIFIED
+  deployment_candidate_rule: alpha_status == PASS AND live_execution_status == APPROVED
+operational_gate_identifiers:
+  synthetic_engineering: tier_0
+  tier_0: pilot
+  tier_1: tier_1
+  tier_2: tier_2
+  tier_3: tier_3
+  final_historical_evaluation: holdout
+  forward_monitoring: forward
+authority:
+  historical_rows: false
+  registration: false
+  execution: false
+  final_252: false
+  holdout_or_forward_values: false
+  provider_network_credentials: false
+  trading: false
+profile_id: afcb79549f4dd45e7853c54db35ead3ea224d48a2b79028a2b8dadd241969d44

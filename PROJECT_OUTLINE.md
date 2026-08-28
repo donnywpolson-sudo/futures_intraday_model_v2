@@ -56,8 +56,8 @@ been built or activated.
 4. Feature Foundation
 5. Chronological Validation and WFA
 6. Mechanism Definition and Freeze
-7. Tier 0 — Engineering and ES Qualification
-8. Tier 1 — Four-Market Confirmation
+7. Stage 0 and Tier 0 — Synthetic Engineering, then ES Qualification
+8. Tier 1 — Frozen Independent-Family Core Pack
 9. Tier 2 — Balanced 16-Market Replication
 10. Tier 3 — Full 41-Market Replication
 11. Final Sealed 252-Session Holdout
@@ -76,8 +76,8 @@ user-facing pipeline.
 | 4. Feature Foundation | Not started for the new mechanism | Certified causal observations | Separate immutable features | Availability, leakage, and transform checks |
 | 5. Chronological Validation and WFA | Not started for the new mechanism | Frozen outcomes and features | Chronological folds and WFA evidence | Training-only transforms, purge, and embargo where required |
 | 6. Mechanism Definition and Freeze | Not started for the new mechanism | Preregistered development evidence | One frozen mechanism identity | Finite budget and preregistration pass |
-| 7. Tier 0 — Engineering and ES Qualification | Not started for the new mechanism | Frozen mechanism and approved Tier 0 inputs | Engineering certificate and ES decision | Synthetic engineering, then row-certified ES qualification |
-| 8. Tier 1 — Four-Market Confirmation | Not started for the new mechanism | Passing Tier 0 mechanism | Four-market confirmation evidence | Frozen identity and four-market gates pass |
+| 7. Stage 0 and Tier 0 — Synthetic Engineering, then ES Qualification | Not started for the new mechanism | Frozen mechanism and approved Tier 0 inputs | Synthetic certificate and ES decision | Synthetic mechanics make no Alpha claim; ES must pass and failure closes the mechanism |
+| 8. Tier 1 — Frozen Independent-Family Core Pack | Not started for the new mechanism | Passing ES mechanism and a pre-result ZN-or-6E selector | NQ, CL, GC, and selected-macro per-market evidence | CL, GC, and macro pass; NQ stays visible; one mechanism and no tuning |
 | 9. Tier 2 — Balanced 16-Market Replication | Not started for the new mechanism | Passing Tier 1 mechanism | Balanced replication evidence | Frozen identity and Tier 2 gates pass |
 | 10. Tier 3 — Full 41-Market Replication | Not started for the new mechanism | Passing Tier 2 mechanism | Traditional and satellite replication evidence | Traditional 38 pass independently; satellites cannot rescue failure |
 | 11. Final Sealed 252-Session Holdout | Authority bytes unresolved; access forbidden | No admissible input until exact authority is rebuilt and separately activated | No evaluation | Exact recoverable manifest and separate single-use authority required |
@@ -152,11 +152,17 @@ campaign from canary to ES normalization.
 
 ## 6. Universe, tiers, and time boundaries
 
-The active standard ladder fixes 41 standard roots and 17 deferred micros.
-Exact standard tier membership is:
+The standard ladder successor fixes 41 standard roots and 17 deferred micros
+for future counted mechanisms only. It does not reopen the prior failed
+mechanism. Exact standard tier membership is:
 
-- **Tier 0 — Engineering and ES Qualification:** ES.
-- **Tier 1 — Four-Market Confirmation:** ES, CL, ZN, 6E.
+- **Stage 0 — Synthetic Engineering:** no real-history Alpha claim; freeze the
+  material mechanism before Tier 0.
+- **Tier 0 — ES Qualification:** ES is mandatory; failure closes the mechanism,
+  and NQ cannot rescue it.
+- **Tier 1 — Frozen Core Pack:** NQ, CL, GC, and exactly one preselected ZN or
+  6E. Macro selection is pending and must use a separately approved pre-result
+  execution gate.
 - **Tier 2 — Balanced 16-Market Replication:** ES, NQ, CL, NG, RB, GC, HG,
   SR3, ZN, ZB, 6E, 6J, ZC, ZS, LE, HE.
 - **Tier 3 — Full 41-Market Replication:** ES, NQ, RTY, YM, CL, NG, RB, HO,
@@ -167,6 +173,13 @@ Tier 3 contains 38 traditional markets and the BTC, ETH, and PA satellites.
 The traditional group must pass independently; satellite results cannot rescue
 traditional failure.
 
+Independent family credits are capped at one each: ES/NQ together are one
+equity family, CL is energy, GC is metals, and the selected ZN or 6E is macro.
+NQ remains a correlated equity extension: its result is always reported, its
+failure makes NQ individually Alpha-ineligible, and it cannot substitute for
+ES, CL, GC, or macro. All per-market failures remain visible; aggregate scores
+are supplemental and cannot rescue a required failure.
+
 The deferred micros are MES, MCL, MGC, M6E, MNQ, MYM, M2K, M6A, SIL, MBT,
 MET, M6B, MJY, MCD, MSF, MNG, and MHG. They are excluded from the next
 41-market foundation, cannot rescue standard-market failure, and cannot create
@@ -174,8 +187,16 @@ a micro-specific or second holdout.
 
 The previous mechanism is closed after failure at Tier 0 ES qualification.
 It cannot advance or be retried. A new mechanism has not started and must
-restart at Tier 0 synthetic engineering after the required foundations and
+restart at Stage 0 synthetic engineering after the required foundations and
 mechanism freeze exist.
+
+Final historical evaluation is currently
+`BLOCKED_FINAL_252_AUTHORITY_UNRESOLVED`. No active manifest or pointer exists,
+so holdout and forward access remain forbidden. The 41 markets are the
+scientific universe, not an automatic deployment list. Forward deployment
+consideration requires both per-market Alpha eligibility and live-execution
+eligibility; OHLCV alone does not certify spread, depth, queue position,
+market impact, or live fills.
 
 - Development end (exclusive): `2025-07-13T22:00:00Z`.
 - Declared Final-252 custody interval: 2025-07-14 through 2026-07-13; active authority bytes unresolved and access forbidden.

@@ -11,18 +11,28 @@ import yaml
 from futures_rebuild.alpha_research_ladder import (
     ACTIVE_POINTER_PATH,
     ALL_APPROVED,
+    ALLOWED_MACRO_EVIDENCE_FIELDS,
     BALANCED,
     CORE,
+    DEFERRED_MICROS,
     DECISION_SCHEMA,
+    MACRO_CANDIDATES,
+    QUALIFICATION_CONTRACT_SCHEMA,
     SATELLITE,
     SESSION_MANIFEST_SCHEMA,
+    TIER1_FIXED_MARKETS,
     TRADITIONAL,
     build_active_pointer,
     build_contract,
+    build_qualification_successor_contract,
+    build_qualification_successor_profile,
     build_profile,
     load_active_ladder,
     load_registered_ladder,
+    qualify_market,
+    qualify_tier1,
     validate_contract,
+    validate_macro_selection,
     validate_session_manifest,
     validate_stage_decision,
     validate_stage_registration,
@@ -650,3 +660,307 @@ def test_every_stage_accepts_only_the_exact_successful_progression(tmp_path: Pat
         )
         assert result["alpha_ladder_stage"] == stage
         assert len(result["mechanism_sha256"]) == 64
+
+
+def _qualification_contract() -> dict[str, object]:
+    return build_qualification_successor_contract(
+        predecessor_path=(
+            "state/alpha_ladder_registry/" + "5" * 64 + "/universe_contract.json"
+        ),
+        predecessor_sha256="6" * 64,
+        predecessor_contract_id="5" * 64,
+        predecessor_profile_id="1" * 64,
+        predecessor_pointer_id="8" * 64,
+        prior_failure_closure_id="7" * 64,
+        prior_failed_mechanism_id="c" * 64,
+    )
+
+
+def _active_qualification_ladder(
+    root: Path,
+) -> tuple[dict[str, object], dict[str, object]]:
+    contract = _qualification_contract()
+    contract_path = (
+        f"state/alpha_ladder_registry/{contract['contract_id']}/universe_contract.json"
+    )
+    contract_sha = _write_json(root, contract_path, contract)
+    profile = build_qualification_successor_profile(
+        contract_path=contract_path,
+        contract_sha256=contract_sha,
+        contract_id=str(contract["contract_id"]),
+    )
+    profile_path = (
+        root / f"state/alpha_ladder_registry/{contract['contract_id']}/alpha_tiered.yaml"
+    )
+    profile_path.write_text(yaml.safe_dump(profile, sort_keys=False), encoding="utf-8")
+    profile_sha = sha256(profile_path.read_bytes()).hexdigest()
+    pointer = build_active_pointer(
+        contract_path=contract_path,
+        contract_sha256=contract_sha,
+        contract_id=str(contract["contract_id"]),
+        profile_path=profile_path.relative_to(root).as_posix(),
+        profile_sha256=profile_sha,
+        profile_id=str(profile["profile_id"]),
+    )
+    _write_json(root, ACTIVE_POINTER_PATH.as_posix(), pointer)
+    return contract, profile
+
+
+def _market_result(
+    mechanism: str, alpha_status: str = "PASS",
+    *, tuning_after_freeze: bool = False,
+) -> dict[str, object]:
+    return {
+        "alpha_status": alpha_status,
+        "execution_proxy_status": "NOT_EVALUATED",
+        "live_execution_status": "UNCLASSIFIED",
+        "mechanism_sha256": mechanism,
+        "tuning_after_freeze": tuning_after_freeze,
+    }
+
+
+def _tier1_results(
+    mechanism: str, macro: str = "ZN",
+) -> dict[str, dict[str, object]]:
+    return {
+        market: _market_result(mechanism)
+        for market in (*TIER1_FIXED_MARKETS, macro)
+    }
+
+
+def _selector(
+    *, status: str = "SELECTED", selected: str | None = "ZN",
+    zn: str = "PASS", six_e: str = "FAIL",
+) -> dict[str, object]:
+    return {
+        "candidates": list(MACRO_CANDIDATES),
+        "selection_status": status,
+        "selected_root": selected,
+        "evidence_fields": [ALLOWED_MACRO_EVIDENCE_FIELDS[0]],
+        "evidence": {"metric": ALLOWED_MACRO_EVIDENCE_FIELDS[0]},
+        "candidate_gate_results": {"ZN": zn, "6E": six_e},
+        "tie_breaker_frozen_before_row_access": False,
+        "tie_breaker_id": None,
+    }
+
+
+def test_qualification_successor_structure_and_preserved_universes() -> None:
+    contract = validate_contract(_qualification_contract())
+    assert contract["schema_version"] == QUALIFICATION_CONTRACT_SCHEMA
+    assert contract["classification"] == "PRE_RESEARCH_DESIGN_PRIOR"
+    assert contract["applies_to"] == "FUTURE_COUNTED_MECHANISMS_ONLY"
+    stages = contract["stages"]
+    assert stages["synthetic_engineering"] == {
+        "role": "SYNTHETIC_ENGINEERING_ONLY",
+        "alpha_claim": False,
+        "real_history_evaluation": False,
+        "mechanism_freeze_required_before_next_stage": True,
+    }
+    assert stages["tier_0"]["evaluation_pack"] == ["ES"]
+    assert stages["tier_0"]["mandatory_pass"] == ["ES"]
+    assert stages["tier_0"]["failure_action"] == "CLOSE_MECHANISM"
+    assert stages["tier_0"]["rescue_markets"] == []
+    assert stages["tier_0"]["nq_rescue_forbidden"] is True
+    assert stages["tier_1"]["incremental_evaluation_pack"] == ["NQ", "CL", "GC"]
+    assert stages["tier_1"]["macro_slot"] == {
+        "candidates": ["ZN", "6E"],
+        "selected_root": None,
+        "selection_status": "PENDING_PRE_RESULT_EXECUTION_GATE",
+    }
+    assert stages["tier_1"]["rerun_prior_tier_markets"] is False
+    assert stages["tier_2"]["evaluation_pack"] == list(BALANCED)
+    assert len(BALANCED) == 16
+    assert stages["tier_3"]["evaluation_pack"] == list(ALL_APPROVED)
+    assert len(ALL_APPROVED) == 41
+    assert len(TRADITIONAL) == 38 and tuple(SATELLITE) == ("BTC", "ETH", "PA")
+    assert len(DEFERRED_MICROS) == 17
+    assert not set(DEFERRED_MICROS) & set(ALL_APPROVED)
+    assert stages["tier_3"]["satellite_can_rescue_traditional_failure"] is False
+    assert stages["tier_3"]["micros_can_rescue_failure"] is False
+    assert stages["tier_3"]["micros_create_holdout"] is False
+    assert contract["prior_failed_mechanism"]["status"] == "CLOSED_NONRETRYABLE"
+    assert contract["prior_failed_mechanism"]["retroactive_reinterpretation"] is False
+
+
+def test_qualification_profile_keeps_science_execution_and_deployment_separate() -> None:
+    contract = _qualification_contract()
+    profile = build_qualification_successor_profile(
+        contract_path="state/alpha_ladder_registry/candidate/universe_contract.json",
+        contract_sha256="a" * 64,
+        contract_id=str(contract["contract_id"]),
+    )
+    assert profile["profiles"]["tier_1"]["macro_selection_status"] == (
+        "PENDING_PRE_RESULT_EXECUTION_GATE"
+    )
+    assert profile["profiles"]["final_historical_evaluation"] == {
+        "status": "BLOCKED_FINAL_252_AUTHORITY_UNRESOLVED",
+        "access_allowed": False,
+    }
+    assert profile["profiles"]["forward_monitoring"][
+        "requires_alpha_and_live_execution_eligibility"
+    ] is True
+    assert profile["per_market_qualification"]["default_live_execution_status"] == (
+        "UNCLASSIFIED"
+    )
+
+
+def test_macro_selector_is_exact_pre_result_and_fail_closed() -> None:
+    assert validate_macro_selection(_selector())["selected_root"] == "ZN"
+    pending = _selector(
+        status="PENDING_PRE_RESULT_EXECUTION_GATE", selected=None,
+        zn="NOT_EVALUATED", six_e="NOT_EVALUATED",
+    )
+    assert validate_macro_selection(pending)["selected_root"] is None
+    neither = _selector(
+        status="NO_ELIGIBLE_MACRO_DIVERSIFIER", selected=None, zn="FAIL", six_e="FAIL",
+    )
+    assert validate_macro_selection(neither)["selection_status"] == (
+        "NO_ELIGIBLE_MACRO_DIVERSIFIER"
+    )
+    with pytest.raises(IntegrityError, match="exactly ZN and 6E"):
+        validate_macro_selection({**_selector(), "candidates": ["ZN", "6E", "ZB"]})
+    with pytest.raises(IntegrityError, match="exactly one"):
+        validate_macro_selection({**_selector(), "selected_root": "ZB"})
+    for forbidden in ("pnl", "sharpe", "wfa", "tier_result", "holdout_result", "forward_result"):
+        changed = _selector()
+        changed["evidence"] = {"metric": forbidden}
+        with pytest.raises(UnauthorizedOperation, match="strategy-result evidence"):
+            validate_macro_selection(changed)
+    both = _selector(selected="ZN", zn="PASS", six_e="PASS")
+    with pytest.raises(UnauthorizedOperation, match="pre-frozen tie-breaker"):
+        validate_macro_selection(both)
+    both["tie_breaker_frozen_before_row_access"] = True
+    both["tie_breaker_id"] = "TIE_BREAKER_FROZEN_BEFORE_ROW_ACCESS"
+    assert validate_macro_selection(both)["selected_root"] == "ZN"
+
+
+def test_unresolved_macro_selection_blocks_tier1_real_history_registration(
+    tmp_path: Path,
+) -> None:
+    contract, profile = _active_qualification_ladder(tmp_path)
+    registration = {
+        "alpha_ladder_binding": {
+            "stage": "tier_1",
+            "contract_id": contract["contract_id"],
+            "profile_id": profile["profile_id"],
+        }
+    }
+    with pytest.raises(UnauthorizedOperation, match="macro selection is unresolved"):
+        validate_stage_registration(registration, certificate={}, root=tmp_path)
+
+
+def test_tier1_pass_requires_es_independent_families_freeze_and_no_tuning() -> None:
+    mechanism = "a" * 64
+    es = _market_result(mechanism)
+    results = _tier1_results(mechanism)
+    report = qualify_tier1(
+        es_tier0_result=es, market_results=results, selected_macro="ZN",
+        frozen_mechanism_sha256=mechanism, no_between_market_tuning=True,
+    )
+    assert report["scientific_promotion"] is True
+    assert report["required_results_exist"] is True
+    assert report["same_frozen_mechanism_identity"] is True
+    assert report["aggregate_score_authoritative"] is False
+    assert report["family_results"]["equity"]["maximum_independent_credit"] == 1
+    assert report["nq_additional_equity_family_credit"] == 0
+    assert report["family_results"]["energy"]["status"] == "PASS"
+    assert report["family_results"]["metals"]["status"] == "PASS"
+    assert report["family_results"]["macro"]["selected_root"] == "ZN"
+
+    incomplete = dict(results)
+    incomplete.pop("NQ")
+    incomplete_report = qualify_tier1(
+        es_tier0_result=es, market_results=incomplete, selected_macro="ZN",
+        frozen_mechanism_sha256=mechanism, no_between_market_tuning=True,
+    )
+    assert incomplete_report["scientific_promotion"] is False
+    assert set(incomplete_report["market_results"]) == {"CL", "GC", "ZN"}
+    for required in ("CL", "GC", "ZN"):
+        failed = _tier1_results(mechanism)
+        failed[required] = _market_result(mechanism, "FAIL")
+        blocked = qualify_tier1(
+            es_tier0_result=es, market_results=failed, selected_macro="ZN",
+            frozen_mechanism_sha256=mechanism, no_between_market_tuning=True,
+        )
+        assert blocked["scientific_promotion"] is False
+        assert f"REQUIRED_MARKET_{required}_NOT_PASS" in blocked["required_failure_reasons"]
+    mismatch = _tier1_results(mechanism)
+    mismatch["GC"] = _market_result("b" * 64)
+    assert qualify_tier1(
+        es_tier0_result=es, market_results=mismatch, selected_macro="ZN",
+        frozen_mechanism_sha256=mechanism, no_between_market_tuning=True,
+    )["scientific_promotion"] is False
+    tuned = _tier1_results(mechanism)
+    tuned["CL"] = _market_result(mechanism, tuning_after_freeze=True)
+    assert qualify_tier1(
+        es_tier0_result=es, market_results=tuned, selected_macro="ZN",
+        frozen_mechanism_sha256=mechanism, no_between_market_tuning=True,
+    )["scientific_promotion"] is False
+
+
+def test_nq_is_visible_individually_but_never_rescues_or_adds_family_credit() -> None:
+    mechanism = "a" * 64
+    results = _tier1_results(mechanism)
+    results["NQ"] = _market_result(mechanism, "FAIL")
+    report = qualify_tier1(
+        es_tier0_result=_market_result(mechanism), market_results=results,
+        selected_macro="ZN", frozen_mechanism_sha256=mechanism,
+        no_between_market_tuning=True,
+    )
+    assert report["scientific_promotion"] is True
+    assert report["market_results"]["NQ"]["alpha_status"] == "FAIL"
+    assert report["market_results"]["NQ"]["alpha_eligible"] is False
+    assert report["family_results"]["equity"]["independent_credit"] == 1
+    assert report["nq_additional_equity_family_credit"] == 0
+    es_failed = qualify_tier1(
+        es_tier0_result=_market_result(mechanism, "FAIL"),
+        market_results=_tier1_results(mechanism), selected_macro="ZN",
+        frozen_mechanism_sha256=mechanism, no_between_market_tuning=True,
+    )
+    assert es_failed["scientific_promotion"] is False
+    assert "ES_TIER_0_NOT_PASS" in es_failed["required_failure_reasons"]
+
+
+def test_market_deployment_requires_alpha_and_live_execution_approval() -> None:
+    default = qualify_market()
+    assert default["live_execution_status"] == "UNCLASSIFIED"
+    assert default["deployment_candidate"] is False
+    assert qualify_market(alpha_status="PASS")["deployment_candidate"] is False
+    assert qualify_market(
+        alpha_status="FAIL", live_execution_status="APPROVED",
+    )["deployment_candidate"] is False
+    proxy_only = qualify_market(execution_proxy_status="PASS")
+    assert proxy_only["execution_proxy_eligible"] is True
+    assert proxy_only["deployment_candidate"] is False
+    approved = qualify_market(alpha_status="PASS", live_execution_status="APPROVED")
+    assert approved["alpha_eligible"] is True
+    assert approved["live_execution_eligible"] is True
+    assert approved["deployment_candidate"] is True
+
+
+def test_final_252_gate_is_unresolved_and_non_authorizing() -> None:
+    contract = _qualification_contract()
+    final_stage = contract["stages"]["final_historical_evaluation"]
+    assert final_stage["status"] == "BLOCKED_FINAL_252_AUTHORITY_UNRESOLVED"
+    assert final_stage["access_allowed"] is False
+    assert final_stage["manifest_binding"] is None
+    assert final_stage["pointer_binding"] is None
+    assert final_stage["historical_summary_is_authority"] is False
+    assert contract["authority"]["final_252"] is False
+    assert contract["authority"]["holdout_or_forward_values"] is False
+
+
+def test_final_transition_fails_closed_while_final_252_authority_is_unresolved(
+    tmp_path: Path,
+) -> None:
+    contract, _profile = _active_qualification_ladder(tmp_path)
+    mechanism = "a" * 64
+    decision = _decision(
+        contract_id=str(contract["contract_id"]), mechanism=mechanism,
+        stage="holdout",
+    )
+    with pytest.raises(UnauthorizedOperation, match="Final-252 authority is unresolved"):
+        validate_stage_decision(
+            decision, contract_id=str(contract["contract_id"]),
+            mechanism_sha256=mechanism, expected_stage="holdout", root=tmp_path,
+        )

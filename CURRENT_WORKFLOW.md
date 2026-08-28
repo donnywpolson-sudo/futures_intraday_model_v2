@@ -90,29 +90,42 @@ source and readiness censuses remain separate operations and cannot fit,
 predict, evaluate, register, or promote a trial.
 The gateway also requires one active, hash-bound Alpha research ladder. With no
 active ladder pointer, all new real-history registration and execution fails
-closed. A ladder-bound mechanism progresses in order through Tier 0, Tier 1,
-Tier 2, Tier 3, the Final Sealed 252-Session Holdout, and then forward monitoring.
-Tier 0 is one visible level with two mandatory gates in order: synthetic ES
-engineering, followed by one row-certified ES pilot with 504 training sessions
-and 63 evaluation sessions. Both gates must pass for Tier 0 to pass. The pilot
-is a go/no-go qualification, not multi-market alpha confirmation.
-The two Tier 0 gates retain separate evidence and authority boundaries.
-Synthetic success cannot authorize or substitute for the real-history pilot.
-The Tier 0 pilot registration must bind the immutable frozen mechanism, its
-passing synthetic certificate, the exact ES 504/63 row certificate and session
-manifest, and a separate passing four-market Tier 1 row certificate and
-session manifest that already exclude the pilot sessions. This prevents the
-single pilot attempt from being spent on a mechanism that cannot advance to
-Tier 1. Immutable operational artifacts continue to use `tier_0` for the
-synthetic gate and `pilot` for the ES gate; `pilot` is an internal gate
-identifier, not a separate ladder level.
-The mechanism hash cannot change between gates or levels; the pilot's
-evaluation sessions are excluded from every later market; and Tier 3 requires
-independent traditional-market passage with satellite results unable to rescue
-failure.
-Economic PASS decisions are recomputed against the immutable mechanism's
-stage-specific stress, baseline, trade-count, breadth, drawdown, subgroup, and
-formal-test gates; a bare PASS label is never sufficient.
+closed. The ladder successor governs future counted mechanisms only; it does
+not reinterpret the previous mechanism, which remains closed and nonretryable.
+
+Stage 0 is synthetic engineering. It can prove mechanics, causality,
+accounting, and failure behavior, but makes no Alpha claim and reads no real
+history. The complete material mechanism identity must be frozen before Tier 0.
+Tier 0 is one row-certified ES pilot with 504 training and 63 evaluation
+sessions. ES must pass; failure closes the mechanism, and NQ cannot rescue it.
+
+Tier 1 evaluates one frozen incremental pack: NQ, CL, GC, and exactly one macro
+market selected from ZN or 6E by a separately approved pre-result execution
+gate. No macro is selected yet, so Tier-1 execution remains fail closed. ES and
+NQ together provide at most one independent equity-family credit; NQ is a
+correlated extension whose result remains individually visible. CL supplies
+energy evidence, GC supplies metals evidence, and the selected ZN or 6E supplies
+macro evidence. ES, CL, GC, and the selected macro must pass, every required
+result must exist, the mechanism identity must match, and no between-market
+tuning may occur. NQ failure makes NQ individually Alpha-ineligible but does
+not erase otherwise successful independent-family evidence. No pooled score
+can conceal a required market or family failure.
+
+Tier 2 preserves the exact balanced 16-market pack and predecessor promotion
+thresholds. Tier 3 preserves the exact 41-standard-market universe: 38
+traditional markets plus BTC, ETH, and PA satellites. Traditional markets must
+pass independently; satellites cannot rescue failure. The 17 deferred micros
+remain disjoint, cannot rescue failure, and cannot create another holdout.
+Every tier uses the same frozen mechanism, and material changes restart a new
+counted mechanism at Stage 0.
+
+Final historical evaluation is a future gate only. It is currently
+`BLOCKED_FINAL_252_AUTHORITY_UNRESOLVED`; no manifest or active pointer exists,
+and holdout or forward access is forbidden. Forward deployment consideration
+requires a market to be independently Alpha-eligible and live-execution
+eligible. OHLCV execution proxies do not certify bid/ask spread, depth, queue
+position, market impact, or live fills. The 41 markets are a scientific
+universe, not an automatic deployment list.
 The active ladder pointer, not `configs/alpha_tiered.yaml` by itself, is the
 current operational truth. `futures-pipeline` is synthetic-only. Current
 real-history actions consist only of a separately authorized immutable
