@@ -572,7 +572,7 @@ def _assert_project_outline_is_concise_current_runbook() -> None:
         "Direct DBN use by features, models, WFA, or backtests is forbidden",
         "seven-market development canary ran once under consumed authority",
         "Final Sealed 252-Session Holdout",
-        "SEALED / PRISTINE / UNREAD",
+        "UNRESOLVED AUTHORITY / ACCESS FORBIDDEN",
         "NEXT REAL-DATA GATE: GC MAXIMUM-ROBUSTNESS CERTIFICATION PREPARATION",
     ):
         assert required.lower() in lowered

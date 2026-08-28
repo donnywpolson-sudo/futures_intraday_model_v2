@@ -9,6 +9,7 @@ only.  It never opens market-data payloads or credential files.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -19,7 +20,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .errors import ContractError
+from .errors import ContractError, IntegrityError
 
 
 SCHEMA_VERSION = "repository_surface/1.0.0"
@@ -40,6 +41,7 @@ ACTIVE_SOURCE_CLASSIFICATIONS = (
     "CURRENT_OPERATIONAL",
     "CURRENT_SUPPORTING",
 )
+EXACT_DESCENDANT_CLASSIFICATION_ROOTS = frozenset({"audits"})
 ACTIVE_SOURCE_HEADER = (
     "# ACTIVE_SOURCE_FILES",
     "# Deterministically generated from configs/repository_surface.json and the tracked repository file inventory.",
@@ -47,7 +49,7 @@ ACTIVE_SOURCE_HEADER = (
     "# Virtual view only; no file is moved or hidden, and this file grants no operational authority.",
 )
 EXPECTED_REGISTRY_ENTRY_COUNT = 189
-DIRECT_AUTHORITY_REGISTRY_ENTRY_COUNT = 214
+DIRECT_AUTHORITY_REGISTRY_ENTRY_COUNT = 251
 EXPECTED_UNRESOLVED_ENTRY_COUNT = 14
 EXPECTED_PUBLIC_COMMAND_COUNT = 7
 
@@ -893,6 +895,17 @@ def validate_tracked_root_coverage(
     if missing:
         raise RepositorySurfaceError(
             "unclassified tracked/exported root paths: " + ", ".join(missing)
+        )
+    missing_exact_descendants = sorted(
+        path
+        for path in paths
+        if path.split("/", 1)[0] in EXACT_DESCENDANT_CLASSIFICATION_ROOTS
+        and resolve_surface_entry(surface, path) is None
+    )
+    if missing_exact_descendants:
+        raise RepositorySurfaceError(
+            "unclassified exact-descendant paths: "
+            + ", ".join(missing_exact_descendants)
         )
     return {"mode": mode, "classified_roots": roots, "omitted_private_paths_known": False}
 
@@ -1901,6 +1914,121 @@ def _validate_pointer_document(path: Path, *, schema: str) -> None:
             raise RepositorySurfaceError(f"pointer hash is invalid: {key}")
 
 
+
+def _iter_sha256_path_bindings(value: object):
+    if isinstance(value, Mapping):
+        for key, relative in value.items():
+            sha_key = (
+                "sha256" if key == "path" else f"{key[:-5]}_sha256"
+                if key.endswith("_path") else None
+            )
+            expected = value.get(sha_key) if sha_key is not None else None
+            if isinstance(relative, str) and isinstance(expected, str):
+                yield relative, expected
+            yield from _iter_sha256_path_bindings(relative)
+    elif isinstance(value, Sequence) and not isinstance(value, (str, bytes)):
+        for item in value:
+            yield from _iter_sha256_path_bindings(item)
+
+
+def validate_active_alpha_authority_candidate(
+    root: Path, pointer: Mapping[str, object],
+) -> dict[str, object]:
+    """Validate a prospective Alpha pointer without mutating the live pointer."""
+
+    from .alpha_research_ladder import build_active_pointer, load_registered_ladder
+
+    tracked = set(_git_tracked_paths(root))
+    required: dict[str, str] = {}
+
+    def require(relative: str, expected_sha256: str) -> Path:
+        _validate_relative_pattern(relative, "EXACT", "Alpha authority binding")
+        if not _HEX_256.fullmatch(expected_sha256):
+            raise RepositorySurfaceError("Alpha authority binding hash is invalid")
+        path = _safe_control_path(root, relative)
+        if not path.is_file() or path.is_symlink():
+            raise RepositorySurfaceError(f"Alpha authority target is absent: {relative}")
+        actual = hashlib.sha256(path.read_bytes()).hexdigest()
+        if actual != expected_sha256:
+            raise RepositorySurfaceError(f"Alpha authority target hash changed: {relative}")
+        if relative not in tracked:
+            raise RepositorySurfaceError(f"Alpha authority target is not Git-tracked: {relative}")
+        required[relative] = actual
+        return path
+
+    contract_relative = _expect_string(pointer.get("contract_path"), "contract_path")
+    profile_relative = _expect_string(pointer.get("profile_path"), "profile_path")
+    contract_sha = _expect_string(pointer.get("contract_sha256"), "contract_sha256")
+    profile_sha = _expect_string(pointer.get("profile_sha256"), "profile_sha256")
+    require(contract_relative, contract_sha)
+    require(profile_relative, profile_sha)
+    try:
+        contract, profile = load_registered_ladder(
+            root,
+            contract_id=_expect_string(pointer.get("contract_id"), "contract_id"),
+            profile_id=_expect_string(pointer.get("profile_id"), "profile_id"),
+        )
+    except (ContractError, IntegrityError) as exc:
+        raise RepositorySurfaceError("registered Alpha authority does not load") from exc
+    expected_pointer = build_active_pointer(
+        contract_path=contract_relative,
+        contract_sha256=contract_sha,
+        contract_id=_expect_string(pointer.get("contract_id"), "contract_id"),
+        profile_path=profile_relative,
+        profile_sha256=profile_sha,
+        profile_id=_expect_string(pointer.get("profile_id"), "profile_id"),
+    )
+    if dict(pointer) != expected_pointer:
+        raise RepositorySurfaceError("prospective Alpha pointer identity is invalid")
+
+    documents: list[object] = [contract, profile]
+    visited_documents = {contract_relative, profile_relative}
+    while documents:
+        document = documents.pop()
+        for relative, expected_sha256 in _iter_sha256_path_bindings(document):
+            path = require(relative, expected_sha256)
+            if relative in visited_documents or path.suffix.lower() != ".json":
+                continue
+            if path.stat().st_size > 2 * 1024 * 1024:
+                raise RepositorySurfaceError(
+                    f"Alpha transitive authority target is unexpectedly large: {relative}"
+                )
+            try:
+                nested = json.loads(path.read_text(encoding="utf-8"))
+            except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                raise RepositorySurfaceError(
+                    f"Alpha transitive authority target is invalid: {relative}"
+                ) from exc
+            visited_documents.add(relative)
+            documents.append(nested)
+    return {
+        "valid": True,
+        "contract_id": pointer["contract_id"],
+        "profile_id": pointer["profile_id"],
+        "required_paths": dict(sorted(required.items())),
+    }
+
+
+def validate_active_alpha_authority_closure(root: Path) -> dict[str, object]:
+    """Require the live Alpha authority to be loadable and checkout-recoverable."""
+
+    from .alpha_research_ladder import load_active_ladder
+
+    pointer_path = root / "configs/active_alpha_research_ladder.json"
+    try:
+        pointer = json.loads(pointer_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+        raise RepositorySurfaceError("active Alpha pointer is unreadable") from exc
+    if not isinstance(pointer, Mapping):
+        raise RepositorySurfaceError("active Alpha pointer is malformed")
+    report = validate_active_alpha_authority_candidate(root, pointer)
+    try:
+        load_active_ladder(root)
+    except (ContractError, IntegrityError) as exc:
+        raise RepositorySurfaceError("active Alpha authority loader failed") from exc
+    return report
+
+
 def _validate_pointer_metadata(surface: Mapping[str, object], root: Path) -> None:
     pointer_specs = (
         (
@@ -1924,6 +2052,8 @@ def _validate_pointer_metadata(surface: Mapping[str, object], root: Path) -> Non
         if path.is_symlink() or not path.is_file():
             raise RepositorySurfaceError(f"active pointer is not a regular file: {relative}")
         _validate_pointer_document(path, schema=schema)
+    if (root / ".git").is_dir():
+        validate_active_alpha_authority_closure(root)
     micro_path = _safe_control_path(root, "configs/active_micro_alpha_research_ladder.json")
     if micro_path.is_file():
         micro = json.loads(micro_path.read_text(encoding="utf-8"))

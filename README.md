@@ -26,7 +26,7 @@ operator orientation; `PROJECT_OUTLINE.md` describes the research pipeline.
 
 ## Certified final-evaluation boundary
 
-The project uses one research-selection-pristine **Final Sealed 252-Session Holdout**: trade dates 2025-07-14 through 2026-07-13, manifest `0ff48f99d8b6d3a262ddf0a060bea8e733fc95aa7c4b4d43f19a0f78b107d4d1`. Development ends exclusively at 2025-07-13T22:00:00Z and forward monitoring begins at 2026-07-14T00:00:00Z. The manifest is purpose-limited, grants no row or evaluation access, creates no market-specific or micro holdout, and is not a general exchange calendar. Complete 2018-cutoff project-session continuity remains unresolved for portions of 2023-2024 and is not claimed.
+The declared **Final Sealed 252-Session Holdout** identity `0ff48f99d8b6d3a262ddf0a060bea8e733fc95aa7c4b4d43f19a0f78b107d4d1` is preserved as historical custody evidence, but its exact active manifest and certification bytes are not locally or Git recoverable. Its current authority status is `UNRESOLVED_AUTHORITY_HOLDOUT_ACCESS_FORBIDDEN`; no holdout or forward value access is permitted. The Alpha ladder is rebound only to the last complete tracked authority, and that rollback neither reinterprets prior results nor creates a replacement holdout.
 
 The canonical source and clean-restart baseline are complete. The
 development-only causal-observation contract is frozen, and its observation-only

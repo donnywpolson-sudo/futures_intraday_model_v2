@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import os
 from pathlib import Path
 import re
+import shutil
 import subprocess
 import sys
 import tomllib
@@ -43,6 +45,8 @@ from futures_rebuild.repository_surface import (
     render_source_of_truth,
     resolve_surface_entry,
     validate_active_source_files,
+    validate_active_alpha_authority_candidate,
+    validate_active_alpha_authority_closure,
     validate_public_command_surfaces,
     validate_pipeline_folder_map,
     validate_repository_checkout,
@@ -124,6 +128,92 @@ def _write_export_controls(
         )
 
 
+def test_active_alpha_authority_is_tracked_and_loadable() -> None:
+    pointer = json.loads((ROOT / "configs/active_alpha_research_ladder.json").read_text(encoding="utf-8"))
+    prospective = validate_active_alpha_authority_candidate(ROOT, pointer)
+    live = validate_active_alpha_authority_closure(ROOT)
+    assert prospective == live
+    assert prospective["valid"] is True
+    assert set(prospective["required_paths"]) == {
+        "configs/research_universe_contract.json",
+        "state/alpha_ladder_registry/53252c8d2351937105103aa6884719f9599cc1448a7908c63795b8fbd2362815/alpha_tiered.yaml",
+        "state/alpha_ladder_registry/53252c8d2351937105103aa6884719f9599cc1448a7908c63795b8fbd2362815/universe_contract.json",
+        "state/alpha_ladder_registry/d3ab84356351568473ccdef935b20eda6779dcd681478415125a668d913dfd18/universe_contract.json",
+    }
+
+
+
+ALPHA_AUTHORITY_FIXTURE_PATHS = {
+    "configs/research_universe_contract.json",
+    "state/alpha_ladder_registry/53252c8d2351937105103aa6884719f9599cc1448a7908c63795b8fbd2362815/alpha_tiered.yaml",
+    "state/alpha_ladder_registry/53252c8d2351937105103aa6884719f9599cc1448a7908c63795b8fbd2362815/universe_contract.json",
+    "state/alpha_ladder_registry/d3ab84356351568473ccdef935b20eda6779dcd681478415125a668d913dfd18/universe_contract.json",
+}
+
+
+def _write_alpha_authority_fixture(root: Path) -> dict[str, object]:
+    pointer = json.loads(
+        (ROOT / "configs/active_alpha_research_ladder.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    for relative in sorted(ALPHA_AUTHORITY_FIXTURE_PATHS):
+        target = root / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / relative, target)
+    subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+    subprocess.run(
+        ["git", "add", "--", *sorted(ALPHA_AUTHORITY_FIXTURE_PATHS)],
+        cwd=root,
+        check=True,
+    )
+    return pointer
+
+
+@pytest.mark.parametrize(
+    ("case", "message"),
+    [
+        ("absent", "Alpha authority target is absent"),
+        ("hash_mismatch", "Alpha authority target hash changed"),
+        ("untracked", "Alpha authority target is not Git-tracked"),
+        ("transitive_absent", "Alpha authority target is absent"),
+        ("schema_incompatible", "registered Alpha authority does not load"),
+    ],
+)
+def test_active_alpha_authority_candidate_fails_closed(
+    tmp_path: Path, case: str, message: str
+) -> None:
+    pointer = _write_alpha_authority_fixture(tmp_path)
+    contract = tmp_path / str(pointer["contract_path"])
+    transitive = tmp_path / "configs/research_universe_contract.json"
+    if case == "absent":
+        contract.unlink()
+    elif case == "hash_mismatch":
+        contract.write_bytes(contract.read_bytes() + b"\n")
+    elif case == "untracked":
+        subprocess.run(
+            ["git", "rm", "--cached", "-q", "--", str(pointer["contract_path"])],
+            cwd=tmp_path,
+            check=True,
+        )
+    elif case == "transitive_absent":
+        transitive.unlink()
+    elif case == "schema_incompatible":
+        document = json.loads(contract.read_text(encoding="utf-8"))
+        document["schema_version"] = "alpha_research_ladder_contract/incompatible"
+        contract.write_bytes(
+            json.dumps(
+                document, sort_keys=True, separators=(",", ":")
+            ).encode("utf-8")
+            + b"\n"
+        )
+        pointer["contract_sha256"] = hashlib.sha256(contract.read_bytes()).hexdigest()
+    else:
+        raise AssertionError(case)
+    with pytest.raises(RepositorySurfaceError, match=message):
+        validate_active_alpha_authority_candidate(tmp_path, pointer)
+
+
 def test_valid_registry_loads_and_validates_current_checkout() -> None:
     surface = load_repository_surface(ROOT)
 
@@ -131,8 +221,48 @@ def test_valid_registry_loads_and_validates_current_checkout() -> None:
 
     assert surface["schema_version"] == "repository_surface/1.0.0"
     assert len(surface["entries"]) == (
-        214 if surface.get("current_direct_authority_registry_id") else 189
+        251 if surface.get("current_direct_authority_registry_id") else 189
     )
+
+
+AUDITS_SURFACE_PATHS = {
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/activation_receipt.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/application_startup_runs.csv",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/artifact_hashes.sha256",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/authority_sources.md",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/baseline_runs.csv",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/build_manifest.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/cache_failure_matrix.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/cache_incident_and_rollback.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/closure_status.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/collect_measurements.py",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/current_state.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/deletion_reconciliation.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/executable_inventory.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/final_report.md",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/functional_regression.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/governance_reconciliation.md",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/inspect_cache_readonly.py",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/launcher_inventory.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/live_cache_benchmarks.csv",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/package_inventory.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/prepare_cache_binding_rollback.py",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/prior_claims_verification.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/process_tree_metrics.csv",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/race_and_shutdown_tests.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/recover_cache_candidate.py",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/release_manifest.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/remediated_runs.csv",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/reproducibility.md",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/rollback_rebuild_receipt.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/source_change_inventory.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/startup_path.md",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/steady_state_metrics.csv",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/steady_state_metrics.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/test_results.json",
+    "audits/futures_live_cockpit/closure_flc_20260825T1933482823061Z_d4271bf9/ui_render_metrics.json",
+    "audits/futures_live_cockpit/main_integration_flc_20260825T2329100495034Z_c1807e4d/certification.json",
+}
 
 
 FINAL_EVALUATION_SUCCESSOR_SURFACE_PATHS = {
@@ -140,6 +270,49 @@ FINAL_EVALUATION_SUCCESSOR_SURFACE_PATHS = {
     "src/futures_rebuild/final_evaluation_recalibration.py",
     "tests/test_final_evaluation_recalibration.py",
 }
+
+
+
+def test_audits_surface_entries_are_exact_closed_and_complete() -> None:
+    surface = _surface()
+    tracked = set(
+        subprocess.check_output(
+            ["git", "ls-files", "--", "audits"],
+            cwd=ROOT,
+            text=True,
+        ).splitlines()
+    )
+    selected = {
+        entry["path_or_pattern"]: entry
+        for entry in surface["entries"]
+        if entry["path_or_pattern"] in AUDITS_SURFACE_PATHS
+    }
+    root = _entry(surface, "audits")
+    assert tracked == AUDITS_SURFACE_PATHS
+    assert set(selected) == AUDITS_SURFACE_PATHS
+    assert root["match_type"] == "EXACT"
+    assert root["classification"] == "HISTORICAL_HASH_BOUND"
+    assert root["authority_role"] == "IMMUTABLE_COCKPIT_AUDIT_EVIDENCE_ROOT"
+    assert root["hash_bound"] is None
+    assert all(entry["match_type"] == "EXACT" for entry in selected.values())
+    assert all(entry["classification"] == "HISTORICAL_HASH_BOUND" for entry in selected.values())
+    assert all(entry["authority_role"] == "IMMUTABLE_COCKPIT_AUDIT_EVIDENCE" for entry in selected.values())
+    assert all(entry["hash_bound"] is True for entry in selected.values())
+
+
+def test_unknown_future_audits_descendant_fails_closed() -> None:
+    surface = _surface()
+    known = sorted(AUDITS_SURFACE_PATHS)[0]
+    report = validate_tracked_root_coverage(surface, ROOT, tracked_paths=[known])
+    assert report["classified_roots"] == ["audits"]
+    with pytest.raises(
+        RepositorySurfaceError, match="unclassified exact-descendant paths"
+    ):
+        validate_tracked_root_coverage(
+            surface,
+            ROOT,
+            tracked_paths=[known, "audits/future-unclassified-evidence.json"],
+        )
 
 
 def test_final_evaluation_successor_surface_entries_are_exact() -> None:
@@ -155,10 +328,10 @@ def test_final_evaluation_successor_surface_entries_are_exact() -> None:
     assert selected["tests/test_final_evaluation_recalibration.py"]["classification"] == "CURRENT_SUPPORTING"
 
 
-@pytest.mark.parametrize("successor_count", [213, 215])
-def test_direct_authority_registry_count_rejects_non_214(successor_count: int) -> None:
+@pytest.mark.parametrize("successor_count", [250, 252])
+def test_direct_authority_registry_count_rejects_non_251(successor_count: int) -> None:
     surface = _surface()
-    if successor_count == 213:
+    if successor_count == 250:
         surface["entries"] = [
             entry
             for entry in surface["entries"]
@@ -171,7 +344,7 @@ def test_direct_authority_registry_count_rejects_non_214(successor_count: int) -
         extra["tracked_expected"] = "ABSENT_EXPECTED"
         surface["entries"].append(extra)
     assert len(surface["entries"]) == successor_count
-    with pytest.raises(RepositorySurfaceError, match="registry entry count must remain 214"):
+    with pytest.raises(RepositorySurfaceError, match="registry entry count must remain 251"):
         expected_pipeline_folder_map_bytes(surface, ROOT)
 
 
@@ -738,7 +911,7 @@ def test_default_cli_reports_all_generated_surface_validity() -> None:
     assert report["pipeline_folder_map_valid"] is True
     assert report["active_source_files_valid"] is True
     expected_entry_count = (
-        214 if _surface().get("current_direct_authority_registry_id") else 189
+        251 if _surface().get("current_direct_authority_registry_id") else 189
     )
     assert report["entry_count"] == expected_entry_count
     assert report["unresolved_entry_count"] == EXPECTED_UNRESOLVED_ENTRY_COUNT == 14

@@ -91,7 +91,7 @@ The counts below use only the canonical classification vocabulary and count regi
 | --- | --- |
 | `CURRENT_OPERATIONAL` | 43 |
 | `CURRENT_SUPPORTING` | 43 |
-| `HISTORICAL_HASH_BOUND` | 61 |
+| `HISTORICAL_HASH_BOUND` | 98 |
 | `HISTORICAL_UNBOUND` | 3 |
 | `PREPARED_NOT_EXECUTED` | 6 |
 | `GENERATED_OUTPUT` | 10 |

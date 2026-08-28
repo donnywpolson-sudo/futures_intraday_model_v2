@@ -12,6 +12,8 @@ This file grants no provider access, market-row read, holdout or forward
 access, publication, Git staging/commit/push, activation, trading, or order
 authority.
 
+Authority recovery status: `UNRESOLVED_AUTHORITY_HOLDOUT_ACCESS_FORBIDDEN`. The declared Final-252 identity is preserved, but its exact active bytes are not recoverable; holdout and forward access remain forbidden.
+
 ## 2. Current status
 
 | Area | Current state |
@@ -28,7 +30,7 @@ authority.
 | Features | **NOT STARTED** |
 | WFA | **NOT STARTED** |
 | New mechanism | **NOT STARTED** |
-| Final Sealed 252-Session Holdout | **SEALED / PRISTINE / UNREAD** |
+| Final Sealed 252-Session Holdout | **UNRESOLVED AUTHORITY / ACCESS FORBIDDEN** |
 | Forward monitoring | **NOT STARTED** |
 
 Direct DBN use by features, models, WFA, or backtests is forbidden. Raw DBN
@@ -78,7 +80,7 @@ user-facing pipeline.
 | 8. Tier 1 — Four-Market Confirmation | Not started for the new mechanism | Passing Tier 0 mechanism | Four-market confirmation evidence | Frozen identity and four-market gates pass |
 | 9. Tier 2 — Balanced 16-Market Replication | Not started for the new mechanism | Passing Tier 1 mechanism | Balanced replication evidence | Frozen identity and Tier 2 gates pass |
 | 10. Tier 3 — Full 41-Market Replication | Not started for the new mechanism | Passing Tier 2 mechanism | Traditional and satellite replication evidence | Traditional 38 pass independently; satellites cannot rescue failure |
-| 11. Final Sealed 252-Session Holdout | Construction complete; evaluation locked / not started | Passing frozen Tier 3 mechanism and separate access authority | Single project-level final evaluation | Pristine manifest, prerequisites, and explicit single-use authority |
+| 11. Final Sealed 252-Session Holdout | Authority bytes unresolved; access forbidden | No admissible input until exact authority is rebuilt and separately activated | No evaluation | Exact recoverable manifest and separate single-use authority required |
 | 12. Post-Cutoff Forward Monitoring | Not started | Final frozen candidate after the holdout decision | Forward-only monitoring evidence | No research selection or rescue from forward results |
 
 Exact approvals, receipts, identities, hashes, and detailed evidence
@@ -176,7 +178,7 @@ restart at Tier 0 synthetic engineering after the required foundations and
 mechanism freeze exist.
 
 - Development end (exclusive): `2025-07-13T22:00:00Z`.
-- Final Sealed 252-Session Holdout: 2025-07-14 through 2026-07-13.
+- Declared Final-252 custody interval: 2025-07-14 through 2026-07-13; active authority bytes unresolved and access forbidden.
 - Forward timestamp boundary: `2026-07-14T00:00:00Z`.
 - General 2023–2024 official-session continuity remains unresolved and is not
   established by the purpose-limited final-252 manifest.
