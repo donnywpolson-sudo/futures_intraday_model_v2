@@ -100,6 +100,7 @@ configs/active_data_view_contract.json
 configs/active_dbn_congruence_release_v1.json
 configs/active_exchange_calendar.json
 configs/active_tier1_trial.json
+configs/alpha_ladder_execution_design_contract_v1.json
 configs/apex_tradovate_50k_eod_risk_policy.json
 configs/archived_cme_holiday_gap_index_discovery_approval.json
 configs/archived_cme_holiday_gap_index_discovery_recovery_approval.json
@@ -431,6 +432,7 @@ src/futures_rebuild/alpha_ladder_combined_readiness_v3.py
 src/futures_rebuild/alpha_ladder_es_pilot_execution.py
 src/futures_rebuild/alpha_ladder_es_pilot_failure_closure.py
 src/futures_rebuild/alpha_ladder_es_training_diagnostic.py
+src/futures_rebuild/alpha_ladder_execution_design.py
 src/futures_rebuild/alpha_ladder_feature_gap_diagnostic.py
 src/futures_rebuild/alpha_ladder_frozen_mechanism.py
 src/futures_rebuild/alpha_ladder_full_contract_risk_census.py
@@ -725,6 +727,7 @@ tests/test_alpha_ladder_es_pilot_execution.py
 tests/test_alpha_ladder_es_pilot_execution_transition.py
 tests/test_alpha_ladder_es_pilot_failure_closure.py
 tests/test_alpha_ladder_es_training_diagnostic.py
+tests/test_alpha_ladder_execution_design.py
 tests/test_alpha_ladder_feature_gap_diagnostic.py
 tests/test_alpha_ladder_frozen_mechanism.py
 tests/test_alpha_ladder_full_contract_risk_census.py

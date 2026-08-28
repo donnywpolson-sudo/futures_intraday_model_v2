@@ -88,6 +88,23 @@ requirements belong in the current contracts, not in this outline.
 
 ## 5. Next-stage requirements
 
+The family-aware Alpha ladder is active and remotely recoverable. The new
+mechanism is `NOT_STARTED`, ZN or 6E is not selected, and the immediate next
+boundary is the pre-result execution-design freeze. The prepared design grants
+no authority to read rows or execute the selector. The required order is:
+
+1. freeze the execution-design contract;
+2. prepare a one-use ZN/6E execution-proxy row-read authorization;
+3. execute the execution-proxy selector only after approval;
+4. freeze the selected macro;
+5. separately define and freeze the mechanism;
+6. run Stage 0 synthetic engineering;
+7. qualify Tier 0 ES;
+8. qualify Tier 1 NQ, CL, GC, and the selected macro;
+9. replicate through the exact balanced Tier 2 set of 16;
+10. replicate through the exact Tier 3 set of 41; and
+11. separately recover and certify Final-252 before sealed-holdout access.
+
 The frozen causal-observation contract and committed observation-only safety
 implementation define:
 

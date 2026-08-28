@@ -28,7 +28,12 @@ The declared **Final Sealed 252-Session Holdout** identity `0ff48f99d8b6d3a262dd
 
 `PROJECT_OUTLINE.md` is the practical current pipeline reference. The previous
 counted mechanism remains closed after Tier 0 ES failure, and the new mechanism
-is not started. The causal-observation contract is frozen and its
+is not started. The family-aware Alpha ladder is active and remotely
+recoverable; ZN or 6E remains unselected at the
+`PENDING_PRE_RESULT_EXECUTION_GATE`. The next boundary is to freeze the
+pre-result execution-design contract. That prepared contract grants no row-read,
+selection, mechanism, evaluation, staging, or publication authority. The
+causal-observation contract is frozen and its
 observation-only safety implementation is built, validated, committed, and
 remotely recoverable. The causal observation release is not built. The
 seven-market development-only canary ran once under consumed authority,
@@ -75,6 +80,14 @@ certificate must name every exact preregistered fold and independently account
 for each baseline, including a true zero-trade baseline and scenario-specific
 risk abstentions. Its semantics and actual bound files must be revalidated
 before a single-use historical execution claim is consumed.
+
+The controlled next sequence is: freeze the execution-design contract; prepare
+a one-use ZN/6E execution-proxy row-read authorization; execute that selector
+only after approval; freeze the selected macro; separately define and freeze the
+mechanism; run Stage 0 synthetic engineering; qualify Tier 0 ES; qualify Tier 1
+NQ, CL, GC, and the selected macro; replicate through the exact Tier 2 set of 16
+and Tier 3 set of 41; then separately recover and certify Final-252 before any
+sealed-holdout access.
 Future trial publication must use the certified registration writer: the
 registration identity binds one canonical readiness-evidence path, file hash,
 certificate identity, trial family, and protocol. Future historical execution
