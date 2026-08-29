@@ -14,6 +14,7 @@ import re
 import shutil
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -24,6 +25,7 @@ from .canonical import (
     assert_plain_file,
     canonical_bytes,
     fsync_directory,
+    io_path,
     is_linklike,
     sha256_file,
     sha256_json,
@@ -54,6 +56,7 @@ SIDECAR_SCHEMA = "causal_active_market_year_manifest/1.0.0"
 JOURNAL_SCHEMA = "causal_active_publication_journal/1.0.0"
 PUBLICATION_RECEIPT_SCHEMA = "causal_active_publication_receipt/1.0.0"
 CERTIFICATION_STATE = "RESEARCH_READY_CAUSAL_PRICE"
+DEVELOPMENT_END_EXCLUSIVE = "2025-07-13T22:00:00Z"
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _MARKET = re.compile(r"^[0-9A-Z]{1,16}$")
@@ -114,7 +117,7 @@ def _plain_year(value: object) -> int:
 
 def _load_canonical(path: Path, description: str) -> dict[str, object]:
     assert_plain_file(path)
-    raw = path.read_bytes()
+    raw = io_path(path).read_bytes()
     try:
         payload = json.loads(raw.decode("utf-8"))
     except (UnicodeDecodeError, ValueError) as exc:
@@ -127,10 +130,11 @@ def _load_canonical(path: Path, description: str) -> dict[str, object]:
 def _write_new_or_exact(path: Path, payload: Mapping[str, object]) -> None:
     encoded = canonical_bytes(dict(payload)) + b"\n"
     assert_no_linklike_ancestors(path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    physical = io_path(path)
+    physical.parent.mkdir(parents=True, exist_ok=True)
     try:
         descriptor = os.open(
-            path,
+            physical,
             os.O_CREAT
             | os.O_EXCL
             | os.O_WRONLY
@@ -138,7 +142,7 @@ def _write_new_or_exact(path: Path, payload: Mapping[str, object]) -> None:
         )
     except FileExistsError:
         assert_plain_file(path)
-        if path.read_bytes() != encoded:
+        if physical.read_bytes() != encoded:
             raise IntegrityError(f"existing artifact differs: {path}")
         return
     try:
@@ -146,7 +150,7 @@ def _write_new_or_exact(path: Path, payload: Mapping[str, object]) -> None:
         os.fsync(descriptor)
     finally:
         os.close(descriptor)
-    fsync_directory(path.parent)
+    fsync_directory(physical.parent)
 
 
 def _resolve_certification_workspace(
@@ -311,6 +315,31 @@ def cohort_for_year(year: int) -> str:
     raise ContractError("market-year lacks an explicit cohort assignment")
 
 
+def cohort_for_coverage(*, year: int, coverage_start: str, coverage_end: str) -> str:
+    """Admit only the certified 2025 development prefix; keep the year default locked."""
+
+    cohort = cohort_for_year(year)
+    if year != 2025:
+        return cohort
+
+    def timestamp(value: str) -> datetime:
+        if type(value) is not str:
+            raise ContractError("catalog coverage timestamp is invalid")
+        for format_ in ("%Y-%m-%d", "%Y-%m-%dT%H:%M:%SZ", "%Y-%m-%dT%H%M%SZ"):
+            try:
+                return datetime.strptime(value, format_).replace(tzinfo=timezone.utc)
+            except ValueError:
+                pass
+        raise ContractError("catalog coverage timestamp is invalid")
+
+    start = timestamp(coverage_start)
+    end = timestamp(coverage_end)
+    cutoff = timestamp(DEVELOPMENT_END_EXCLUSIVE)
+    if datetime(2025, 1, 1, tzinfo=timezone.utc) <= start < end <= cutoff:
+        return "NON_PRISTINE_RESEARCH"
+    return cohort
+
+
 def disposition_for(*, year: int, research_admissible: bool) -> str:
     cohort = cohort_for_year(year)
     if cohort == "LOCKED_HOLDOUT":
@@ -360,7 +389,15 @@ class CatalogEntry:
     def __post_init__(self) -> None:
         _plain_market(self.market)
         _plain_year(self.year)
-        expected_cohort = cohort_for_year(self.year)
+        expected_cohort = (
+            cohort_for_coverage(
+                year=self.year,
+                coverage_start=self.coverage_start,
+                coverage_end=self.coverage_end,
+            )
+            if self.disposition == CERTIFICATION_STATE
+            else cohort_for_year(self.year)
+        )
         if self.cohort != expected_cohort:
             raise ContractError("catalog cohort differs from explicit year policy")
         expected_selection = selection_eligible(
@@ -664,9 +701,22 @@ def build_access_policy_binding(
     universe_contract_sha256: str,
     active_view_id: str,
     content_validation_receipt_id: str,
+    coverage_start: str | None = None,
+    coverage_end: str | None = None,
 ) -> dict[str, object]:
     _plain_market(market)
-    cohort = cohort_for_year(_plain_year(year))
+    year = _plain_year(year)
+    if (coverage_start is None) is not (coverage_end is None):
+        raise ContractError("access binding coverage is incomplete")
+    cohort = (
+        cohort_for_year(year)
+        if coverage_start is None
+        else cohort_for_coverage(
+            year=year,
+            coverage_start=coverage_start,
+            coverage_end=coverage_end,
+        )
+    )
     if cohort in {"LOCKED_HOLDOUT", "FORWARD_ONLY"}:
         raise UnauthorizedOperation("protected market-year cannot receive an access binding")
     for value, name in (
@@ -693,6 +743,9 @@ def build_access_policy_binding(
         "universe_contract_sha256": universe_contract_sha256,
         "year": year,
     }
+    if coverage_start is not None:
+        core["coverage_start"] = coverage_start
+        core["coverage_end"] = coverage_end
     return {**core, "access_policy_binding_id": sha256_json(core)}
 
 
@@ -703,7 +756,19 @@ def validate_access_policy_binding(binding: Mapping[str, object]) -> str:
     core = {key: value for key, value in binding.items() if key != "access_policy_binding_id"}
     market = _plain_market(binding.get("market"))
     year = _plain_year(binding.get("year"))
-    cohort = cohort_for_year(year)
+    coverage_start = binding.get("coverage_start")
+    coverage_end = binding.get("coverage_end")
+    if (coverage_start is None) is not (coverage_end is None):
+        raise IntegrityError("access policy binding coverage is incomplete")
+    cohort = (
+        cohort_for_year(year)
+        if coverage_start is None
+        else cohort_for_coverage(
+            year=year,
+            coverage_start=coverage_start,
+            coverage_end=coverage_end,
+        )
+    )
     if (
         binding.get("schema_version") != ACCESS_BINDING_SCHEMA
         or binding_id != sha256_json(core)
@@ -731,6 +796,9 @@ def build_sidecar(
     if (
         content_id != entry.content_validation_receipt_id
         or access_id != entry.access_policy_binding_id
+        or access_binding.get("coverage_start", entry.coverage_start)
+        != entry.coverage_start
+        or access_binding.get("coverage_end", entry.coverage_end) != entry.coverage_end
     ):
         raise IntegrityError("market-year sidecar bindings differ from catalog entry")
     entry_binding = entry.as_dict()
@@ -828,7 +896,15 @@ def validate_catalog(
         keys.append(key)
         expected_parquet, expected_sidecar = _canonical_target(market, year)
         disposition = raw.get("disposition")
-        cohort = cohort_for_year(year)
+        cohort = (
+            cohort_for_coverage(
+                year=year,
+                coverage_start=str(raw.get("coverage_start")),
+                coverage_end=str(raw.get("coverage_end")),
+            )
+            if disposition == CERTIFICATION_STATE
+            else cohort_for_year(year)
+        )
         if (
             raw.get("cohort") != cohort
             or raw.get("selection_eligible")
@@ -909,28 +985,30 @@ def materialize_parquet(
     ):
         raise ContractError("materialization bounds or sources are invalid")
     _plain_sha256(expected_schema_fingerprint, "expected schema fingerprint")
-    for path, expected_hash in zip(sources, source_sha256s):
+    physical_sources = [io_path(path) for path in sources]
+    physical_destination = io_path(destination)
+    for path, expected_hash in zip(physical_sources, source_sha256s):
         _plain_sha256(expected_hash, "source Parquet hash")
         if sha256_file(path) != expected_hash:
             raise IntegrityError("selected causal source changed before materialization")
     assert_no_linklike_ancestors(destination)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists():
+    physical_destination.parent.mkdir(parents=True, exist_ok=True)
+    if physical_destination.exists():
         raise IntegrityError("materialization destination already exists")
-    required_bytes = sum(path.stat().st_size for path in sources)
-    available_bytes = shutil.disk_usage(destination.parent).free
+    required_bytes = sum(path.stat().st_size for path in physical_sources)
+    available_bytes = shutil.disk_usage(physical_destination.parent).free
     if available_bytes < required_bytes + 67_108_864:
         raise IntegrityError("insufficient disk for bounded materialization")
     if len(sources) == 1:
         descriptor = os.open(
-            destination,
+            physical_destination,
             os.O_CREAT
             | os.O_EXCL
             | os.O_WRONLY
             | getattr(os, "O_BINARY", 0),
         )
         try:
-            with sources[0].open("rb") as source:
+            with physical_sources[0].open("rb") as source:
                 for chunk in iter(lambda: source.read(1024 * 1024), b""):
                     os.write(descriptor, chunk)
             os.fsync(descriptor)
@@ -940,36 +1018,35 @@ def materialize_parquet(
         import pyarrow as pa
         import pyarrow.parquet as pq
 
-        first = pq.ParquetFile(sources[0])
+        first = pq.ParquetFile(physical_sources[0])
         schema = first.schema_arrow
         writer = pq.ParquetWriter(
-            destination,
+            physical_destination,
             schema,
             compression="zstd",
             use_dictionary=True,
             write_statistics=True,
         )
         try:
-            previous_key: tuple[int, int, int] | None = None
+            previous_key: tuple[object, ...] | None = None
             observed_rows = 0
-            for source in sources:
+            for source in physical_sources:
                 parquet = pq.ParquetFile(source)
                 if not parquet.schema_arrow.equals(schema, check_metadata=True):
                     raise IntegrityError("split causal source schemas differ")
                 for batch in parquet.iter_batches(batch_size=batch_rows):
                     names = set(batch.schema.names)
-                    required = {"event_at_ns", "publisher_id", "instrument_id"}
-                    if not required.issubset(names):
+                    legacy_key = {"event_at_ns", "publisher_id", "instrument_id"}
+                    v10_key = {"bar_start_ns", "source_row_sha256"}
+                    if legacy_key.issubset(names):
+                        key_columns = ["event_at_ns", "publisher_id", "instrument_id"]
+                    elif v10_key.issubset(names):
+                        key_columns = ["bar_start_ns", "source_row_sha256"]
+                    else:
                         raise IntegrityError("causal primary-key columns are absent")
-                    rows = batch.select(
-                        ["event_at_ns", "publisher_id", "instrument_id"]
-                    ).to_pylist()
+                    rows = batch.select(key_columns).to_pylist()
                     for raw in rows:
-                        key = (
-                            int(raw["event_at_ns"]),
-                            int(raw["publisher_id"]),
-                            int(raw["instrument_id"]),
-                        )
+                        key = tuple(raw[column] for column in key_columns)
                         if previous_key is not None and key <= previous_key:
                             raise IntegrityError(
                                 "split causal inputs overlap, duplicate, or reverse order"
@@ -983,15 +1060,17 @@ def materialize_parquet(
             raise IntegrityError("split materialization row count differs")
     from .active_data_certification import canonical_parquet_fingerprint
 
-    fingerprint = canonical_parquet_fingerprint(destination, batch_rows=batch_rows)
+    fingerprint = canonical_parquet_fingerprint(
+        physical_destination, batch_rows=batch_rows
+    )
     if (
         fingerprint["row_count"] != expected_row_count
         or fingerprint["schema_fingerprint"] != expected_schema_fingerprint
     ):
         raise IntegrityError("materialized Parquet differs from certification")
-    with destination.open("r+b") as handle:
+    with physical_destination.open("r+b") as handle:
         os.fsync(handle.fileno())
-    fsync_directory(destination.parent)
+    fsync_directory(physical_destination.parent)
     return (
         sha256_file(destination),
         str(fingerprint["canonical_row_hash"]),
@@ -1054,6 +1133,8 @@ def stage_view(
                 ),
                 active_view_id=active_view_id,
                 content_validation_receipt_id=content_id,
+                coverage_start=str(raw["coverage_start"]),
+                coverage_end=str(raw["coverage_end"]),
             )
             access_id = validate_access_policy_binding(access)
             sources_raw = raw.get("source_paths")
@@ -1084,7 +1165,11 @@ def stage_view(
             )
             if canonical_row_hash != content.get("canonical_row_hash"):
                 raise IntegrityError("materialized canonical rows differ from certification")
-            cohort = cohort_for_year(year)
+            cohort = cohort_for_coverage(
+                year=year,
+                coverage_start=str(raw["coverage_start"]),
+                coverage_end=str(raw["coverage_end"]),
+            )
             provisional = CatalogEntry(
                 market=market,
                 year=year,
@@ -1979,9 +2064,32 @@ def publish_full_successor(
     active = root / ACTIVE_ROOT
     current = verify_view(active)
     stage = staging.resolve(strict=True)
-    if stage != (root / STAGING_ROOT / plan_id).resolve(strict=False):
+    binding = plan.get("publication_input_binding")
+    bound_stage = binding.get("staging_path") if isinstance(binding, dict) else None
+    if bound_stage is not None:
+        pure_stage = PurePosixPath(str(bound_stage))
+        expected_stage = (root / pure_stage).resolve(strict=False)
+        if (
+            pure_stage.is_absolute()
+            or ".." in pure_stage.parts
+            or expected_stage.parent != (root / STAGING_ROOT).resolve(strict=True)
+        ):
+            raise ContractError("successor stage binding is outside the staging root")
+    else:
+        expected_stage = (root / STAGING_ROOT / plan_id).resolve(strict=False)
+    if stage != expected_stage:
         raise ContractError("successor stage differs from the exact plan stage")
     successor = verify_view(stage)
+    if binding is not None and (
+        not isinstance(binding, dict)
+        or binding.get("predecessor_active_view_id") != current["active_view_id"]
+        or binding.get("predecessor_catalog_sha256") != current["catalog_sha256"]
+        or binding.get("active_view_id") != successor["active_view_id"]
+        or binding.get("catalog_sha256") != successor["catalog_sha256"]
+        or binding.get("catalog_file_sha256") != sha256_file(stage / "catalog.json")
+        or binding.get("staging_path") != stage.relative_to(root).as_posix()
+    ):
+        raise IntegrityError("full-successor publication binding differs")
     rollback = root / ROLLBACK_ROOT / str(current["active_view_id"])
     if rollback.exists():
         raise IntegrityError("full-successor rollback destination already exists")
