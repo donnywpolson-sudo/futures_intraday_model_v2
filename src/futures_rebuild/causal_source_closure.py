@@ -20,6 +20,7 @@ from .foundation_operation_firewall import (
     FoundationOperationContext,
     require_current_source_closure_context,
 )
+from .source_symbology import require_allowed_query_symbology
 
 
 ACTIVE_CONTRACT_PATH = Path("configs/source_contract.json")
@@ -315,6 +316,110 @@ def select_standard_dbn_paths(
     if selected != tuple(sorted(selected)) or len(set(selected)) != len(selected):
         raise IntegrityError("exact admitted source selection is not unique and sorted")
     return selected
+
+
+def select_preferred_standard_source_entries(
+    repository_root: Path,
+    source_entries: Sequence[Mapping[str, object]],
+) -> tuple[dict[str, object], ...]:
+    """Choose the one standard query epoch per market/family/interval.
+
+    Parent OHLCV/statistics/status deliveries are retained as custody evidence,
+    but they are diagnostic alternates when an exact continuous delivery exists.
+    This metadata-only selector never opens a DBN payload.
+    """
+
+    root = repository_root.resolve(strict=True)
+    pairs: dict[str, dict[str, Mapping[str, object]]] = {}
+    for entry in source_entries:
+        path = str(entry.get("path", ""))
+        kind = str(entry.get("kind", ""))
+        base = path.removesuffix(".manifest.json")
+        if kind not in {"DBN", "SIDECAR"} or not base.endswith(_DBN_SUFFIX):
+            raise IntegrityError("standard source candidate is not an exact DBN pair")
+        pairs.setdefault(base, {})[kind] = entry
+    if not pairs or any(set(pair) != {"DBN", "SIDECAR"} for pair in pairs.values()):
+        raise IntegrityError("standard source candidate lacks an exact DBN/sidecar pair")
+
+    candidates: dict[
+        tuple[object, ...],
+        list[tuple[str, dict[str, object], dict[str, object]]],
+    ] = {}
+    for base, pair in sorted(pairs.items()):
+        dbn = dict(pair["DBN"])
+        sidecar = dict(pair["SIDECAR"])
+        payload = _json(_contained(root, str(sidecar["path"])))
+        digest, size = _declared_dbn_identity(payload, Path(base))
+        if digest != dbn.get("sha256") or size != dbn.get("size_bytes"):
+            raise IntegrityError("standard sidecar does not bind its DBN")
+        market = str(dbn.get("market"))
+        family = str(dbn.get("family"))
+        inferred_stype = "parent" if family == "definition" else "continuous"
+        inferred_symbols = (
+            [f"{market}.FUT"] if family == "definition" else [f"{market}.v.0"]
+        )
+        bounded = (
+            payload.get("schema_version")
+            == "bounded_2025_canonical_registration_sidecar/1.0.0"
+        )
+        if payload.get("schema_version") == "ohlcv_historical_backfill_sidecar/1.0.0":
+            schema = payload.get("databento_schema")
+            symbols = payload.get("source_symbols")
+            stype = payload.get("stype_in")
+        elif bounded:
+            schema = family.replace("_", "-")
+            symbols = inferred_symbols
+            stype = inferred_stype
+        else:
+            schema = payload.get("schema")
+            symbols = payload.get("symbols_requested")
+            stype = payload.get("stype_in")
+        if schema != family.replace("_", "-") or payload.get("market") != market:
+            continue
+        try:
+            normalized_stype, _ = require_allowed_query_symbology(
+                schema=str(schema),
+                market=market,
+                stype_in=stype,
+                symbols=symbols,
+            )
+        except IntegrityError:
+            continue
+        key = (
+            market,
+            family,
+            dbn.get("year"),
+            dbn.get("interval_start_inclusive"),
+            dbn.get("interval_end_exclusive"),
+        )
+        candidates.setdefault(key, []).append((normalized_stype, dbn, sidecar))
+
+    expected = {
+        (
+            str(entry.get("market")),
+            str(entry.get("family")),
+            entry.get("year"),
+            entry.get("interval_start_inclusive"),
+            entry.get("interval_end_exclusive"),
+        )
+        for entry in source_entries
+        if entry.get("kind") == "DBN"
+    }
+    if set(candidates) != expected:
+        raise IntegrityError("standard source lacks one preferred query epoch")
+    selected: list[tuple[dict[str, object], dict[str, object]]] = []
+    for choices in candidates.values():
+        continuous = [choice for choice in choices if choice[0] == "continuous"]
+        preferred = continuous or choices
+        if len(preferred) != 1:
+            raise IntegrityError("standard source has multiple preferred query epochs")
+        selected.append((preferred[0][1], preferred[0][2]))
+    return tuple(
+        sorted(
+            (item for pair in selected for item in pair),
+            key=lambda item: str(item["path"]),
+        )
+    )
 
 
 def reject_unlisted_source_path(

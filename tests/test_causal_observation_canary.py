@@ -153,6 +153,37 @@ def test_bounded_2025_sidecar_pairing_drift_fails_closed(tmp_path: Path) -> None
         _query_contract(tmp_path, entry)
 
 
+def test_historical_backfill_sidecar_builds_exact_query_contract(tmp_path: Path) -> None:
+    dbn_path = "data/dbn/ohlcv_1h/6N/2010/2010-06-06_2011-01-01.dbn.zst"
+    payload = {
+        "schema_version": "ohlcv_historical_backfill_sidecar/1.0.0",
+        "dataset": "GLBX.MDP3",
+        "databento_schema": "ohlcv-1h",
+        "market": "6N",
+        "source_symbols": ["6N.v.0"],
+        "request_start_inclusive": "2010-06-06T00:00:00Z",
+        "request_end_exclusive": "2011-01-01T00:00:00Z",
+        "stype_in": "continuous",
+        "sha256": "a" * 64,
+        "dbn_byte_size": 7,
+    }
+    sidecar = tmp_path / f"{dbn_path}.manifest.json"
+    sidecar.parent.mkdir(parents=True)
+    sidecar.write_text(json.dumps(payload), encoding="utf-8")
+    entry = {
+        "path": f"{dbn_path}.manifest.json",
+        "kind": "SIDECAR",
+        "sha256": sha256_file(sidecar),
+        "size_bytes": sidecar.stat().st_size,
+        "paired_dbn_sha256": "a" * 64,
+        "paired_dbn_size_bytes": 7,
+    }
+    contract = _query_contract(tmp_path, entry)
+    assert contract["schema"] == "ohlcv-1h"
+    assert contract["stype_in"] == "continuous"
+    assert contract["symbols"] == ["6N.v.0"]
+
+
 def test_bounded_2025_registered_hardlink_reaches_real_decoder_path(
     tmp_path: Path,
 ) -> None:

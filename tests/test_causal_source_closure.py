@@ -10,6 +10,7 @@ from futures_rebuild.canonical import sha256_file
 from futures_rebuild.causal_source_closure import (
     reject_unlisted_source_path,
     select_standard_dbn_paths,
+    select_preferred_standard_source_entries,
     validate_source_contract_metadata,
     validate_full_build_selection_contract,
 )
@@ -123,6 +124,43 @@ def test_exact_standard_selection_rejects_micro_and_unlisted_paths() -> None:
             operation_context=context,
             contract_path=CONTRACT,
         )
+
+
+def test_preferred_standard_selection_excludes_diagnostic_parent_duplicate(
+    tmp_path: Path,
+) -> None:
+    entries = []
+    for suffix, stype, symbols, digest in (
+        ("", "continuous", ["6N.v.0"], "a" * 64),
+        (".parent", "parent", ["6N.FUT"], "b" * 64),
+    ):
+        dbn = f"data/dbn/ohlcv_1m/6N/2010/2010-06-06_2011-01-01{suffix}.dbn.zst"
+        sidecar = f"{dbn}.manifest.json"
+        path = tmp_path / sidecar
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps({
+                "dataset": "GLBX.MDP3", "schema": "ohlcv-1m", "market": "6N",
+                "symbols_requested": symbols, "start": "2010-06-06",
+                "end": "2011-01-01", "stype_in": stype, "path": dbn,
+                "file_sha256": digest, "file_size_bytes": 10,
+            }),
+            encoding="utf-8",
+        )
+        common = {
+            "market": "6N", "family": "ohlcv_1m", "year": 2010,
+            "interval_start_inclusive": "2010-06-06",
+            "interval_end_exclusive": "2011-01-01",
+        }
+        entries.extend((
+            {**common, "kind": "DBN", "path": dbn, "sha256": digest, "size_bytes": 10},
+            {**common, "kind": "SIDECAR", "path": sidecar, "sha256": sha256_file(path), "size_bytes": path.stat().st_size},
+        ))
+    selected = select_preferred_standard_source_entries(tmp_path, entries)
+    assert [item["path"] for item in selected] == [
+        "data/dbn/ohlcv_1m/6N/2010/2010-06-06_2011-01-01.dbn.zst",
+        "data/dbn/ohlcv_1m/6N/2010/2010-06-06_2011-01-01.dbn.zst.manifest.json",
+    ]
 
 
 def test_missing_or_forged_context_fails_closed() -> None:

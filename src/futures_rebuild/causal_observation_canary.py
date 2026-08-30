@@ -447,20 +447,36 @@ def _query_contract(root: Path, sidecar_entry: Mapping[str, object]) -> dict[str
         if sha256_file(path, reject_hardlinks=False) != sidecar_entry["sha256"]:
             raise IntegrityError("bounded-2025 sidecar changed during validation")
         return result
+    if payload.get("schema_version") == "ohlcv_historical_backfill_sidecar/1.0.0":
+        declared_path = str(sidecar_entry["path"]).removesuffix(".manifest.json")
+        declared_sha256 = payload.get("sha256")
+        declared_size = payload.get("dbn_byte_size")
+        schema = payload.get("databento_schema")
+        start = payload.get("request_start_inclusive")
+        end = payload.get("request_end_exclusive")
+        symbols = payload.get("source_symbols")
+    else:
+        declared_path = payload.get("path")
+        declared_sha256 = payload.get("file_sha256")
+        declared_size = payload.get("file_size_bytes")
+        schema = payload.get("schema")
+        start = payload.get("start")
+        end = payload.get("end")
+        symbols = payload.get("symbols_requested")
     if (
-        payload.get("path") != str(sidecar_entry["path"]).removesuffix(".manifest.json")
-        or payload.get("file_sha256") is None
-        or payload.get("file_sha256") != sidecar_entry["paired_dbn_sha256"]
-        or payload.get("file_size_bytes") != sidecar_entry["paired_dbn_size_bytes"]
+        declared_path != str(sidecar_entry["path"]).removesuffix(".manifest.json")
+        or declared_sha256 is None
+        or declared_sha256 != sidecar_entry["paired_dbn_sha256"]
+        or declared_size != sidecar_entry["paired_dbn_size_bytes"]
     ):
         raise IntegrityError("canary sidecar does not bind its selected DBN")
     return build_query_contract(
-        schema=str(payload["schema"]),
+        schema=str(schema),
         market=str(payload["market"]),
-        start=str(payload["start"]),
-        end=str(payload["end"]),
+        start=str(start),
+        end=str(end),
         stype_in=payload["stype_in"],
-        symbols=payload["symbols_requested"],
+        symbols=symbols,
     )
 
 
