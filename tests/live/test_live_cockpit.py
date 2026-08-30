@@ -46,7 +46,6 @@ from futures_rebuild.live_cockpit.history import (
     HistoryBinding,
     group_history_chunks,
     missing_intervals,
-    promote_market,
 )
 from futures_rebuild.live_cockpit.market_groups import load_alpha_tier_grouping
 from futures_rebuild.live_cockpit.predictions import NullPredictionSource
@@ -547,11 +546,6 @@ def test_history_plan_fills_only_gaps_chunks_newest_first_and_promotes() -> None
     assert chunks[0].end == end
     assert all(chunk.end - chunk.start <= timedelta(hours=24) for chunk in chunks)
     assert all(len(chunk.bindings) == 2 for chunk in chunks)
-    promoted = promote_market(chunks, "NQ")
-    assert [chunk.bindings[0].market for chunk in promoted[:3]] == ["NQ"] * 3
-    assert sum(len(chunk.bindings) for chunk in promoted) == 6
-
-
 def test_extended_quick_history_is_stable_bounded_and_continuous() -> None:
     assert CHART_RANGE_HOURS == {"1D": 24, "1W": 168, "1M": 720}
     assert CURRENT_CONTRACT_CHART_RANGES == frozenset({"1D", "1W"})
@@ -1009,6 +1003,7 @@ def test_controller_bridges_events_and_persists_only_preferences(tmp_path: Path)
             "show_volume": False,
             "show_predictions": True,
             "prediction_panel_open": True,
+            "data_status_panel_open": False,
             "visual_update_mode": "efficient",
             "market_grouping_mode": "alpha_tier",
             "sector_group_order": ["rates", "energy", "rates", "../bad"],
@@ -1021,6 +1016,7 @@ def test_controller_bridges_events_and_persists_only_preferences(tmp_path: Path)
         "ui_preferences": {
             "show_predictions": True,
             "prediction_panel_open": True,
+            "data_status_panel_open": False,
             "market_grouping_mode": "alpha_tier",
             "sector_group_order": ["rates", "energy"],
             "collapsed_alpha_tier_groups": ["tier_3_additions"],
@@ -1044,6 +1040,7 @@ def test_controller_bridges_events_and_persists_only_preferences(tmp_path: Path)
         "ui_preferences": {
             "show_predictions": True,
             "prediction_panel_open": True,
+            "data_status_panel_open": False,
             "market_grouping_mode": "alpha_tier",
             "sector_group_order": ["rates", "energy"],
             "collapsed_alpha_tier_groups": ["tier_3_additions"],
@@ -3129,7 +3126,8 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "Full screen" in html
     assert 'class="chart-stage"' in html
     assert 'id="session-boundaries"' in html
-    assert 'id="prediction-rail"' in html
+    assert 'id="data-status-drawer"' in html
+    assert 'id="data-status-toggle"' in html
     assert 'id="data-health-pill"' in html
     assert 'class="quote-strip"' not in html
     assert 'id="quote-open"' not in html
@@ -3149,16 +3147,14 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "HistogramSeries" not in javascript
     assert "addHistogramSeries" not in javascript
     assert "volumeSeries" not in javascript
-    assert 'id="group-by-sector"' in html
-    assert 'id="group-by-alpha"' in html
-    assert "Tier 1 · Core confirmation" in javascript
-    assert "tier_2_additions" in javascript
-    assert "tier_3_traditional_additions" in javascript
-    assert "tier_3_satellites" in javascript
-    assert "Alt+ArrowUp Alt+ArrowDown" in javascript
-    assert "dragstart" in javascript
-    assert "collapsed_alpha_tier_groups" in javascript
-    assert "Clear search to reorder groups" in javascript
+    assert 'id="group-by-sector"' not in html
+    assert 'id="group-by-alpha"' not in html
+    assert "market_grouping_mode" not in javascript
+    assert "Alt+ArrowUp Alt+ArrowDown" not in javascript
+    assert "dragstart" not in javascript
+    assert "collapsed_alpha_tier_groups" not in javascript
+    assert 'id="timeframe-select"' in html
+    assert "elements.timeframeSelect.value" in javascript
     assert "Chart smoothness" not in html
     assert 'name="visual-update-mode"' not in html
     assert "DEFAULT_VISUAL_UPDATE_HZ = 15" in javascript
@@ -3172,17 +3168,21 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "Target window" in html
     assert "Target by" in html
     assert "Chart data" in html
-    assert "Market context" in html
+    assert "Data status" in html
     assert "Technical details" in html
     assert 'id="prediction-output" class="forecast-output" hidden' in html
+    assert 'id="prediction-card" class="forecast-card" aria-live="polite" hidden' in html
     assert html.index('id="health-state"') < html.index('id="prediction-state"')
     assert "elements.predictionOutput.hidden = !ready" in javascript
+    assert "elements.predictionCard.hidden = !predictionAvailable" in javascript
+    assert "elements.predictionLayerOption.hidden = !predictionAvailable" in javascript
     assert ".forecast-output[hidden]" in stylesheet
     assert "Shadow forecast" not in html
     assert "NO PREDICTION" not in html
     assert "Direction entropy" not in html
     assert 'id="prediction-entropy"' not in html
-    assert "Display only &mdash; no orders" in html
+    assert "Display only &mdash; no orders" not in html
+    assert html.count("OBSERVATION ONLY &middot; NO ORDERS") == 1
     assert "Manual execution assistant" not in html
     assert "executionCapability" not in javascript
     assert "prepare_manual_ticket" not in javascript
@@ -3225,7 +3225,8 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert 'YM: ["WARMING_UP", "FEATURE_WARMUP_INCOMPLETE"]' in javascript
     assert 'CL: ["STALE", "DATA_STALE"]' in javascript
     assert 'NG: ["ERROR", "SYNTHETIC_DEMO_ERROR"]' in javascript
-    assert "window.innerWidth >= 1440" in javascript
+    assert "data_status_panel_open" in javascript
+    assert "window.innerWidth >= 1440" not in javascript
     assert "set_ui_preferences(state.uiPreferences)" in javascript
     assert "scrollToRealTime()" in javascript
     assert '"timeframe-cache": "Cached + live"' in javascript
@@ -3251,21 +3252,23 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "Market view unavailable" in javascript
     assert ".chart-stage" in stylesheet
     assert ".session-boundary-layer" in stylesheet
-    assert ".prediction-rail" in stylesheet
-    assert "grid-template-columns: minmax(0, 1fr) 304px" in stylesheet
+    assert ".status-drawer" in stylesheet
+    assert "grid-template-columns: minmax(0, 1fr) 286px" in stylesheet
     assert ".workspace-content.panel-collapsed" in stylesheet
     assert ".data-health-pill" in stylesheet
     assert ".history-cache-popover" in stylesheet
-    assert "flex: 0 0 132px" in stylesheet
-    assert "min-width: 132px" in stylesheet
+    assert ".local-clock" not in stylesheet
     assert 'id="health-loaded-range"' in html
     assert 'id="data-health-explanation"' in html
     assert "Selected range ready" in html
     assert 'id="quick-market-list"' not in html
     assert "renderQuickMarkets" not in javascript
     assert "quick-market-button" not in stylesheet
-    assert "Session move" in html
+    assert "<span>Move</span>" in html
     assert "status.session_move_pct" in javascript
+    assert 'id="rail-column-labels"' in html
+    assert "elements.railColumnLabels.hidden = !hasMarketValues" in javascript
+    assert "values-unavailable" in javascript
     assert "change_1m" not in javascript
     assert 'id="chart-range-list"' in html
     assert "select_chart_range(chartRange)" in javascript
@@ -3297,8 +3300,8 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "Â" not in javascript
     assert ".control-button" in stylesheet
     assert "v5.1.0" in vendor
-    assert ".market-grouping" in stylesheet
-    assert ".market-group-drag" in stylesheet
+    assert ".market-grouping" not in stylesheet
+    assert ".market-group-drag" not in stylesheet
     spec = Path(
         "FuturesLiveCockpit/_internal/FuturesLiveCockpit.spec"
     ).read_text(encoding="utf-8")

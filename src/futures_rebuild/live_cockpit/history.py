@@ -145,23 +145,6 @@ def group_history_chunks(
     ]
 
 
-def promote_market(
-    chunks: Sequence[HistoryChunk], market: str
-) -> list[HistoryChunk]:
-    """Move one market ahead without changing the approved request scope."""
-
-    promoted: list[HistoryChunk] = []
-    remaining: list[HistoryChunk] = []
-    for chunk in chunks:
-        selected = tuple(binding for binding in chunk.bindings if binding.market == market)
-        others = tuple(binding for binding in chunk.bindings if binding.market != market)
-        if selected:
-            promoted.append(HistoryChunk(chunk.start, chunk.end, selected))
-        if others:
-            remaining.append(HistoryChunk(chunk.start, chunk.end, others))
-    return promoted + remaining
-
-
 def promote_market_first_request(
     chunks: Sequence[HistoryChunk], market: str, *, max_chunks: int = 8
 ) -> list[HistoryChunk]:

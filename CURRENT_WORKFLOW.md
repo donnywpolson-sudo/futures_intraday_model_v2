@@ -31,17 +31,20 @@ counted mechanism remains closed after Tier 0 ES failure, and the new mechanism
 is not started. The family-aware Alpha ladder is active and remotely
 recoverable; ZN or 6E remains unselected at the
 `PENDING_PRE_RESULT_EXECUTION_GATE`. The next boundary is to freeze the
-pre-result execution-design contract. That prepared contract grants no row-read,
-selection, mechanism, evaluation, staging, or publication authority. The
+pre-result execution-design contract. The prepared contract currently
+revalidates against the active Alpha ladder and canonical source, but it is not
+active and grants no row-read, selection, mechanism, evaluation, staging, or
+publication authority. The
 causal-observation contract is frozen and its
 observation-only safety implementation is built, validated, committed, and
-remotely recoverable. The causal observation release is not built. The
+remotely recoverable. The full 41-market causal observation release is not
+built. The
 seven-market development-only canary ran once under consumed authority,
 passed independent verification, and remains unpublished and inactive. The
 historical full-build attempts and V9 evidence remain immutable and grant no
-fresh authority. V10 is the current non-active implementation: it processes
-and maximum-robustness-certifies one complete market at a time in a frozen
-41-market order, stores inactive output below
+fresh authority. V10 is the current immutable monthly certification source: it
+processes and maximum-robustness-certifies one complete market at a time in a
+frozen 41-market order and stores source evidence below
 `data/causally_gated_normalized/v10/`, and cannot advance until the preceding
 market certificate remains valid. Each completed year is sealed with exact
 source, state, partition, and file identities; a fresh attempt may reuse only
@@ -51,25 +54,33 @@ rehearsal are synthetic-test proven. A dedicated ES-2025 canary successor is
 implemented and passed under consumed authority: it bound seven exact
 registered DBNs plus sidecars, performed one producer decode and one
 fresh-process independent replay, wrote only below the V10 `_canary` lane, and
-did not seed the complete ES checkpoint. The complete ES 2010-2025 checkpoint
-and its two-pass maximum-robustness certification passed and remain inactive.
-The complete GC 2010-2025 checkpoint also passed with all 16 years sealed and
-remains inactive; GC maximum-robustness certification is the next gate. The
-other 39 markets have not started. No V10 publication or activation has
-occurred.
+did not seed the complete ES checkpoint. Complete ES, NQ, CL, GC, ZN, and 6E
+2010-2025 checkpoints and their two-pass maximum-robustness certificates
+passed. Their certified development rows from 2010 through the exclusive
+`2025-07-13T22:00:00Z` cutoff are active as 96 annual causal-price files. The
+partial 2025 files are interval-bound non-selection research; July 14 onward
+remains inaccessible. The other 35 markets have not started. The six-market active
+release does not claim full-universe coverage, Alpha qualification, model or
+evaluation authority, or holdout access.
 
-After all 41 individual market certificates and the inactive release-wide
-certificate pass, prepare a separate annual active-view publication. The
-research-facing layout is exactly
+The current six-market annual active view uses exactly
 `data/active/causally_gated_normalized/{market}/{year}/{year}.parquet` with one
 adjacent `{year}.parquet.manifest.json` per market-year. The annual materializer
-must reconstruct only from the certified V10 artifacts, preserve exact logical
+reconstructed only from the certified V10 artifacts, preserved exact logical
 rows, causal and source identities, counts, ordering, and development
-boundaries, and independently read back every annual file before activation.
-Publication and activation remain separately approved, atomic, rollback-safe,
-and catalog/pointer-last. The certified month-partitioned V10 checkpoint tree
-remains immutable audit and recovery evidence; the active annual view does not
-replace or authorize deletion of that evidence.
+boundaries, and independently read back every annual file before atomic
+catalog-last activation. The certified month-partitioned V10 checkpoint tree
+remains immutable audit and recovery evidence. After all 41 market certificates
+and the inactive release-wide certificate pass, a separately approved active
+view successor may add the remaining compatible markets; it may not replace or
+authorize deletion of V10 evidence.
+
+`data/active/catalog.json` is the operational authority for materialized
+market intervals. The older accepted whole-calendar-year policy remains a
+hash-bound historical policy and a fail-closed default when no exact interval
+is supplied; its `2025 = LOCKED_HOLDOUT` label does not override the catalog's
+six exact development-prefix entries. Those entries are non-selection research
+only. No row at or after the development cutoff is admitted.
 
 Real research still needs its durable trial declaration and immutable evidence.
 Before registration, every row-dependent sample, fold, feature, execution,
@@ -88,6 +99,21 @@ mechanism; run Stage 0 synthetic engineering; qualify Tier 0 ES; qualify Tier 1
 NQ, CL, GC, and the selected macro; replicate through the exact Tier 2 set of 16
 and Tier 3 set of 41; then separately recover and certify Final-252 before any
 sealed-holdout access.
+The mechanism freeze must specify its outcomes, features, folds, purge,
+embargo, costs, and stop rules before any corresponding result-bearing rows are
+constructed. The numbered foundation sections describe data products, not
+permission to build them before that freeze.
+The current authoritative historical design is Rank 1, bound by
+`configs/active_alpha_historical_research_design.json`: selection, feature
+selection, fitting, WFA, and mechanism selection use only 2018-2022. After each
+market's qualification result is sealed, the same frozen mechanism receives one
+non-pristine recent-regime challenge over 2023 through the exclusive
+`2025-07-13T22:00:00Z` cutoff. No tuning, design change, or retry may follow a
+challenge result. A passing market must then be refit using only coefficient or
+fit-parameter changes over the complete 2018-to-cutoff development interval,
+with no further performance evaluation before Final-252. Every row-dependent
+step still requires its own readiness evidence and authorization; the active
+design pointer grants identity only.
 Future trial publication must use the certified registration writer: the
 registration identity binds one canonical readiness-evidence path, file hash,
 certificate identity, trial family, and protocol. Future historical execution
@@ -147,11 +173,11 @@ execution through `CertifiedResearchGateway`.
 Any row-certified preparatory census also consumes its own authorization even
 when it times out or produces no report. A successor must use a new immutable
 plan and approval; it may not silently reuse the consumed claim.
-The cockpit starts observation-only and credentials remain outside Git. MFF
-Evaluation and Rapid EOD Sim Funded are manual-only: the cockpit may prepare a
-risk-gated ticket and persist explicitly operator-reported state, but it does
-not authenticate, bind an API account, or transmit an order. MFF Live API
-capability remains unconfirmed. See `docs/MFF_TRADOVATE_EXECUTION.md`.
+The cockpit is observation-only and credentials remain outside Git. It has no
+order assistant, broker adapter, account binding, or order transmission path.
+MFF Evaluation and Rapid EOD Sim Funded remain manual-only outside the app;
+MFF Live API capability remains unconfirmed. See
+`docs/MFF_TRADOVATE_EXECUTION.md`.
 
 When present, the machine-local accepted micro-contract source catalog is the
 immutable legacy publication at `data/active/catalogs/apex_micro.json`. Its
@@ -223,12 +249,12 @@ Old derived releases and retired foundation runners remain no-read. Historical
 canary and full-build authorizations are consumed; their inactive outputs and
 V9 artifacts remain evidence only. The V10 market-by-market controller,
 checkpoint writer, sealed-year recovery, independent market certifier, and
-long-path-safe provider-free rehearsal are implemented. The ES-2025 canary and
-complete ES 2010-2025 checkpoint and maximum-robustness certification passed
-under consumed authority and remain inactive. The complete GC 2010-2025
-checkpoint also passed under consumed authority and remains inactive; GC
-maximum-robustness certification has not started. The other 39 markets and the
-complete 41-market release remain unbuilt. Each later market row read,
+long-path-safe provider-free rehearsal are implemented. The ES-2025 canary
+remains separate. Complete ES, NQ, CL, GC, ZN, and 6E 2010-2025 checkpoints
+passed maximum-robustness certification; their 2010-through-bounded-2025 annual
+active view is research-ready causal-price data. July 14 onward remains
+protected. The other 35
+markets and the complete 41-market release remain unbuilt. Each later market row read,
 certification, scheduler action, publication, and activation still requires the
 applicable approval. The Final Sealed 252-Session Holdout and forward values
 remain inaccessible.

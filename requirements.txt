@@ -1,2 +1,0 @@
-# Exact Windows desktop runtime and onedir packager closure.
--r requirements.sha256.lock

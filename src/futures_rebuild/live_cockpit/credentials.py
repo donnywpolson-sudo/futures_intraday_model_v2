@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Mapping
 
@@ -26,15 +25,6 @@ _MAX_LOCATOR_BYTES = 4_096
 
 class CredentialLocatorError(RuntimeError):
     """Raised for an installed locator that cannot safely resolve a key."""
-
-
-@dataclass(frozen=True)
-class CredentialStatus:
-    configured: bool
-    source: str | None
-    locator_present: bool
-    locator_valid: bool | None
-    error: str | None
 
 
 def default_credential_locator_path() -> Path | None:
@@ -101,33 +91,3 @@ def resolve_cockpit_api_key_source(
             )
         return ApiKeyResolution(key=key, source="installed credential locator")
     return resolve_api_key_source(None if env is None else dict(env))
-
-
-def credential_status(
-    env: Mapping[str, str] | None = None,
-    *,
-    locator_path: Path | None = None,
-) -> CredentialStatus:
-    resolved_locator = (
-        default_credential_locator_path() if locator_path is None else locator_path
-    )
-    locator_present = bool(
-        resolved_locator is not None and resolved_locator.exists()
-    )
-    try:
-        resolution = resolve_cockpit_api_key_source(env, locator_path=resolved_locator)
-    except CredentialLocatorError as exc:
-        return CredentialStatus(
-            configured=False,
-            source=None,
-            locator_present=locator_present,
-            locator_valid=False,
-            error=str(exc),
-        )
-    return CredentialStatus(
-        configured=resolution is not None,
-        source=resolution.source if resolution is not None else None,
-        locator_present=locator_present,
-        locator_valid=True if locator_present else None,
-        error=None,
-    )

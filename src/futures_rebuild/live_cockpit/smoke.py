@@ -28,8 +28,6 @@ from .feed import (
 
 from .credentials import CredentialLocatorError, resolve_cockpit_api_key_source
 from .engine import LiveCockpitEngine, MAX_RENDER_HZ
-from .live_model import build_live_model_adapter
-from .model_runtime import TrustedModelAdapter
 from .approval import (
     LiveSmokeApprovalError,
     validate_live_smoke_plan,
@@ -106,7 +104,7 @@ def _temporary_log_path(
     return root / "FuturesLiveCockpit" / f"live-smoke-{timestamp}.jsonl"
 
 
-def _subscription_plan(adapter: TrustedModelAdapter | None = None) -> dict[str, Any]:
+def _subscription_plan() -> dict[str, Any]:
     symbols = sorted(info.symbol for info in chart_market_universe())
     return {
         "dataset": DEFAULT_DATASET,
@@ -116,30 +114,18 @@ def _subscription_plan(adapter: TrustedModelAdapter | None = None) -> dict[str, 
             "stype_in": "continuous",
             "symbols": [f"{symbol}{DEFAULT_CONTINUOUS_SUFFIX}" for symbol in symbols],
         },
-        "model": (
-            {
-                "model_id": adapter.spec.model_id,
-                "model_version": adapter.spec.version,
-                "artifact_sha256": adapter.spec.artifact_sha256,
-                "schema": adapter.spec.schema,
-                "markets": list(adapter.spec.markets),
-                "stype_in": "continuous",
-            }
-            if adapter is not None
-            else None
-        ),
-        # Kept only for the pre-model package smoke. Production desktop mode never
-        # opens this legacy stream; a connected model replaces it exactly.
-        "focus": None if adapter is not None else {
-            "market": SMOKE_MARKET, "schema": DEFAULT_SCHEMA, "stype_in": "instrument_id",
+        "model": None,
+        "focus": {
+            "market": SMOKE_MARKET,
+            "schema": DEFAULT_SCHEMA,
+            "stype_in": "instrument_id",
         },
-        "max_live_sessions": 1 if adapter is not None and adapter.spec.schema == DEFAULT_HISTORICAL_SCHEMA else 2,
+        "max_live_sessions": 2,
         "max_render_hz": MAX_RENDER_HZ,
         "historical_replay": False,
         "cache": False,
         "reconnect": False,
     }
-
 
 def _verify_package_runtime(plan: Mapping[str, Any]) -> dict[str, Any]:
     scope = plan["scope"]
@@ -165,19 +151,6 @@ def _verify_package_runtime(plan: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def _installed_model_binding() -> dict[str, Any] | None:
-    adapter = build_live_model_adapter()
-    if adapter is None:
-        return None
-    return {
-        "model_id": adapter.spec.model_id,
-        "version": adapter.spec.version,
-        "artifact_sha256": adapter.spec.artifact_sha256,
-        "schema": adapter.spec.schema,
-        "markets": list(adapter.spec.markets),
-    }
-
-
 def execute_approved_smoke(
     *,
     plan_path: Path,
@@ -196,10 +169,8 @@ def execute_approved_smoke(
         credential_locator=credential_locator,
     )
     runtime = _verify_package_runtime(plan)
-    if _installed_model_binding() != plan["scope"].get("model"):
-        raise LiveSmokeApprovalError(
-            "installed model identity or requested subscriptions differ from the approved plan"
-        )
+    if plan["scope"].get("model") is not None:
+        raise LiveSmokeApprovalError("this cockpit build has no model attachment point")
     expected_output = (
         Path.cwd() / plan["scope"]["result_output_relative"]
     ).resolve()
@@ -279,16 +250,14 @@ def run_smoke(
     secrets = [key_resolution.key] if key_resolution is not None else []
     log_path = _temporary_log_path(env=active_env, temp_root=temp_root)
     log = _JsonlLog(log_path, secrets=secrets)
-    model_adapter = build_live_model_adapter()
-    plan = _subscription_plan(model_adapter)
-    smoke_market = model_adapter.spec.markets[0] if model_adapter is not None else SMOKE_MARKET
+    plan = _subscription_plan()
+    smoke_market = SMOKE_MARKET
     state_lock = threading.RLock()
     stop_early = threading.Event()
     counters = {
         "overview_market_updates": 0,
         "focus_live_events": 0,
         "bar_updates": 0,
-        "model_ready_decisions": 0,
     }
     resolved_contract: str | None = None
     feed_errors: list[dict[str, Any]] = []
@@ -302,12 +271,6 @@ def run_smoke(
                 counters["overview_market_updates"] += 1
             elif message_type == "bar_update":
                 counters["bar_updates"] += 1
-            elif (
-                message_type == "prediction_update"
-                and payload.get("source") == "REPOSITORY_MODEL"
-                and payload.get("state") in {"READY", "ABSTAIN"}
-            ):
-                counters["model_ready_decisions"] += 1
             elif message_type == "chart_snapshot" and payload.get("market") == smoke_market:
                 contract = payload.get("contract")
                 if contract:
@@ -334,9 +297,7 @@ def run_smoke(
         cache_enabled=False,
         reconnect_enabled=False,
         fail_fast_provider_errors=True,
-        model_adapter=model_adapter,
-        model_store_path=log_path.with_suffix(".model.sqlite3") if model_adapter is not None else None,
-        focus_stream_enabled=model_adapter is None,
+        focus_stream_enabled=True,
     )
     started = time.monotonic()
     runtime_exception: str | None = None
@@ -389,11 +350,7 @@ def run_smoke(
     if contract in (None, "", smoke_market):
         reasons.append(f"{smoke_market} did not resolve to an exact raw contract")
 
-    required_observations = [
-        "overview_market_updates",
-        "model_ready_decisions" if model_adapter is not None else "focus_live_events",
-        "bar_updates",
-    ]
+    required_observations = ["overview_market_updates", "focus_live_events", "bar_updates"]
     missing_data = [name for name in required_observations if observed[name] < 1]
     if reasons:
         status = "FAIL"

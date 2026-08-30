@@ -573,7 +573,7 @@ def _assert_project_outline_is_concise_current_runbook() -> None:
         "seven-market development canary ran once under consumed authority",
         "Final Sealed 252-Session Holdout",
         "UNRESOLVED AUTHORITY / ACCESS FORBIDDEN",
-        "NEXT REAL-DATA GATE: GC MAXIMUM-ROBUSTNESS CERTIFICATION PREPARATION",
+        "NEXT CONTROLLED GATE: EXECUTION-DESIGN CONTRACT FREEZE (NO ROW READ)",
     ):
         assert required.lower() in lowered
 
@@ -583,6 +583,10 @@ def _assert_project_outline_is_concise_current_runbook() -> None:
     assert "acquisition v21" not in lowered
     assert "custody repair v2" not in lowered
     assert "preserved legacy micro phase 1a/1b/2 route" not in lowered
+    assert (
+        "next real-data gate: gc maximum-robustness certification preparation"
+        not in lowered
+    )
     assert lowered.count("consumed authoriz") <= 1
 
     assert re.search(r"(?i)\b[A-Z]:\\", outline) is None

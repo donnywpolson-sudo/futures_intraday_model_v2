@@ -44,21 +44,27 @@ The canonical source and clean-restart baseline are complete. The
 development-only causal-observation contract is frozen, and its observation-only
 safety implementation is built, validated, committed, and remotely recoverable.
 The seven-market development canary ran once, passed independent verification,
-and remains unpublished and inactive. The new 41-market causal observation
+and remains unpublished and inactive. The full 41-market causal observation
 release is not built. Later full-build attempts remained inactive and failed
-closed and remain evidence only. The non-active V10 successor performs compact
-Parquet/Zstandard normalization and two-pass independent certification one
-market at a time, with immutable market and sealed-year checkpoints. It is
-synthetic-test proven. Its ES-2025 canary and complete ES 2010-2025 checkpoint
-and two-pass maximum-robustness certification passed under consumed authority
-and remain inactive. The complete GC 2010-2025 checkpoint also passed and
-remains inactive; GC maximum-robustness certification has not started. The
-other 39 markets have not started. After all 41 markets and the release-wide
-certificate pass, a separately approved publication phase will create one annual active Parquet at
-`data/active/causally_gated_normalized/{market}/{year}/{year}.parquet` plus its
-manifest while preserving the certified V10 monthly evidence. The Final Sealed
-252-Session Holdout remains pristine and unread. See
+closed and remain evidence only. V10 is the immutable monthly certification
+source and performs compact Parquet/Zstandard normalization plus two-pass
+independent certification one market at a time, with immutable market and
+sealed-year checkpoints. It is
+synthetic-test proven. Complete ES, NQ, CL, GC, ZN, and 6E 2010-2025
+checkpoints passed two-pass maximum-robustness certification. Their certified
+development rows from 2010 through the exclusive `2025-07-13T22:00:00Z`
+cutoff are active as 96 annual research-ready causal-price Parquets at
+`data/active/causally_gated_normalized/{market}/{year}/{year}.parquet`. The
+partial 2025 files are interval-bound non-selection research; July 14 onward
+remains inaccessible. The other 35 markets have not
+started, and the active subset makes no full-universe or Alpha claim. The
+certified V10 monthly evidence remains immutable. The Final Sealed 252-Session
+Holdout remains pristine and unread. See
 `PROJECT_OUTLINE.md` for the current pipeline and status.
+
+The immediate next gate is the separate freeze of the already prepared
+execution-design contract, followed by a one-use ZN/6E execution-proxy selector.
+Outcomes, features, WFA, Alpha evaluation, and the macro choice remain unstarted.
 
 ## Repository map
 
@@ -220,15 +226,10 @@ back to the same ignored v2-local `api.env`.
 
 The cockpit provides search/grouping, live charts, history controls, bounded
 cache, persisted preferences, explicit provider errors, prediction abstention,
-and all 41 approved markets. It now also displays a gated MFF/Tradovate
-execution-capability panel and a manual order-preparation assistant. MFF
-Evaluation and Rapid EOD Sim Funded are `MANUAL_ONLY`; no Tradovate client,
-credential lookup, or provider account binding is used. The operator reconciles
-a local snapshot, prepares and copies instructions, manually enters the order,
-then reports submission, fills, protection, rejection/cancellation, exit, and
-reconciliation. Every restart makes prior manual state stale. Provider API
-readiness, automatic authorization, production readiness, and account binding
-remain false/unset. The deterministic local simulator is synthetic-only.
+and all 41 approved markets. It is observation-only: it has no Tradovate
+client, order assistant, credential lookup, provider account binding, account
+state, or order transmission path. MFF Evaluation and Rapid EOD Sim Funded
+remain `MANUAL_ONLY` outside the app; MFF Live capability remains unconfirmed.
 
 The 41-market overview remains live, while disk history is intentionally
 limited to the five quick-chart markets `ES`, `CL`, `ZN`, `6E`, and `NQ`.
@@ -242,9 +243,7 @@ applies only to the one-week quick-market cache.
 **FuturesLiveCockpit does not transmit orders for MFF simulated accounts.**
 
 See [`docs/MFF_TRADOVATE_EXECUTION.md`](docs/MFF_TRADOVATE_EXECUTION.md) for
-execution modes, official-source distinctions, credential storage, account
-binding, reconciliation, emergency behavior, blockers, self-check, packaging,
-and the separate authorization required for future provider smokes.
+the preserved execution boundary and capability-evidence status.
 
 Do not run a provider-backed smoke or replace shortcuts without one
 plain-language confirmation. High-risk CLIs prepare a scope summary only;

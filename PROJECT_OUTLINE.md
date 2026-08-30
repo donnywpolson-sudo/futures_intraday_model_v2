@@ -23,9 +23,9 @@ Authority recovery status: `UNRESOLVED_AUTHORITY_HOLDOUT_ACCESS_FORBIDDEN`. The 
 | Clean restart | **COMPLETE / CERTIFIED** |
 | Causal-observation contract | **FROZEN** |
 | Observation-only safety implementation | **BUILT / VALIDATED / REMOTELY RECOVERABLE** |
-| Causal observation release | **NOT BUILT** |
+| Causal observation release | **SIX-MARKET ACTIVE / FULL 41 NOT BUILT** |
 | Development-only canary | **V10 ES-2025 EXECUTED / PASSED / INACTIVE** |
-| Full development builder | **ES CERTIFIED / GC 2010-2025 CHECKPOINT PASSED / GC CERTIFICATION NOT STARTED / OTHER 39 NOT STARTED** |
+| Full development builder | **ES / NQ / CL / GC / ZN / 6E CERTIFIED / OTHER 35 NOT STARTED** |
 | Outcomes | **NOT STARTED** |
 | Features | **NOT STARTED** |
 | WFA | **NOT STARTED** |
@@ -38,9 +38,9 @@ may feed only the frozen development-only causal-observation contract through
 the committed observation-only safety implementation. The representative
 seven-market development canary ran once under consumed authority and passed
 independent verification; its candidates remain unpublished and inactive. The
-full development release is not built. Its first full-build attempt failed
-closed and its complete inactive partitions are retained only as failure
-evidence.
+full 41-market development release is not built. Earlier full-41 attempts
+failed closed and their inactive partitions are retained only as evidence; they
+do not conflict with the certified six-market active subset.
 
 The canonical DBN source is frozen and validated, and active source closure
 blocks old derived inputs and retired execution paths. Prior foundation
@@ -71,7 +71,7 @@ user-facing pipeline.
 | Stage | Status | Main input | Main output | Main gate |
 | --- | --- | --- | --- | --- |
 | 1. Canonical Source Custody and Closure | Complete | Canonical DBN custody | Frozen validated source plus active no-read closure | Current source contract and closure proof pass |
-| 2. Causal Observation Foundation | Contract frozen; canary passed; full release not built | Approved development-only canonical DBN scope | Certified causal observation release | Full build requires a separate exact row-read packet and independent certification |
+| 2. Causal Observation Foundation | Six markets active; full 41 not built | Certified V10 development-only observations | Active annual subset plus immutable V10 evidence | Remaining markets require separate certification and successor activation |
 | 3. Outcome/Target Foundation | Not started for the new mechanism | Certified causal observations | Separate immutable outcomes | Point-in-time maturity and separation contract |
 | 4. Feature Foundation | Not started for the new mechanism | Certified causal observations | Separate immutable features | Availability, leakage, and transform checks |
 | 5. Chronological Validation and WFA | Not started for the new mechanism | Frozen outcomes and features | Chronological folds and WFA evidence | Training-only transforms, purge, and embargo where required |
@@ -91,7 +91,8 @@ requirements belong in the current contracts, not in this outline.
 The family-aware Alpha ladder is active and remotely recoverable. The new
 mechanism is `NOT_STARTED`, ZN or 6E is not selected, and the immediate next
 boundary is the pre-result execution-design freeze. The prepared design grants
-no authority to read rows or execute the selector. The required order is:
+no authority to read rows or execute the selector, but it currently revalidates
+against the active Alpha ladder and canonical source. The required order is:
 
 1. freeze the execution-design contract;
 2. prepare a one-use ZN/6E execution-proxy row-read authorization;
@@ -104,6 +105,22 @@ no authority to read rows or execute the selector. The required order is:
 9. replicate through the exact balanced Tier 2 set of 16;
 10. replicate through the exact Tier 3 set of 41; and
 11. separately recover and certify Final-252 before sealed-holdout access.
+
+Outcome, feature, and WFA rows are not built merely because stages 3-5 appear
+before the mechanism section in the pipeline inventory. Their exact definitions
+belong to the mechanism freeze and are constructed only afterward under the
+required row authority.
+
+The active historical design is Rank 1. The 2018-2022 interval is the only
+discovery, feature-selection, fitting, WFA, and mechanism-selection window.
+After a market's qualification result is sealed, its unchanged mechanism gets
+one non-pristine recent-regime challenge from 2023 through the declared
+development cutoff. Challenge failure follows the active ladder's
+market and tier failure rules with no retry or tuning. After a pass, only fit
+parameters may be refit over the complete 2018-to-cutoff development interval;
+no further performance evaluation is allowed before Final-252. The binding
+authority is `configs/active_alpha_historical_research_design.json`, which grants
+design identity but no row read, fitting, WFA, evaluation, or holdout access.
 
 The frozen causal-observation contract and committed observation-only safety
 implementation define:
@@ -138,26 +155,27 @@ failure cannot change an earlier certificate. After all 41 pass, one inactive
 release-wide certificate must re-open every certified artifact and prove exact
 set compatibility. Synthetic fault injection covers every market and major
 phase, and the provider-free production rehearsal covers terminal Windows path
-depth without registering a task. The V10 ES-2025 canary and complete ES
-2010-2025 checkpoint and maximum-robustness certification passed under consumed
-authority and remain inactive. The complete GC 2010-2025 checkpoint also passed
-under consumed authority and remains inactive; GC maximum-robustness
-certification has not started. The other 39 markets have not started.
-Publication and activation remain at their separate approval boundaries.
+depth without registering a task. The V10 ES-2025 canary remains separate.
+Complete ES, NQ, CL, GC, ZN, and 6E 2010-2025 checkpoints passed two-pass
+maximum-robustness certification. Their certified development rows from 2010
+through the declared July 2025 development cutoff are active as 96 annual
+research-ready causal-price files. The partial 2025 files are non-selection
+research only; July 14 onward remains inaccessible. The other 35 markets have
+not started. This incremental
+release makes no full-41, Alpha, model, evaluation, or holdout claim.
 
-After the 41 individual certificates and release-wide certificate pass, a
-separate publication phase must materialize the research-facing annual active
-view at
+The six-market research-facing annual active view is materialized at
 `data/active/causally_gated_normalized/{market}/{year}/{year}.parquet`, with an
 adjacent `{year}.parquet.manifest.json`. Each annual file must be derived only
 from the compatible certified V10 monthly artifacts and independently prove
 the same logical rows, ordering, counts, timestamps, source release, source
 contract, causal contract, and development cutoff. The active layout contains
-no month directories. Publication is inactive first, read back completely,
-independently certified, and activated catalog/pointer-last under separate
-approval with rollback evidence. The month-partitioned V10 tree remains
-immutable certification and recovery evidence and is not deleted by active-view
-publication.
+no month directories. The six-market release was staged inactive, read back
+completely, independently certified, and activated catalog-last with rollback
+evidence. After all 41 individual certificates and the release-wide certificate
+pass, a separately approved successor may add the remaining compatible
+markets. The month-partitioned V10 tree remains immutable certification and
+recovery evidence and is not deleted by active-view publication.
 
 The V10 ES-2025 canary is a separate inactive role below
 `data/causally_gated_normalized/v10/_canary/ES/<attempt>/`. It is bounded to
@@ -250,4 +268,4 @@ Current contracts hold detailed evidence requirements. Git history and
 foundation releases remain evidence only and do not override active pointers,
 contracts, or closure.
 
-NEXT REAL-DATA GATE: GC MAXIMUM-ROBUSTNESS CERTIFICATION PREPARATION
+NEXT CONTROLLED GATE: EXECUTION-DESIGN CONTRACT FREEZE (NO ROW READ)

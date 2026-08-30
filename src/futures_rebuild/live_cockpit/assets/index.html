@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="color-scheme" content="dark" />
     <title>Futures Live Cockpit</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles.css?v=chart-first-2" />
   </head>
   <body>
     <div class="app-shell">
@@ -28,21 +28,15 @@
           <kbd>/</kbd>
         </label>
 
-        <div id="market-grouping" class="market-grouping" role="group" aria-label="Market grouping">
-          <button id="group-by-sector" type="button" aria-pressed="true">Sectors</button>
-          <button id="group-by-alpha" type="button" aria-pressed="false">Alpha tiers</button>
-        </div>
-        <p id="group-reorder-status" class="sr-only" aria-live="polite"></p>
-
-        <div class="rail-column-labels" aria-hidden="true">
-          <span>Market</span><span>Last</span><span>Session move</span>
+        <div id="rail-column-labels" class="rail-column-labels" aria-hidden="true" hidden>
+          <span>Market</span><span>Last</span><span>Move</span>
         </div>
         <nav id="market-list" class="market-list" aria-live="polite"></nav>
 
         <footer class="rail-footer">
           <div class="rail-health">
             <span id="overview-dot" class="status-dot waiting"></span>
-            <span id="overview-label">Overview waiting</span>
+            <span id="overview-label" class="sr-only">Overview waiting</span>
           </div>
           <span id="market-count">41 markets</span>
         </footer>
@@ -68,7 +62,7 @@
             </div>
             <div class="interval-control">
               <span class="control-label">Interval</span>
-              <div id="timeframe-list" class="timeframe-list" aria-label="Chart interval"></div>
+              <select id="timeframe-select" class="timeframe-select" aria-label="Chart interval"></select>
             </div>
             <div class="layers-control">
               <button id="layers-toggle" class="control-button" type="button" aria-haspopup="true" aria-expanded="false" aria-controls="layers-menu">
@@ -81,7 +75,7 @@
                 <fieldset>
                   <legend>Layers</legend>
                   <label><input id="layer-sessions" type="checkbox" checked /> Session boundaries</label>
-                  <label><input id="layer-predictions" type="checkbox" checked /> Predictions</label>
+                  <label id="prediction-layer-option" hidden><input id="layer-predictions" type="checkbox" checked /> Predictions</label>
                 </fieldset>
               </div>
             </div>
@@ -89,18 +83,14 @@
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M4 12a8 8 0 1 0 2.35-5.65M4 4v5h5" />
               </svg>
-              <span>Reset view</span>
+              <span class="sr-only">Reset view</span>
             </button>
             <button id="fullscreen-toggle" class="control-button" type="button" title="Enter full screen (F11)" aria-label="Enter full screen" aria-pressed="false">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="M8 3H3v5M16 3h5v5M8 21H3v-5m13 5h5v-5M3 8l6-6m12 6-6-6M3 16l6 6m12-6-6 6" />
               </svg>
-              <span>Full screen</span>
+              <span class="sr-only">Full screen</span>
             </button>
-            <div class="local-clock" aria-label="Local time">
-              <span id="local-time">--:--:--</span>
-              <small>LOCAL</small>
-            </div>
           </section>
         </header>
 
@@ -126,17 +116,17 @@
           </div>
         </section>
 
-        <aside id="prediction-rail" class="prediction-rail" aria-label="Market context" aria-expanded="true">
-          <header class="prediction-header">
-            <div class="prediction-heading">
-              <span class="prediction-kicker">Observation only</span>
-              <strong>Market context</strong>
+        <aside id="data-status-drawer" class="status-drawer" aria-label="Data status" aria-expanded="false">
+          <header class="status-drawer-header">
+            <div class="status-drawer-heading">
+              <span class="status-drawer-kicker">Runtime truth</span>
+              <strong>Data status</strong>
             </div>
-            <button id="prediction-panel-toggle" class="panel-toggle" type="button" aria-label="Collapse market context" aria-expanded="true">
+            <button id="data-status-toggle" class="panel-toggle" type="button" aria-label="Expand data status" aria-expanded="false">
               <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 18-6-6 6-6" /></svg>
             </button>
           </header>
-          <div id="prediction-content" class="prediction-content">
+          <div id="data-status-content" class="status-drawer-content">
             <section class="health-card">
               <div class="panel-section-heading">
                 <span>Chart data</span>
@@ -154,7 +144,7 @@
               <p id="data-health-explanation" class="data-health-explanation">Waiting for chart coverage details.</p>
             </section>
 
-            <section class="forecast-card" aria-live="polite">
+            <section id="prediction-card" class="forecast-card" aria-live="polite" hidden>
               <div class="panel-section-heading">
                 <span>Prediction</span>
                 <span id="prediction-mode" class="forecast-mode offline">LIVE MODE</span>
@@ -188,8 +178,6 @@
                 </dl>
               </details>
             </section>
-
-            <p class="display-only-note">Display only &mdash; no orders</p>
           </div>
         </aside>
         </div>
@@ -235,8 +223,7 @@
               </section>
             </div>
             <span id="observation-footer-pill" class="observation-pill">OBSERVATION ONLY &middot; NO ORDERS</span>
-            <span>Display only &mdash; no orders</span>
-            <span id="render-rate">&le; 10 visual updates/sec</span>
+            <span id="render-rate" class="sr-only">Visual updates active</span>
             <a href="https://www.tradingview.com/" target="_blank" rel="noreferrer">Charts by TradingView</a>
           </div>
         </footer>
@@ -265,6 +252,6 @@
 
     <script src="lightweight-charts.standalone.production.js"></script>
     <script src="time-format.js"></script>
-    <script src="app.js"></script>
+    <script src="app.js?v=chart-first-2"></script>
   </body>
 </html>

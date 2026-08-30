@@ -11,7 +11,6 @@ from futures_rebuild.live_cockpit.credentials import (
     CREDENTIAL_LOCATOR_FILENAME,
     CREDENTIAL_LOCATOR_SCHEMA,
     CredentialLocatorError,
-    credential_status,
     default_repository_package_api_env_path,
     resolve_cockpit_api_key_source,
 )
@@ -176,39 +175,3 @@ def test_arbitrary_frozen_package_does_not_read_parent_api_env(
 
     assert default_repository_package_api_env_path() is None
     assert resolve_cockpit_api_key_source(None) is None
-
-
-def test_frozen_default_locator_and_status_use_existing_file(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    executable = tmp_path / "FuturesLiveCockpit.exe"
-    credential_path = tmp_path / "repo" / "api.env"
-    credential_path.parent.mkdir()
-    _write_key(credential_path)
-    _write_locator(tmp_path / CREDENTIAL_LOCATOR_FILENAME, credential_path)
-    monkeypatch.setattr(credentials.sys, "frozen", True, raising=False)
-    monkeypatch.setattr(credentials.sys, "executable", str(executable))
-
-    status = credential_status({"DATABENTO_API_KEY": STALE_ENV_KEY})
-
-    assert status.configured is True
-    assert status.source == "installed credential locator"
-    assert status.locator_present is True
-    assert status.locator_valid is True
-    assert status.error is None
-
-
-def test_invalid_locator_status_is_actionable_without_key_material(tmp_path: Path) -> None:
-    locator_path = tmp_path / CREDENTIAL_LOCATOR_FILENAME
-    locator_path.write_text("not-json", encoding="utf-8")
-
-    status = credential_status(
-        {"DATABENTO_API_KEY": STALE_ENV_KEY},
-        locator_path=locator_path,
-    )
-
-    assert status.configured is False
-    assert status.locator_present is True
-    assert status.locator_valid is False
-    assert "valid UTF-8 JSON" in str(status.error)
-    assert STALE_ENV_KEY not in str(status.error)

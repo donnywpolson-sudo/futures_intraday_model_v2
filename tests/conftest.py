@@ -49,12 +49,12 @@ LEGACY_PATH_PARTS = (
     "tests/live/test_live_cockpit",
 )
 CURRENT_TEST_FILES = {
+    "test_causal_observation_priority_sequence.py",
+    "test_causal_incremental_release.py",
     "test_controlled_rebuild_authorization.py",
     "test_data_layout.py",
     "test_dependency_lock.py",
     "test_generic_naming_policy.py",
-    "test_live_cockpit_execution.py",
-    "test_manual_execution_assistant.py",
     "test_live_cockpit_offline_network.py",
     "test_operational_documents.py",
     "test_micro_futures_catalog_migration.py",

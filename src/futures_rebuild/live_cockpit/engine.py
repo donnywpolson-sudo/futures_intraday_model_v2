@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-import importlib.util
 import queue
 import threading
 import time
@@ -67,9 +66,7 @@ from .predictions import (
     PredictionContext,
     SyntheticPredictionSource,
     now_utc,
-    repository_model_payload,
 )
-from .model_runtime import DecisionStore, ModelRuntime, TrustedModelAdapter
 from .protocol import event, serialize_bar, timestamp_seconds
 
 
@@ -1041,7 +1038,7 @@ class DemoCockpitEngine:
 
 
 class LiveCockpitEngine:
-    """At-most-two-session engine: minute overview plus optional model OHLCV."""
+    """At-most-two-session observation engine for overview and focused charts."""
 
     def __init__(
         self,
@@ -1058,8 +1055,6 @@ class LiveCockpitEngine:
         reconnect_enabled: bool = True,
         fail_fast_provider_errors: bool = False,
         markets: Sequence[MarketInfo] | None = None,
-        model_adapter: TrustedModelAdapter | None = None,
-        model_store_path: Path | None = None,
         focus_stream_enabled: bool = True,
     ) -> None:
         self.markets = tuple(markets) if markets is not None else chart_market_universe()
@@ -1091,10 +1086,7 @@ class LiveCockpitEngine:
         self.cache_enabled = cache_enabled
         self.reconnect_enabled = reconnect_enabled
         self.fail_fast_provider_errors = fail_fast_provider_errors
-        self._model_adapter = model_adapter
         self._focus_stream_enabled = bool(focus_stream_enabled)
-        if model_adapter is not None and not set(model_adapter.spec.markets) <= self._symbols:
-            raise ValueError("model markets must be in the cockpit universe")
         if cache_enabled and cache_path is None:
             raise ValueError("cache_path is required when cache_enabled is true")
         self._cache_path = cache_path
@@ -1106,22 +1098,6 @@ class LiveCockpitEngine:
         self._historical: object | None = None
         self._overview_client: object | None = None
         self._focus_client: object | None = None
-        self._model_client: object | None = None
-        self._model_instruments: dict[int, str] = {}
-        self._model_bindings: dict[str, HistoryBinding] = {}
-        self._model_runtime: ModelRuntime | None = None
-        if model_adapter is not None:
-            resolved_model_store = model_store_path or (
-                cache_path.with_name("model-decisions.sqlite3") if cache_path is not None else None
-            )
-            if resolved_model_store is None:
-                raise ValueError("model_store_path is required when the bar cache is disabled")
-            self._model_store = DecisionStore(resolved_model_store)
-        else:
-            self._model_store = None
-        self._model_state = "OFFLINE"
-        self._model_reason = "MODEL_NOT_AUTHORIZED"
-        self._latest_model_predictions: dict[str, dict[str, Any]] = {}
         self._overview_instruments: dict[int, str] = {}
         self._overview_latest: dict[str, tuple[float, datetime]] = {}
         self._overview_session_opens: dict[str, tuple[datetime, float]] = {}
@@ -1159,7 +1135,6 @@ class LiveCockpitEngine:
         self._stop_event = threading.Event()
         self._threads: list[threading.Thread] = []
         self._trading_day = trading_day_start(datetime.now(timezone.utc))
-        self._maintenance_clock = (time.monotonic(), time.time())
         self._focus_live_announced_generation: int | None = None
         self._provider_failure: dict[str, Any] | None = None
         self._active_live_clients: dict[int, str] = {}
@@ -1383,40 +1358,22 @@ class LiveCockpitEngine:
                 ),
             )
         )
-        if self._model_adapter is not None:
-            prediction = self._latest_model_predictions.get(market)
-            if prediction is None:
-                prediction = repository_model_payload(
-                    spec=self._model_adapter.spec,
-                    market=market,
-                    contract=contract,
-                    instrument_id=instrument_id,
-                    generation=generation,
-                    display_timeframe=timeframe,
-                    prediction_time=evaluated_at,
-                    state=self._model_state,
-                    reason_code=self._model_reason,
-                )
-            else:
-                prediction = {**prediction, "timeframe": timeframe, "generation": generation}
-            self._publish(event("prediction_update", prediction))
-        else:
-            self._publish(
-                event(
-                    "prediction_update",
-                    self._prediction_source.build(
-                        PredictionContext(
-                            market=market,
-                            contract=contract,
-                            instrument_id=instrument_id,
-                            timeframe=timeframe,
-                            generation=generation,
-                            bars=aggregated,
-                            prediction_time=evaluated_at,
-                        )
-                    ),
-                )
+        self._publish(
+            event(
+                "prediction_update",
+                self._prediction_source.build(
+                    PredictionContext(
+                        market=market,
+                        contract=contract,
+                        instrument_id=instrument_id,
+                        timeframe=timeframe,
+                        generation=generation,
+                        bars=aggregated,
+                        prediction_time=evaluated_at,
+                    )
+                ),
             )
+        )
 
     def start(self, publish: Publish) -> None:
         self._publish = publish
@@ -1438,27 +1395,6 @@ class LiveCockpitEngine:
             return
         if self._stop_event.is_set():
             return
-        if self._model_adapter is not None:
-            try:
-                missing = [
-                    name for name in self._model_adapter.spec.dependencies
-                    if importlib.util.find_spec(name) is None
-                ]
-                if missing:
-                    raise RuntimeError(f"missing model dependencies: {', '.join(missing)}")
-                adapter_self_check = getattr(self._model_adapter, "self_check", None)
-                if not callable(adapter_self_check) or adapter_self_check() is not True:
-                    raise RuntimeError("model identity/hash self-check failed")
-                self._model_runtime = ModelRuntime(self._model_adapter)
-                self._model_runtime.start()
-                self._set_model_state("WARMING_UP", "FEATURE_WARMUP_INCOMPLETE")
-            except Exception as exc:
-                self._set_model_state("ERROR", "MODEL_ERROR")
-                self._emit(
-                    "feed_status",
-                    {"scope": "model", "state": "ERROR", "message": f"Model failed before live connection: {exc}"},
-                )
-                return
         try:
             key_resolution = resolve_cockpit_api_key_source(self.env)
         except CredentialLocatorError as exc:
@@ -1502,16 +1438,12 @@ class LiveCockpitEngine:
             return
 
         self._start_overview()
-        if self._model_adapter is not None and self._model_adapter.spec.schema != DEFAULT_HISTORICAL_SCHEMA:
-            self._start_model_feed()
         if self._stop_event.is_set():
             return
         workers = [
             (self._switch_worker, "cockpit-focus-switch"),
             (self._render_worker, "cockpit-render"),
         ]
-        if self._model_runtime is not None:
-            workers.append((self._model_worker, "cockpit-model-results"))
         if self.reconnect_enabled:
             workers.append((self._maintenance_worker, "cockpit-maintenance"))
         for target, name in workers:
@@ -1606,11 +1538,6 @@ class LiveCockpitEngine:
             if self._provider_failure is None:
                 self._provider_failure = dict(payload)
         self._emit("feed_status", payload)
-        if self._model_adapter is not None and (
-            scope == "model"
-            or (scope == "overview" and self._model_adapter.spec.schema == DEFAULT_HISTORICAL_SCHEMA)
-        ):
-            self._set_model_state("ERROR", "DATA_RECONCILIATION_REQUIRED")
         if self.fail_fast_provider_errors:
             self._stop_event.set()
 
@@ -2596,13 +2523,7 @@ class LiveCockpitEngine:
                         ),
                     },
                 )
-                if binding is not None and (self._model_adapter is not None or not self._focus_stream_enabled):
-                    if self._model_adapter is not None and self._model_adapter.spec.schema == DEFAULT_HISTORICAL_SCHEMA and market in self._model_adapter.spec.markets:
-                        self._submit_model_candle(
-                            market=market,
-                            binding=binding,
-                            candle=candle_value,
-                        )
+                if binding is not None and not self._focus_stream_enabled:
                     with self._lock:
                         if market == self.market and binding.instrument_id == self._resolved_instrument_id:
                             _upsert_sorted_bar(self._raw_bars, candle_value)
@@ -2676,151 +2597,6 @@ class LiveCockpitEngine:
             self._overview_client = None
             self._overview_instruments.clear()
             self._overview_session_opens.clear()
-
-    def _set_model_state(self, state: str, reason: str) -> None:
-        self._model_state = state
-        self._model_reason = reason
-        if self._model_store is not None:
-            self._model_store.record_state(state, reason)
-
-    def _submit_model_candle(
-        self,
-        *,
-        market: str,
-        binding: HistoryBinding,
-        candle: Mapping[str, Any],
-    ) -> None:
-        runtime = self._model_runtime
-        adapter = self._model_adapter
-        if runtime is None or adapter is None or runtime.error is not None:
-            return
-        try:
-            runtime.submit(
-                {
-                    "market": market,
-                    "contract": binding.contract,
-                    "instrument_id": binding.instrument_id,
-                    "schema": adapter.spec.schema,
-                    "time": timestamp_seconds(candle["time"]),
-                    "open": candle["open"],
-                    "high": candle["high"],
-                    "low": candle["low"],
-                    "close": candle["close"],
-                    "volume": candle["volume"],
-                }
-            )
-        except Exception as exc:
-            self._set_model_state("ERROR", "MODEL_ERROR")
-            self._emit("feed_status", {"scope": "model", "state": "ERROR", "message": str(exc)})
-
-    def _on_model_record(self, record: object) -> None:
-        if self._handle_provider_control(record, scope="model"):
-            self._set_model_state("ERROR", "MODEL_ERROR")
-            return
-        mapped_market = self._mapping_symbol(record)
-        if self._model_adapter is not None and mapped_market in self._model_adapter.spec.markets:
-            instrument_id = int(_record_field(record, "instrument_id"))
-            self._model_instruments[instrument_id] = mapped_market
-            raw_symbol = self._mapping_raw_symbol(record)
-            if raw_symbol:
-                self._model_bindings[mapped_market] = HistoryBinding(
-                    market=mapped_market, contract=raw_symbol, instrument_id=instrument_id
-                )
-            return
-        if not all(hasattr(record, field) for field in ("open", "high", "low", "close", "volume")):
-            return
-        try:
-            instrument_id = int(_record_field(record, "instrument_id"))
-            market = self._model_instruments[instrument_id]
-            binding = self._model_bindings[market]
-            self._submit_model_candle(
-                market=market,
-                binding=binding,
-                candle=ohlcv_record_to_candle(record),
-            )
-        except Exception as exc:
-            self._set_model_state("ERROR", "MODEL_ERROR")
-            self._emit("feed_status", {"scope": "model", "state": "ERROR", "message": f"Invalid model feed record: {exc}"})
-
-    def _start_model_feed(self) -> None:
-        if self.db_module is None or self._api_key is None or self._model_adapter is None:
-            return
-        client: object | None = None
-        try:
-            client = self._new_live_client()
-            client.subscribe(
-                dataset=DEFAULT_DATASET,
-                schema=self._model_adapter.spec.schema,
-                symbols=[f"{market}{DEFAULT_CONTINUOUS_SUFFIX}" for market in self._model_adapter.spec.markets],
-                stype_in="continuous",
-            )
-            self._add_live_callback(client, self._on_model_record, scope="model")
-            client.start()
-            self._register_started_client(client, scope="model")
-            self._model_client = client
-            self._emit(
-                "feed_status",
-                {"scope": "model", "state": "LIVE", "message": f"Model {self._model_adapter.spec.schema} entitlement and subscription accepted"},
-            )
-        except Exception as exc:
-            self._stop_client(client)
-            self._model_client = None
-            self._set_model_state("ERROR", "MODEL_ERROR")
-            self._emit("feed_status", {"scope": "model", "state": "ERROR", "message": f"Model schema unavailable: {exc}"})
-
-    def _model_worker(self) -> None:
-        while not self._stop_event.wait(0.02):
-            runtime = self._model_runtime
-            adapter = self._model_adapter
-            if runtime is None or adapter is None:
-                return
-            messages = runtime.poll()
-            for message in messages:
-                kind = message.get("kind")
-                if kind == "error":
-                    self._set_model_state("ERROR", "MODEL_ERROR")
-                    self._emit("feed_status", {"scope": "model", "state": "ERROR", "message": str(message.get("reason") or "Model error")})
-                    return
-                if kind == "state":
-                    self._set_model_state(str(message["state"]), str(message["reason"]))
-                    continue
-                if kind != "result":
-                    continue
-                decisions = list(message.get("decisions") or [])
-                if not decisions:
-                    continue
-                for decision in decisions:
-                    market = str(decision["market"])
-                    binding = self._model_bindings.get(market) or self._market_bindings.get(market)
-                    if binding is None:
-                        self._set_model_state("ERROR", "MODEL_ERROR")
-                        return
-                    input_time = int(decision["input_bar_time"])
-                    state = "ABSTAIN" if decision["decision"] == "ABSTAIN" else "READY"
-                    reason = "MODEL_ABSTAINED" if state == "ABSTAIN" else "MODEL_DECISION"
-                    with self._lock:
-                        timeframe = self.timeframe
-                        generation = self.generation
-                        selected = self.market
-                    payload = repository_model_payload(
-                        spec=adapter.spec,
-                        market=market,
-                        contract=binding.contract,
-                        instrument_id=binding.instrument_id,
-                        generation=generation,
-                        display_timeframe=timeframe,
-                        prediction_time=datetime.fromtimestamp(input_time + 1 + {"ohlcv-1s": 0, "ohlcv-1m": 59, "ohlcv-1h": 3599, "ohlcv-1d": 86399}[adapter.spec.schema], tz=timezone.utc),
-                        state=state,
-                        reason_code=reason,
-                        decision=decision,
-                    )
-                    payload["reason"] = decision.get("reason", "")
-                    self._latest_model_predictions[market] = payload
-                    self._set_model_state(state, reason)
-                    if self._model_store is not None:
-                        self._model_store.record_decision(str(payload["prediction_id"]), payload)
-                    if market == selected:
-                        self._emit("prediction_update", payload)
 
     def _publish_cached_selection(
         self,
@@ -3590,7 +3366,7 @@ class LiveCockpitEngine:
             return
         bars = visible_bars
 
-        if self._model_adapter is not None or not self._focus_stream_enabled:
+        if not self._focus_stream_enabled:
             self._emit(
                 "feed_status",
                 {
@@ -3896,15 +3672,6 @@ class LiveCockpitEngine:
 
     def _maintenance_worker(self) -> None:
         while not self._stop_event.wait(30.0):
-            monotonic_now, wall_now = time.monotonic(), time.time()
-            prior_monotonic, prior_wall = self._maintenance_clock
-            self._maintenance_clock = (monotonic_now, wall_now)
-            if self._model_adapter is not None and abs((wall_now - prior_wall) - (monotonic_now - prior_monotonic)) > 5.0:
-                self._set_model_state("ERROR", "DATA_RECONCILIATION_REQUIRED")
-                self._emit(
-                    "feed_status",
-                    {"scope": "model", "state": "ERROR", "message": "Computer sleep or clock jump detected; restart after the missing interval is reconciled"},
-                )
             self._refresh_overview_staleness()
             self._publish_current_focus_health()
             current_day = trading_day_start(datetime.now(timezone.utc))
@@ -3931,22 +3698,12 @@ class LiveCockpitEngine:
             )
             self._stop_overview()
             self._start_overview()
-            if self._model_adapter is not None and self._model_adapter.spec.schema != DEFAULT_HISTORICAL_SCHEMA:
-                self._stop_client(self._model_client)
-                self._model_client = None
-                self._model_instruments.clear()
-                self._model_bindings.clear()
-                self._start_model_feed()
             self.select_market(self.market, force=True)
             self._history_wakeup.set()
 
     def stop(self) -> None:
         self._stop_event.set()
         self._history_wakeup.set()
-        self._stop_client(self._model_client)
-        self._model_client = None
-        if self._model_runtime is not None:
-            self._model_runtime.stop()
         self._stop_client(self._focus_client)
         self._focus_client = None
         with self._lock:
@@ -3961,5 +3718,3 @@ class LiveCockpitEngine:
             if self._cache is not None:
                 self._cache.close()
                 self._cache = None
-        if self._model_store is not None:
-            self._model_store.close()

@@ -23,12 +23,6 @@
     "Livestock",
     "Other",
   ];
-  const ALPHA_TIER_LABELS = {
-    tier_1_core: "Tier 1 · Core confirmation",
-    tier_2_additions: "Tier 2 · Balanced additions",
-    tier_3_traditional_additions: "Tier 3 · Traditional additions",
-    tier_3_satellites: "Tier 3 · Satellite stress",
-  };
   const DEFAULT_VISUAL_UPDATE_HZ = 15;
   const ADAPTIVE_VISUAL_UPDATE_HZ = 5;
   const DEMO_EXCHANGE_CLOCK = new Intl.DateTimeFormat("en-US", {
@@ -141,29 +135,20 @@
     prediction: null,
     predictionMarkers: null,
     dataHealth: null,
-    alphaTierGroupingAvailable: false,
-    alphaTierGroups: [],
-    draggedMarketGroup: null,
     panelOpen: false,
     panelPreferenceExplicit: false,
     uiPreferences: {
       show_session_boundaries: true,
       show_predictions: true,
-      market_grouping_mode: "sector",
-      sector_group_order: [],
-      alpha_tier_group_order: [],
       collapsed_sector_groups: [],
-      collapsed_alpha_tier_groups: [],
+      data_status_panel_open: false,
     },
   };
 
   const elements = {
     marketList: document.getElementById("market-list"),
     marketSearch: document.getElementById("market-search"),
-    marketGrouping: document.getElementById("market-grouping"),
-    groupBySector: document.getElementById("group-by-sector"),
-    groupByAlpha: document.getElementById("group-by-alpha"),
-    groupReorderStatus: document.getElementById("group-reorder-status"),
+    railColumnLabels: document.getElementById("rail-column-labels"),
     marketCount: document.getElementById("market-count"),
     overviewDot: document.getElementById("overview-dot"),
     overviewLabel: document.getElementById("overview-label"),
@@ -171,7 +156,7 @@
     instrumentContract: document.getElementById("instrument-contract"),
     instrumentMeta: document.getElementById("instrument-meta"),
     focusState: document.getElementById("focus-state"),
-    timeframeList: document.getElementById("timeframe-list"),
+    timeframeSelect: document.getElementById("timeframe-select"),
     chartRangeList: document.getElementById("chart-range-list"),
     fitChart: document.getElementById("fit-chart"),
     fullscreenToggle: document.getElementById("fullscreen-toggle"),
@@ -179,7 +164,7 @@
     layersMenu: document.getElementById("layers-menu"),
     layerSessions: document.getElementById("layer-sessions"),
     layerPredictions: document.getElementById("layer-predictions"),
-    localTime: document.getElementById("local-time"),
+    predictionLayerOption: document.getElementById("prediction-layer-option"),
     workspaceContent: document.getElementById("workspace-content"),
     chart: document.getElementById("chart"),
     sessionBoundaries: document.getElementById("session-boundaries"),
@@ -194,8 +179,9 @@
     footerDot: document.getElementById("footer-dot"),
     footerStatus: document.getElementById("footer-status"),
     renderRate: document.getElementById("render-rate"),
-    predictionRail: document.getElementById("prediction-rail"),
-    predictionPanelToggle: document.getElementById("prediction-panel-toggle"),
+    dataStatusDrawer: document.getElementById("data-status-drawer"),
+    dataStatusToggle: document.getElementById("data-status-toggle"),
+    predictionCard: document.getElementById("prediction-card"),
     predictionMode: document.getElementById("prediction-mode"),
     predictionFreshness: document.getElementById("prediction-freshness"),
     predictionState: document.getElementById("prediction-state"),
@@ -489,6 +475,9 @@
     const prediction = state.prediction;
     const synthetic = Boolean(prediction?.synthetic || state.predictionCapability.synthetic);
     const repositoryModel = prediction?.source === "REPOSITORY_MODEL";
+    const predictionAvailable = synthetic || repositoryModel;
+    elements.predictionCard.hidden = !predictionAvailable;
+    elements.predictionLayerOption.hidden = !predictionAvailable;
     elements.predictionMode.textContent = synthetic ? "SYNTHETIC DEMO" : repositoryModel ? "MODEL LIVE" : "LIVE MODE";
     elements.predictionMode.className = `forecast-mode ${synthetic ? "synthetic" : repositoryModel ? "live" : "offline"}`;
     elements.predictionFreshness.textContent = prediction ? formatAge(prediction.prediction_time) : "No event";
@@ -611,17 +600,17 @@
     state.panelOpen = Boolean(open);
     elements.workspaceContent.classList.toggle("panel-collapsed", !state.panelOpen);
     elements.workspaceContent.style.gridTemplateColumns = state.panelOpen
-      ? "minmax(0, 1fr) 304px"
+      ? "minmax(0, 1fr) 286px"
       : "minmax(0, 1fr) 44px";
-    elements.predictionRail.setAttribute("aria-expanded", String(state.panelOpen));
-    elements.predictionPanelToggle.setAttribute("aria-expanded", String(state.panelOpen));
-    elements.predictionPanelToggle.setAttribute(
+    elements.dataStatusDrawer.setAttribute("aria-expanded", String(state.panelOpen));
+    elements.dataStatusToggle.setAttribute("aria-expanded", String(state.panelOpen));
+    elements.dataStatusToggle.setAttribute(
       "aria-label",
-      state.panelOpen ? "Collapse market context" : "Expand market context",
+      state.panelOpen ? "Collapse data status" : "Expand data status",
     );
     if (persist) {
       state.panelPreferenceExplicit = true;
-      state.uiPreferences.prediction_panel_open = state.panelOpen;
+      state.uiPreferences.data_status_panel_open = state.panelOpen;
       persistUiPreferences();
     }
     window.requestAnimationFrame(queueSessionBoundaryRender);
@@ -669,25 +658,12 @@
     ["show_session_boundaries", "show_predictions"].forEach((key) => {
       if (typeof values[key] === "boolean") state.uiPreferences[key] = values[key];
     });
-    if (["sector", "alpha_tier"].includes(values.market_grouping_mode)) {
-      state.uiPreferences.market_grouping_mode = values.market_grouping_mode;
-    }
-    [
-      "sector_group_order",
-      "alpha_tier_group_order",
-      "collapsed_sector_groups",
-      "collapsed_alpha_tier_groups",
-    ].forEach((key) => {
+    ["collapsed_sector_groups"].forEach((key) => {
       if (Array.isArray(values[key])) state.uiPreferences[key] = [...new Set(values[key].map(normalizeGroupId))];
     });
-    if (!state.alphaTierGroupingAvailable && state.uiPreferences.market_grouping_mode === "alpha_tier") {
-      state.uiPreferences.market_grouping_mode = "sector";
-    }
-    state.panelPreferenceExplicit = typeof values.prediction_panel_open === "boolean";
-    const defaultOpen = window.innerWidth >= 1440;
-    setPanelOpen(state.panelPreferenceExplicit ? values.prediction_panel_open : defaultOpen);
+    state.panelPreferenceExplicit = typeof values.data_status_panel_open === "boolean";
+    setPanelOpen(state.panelPreferenceExplicit ? values.data_status_panel_open : false);
     applyLayerVisibility();
-    updateGroupingControls();
     renderVisualUpdateState();
     syncVisualUpdateActivity();
   }
@@ -766,16 +742,14 @@
   }
 
   function renderTimeframes() {
-    elements.timeframeList.replaceChildren();
+    elements.timeframeSelect.replaceChildren();
     state.timeframes.forEach((timeframe, index) => {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = `timeframe-button${timeframe === state.timeframe ? " active" : ""}`;
-      button.textContent = timeframe;
-      button.title = `${timeframe} chart · shortcut ${index + 1}`;
-      button.setAttribute("aria-pressed", String(timeframe === state.timeframe));
-      button.addEventListener("click", () => chooseTimeframe(timeframe));
-      elements.timeframeList.appendChild(button);
+      const option = document.createElement("option");
+      option.value = timeframe;
+      option.textContent = timeframe;
+      option.selected = timeframe === state.timeframe;
+      option.title = `${timeframe} chart · shortcut ${index + 1}`;
+      elements.timeframeSelect.appendChild(option);
     });
   }
 
@@ -811,113 +785,29 @@
       .replace(/^_+|_+$/g, "") || "other";
   }
 
-  function activeGroupingMode() {
-    return state.uiPreferences.market_grouping_mode === "alpha_tier" && state.alphaTierGroupingAvailable
-      ? "alpha_tier"
-      : "sector";
-  }
-
-  function groupingPreferenceKeys(mode = activeGroupingMode()) {
-    return mode === "alpha_tier"
-      ? { order: "alpha_tier_group_order", collapsed: "collapsed_alpha_tier_groups" }
-      : { order: "sector_group_order", collapsed: "collapsed_sector_groups" };
-  }
-
-  function marketGroupDetails(market, mode = activeGroupingMode()) {
-    if (mode === "alpha_tier") {
-      const id = normalizeGroupId(market.alpha_tier_group);
-      const configured = state.alphaTierGroups.find((group) => normalizeGroupId(group?.id) === id);
-      return { id, label: configured?.label || ALPHA_TIER_LABELS[id] || "Alpha tier unavailable" };
-    }
+  function marketGroupDetails(market) {
     const label = market.family || "Other";
     return { id: normalizeGroupId(label), label };
   }
 
-  function normalizeGroupOrder(savedOrder, canonicalIds) {
-    const known = new Set(canonicalIds);
-    const ordered = [];
-    (Array.isArray(savedOrder) ? savedOrder : []).forEach((groupId) => {
-      const normalized = normalizeGroupId(groupId);
-      if (known.has(normalized) && !ordered.includes(normalized)) ordered.push(normalized);
-    });
-    canonicalIds.forEach((groupId) => {
-      if (!ordered.includes(groupId)) ordered.push(groupId);
-    });
-    return ordered;
-  }
-
-  function canonicalMarketGroups(mode = activeGroupingMode()) {
+  function canonicalMarketGroups() {
     const sorted = [...state.markets].sort((left, right) => {
-      if (mode === "sector") return familyRank(left.family) - familyRank(right.family);
-      const leftId = marketGroupDetails(left, mode).id;
-      const rightId = marketGroupDetails(right, mode).id;
-      const configuredOrder = state.alphaTierGroups.map((group) => normalizeGroupId(group?.id));
-      const order = configuredOrder.length ? configuredOrder : Object.keys(ALPHA_TIER_LABELS);
-      return order.indexOf(leftId) - order.indexOf(rightId);
+      return familyRank(left.family) - familyRank(right.family);
     });
     const groups = new Map();
     sorted.forEach((market) => {
-      const details = marketGroupDetails(market, mode);
+      const details = marketGroupDetails(market);
       if (!groups.has(details.id)) groups.set(details.id, { ...details, markets: [] });
       groups.get(details.id).markets.push(market);
     });
     return groups;
   }
 
-  function updateGroupingControls() {
-    const mode = activeGroupingMode();
-    elements.groupBySector.setAttribute("aria-pressed", String(mode === "sector"));
-    elements.groupByAlpha.setAttribute("aria-pressed", String(mode === "alpha_tier"));
-    elements.groupByAlpha.disabled = !state.alphaTierGroupingAvailable;
-    elements.groupByAlpha.title = state.alphaTierGroupingAvailable
-      ? "Group each market by its earliest configured research tier"
-      : "Alpha-tier grouping is unavailable; sector grouping remains active";
-  }
-
-  function announceGroupOrder(message) {
-    elements.groupReorderStatus.textContent = "";
-    window.setTimeout(() => { elements.groupReorderStatus.textContent = message; }, 0);
-  }
-
-  function reorderMarketGroup(groupId, targetId, placeAfter = false) {
-    const mode = activeGroupingMode();
-    const groups = canonicalMarketGroups(mode);
-    const keys = groupingPreferenceKeys(mode);
-    const canonicalIds = [...groups.keys()];
-    const order = normalizeGroupOrder(state.uiPreferences[keys.order], canonicalIds);
-    const fromIndex = order.indexOf(groupId);
-    const targetIndexBeforeRemoval = order.indexOf(targetId);
-    if (fromIndex < 0 || targetIndexBeforeRemoval < 0 || groupId === targetId) return;
-    order.splice(fromIndex, 1);
-    let targetIndex = order.indexOf(targetId);
-    if (placeAfter) targetIndex += 1;
-    order.splice(targetIndex, 0, groupId);
-    state.uiPreferences[keys.order] = order;
-    const label = groups.get(groupId)?.label || groupId;
-    announceGroupOrder(`${label} moved to position ${order.indexOf(groupId) + 1} of ${order.length}.`);
-    renderMarkets();
-    persistUiPreferences();
-  }
-
-  function reorderMarketGroupByOffset(groupId, offset) {
-    const mode = activeGroupingMode();
-    const groups = canonicalMarketGroups(mode);
-    const keys = groupingPreferenceKeys(mode);
-    const order = normalizeGroupOrder(state.uiPreferences[keys.order], [...groups.keys()]);
-    const currentIndex = order.indexOf(groupId);
-    const nextIndex = Math.max(0, Math.min(order.length - 1, currentIndex + offset));
-    if (currentIndex < 0 || nextIndex === currentIndex) return;
-    const targetId = order[nextIndex];
-    reorderMarketGroup(groupId, targetId, offset > 0);
-    window.requestAnimationFrame(() => elements.marketList.querySelector(`[data-drag-group="${groupId}"]`)?.focus());
-  }
-
   function toggleMarketGroup(groupId) {
-    const keys = groupingPreferenceKeys();
-    const collapsed = new Set(Array.isArray(state.uiPreferences[keys.collapsed]) ? state.uiPreferences[keys.collapsed] : []);
+    const collapsed = new Set(state.uiPreferences.collapsed_sector_groups);
     if (collapsed.has(groupId)) collapsed.delete(groupId);
     else collapsed.add(groupId);
-    state.uiPreferences[keys.collapsed] = [...collapsed];
+    state.uiPreferences.collapsed_sector_groups = [...collapsed];
     renderMarkets();
     persistUiPreferences();
   }
@@ -927,12 +817,16 @@
     const exactSymbolQuery = Boolean(query) && state.markets.some(
       (market) => market.symbol.toLowerCase() === query,
     );
-    const mode = activeGroupingMode();
-    updateGroupingControls();
-    const groups = canonicalMarketGroups(mode);
-    const keys = groupingPreferenceKeys(mode);
-    const groupOrder = normalizeGroupOrder(state.uiPreferences[keys.order], [...groups.keys()]);
-    const collapsed = new Set(Array.isArray(state.uiPreferences[keys.collapsed]) ? state.uiPreferences[keys.collapsed] : []);
+    const groups = canonicalMarketGroups();
+    const groupOrder = [...groups.keys()];
+    const collapsed = new Set(state.uiPreferences.collapsed_sector_groups);
+    const hasMarketValues = state.markets.some((market) => {
+      const status = state.statuses.get(market.symbol) || market;
+      const hasLast = status.last !== null && status.last !== undefined && Number.isFinite(Number(status.last));
+      const hasMove = status.session_move_pct !== null && status.session_move_pct !== undefined && Number.isFinite(Number(status.session_move_pct));
+      return hasLast || hasMove;
+    });
+    elements.railColumnLabels.hidden = !hasMarketValues;
     elements.marketList.replaceChildren();
     groupOrder.forEach((groupId) => {
       const group = groups.get(groupId);
@@ -971,54 +865,16 @@
       toggle.append(chevron, label, count);
       toggle.addEventListener("click", () => toggleMarketGroup(groupId));
 
-      const drag = document.createElement("button");
-      drag.type = "button";
-      drag.className = "market-group-drag";
-      drag.textContent = "⠿";
-      drag.draggable = !query;
-      drag.disabled = Boolean(query);
-      drag.dataset.dragGroup = groupId;
-      drag.setAttribute("aria-label", `Reorder ${group.label}`);
-      drag.setAttribute("aria-keyshortcuts", "Alt+ArrowUp Alt+ArrowDown");
-      drag.title = query ? "Clear search to reorder groups" : "Drag, or press Alt+Up/Down";
-      drag.addEventListener("keydown", (event) => {
-        if (!event.altKey || !["ArrowUp", "ArrowDown"].includes(event.key)) return;
-        event.preventDefault();
-        event.stopPropagation();
-        reorderMarketGroupByOffset(groupId, event.key === "ArrowUp" ? -1 : 1);
-      });
-      drag.addEventListener("dragstart", (event) => {
-        state.draggedMarketGroup = groupId;
-        section.classList.add("dragging");
-        event.dataTransfer.effectAllowed = "move";
-        event.dataTransfer.setData("text/plain", groupId);
-      });
-      drag.addEventListener("dragend", () => {
-        state.draggedMarketGroup = null;
-        section.classList.remove("dragging");
-        elements.marketList.querySelectorAll(".drag-over").forEach((element) => element.classList.remove("drag-over"));
-      });
-      section.addEventListener("dragover", (event) => {
-        if (query || !state.draggedMarketGroup || state.draggedMarketGroup === groupId) return;
-        event.preventDefault();
-        section.classList.add("drag-over");
-      });
-      section.addEventListener("dragleave", () => section.classList.remove("drag-over"));
-      section.addEventListener("drop", (event) => {
-        event.preventDefault();
-        section.classList.remove("drag-over");
-        const dragged = state.draggedMarketGroup || event.dataTransfer.getData("text/plain");
-        const bounds = section.getBoundingClientRect();
-        reorderMarketGroup(dragged, groupId, event.clientY > bounds.top + bounds.height / 2);
-      });
-      heading.append(toggle, drag);
+      heading.append(toggle);
       section.appendChild(heading);
 
       if (expanded) groupMarkets.forEach((market) => {
         const status = state.statuses.get(market.symbol) || market;
         const button = document.createElement("button");
         button.type = "button";
-        button.className = `market-row${market.symbol === state.selectedMarket ? " selected" : ""}`;
+        const hasLast = status.last !== null && status.last !== undefined && Number.isFinite(Number(status.last));
+        const hasChange = status.session_move_pct !== null && status.session_move_pct !== undefined && Number.isFinite(Number(status.session_move_pct));
+        button.className = `market-row${market.symbol === state.selectedMarket ? " selected" : ""}${hasLast || hasChange ? "" : " values-unavailable"}`;
         button.dataset.market = market.symbol;
         button.setAttribute("aria-label", `${market.symbol} ${status.state || status.status || "waiting"}`);
 
@@ -1032,15 +888,16 @@
 
         const last = document.createElement("span");
         last.className = "market-value";
-        last.textContent = formatPrice(status.last);
+        last.textContent = hasLast ? formatPrice(status.last) : "—";
 
         const change = document.createElement("span");
-        const numericChange = status.session_move_pct === null || status.session_move_pct === undefined ? null : Number(status.session_move_pct);
+        const numericChange = hasChange ? Number(status.session_move_pct) : null;
         const direction = numericChange === null ? "flat" : numericChange > 0 ? "up" : numericChange < 0 ? "down" : "flat";
         change.className = `market-change ${direction}`;
         change.textContent = numericChange === null ? "—" : `${numericChange >= 0 ? "+" : ""}${numericChange.toFixed(2)}%`;
 
-        button.append(name, last, change);
+        button.append(name);
+        if (hasLast || hasChange) button.append(last, change);
         button.addEventListener("click", () => chooseMarket(market.symbol));
         section.appendChild(button);
       });
@@ -1578,11 +1435,6 @@
       synthetic: false,
       observation_only: true,
     };
-    const groupingCapability = payload.market_grouping_capability || {};
-    state.alphaTierGroupingAvailable = groupingCapability.alpha_tiers_available === true;
-    state.alphaTierGroups = Array.isArray(groupingCapability.alpha_tier_groups)
-      ? groupingCapability.alpha_tier_groups
-      : [];
     state.contract = "";
     state.statuses.clear();
     state.markets.forEach((market) => state.statuses.set(market.symbol, { ...market, state: market.status || "WAITING" }));
@@ -1837,17 +1689,6 @@
     ["LE", "Livestock"], ["HE", "Livestock"], ["GF", "Livestock"],
     ["BTC", "Crypto"], ["ETH", "Crypto"],
   ];
-  const DEMO_ALPHA_TIER_GROUPS = {
-    tier_1_core: ["ES", "CL", "ZN", "6E"],
-    tier_2_additions: ["NQ", "NG", "RB", "GC", "HG", "SR3", "ZB", "6J", "ZC", "ZS", "LE", "HE"],
-    tier_3_traditional_additions: ["RTY", "YM", "HO", "SI", "PL", "SR1", "ZQ", "TN", "ZT", "ZF", "UB", "6A", "6B", "6C", "6M", "6N", "6S", "ZL", "ZM", "ZW", "KE", "GF"],
-    tier_3_satellites: ["BTC", "ETH", "PA"],
-  };
-
-  function demoAlphaTierGroup(symbol) {
-    return Object.keys(DEMO_ALPHA_TIER_GROUPS).find((groupId) => DEMO_ALPHA_TIER_GROUPS[groupId].includes(symbol)) || null;
-  }
-
   function demoBars(market) {
     if (state.browserBars.has(market)) return state.browserBars.get(market);
     const marketIndex = DEMO_MARKETS.findIndex(([symbol]) => symbol === market);
@@ -2042,7 +1883,6 @@
       return {
         symbol,
         family,
-        alpha_tier_group: demoAlphaTierGroup(symbol),
         status,
         last: latest.close,
         session_move_pct: sessionOpen === null ? null : (latest.close / sessionOpen - 1) * 100,
@@ -2073,14 +1913,6 @@
           automatic_interval_hours: 24,
         },
         prediction_capability: { mode: "synthetic_demo", synthetic: true, observation_only: true },
-        market_grouping_capability: {
-          alpha_tiers_available: true,
-          alpha_tier_groups: Object.entries(DEMO_ALPHA_TIER_GROUPS).map(([id, groupMarkets]) => ({
-            id,
-            label: ALPHA_TIER_LABELS[id],
-            market_count: groupMarkets.length,
-          })),
-        },
         visual_update_capability: {
           default_hz: DEFAULT_VISUAL_UPDATE_HZ,
           adaptive_floor_hz: ADAPTIVE_VISUAL_UPDATE_HZ,
@@ -2162,16 +1994,8 @@
   });
 
   elements.marketSearch.addEventListener("input", renderMarkets);
-  [
-    [elements.groupBySector, "sector"],
-    [elements.groupByAlpha, "alpha_tier"],
-  ].forEach(([element, mode]) => {
-    element.addEventListener("click", () => {
-      if (mode === "alpha_tier" && !state.alphaTierGroupingAvailable) return;
-      state.uiPreferences.market_grouping_mode = mode;
-      renderMarkets();
-      persistUiPreferences();
-    });
+  elements.timeframeSelect.addEventListener("change", () => {
+    chooseTimeframe(elements.timeframeSelect.value);
   });
   elements.retryFocus.addEventListener("click", retrySelectedMarket);
   elements.retryHistory.addEventListener("click", retryHistory);
@@ -2192,7 +2016,7 @@
   elements.historyPolicyChoiceManual.addEventListener("click", () => chooseHistoryUpdateMode("MANUAL"));
   elements.fitChart.addEventListener("click", resetChartView);
   elements.fullscreenToggle.addEventListener("click", toggleFullscreen);
-  elements.predictionPanelToggle.addEventListener("click", () => {
+  elements.dataStatusToggle.addEventListener("click", () => {
     setPanelOpen(!state.panelOpen, { persist: true });
   });
   elements.layersToggle.addEventListener("click", () => {
@@ -2282,16 +2106,11 @@
   });
 
   function updateClock() {
-    elements.localTime.textContent = localTime.formatLocalClock(
-      Date.now() / 1000,
-      navigator.language,
-    );
     renderPrediction();
     renderDataHealth();
   }
   window.addEventListener("resize", () => {
     queueChartResize();
-    if (!state.panelPreferenceExplicit) setPanelOpen(window.innerWidth >= 1440);
   });
   applyUiPreferences({});
   renderPrediction();
