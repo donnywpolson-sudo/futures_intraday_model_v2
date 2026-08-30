@@ -1087,6 +1087,7 @@ def stage_view(
     semantic_bindings: Mapping[str, str],
     materializations: Sequence[Mapping[str, object]],
     non_materialized_entries: Sequence[CatalogEntry],
+    seed_view: Path | None = None,
 ) -> tuple[Path, dict[str, object]]:
     """Create one complete, create-only successor under the exact staging root."""
 
@@ -1114,6 +1115,34 @@ def stage_view(
     )
     entries: list[CatalogEntry] = list(non_materialized_entries)
     try:
+        if seed_view is not None:
+            seed = seed_view.resolve(strict=True)
+            seed_catalog = verify_view(seed)
+            seeded = {
+                f"{item['market']}/{item['year']}": item
+                for item in seed_catalog["entries"]
+            }
+            expected = {
+                entry.key: entry.as_dict()
+                for entry in non_materialized_entries
+                if entry.disposition == CERTIFICATION_STATE
+            }
+            if seeded != expected:
+                raise IntegrityError("seed view differs from preserved successor entries")
+            for entry in non_materialized_entries:
+                if entry.disposition != CERTIFICATION_STATE:
+                    continue
+                for relative_text, expected_sha256 in (
+                    (entry.as_dict()["parquet_path"], entry.parquet_sha256),
+                    (entry.as_dict()["sidecar_path"], entry.sidecar_sha256),
+                ):
+                    relative = PurePosixPath(str(relative_text)).relative_to("data/active")
+                    source = seed / relative
+                    destination = stage / relative
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(source, destination)
+                    if sha256_file(destination) != expected_sha256:
+                        raise IntegrityError("seeded active-view file changed during copy")
         for raw in sorted(
             materializations, key=lambda item: (str(item.get("market")), int(item.get("year", 0)))
         ):

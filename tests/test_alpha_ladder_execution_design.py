@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from pathlib import Path
 
@@ -10,9 +11,11 @@ from futures_rebuild.alpha_ladder_execution_design import (
     evaluate_execution_proxy, load_execution_design_contract,
     select_macro_execution_candidate, validate_execution_design_contract,
 )
+from futures_rebuild.canonical import sha256_json
 from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 pytestmark = pytest.mark.current
 ROOT = Path(__file__).resolve().parents[1]
+ACTIVE_DESIGN_PATH = Path("configs/active_alpha_historical_research_design.json")
 FINAL_MANIFEST_PATH = Path(
     "state/final_evaluation_session_manifest_registry/"
     "0ff48f99d8b6d3a262ddf0a060bea8e733fc95aa7c4b4d43f19a0f78b107d4d1/"
@@ -42,6 +45,34 @@ def test_contract_is_canonical_deterministic_and_bound() -> None:
     assert first["state"]["mechanism"] == "NOT_STARTED"
     assert first["state"]["macro_selection"] == "PENDING_PRE_RESULT_EXECUTION_GATE"
     assert tuple(first["macro_selector"]["candidates"]) == ("ZN", "6E")
+
+
+def test_active_rank1_historical_design_is_exact_and_non_authorizing() -> None:
+    pointer = json.loads((ROOT / ACTIVE_DESIGN_PATH).read_bytes())
+    core = {key: value for key, value in pointer.items() if key != "pointer_id"}
+    assert pointer["pointer_id"] == sha256_json(core)
+    assert pointer["state"] == "HISTORICAL_RESEARCH_DESIGN_IDENTITY_ONLY"
+    assert pointer["does_not_authorize"] == [
+        "FEATURE_OR_OUTCOME_CONSTRUCTION", "FINAL_252_OR_FORWARD_ACCESS",
+        "MACRO_SELECTION", "MARKET_ROW_READ", "MODEL_FIT_OR_PREDICTION",
+        "PROVIDER_OR_NETWORK", "TRADING", "WFA_OR_ALPHA_EVALUATION",
+    ]
+    assert pointer["design"] == "RANK_1_RECENT_REGIME_CHALLENGE"
+    assert pointer["selection_and_wfa"]["start_inclusive"] == "2018-01-01T00:00:00Z"
+    assert pointer["selection_and_wfa"]["end_exclusive"] == "2023-01-01T00:00:00Z"
+    challenge = pointer["recent_regime_challenge"]
+    assert challenge["start_inclusive"] == "2023-01-01T00:00:00Z"
+    assert challenge["end_exclusive"] == "2025-07-13T22:00:00Z"
+    assert challenge["maximum_attempts_per_market"] == 1
+    assert challenge["tuning_or_design_change_after_result"] is False
+    refit = pointer["final_refit"]
+    assert refit["allowed_change"] == "FIT_PARAMETERS_ONLY"
+    assert refit["performance_evaluation_after_refit_before_final_252"] is False
+    assert pointer["final_252"] == {
+        "access_allowed": False,
+        "only_independent_historical_confirmation": True,
+        "status": "BLOCKED_FINAL_252_AUTHORITY_UNRESOLVED",
+    }
 
 
 def test_missing_evidence_fails_closed() -> None:

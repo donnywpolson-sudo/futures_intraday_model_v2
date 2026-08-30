@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -25,8 +26,10 @@ from futures_rebuild.alpha_ladder_zn_6e_execution_proxy import (
 )
 from futures_rebuild.boundary import OperationClassification, OperationReceipt, RepoBoundary
 from futures_rebuild.canonical import sha256_json
-from futures_rebuild.errors import UnauthorizedOperation
-from futures_rebuild.research_gateway_policy import PREPARATORY_REAL_HISTORY_OPERATIONS
+from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
+from futures_rebuild.research_gateway_policy import (
+    PREPARATORY_REAL_HISTORY_OPERATIONS, require_current_real_history_operation,
+)
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -119,7 +122,7 @@ def test_calendar_and_metadata_only_plan_are_exact():
     assert "2018-12-05" not in dates
     assert sha256_json(list(dates)) == SCHEDULE_SHA256
     before_macro = (ROOT / ACTIVE_MACRO_PATH).exists()
-    plan = prepare_execution_proxy_plan(ROOT)
+    plan = json.loads((ROOT / PLAN_PATH).read_bytes())
     assert plan["state"] == "PREPARED_REQUIRES_EXACT_APPROVAL"
     assert plan["limits"] == {"market_year_partitions": 10, "files": 480, "observation_rows": 4_000_000, "bytes": 512 * 1024 * 1024}
     assert len(plan["bindings"]["files"]) == 480
@@ -131,8 +134,12 @@ def test_calendar_and_metadata_only_plan_are_exact():
         "provider_or_network": False,
         "final_252_or_forward": False,
     }
+    with pytest.raises(IntegrityError, match="drifted"):
+        prepare_execution_proxy_plan(ROOT)
     assert (ROOT / ACTIVE_MACRO_PATH).exists() is before_macro
-    assert OPERATION in PREPARATORY_REAL_HISTORY_OPERATIONS
+    assert OPERATION not in PREPARATORY_REAL_HISTORY_OPERATIONS
+    with pytest.raises(UnauthorizedOperation, match="retired"):
+        require_current_real_history_operation(OPERATION, {})
 
 
 def test_synthetic_aggregate_is_deterministic_and_selector_passes():
@@ -184,12 +191,12 @@ def test_scope_and_authorization_fail_before_parquet(monkeypatch):
         "futures_rebuild.alpha_ladder_zn_6e_execution_proxy._read_bound_bundles",
         lambda *_: pytest.fail("Parquet accessed before authorization"),
     )
-    with pytest.raises(UnauthorizedOperation):
+    with pytest.raises((IntegrityError, UnauthorizedOperation)):
         execute_authorized_execution_proxy(ROOT, receipt)
     assert (ROOT / PLAN_PATH).exists()
 
 
-def test_exact_external_receipt_is_single_use(boundary):
+def test_consumed_operation_receipt_cannot_be_used_again(boundary):
     plan_id, plan_sha = "a" * 64, "b" * 64
     approval = f"APPROVE {OPERATION} PLAN {plan_id} SHA256 {plan_sha}"
     receipt = OperationReceipt.issue_user_approved(
@@ -208,13 +215,7 @@ def test_exact_external_receipt_is_single_use(boundary):
         "approval_plan_id": plan_id,
         "approval_plan_sha256": plan_sha,
     }
-    receipt.consume(
-        boundary,
-        operation=OPERATION,
-        classification=OperationClassification.EXTERNAL_REAL_HISTORY_AUTHORIZATION,
-        required_scope=scope,
-    )
-    with pytest.raises(UnauthorizedOperation, match="already used"):
+    with pytest.raises(UnauthorizedOperation, match="retired"):
         receipt.consume(
             boundary,
             operation=OPERATION,

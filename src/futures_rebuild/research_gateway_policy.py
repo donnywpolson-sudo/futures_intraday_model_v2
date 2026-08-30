@@ -36,6 +36,30 @@ CAUSAL_OBSERVATION_FULL_BUILD_OPERATION = (
 CAUSAL_OBSERVATION_V10_CANARY_OPERATION = (
     "READ_V10_ES_2025_CAUSAL_CANARY_TWICE_ONCE"
 )
+ALPHA_LADDER_MACRO_SUCCESSOR_OPERATION = (
+    "RUN_ALPHA_LADDER_MACRO_SUCCESSOR_EXECUTION_PROXY_ONCE"
+)
+ALPHA_LADDER_MACRO_SUCCESSOR_SCOPE_KEYS = frozenset(
+    {
+        "operation_kind",
+        "markets",
+        "years",
+        "predecessor_closure_sha256",
+        "candidate_order_sha256",
+        "carried_evidence_sha256",
+        "rank1_pointer_id",
+        "ladder_pointer_id",
+        "execution_design_pointer_id",
+        "catalog_sha256",
+        "certificates_sha256",
+        "calendars_sha256",
+        "schedule_sha256",
+        "limits_sha256",
+        "implementation_sha256",
+        "plan_id",
+        "plan_sha256",
+    }
+)
 RETIRED_PRE_REGISTRATION_PROTOCOL_IDS = frozenset(
     {"3b8e09d65015afd33fc033aa72c8bb0be22425cafac8b8b145eeccb639258067"}
 )
@@ -95,7 +119,6 @@ PREPARATORY_REAL_HISTORY_OPERATIONS = frozenset(
         "PUBLISH_V12_LOCAL_SOURCE_QUALITY_RECORD_CREATE_ONLY",
         "PREFLIGHT_APEX_MICRO_TIER01_DATABENTO_METADATA_ONCE",
         "QUOTE_FROZEN_TIER1_BBO_1S_RECOVERY_COST_AND_PUBLISH",
-        "RUN_ZN_6E_EXECUTION_PROXY_GATE_ONCE",
     }
 )
 
@@ -112,6 +135,26 @@ def require_current_real_history_operation(
     """
 
     if operation in PREPARATORY_REAL_HISTORY_OPERATIONS:
+        return
+    if operation == ALPHA_LADDER_MACRO_SUCCESSOR_OPERATION:
+        research_scope = {
+            key: value for key, value in scope.items() if key not in _APPROVAL_SCOPE_KEYS
+        }
+        hashes = ALPHA_LADDER_MACRO_SUCCESSOR_SCOPE_KEYS - {
+            "operation_kind", "markets", "years",
+        }
+        if (
+            set(research_scope) != ALPHA_LADDER_MACRO_SUCCESSOR_SCOPE_KEYS
+            or research_scope.get("operation_kind")
+            != "PRE_RESULT_MACRO_SUCCESSOR_EXECUTION_PROXY_AND_SEAL"
+            or research_scope.get("markets") != "SR3,ZB,6J"
+            or research_scope.get("years") != "2018,2019,2020,2021,2022"
+            or any(
+                re.fullmatch(r"[0-9a-f]{64}", research_scope.get(key, "")) is None
+                for key in hashes
+            )
+        ):
+            raise UnauthorizedOperation("macro successor gateway scope is invalid")
         return
     if operation != CERTIFIED_TRIAL_EXECUTION_OPERATION:
         raise UnauthorizedOperation(

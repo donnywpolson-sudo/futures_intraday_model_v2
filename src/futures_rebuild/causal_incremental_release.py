@@ -125,6 +125,7 @@ def _validated_certificate(
     relative_path: str,
     expected_market: str,
     shared_bindings: Mapping[str, str] | None = None,
+    allowed_markets: Sequence[str] = ACTIVE_RELEASE_MARKETS,
 ) -> dict[str, object]:
     path = _contained(root, relative_path, "certificate path")
     certificate = _load_object(path, "market maximum-robustness certificate")
@@ -139,7 +140,7 @@ def _validated_certificate(
         / f"{attempt_id}.json"
     ).as_posix()
     if (
-        expected_market not in ACTIVE_RELEASE_MARKETS
+        expected_market not in allowed_markets
         or expected_market not in V10_CHECKPOINT_MARKETS
         or relative_path != expected_path
         or certificate.get("schema_version") != CERTIFICATE_SCHEMA
