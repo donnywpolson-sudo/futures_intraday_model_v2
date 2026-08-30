@@ -20,9 +20,11 @@ from .errors import IntegrityError, UnauthorizedOperation
 LEGACY_CONTRACT_SCHEMA = "alpha_research_ladder_contract/1.0.0"
 CONTRACT_SCHEMA = "alpha_research_ladder_contract/2.0.0"
 QUALIFICATION_CONTRACT_SCHEMA = "alpha_research_ladder_contract/4.0.0"
+FINAL_252_CONTRACT_SCHEMA = "alpha_research_ladder_contract/5.0.0"
 LEGACY_PROFILE_SCHEMA = "alpha_research_ladder_profile/1.0.0"
 PROFILE_SCHEMA = "alpha_research_ladder_profile/2.0.0"
 QUALIFICATION_PROFILE_SCHEMA = "alpha_research_ladder_profile/4.0.0"
+FINAL_252_PROFILE_SCHEMA = "alpha_research_ladder_profile/5.0.0"
 POINTER_SCHEMA = "active_alpha_research_ladder/1.0.0"
 SESSION_MANIFEST_SCHEMA = "alpha_ladder_session_manifest/1.0.0"
 DECISION_SCHEMA = "alpha_ladder_stage_decision/1.0.0"
@@ -326,6 +328,7 @@ def build_qualification_successor_contract(
     predecessor_contract_id: str, predecessor_profile_id: str,
     predecessor_pointer_id: str, prior_failure_closure_id: str,
     prior_failed_mechanism_id: str,
+    final_252_binding: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Build the future-mechanism qualification successor without granting access."""
 
@@ -338,8 +341,26 @@ def build_qualification_successor_contract(
         (prior_failed_mechanism_id, "prior failed mechanism identity"),
     ):
         _digest(value, name)
+    final_stage = {
+        "role": "FUTURE_FINAL_SEALED_EVALUATION_GATE",
+        "status": (
+            "SEALED_AUTHORITY_RESOLVED_ACCESS_FORBIDDEN"
+            if final_252_binding is not None
+            else "BLOCKED_FINAL_252_AUTHORITY_UNRESOLVED"
+        ),
+        "access_allowed": False,
+        "manifest_binding": (
+            dict(final_252_binding) if final_252_binding is not None else None
+        ),
+        "pointer_binding": None,
+        "historical_summary_is_authority": False,
+    }
     core: dict[str, object] = {
-        "schema_version": QUALIFICATION_CONTRACT_SCHEMA,
+        "schema_version": (
+            FINAL_252_CONTRACT_SCHEMA
+            if final_252_binding is not None
+            else QUALIFICATION_CONTRACT_SCHEMA
+        ),
         "classification": "PRE_RESEARCH_DESIGN_PRIOR",
         "state": "ACTIVE_ONLY_WHEN_REFERENCED_BY_VALID_POINTER",
         "applies_to": "FUTURE_COUNTED_MECHANISMS_ONLY",
@@ -422,14 +443,7 @@ def build_qualification_successor_contract(
                 "micros_can_rescue_failure": False,
                 "micros_create_holdout": False,
             },
-            "final_historical_evaluation": {
-                "role": "FUTURE_FINAL_SEALED_EVALUATION_GATE",
-                "status": "BLOCKED_FINAL_252_AUTHORITY_UNRESOLVED",
-                "access_allowed": False,
-                "manifest_binding": None,
-                "pointer_binding": None,
-                "historical_summary_is_authority": False,
-            },
+            "final_historical_evaluation": final_stage,
             "forward_monitoring": {
                 "role": "MONITORING_ONLY_AFTER_ALL_SCIENTIFIC_AND_OPERATIONAL_GATES",
                 "requires_alpha_and_live_execution_eligibility": True,
@@ -509,6 +523,7 @@ def validate_contract(payload: Mapping[str, object]) -> dict[str, object]:
     schema = payload.get("schema_version")
     if schema not in {
         LEGACY_CONTRACT_SCHEMA, CONTRACT_SCHEMA, QUALIFICATION_CONTRACT_SCHEMA,
+        FINAL_252_CONTRACT_SCHEMA,
     }:
         raise IntegrityError("unsupported Alpha ladder contract schema")
     assert isinstance(schema, str)
@@ -543,6 +558,14 @@ def validate_contract(payload: Mapping[str, object]) -> dict[str, object]:
             predecessor_pointer_id=str(predecessor.get("pointer_id", "")),
             prior_failure_closure_id=str(prior_failure.get("closure_id", "")),
             prior_failed_mechanism_id=str(prior_failure.get("mechanism_id", "")),
+            final_252_binding=(
+                _mapping(
+                    stages.get("final_historical_evaluation"),
+                    "final historical evaluation",
+                ).get("manifest_binding")
+                if schema == FINAL_252_CONTRACT_SCHEMA
+                else None
+            ),
         )
         expected_stages = {
             "synthetic_engineering", "tier_0", "tier_1", "tier_2", "tier_3",
@@ -677,13 +700,18 @@ def build_profile(
 
 def build_qualification_successor_profile(
     *, contract_path: str, contract_sha256: str, contract_id: str,
+    final_252_binding: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Build the operational view for qualification-contract schema v4."""
 
     _digest(contract_sha256, "contract SHA-256")
     _digest(contract_id, "contract identity")
     core: dict[str, object] = {
-        "schema_version": QUALIFICATION_PROFILE_SCHEMA,
+        "schema_version": (
+            FINAL_252_PROFILE_SCHEMA
+            if final_252_binding is not None
+            else QUALIFICATION_PROFILE_SCHEMA
+        ),
         "classification": "PRE_RESEARCH_DESIGN_PRIOR",
         "state": "ACTIVE_ONLY_WHEN_REFERENCED_BY_VALID_POINTER",
         "applies_to": "FUTURE_COUNTED_MECHANISMS_ONLY",
@@ -736,8 +764,17 @@ def build_qualification_successor_profile(
                 "deferred_micros_create_holdout": False,
             },
             "final_historical_evaluation": {
-                "status": "BLOCKED_FINAL_252_AUTHORITY_UNRESOLVED",
+                "status": (
+                    "SEALED_AUTHORITY_RESOLVED_ACCESS_FORBIDDEN"
+                    if final_252_binding is not None
+                    else "BLOCKED_FINAL_252_AUTHORITY_UNRESOLVED"
+                ),
                 "access_allowed": False,
+                **(
+                    {"manifest_binding": dict(final_252_binding)}
+                    if final_252_binding is not None
+                    else {}
+                ),
             },
             "forward_monitoring": {
                 "requires_alpha_and_live_execution_eligibility": True,
@@ -794,6 +831,7 @@ def validate_profile(
     schema = payload.get("schema_version")
     if schema not in {
         LEGACY_PROFILE_SCHEMA, PROFILE_SCHEMA, QUALIFICATION_PROFILE_SCHEMA,
+        FINAL_252_PROFILE_SCHEMA,
     }:
         raise IntegrityError("unsupported Alpha ladder profile schema")
     assert isinstance(schema, str)
@@ -814,6 +852,7 @@ def validate_profile(
         LEGACY_PROFILE_SCHEMA: LEGACY_CONTRACT_SCHEMA,
         PROFILE_SCHEMA: CONTRACT_SCHEMA,
         QUALIFICATION_PROFILE_SCHEMA: QUALIFICATION_CONTRACT_SCHEMA,
+        FINAL_252_PROFILE_SCHEMA: FINAL_252_CONTRACT_SCHEMA,
     }[schema]
     if contract.get("schema_version") != expected_contract_schema:
         raise IntegrityError("ladder profile and contract schema generations differ")
@@ -823,11 +862,22 @@ def validate_profile(
         LEGACY_PROFILE_SCHEMA: _build_legacy_profile,
         PROFILE_SCHEMA: build_profile,
         QUALIFICATION_PROFILE_SCHEMA: build_qualification_successor_profile,
+        FINAL_252_PROFILE_SCHEMA: build_qualification_successor_profile,
     }[schema]
+    builder_kwargs: dict[str, object] = {
+        "contract_path": str(binding.get("path")),
+        "contract_sha256": str(binding.get("sha256")),
+        "contract_id": str(binding.get("contract_id")),
+    }
+    if schema == FINAL_252_PROFILE_SCHEMA:
+        builder_kwargs["final_252_binding"] = _mapping(
+            _mapping(contract.get("stages"), "stages").get(
+                "final_historical_evaluation"
+            ),
+            "final historical evaluation",
+        ).get("manifest_binding")
     expected = builder(
-        contract_path=str(binding.get("path")),
-        contract_sha256=str(binding.get("sha256")),
-        contract_id=str(binding.get("contract_id")),
+        **builder_kwargs,
     )
     if dict(payload) != expected:
         raise IntegrityError("ladder profile semantics drifted")
@@ -1151,10 +1201,16 @@ def validate_stage_decision(
         active_contract, _ = load_active_ladder(root)
         qualification_contract = (
             active_contract.get("contract_id") == contract_id
-            and active_contract.get("schema_version") == QUALIFICATION_CONTRACT_SCHEMA
+            and active_contract.get("schema_version") in {
+                QUALIFICATION_CONTRACT_SCHEMA, FINAL_252_CONTRACT_SCHEMA,
+            }
         )
     if qualification_contract and expected_stage in {"holdout", "forward"}:
-        raise UnauthorizedOperation("Final-252 authority is unresolved and access is forbidden")
+        raise UnauthorizedOperation(
+            "Final-252 access requires separate authorization and is forbidden"
+            if active_contract.get("schema_version") == FINAL_252_CONTRACT_SCHEMA
+            else "Final-252 authority is unresolved and access is forbidden"
+        )
     if expected_stage == "tier_0":
         if root is None:
             raise IntegrityError("Tier 0 decision validation requires repository context")
@@ -1262,11 +1318,15 @@ def validate_stage_registration(
         or binding.get("profile_id") != profile.get("profile_id")
     ):
         raise IntegrityError("registration is not bound to the active Alpha ladder")
-    qualification_contract = (
-        contract.get("schema_version") == QUALIFICATION_CONTRACT_SCHEMA
-    )
+    qualification_contract = contract.get("schema_version") in {
+        QUALIFICATION_CONTRACT_SCHEMA, FINAL_252_CONTRACT_SCHEMA,
+    }
     if qualification_contract and stage in {"holdout", "forward"}:
-        raise UnauthorizedOperation("Final-252 authority is unresolved and access is forbidden")
+        raise UnauthorizedOperation(
+            "Final-252 access requires separate authorization and is forbidden"
+            if contract.get("schema_version") == FINAL_252_CONTRACT_SCHEMA
+            else "Final-252 authority is unresolved and access is forbidden"
+        )
 
     selected_macro: str | None = None
     tier1_markets = CORE

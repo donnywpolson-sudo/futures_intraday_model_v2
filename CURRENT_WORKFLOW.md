@@ -24,7 +24,7 @@ preservation/rollback boundary. Replying `Approve` is sufficient.
 
 ## Certified final-evaluation boundary
 
-The declared **Final Sealed 252-Session Holdout** identity `0ff48f99d8b6d3a262ddf0a060bea8e733fc95aa7c4b4d43f19a0f78b107d4d1` is preserved as historical custody evidence, but its exact active manifest and certification bytes are not locally or Git recoverable. Its current authority status is `UNRESOLVED_AUTHORITY_HOLDOUT_ACCESS_FORBIDDEN`; no holdout or forward value access is permitted. The Alpha ladder is rebound only to the last complete tracked authority, and that rollback neither reinterprets prior results nor creates a replacement holdout.
+The active Alpha ladder seals the research-selection-pristine **Final Sealed 252-Session Holdout** under successor manifest `ad1baab30b52fdda95e72777a4930ea18bd78037925cc36a27594f484c876549`, covering trade dates 2025-07-14 through 2026-07-13. Its ordered-session identity exactly reproduces the declared historical sequence. The unrecoverable identity `0ff48f99d8b6d3a262ddf0a060bea8e733fc95aa7c4b4d43f19a0f78b107d4d1` remains historical evidence and was not reused. Authority is resolved and durable, but the holdout remains unread: neither holdout nor forward value access is authorized.
 
 `PROJECT_OUTLINE.md` is the practical current pipeline reference. The previous
 counted mechanism remains closed after Tier 0 ES failure, and the new mechanism
@@ -54,16 +54,17 @@ rehearsal are synthetic-test proven. A dedicated ES-2025 canary successor is
 implemented and passed under consumed authority: it bound seven exact
 registered DBNs plus sidecars, performed one producer decode and one
 fresh-process independent replay, wrote only below the V10 `_canary` lane, and
-did not seed the complete ES checkpoint. Complete ES, NQ, CL, GC, ZN, and 6E
+did not seed the complete ES checkpoint. Complete ES, NQ, CL, GC, ZN, 6E,
+SR3, ZB, and 6J
 2010-2025 checkpoints and their two-pass maximum-robustness certificates
 passed. Their certified development rows from 2010 through the exclusive
-`2025-07-13T22:00:00Z` cutoff are active as 96 annual causal-price files. The
+`2025-07-13T22:00:00Z` cutoff are active as 136 annual causal-price files. The
 partial 2025 files are interval-bound non-selection research; July 14 onward
-remains inaccessible. The other 35 markets have not started. The six-market active
+remains inaccessible. The other 32 markets have not started. The nine-market active
 release does not claim full-universe coverage, Alpha qualification, model or
 evaluation authority, or holdout access.
 
-The current six-market annual active view uses exactly
+The current nine-market annual active view uses exactly
 `data/active/causally_gated_normalized/{market}/{year}/{year}.parquet` with one
 adjacent `{year}.parquet.manifest.json` per market-year. The annual materializer
 reconstructed only from the certified V10 artifacts, preserved exact logical
@@ -97,8 +98,7 @@ a one-use ZN/6E execution-proxy row-read authorization; execute that selector
 only after approval; freeze the selected macro; separately define and freeze the
 mechanism; run Stage 0 synthetic engineering; qualify Tier 0 ES; qualify Tier 1
 NQ, CL, GC, and the selected macro; replicate through the exact Tier 2 set of 16
-and Tier 3 set of 41; then separately recover and certify Final-252 before any
-sealed-holdout access.
+and Tier 3 set of 41; then obtain separate single-use Final-252 access authority.
 The mechanism freeze must specify its outcomes, features, folds, purge,
 embargo, costs, and stop rules before any corresponding result-bearing rows are
 constructed. The numbered foundation sections describe data products, not
@@ -159,8 +159,8 @@ Every tier uses the same frozen mechanism, and material changes restart a new
 counted mechanism at Stage 0.
 
 Final historical evaluation is a future gate only. It is currently
-`BLOCKED_FINAL_252_AUTHORITY_UNRESOLVED`; no manifest or active pointer exists,
-and holdout or forward access is forbidden. Forward deployment consideration
+`SEALED_AUTHORITY_RESOLVED_ACCESS_FORBIDDEN`; the active manifest defines and
+seals the interval but grants no holdout or forward access. Forward deployment consideration
 requires a market to be independently Alpha-eligible and live-execution
 eligible. OHLCV execution proxies do not certify bid/ask spread, depth, queue
 position, market impact, or live fills. The 41 markets are a scientific
@@ -250,10 +250,10 @@ canary and full-build authorizations are consumed; their inactive outputs and
 V9 artifacts remain evidence only. The V10 market-by-market controller,
 checkpoint writer, sealed-year recovery, independent market certifier, and
 long-path-safe provider-free rehearsal are implemented. The ES-2025 canary
-remains separate. Complete ES, NQ, CL, GC, ZN, and 6E 2010-2025 checkpoints
+remains separate. Complete ES, NQ, CL, GC, ZN, 6E, SR3, ZB, and 6J 2010-2025 checkpoints
 passed maximum-robustness certification; their 2010-through-bounded-2025 annual
 active view is research-ready causal-price data. July 14 onward remains
-protected. The other 35
+protected. The other 32
 markets and the complete 41-market release remain unbuilt. Each later market row read,
 certification, scheduler action, publication, and activation still requires the
 applicable approval. The Final Sealed 252-Session Holdout and forward values

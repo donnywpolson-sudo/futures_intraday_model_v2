@@ -26,7 +26,7 @@ operator orientation; `PROJECT_OUTLINE.md` describes the research pipeline.
 
 ## Certified final-evaluation boundary
 
-The declared **Final Sealed 252-Session Holdout** identity `0ff48f99d8b6d3a262ddf0a060bea8e733fc95aa7c4b4d43f19a0f78b107d4d1` is preserved as historical custody evidence, but its exact active manifest and certification bytes are not locally or Git recoverable. Its current authority status is `UNRESOLVED_AUTHORITY_HOLDOUT_ACCESS_FORBIDDEN`; no holdout or forward value access is permitted. The Alpha ladder is rebound only to the last complete tracked authority, and that rollback neither reinterprets prior results nor creates a replacement holdout.
+The active Alpha ladder seals the research-selection-pristine **Final Sealed 252-Session Holdout** under successor manifest `ad1baab30b52fdda95e72777a4930ea18bd78037925cc36a27594f484c876549`, covering trade dates 2025-07-14 through 2026-07-13. Its ordered-session identity exactly reproduces the declared historical sequence. The unrecoverable identity `0ff48f99d8b6d3a262ddf0a060bea8e733fc95aa7c4b4d43f19a0f78b107d4d1` remains historical evidence and was not reused. Authority is resolved and durable, but the holdout remains unread: neither holdout nor forward value access is authorized.
 
 For future counted mechanisms, the prepared ladder successor separates Stage 0
 synthetic engineering from the mandatory ES Tier 0 pilot. Tier 1 uses one frozen
@@ -36,9 +36,9 @@ provide energy, metals, and macro evidence. Tier 2 preserves the balanced 16
 markets and Tier 3 preserves the 41-market scientific universe. Every market
 result remains visible. Scientific Alpha eligibility is separate from
 live-execution eligibility, and both are required before deployment
-consideration. Final historical evaluation remains blocked until Final-252 is
-separately reconstructed, certified, and activated. No new mechanism has
-started.
+consideration. Final historical evaluation remains blocked until a passing,
+unchanged Tier 3 mechanism receives separate single-use holdout access
+authorization. No new mechanism has started.
 
 The canonical source and clean-restart baseline are complete. The
 development-only causal-observation contract is frozen, and its observation-only
@@ -50,13 +50,13 @@ closed and remain evidence only. V10 is the immutable monthly certification
 source and performs compact Parquet/Zstandard normalization plus two-pass
 independent certification one market at a time, with immutable market and
 sealed-year checkpoints. It is
-synthetic-test proven. Complete ES, NQ, CL, GC, ZN, and 6E 2010-2025
+synthetic-test proven. Complete ES, NQ, CL, GC, ZN, 6E, SR3, ZB, and 6J 2010-2025
 checkpoints passed two-pass maximum-robustness certification. Their certified
 development rows from 2010 through the exclusive `2025-07-13T22:00:00Z`
-cutoff are active as 96 annual research-ready causal-price Parquets at
+cutoff are active as 136 annual research-ready causal-price Parquets at
 `data/active/causally_gated_normalized/{market}/{year}/{year}.parquet`. The
 partial 2025 files are interval-bound non-selection research; July 14 onward
-remains inaccessible. The other 35 markets have not
+remains inaccessible. The other 32 markets have not
 started, and the active subset makes no full-universe or Alpha claim. The
 certified V10 monthly evidence remains immutable. The Final Sealed 252-Session
 Holdout remains pristine and unread. See

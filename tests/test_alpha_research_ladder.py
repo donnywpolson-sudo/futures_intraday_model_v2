@@ -662,7 +662,9 @@ def test_every_stage_accepts_only_the_exact_successful_progression(tmp_path: Pat
         assert len(result["mechanism_sha256"]) == 64
 
 
-def _qualification_contract() -> dict[str, object]:
+def _qualification_contract(
+    final_252_binding: dict[str, object] | None = None,
+) -> dict[str, object]:
     return build_qualification_successor_contract(
         predecessor_path=(
             "state/alpha_ladder_registry/" + "5" * 64 + "/universe_contract.json"
@@ -673,13 +675,14 @@ def _qualification_contract() -> dict[str, object]:
         predecessor_pointer_id="8" * 64,
         prior_failure_closure_id="7" * 64,
         prior_failed_mechanism_id="c" * 64,
+        final_252_binding=final_252_binding,
     )
 
 
 def _active_qualification_ladder(
-    root: Path,
+    root: Path, final_252_binding: dict[str, object] | None = None,
 ) -> tuple[dict[str, object], dict[str, object]]:
-    contract = _qualification_contract()
+    contract = _qualification_contract(final_252_binding)
     contract_path = (
         f"state/alpha_ladder_registry/{contract['contract_id']}/universe_contract.json"
     )
@@ -688,6 +691,7 @@ def _active_qualification_ladder(
         contract_path=contract_path,
         contract_sha256=contract_sha,
         contract_id=str(contract["contract_id"]),
+        final_252_binding=final_252_binding,
     )
     profile_path = (
         root / f"state/alpha_ladder_registry/{contract['contract_id']}/alpha_tiered.yaml"
@@ -960,6 +964,24 @@ def test_final_transition_fails_closed_while_final_252_authority_is_unresolved(
         stage="holdout",
     )
     with pytest.raises(UnauthorizedOperation, match="Final-252 authority is unresolved"):
+        validate_stage_decision(
+            decision, contract_id=str(contract["contract_id"]),
+            mechanism_sha256=mechanism, expected_stage="holdout", root=tmp_path,
+        )
+
+
+def test_resolved_final_252_authority_still_does_not_authorize_access(
+    tmp_path: Path,
+) -> None:
+    contract, _profile = _active_qualification_ladder(
+        tmp_path, {"manifest_id": "f" * 64, "access_allowed": False},
+    )
+    mechanism = "a" * 64
+    decision = _decision(
+        contract_id=str(contract["contract_id"]), mechanism=mechanism,
+        stage="holdout",
+    )
+    with pytest.raises(UnauthorizedOperation, match="separate authorization"):
         validate_stage_decision(
             decision, contract_id=str(contract["contract_id"]),
             mechanism_sha256=mechanism, expected_stage="holdout", root=tmp_path,

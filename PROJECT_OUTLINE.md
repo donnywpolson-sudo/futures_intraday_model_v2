@@ -12,7 +12,7 @@ This file grants no provider access, market-row read, holdout or forward
 access, publication, Git staging/commit/push, activation, trading, or order
 authority.
 
-Authority recovery status: `UNRESOLVED_AUTHORITY_HOLDOUT_ACCESS_FORBIDDEN`. The declared Final-252 identity is preserved, but its exact active bytes are not recoverable; holdout and forward access remain forbidden.
+Final-252 authority status: `SEALED_AUTHORITY_RESOLVED_ACCESS_FORBIDDEN`. Successor manifest `ad1baab30b52fdda95e72777a4930ea18bd78037925cc36a27594f484c876549` is active, durable, and non-authorizing; holdout and forward values remain unread.
 
 ## 2. Current status
 
@@ -23,14 +23,14 @@ Authority recovery status: `UNRESOLVED_AUTHORITY_HOLDOUT_ACCESS_FORBIDDEN`. The 
 | Clean restart | **COMPLETE / CERTIFIED** |
 | Causal-observation contract | **FROZEN** |
 | Observation-only safety implementation | **BUILT / VALIDATED / REMOTELY RECOVERABLE** |
-| Causal observation release | **SIX-MARKET ACTIVE / FULL 41 NOT BUILT** |
+| Causal observation release | **NINE-MARKET ACTIVE / FULL 41 NOT BUILT** |
 | Development-only canary | **V10 ES-2025 EXECUTED / PASSED / INACTIVE** |
-| Full development builder | **ES / NQ / CL / GC / ZN / 6E CERTIFIED / OTHER 35 NOT STARTED** |
+| Full development builder | **ES / NQ / CL / GC / ZN / 6E / SR3 / ZB / 6J CERTIFIED / OTHER 32 NOT STARTED** |
 | Outcomes | **NOT STARTED** |
 | Features | **NOT STARTED** |
 | WFA | **NOT STARTED** |
 | New mechanism | **NOT STARTED** |
-| Final Sealed 252-Session Holdout | **UNRESOLVED AUTHORITY / ACCESS FORBIDDEN** |
+| Final Sealed 252-Session Holdout | **SEALED / AUTHORITY RESOLVED / ACCESS FORBIDDEN** |
 | Forward monitoring | **NOT STARTED** |
 
 Direct DBN use by features, models, WFA, or backtests is forbidden. Raw DBN
@@ -40,7 +40,7 @@ seven-market development canary ran once under consumed authority and passed
 independent verification; its candidates remain unpublished and inactive. The
 full 41-market development release is not built. Earlier full-41 attempts
 failed closed and their inactive partitions are retained only as evidence; they
-do not conflict with the certified six-market active subset.
+do not conflict with the certified nine-market active subset.
 
 The canonical DBN source is frozen and validated, and active source closure
 blocks old derived inputs and retired execution paths. Prior foundation
@@ -71,7 +71,7 @@ user-facing pipeline.
 | Stage | Status | Main input | Main output | Main gate |
 | --- | --- | --- | --- | --- |
 | 1. Canonical Source Custody and Closure | Complete | Canonical DBN custody | Frozen validated source plus active no-read closure | Current source contract and closure proof pass |
-| 2. Causal Observation Foundation | Six markets active; full 41 not built | Certified V10 development-only observations | Active annual subset plus immutable V10 evidence | Remaining markets require separate certification and successor activation |
+| 2. Causal Observation Foundation | Nine markets active; full 41 not built | Certified V10 development-only observations | Active annual subset plus immutable V10 evidence | Remaining markets require separate certification and successor activation |
 | 3. Outcome/Target Foundation | Not started for the new mechanism | Certified causal observations | Separate immutable outcomes | Point-in-time maturity and separation contract |
 | 4. Feature Foundation | Not started for the new mechanism | Certified causal observations | Separate immutable features | Availability, leakage, and transform checks |
 | 5. Chronological Validation and WFA | Not started for the new mechanism | Frozen outcomes and features | Chronological folds and WFA evidence | Training-only transforms, purge, and embargo where required |
@@ -80,7 +80,7 @@ user-facing pipeline.
 | 8. Tier 1 — Frozen Independent-Family Core Pack | Not started for the new mechanism | Passing ES mechanism and a pre-result ZN-or-6E selector | NQ, CL, GC, and selected-macro per-market evidence | CL, GC, and macro pass; NQ stays visible; one mechanism and no tuning |
 | 9. Tier 2 — Balanced 16-Market Replication | Not started for the new mechanism | Passing Tier 1 mechanism | Balanced replication evidence | Frozen identity and Tier 2 gates pass |
 | 10. Tier 3 — Full 41-Market Replication | Not started for the new mechanism | Passing Tier 2 mechanism | Traditional and satellite replication evidence | Traditional 38 pass independently; satellites cannot rescue failure |
-| 11. Final Sealed 252-Session Holdout | Authority bytes unresolved; access forbidden | No admissible input until exact authority is rebuilt and separately activated | No evaluation | Exact recoverable manifest and separate single-use authority required |
+| 11. Final Sealed 252-Session Holdout | Sealed and authority-resolved; access forbidden | Passing unchanged Tier 3 mechanism plus separate single-use authority | No evaluation yet | Active pristine manifest and explicit single-use access authority required |
 | 12. Post-Cutoff Forward Monitoring | Not started | Final frozen candidate after the holdout decision | Forward-only monitoring evidence | No research selection or rescue from forward results |
 
 Exact approvals, receipts, identities, hashes, and detailed evidence
@@ -104,7 +104,7 @@ against the active Alpha ladder and canonical source. The required order is:
 8. qualify Tier 1 NQ, CL, GC, and the selected macro;
 9. replicate through the exact balanced Tier 2 set of 16;
 10. replicate through the exact Tier 3 set of 41; and
-11. separately recover and certify Final-252 before sealed-holdout access.
+11. obtain separate single-use Final-252 access authority only after Tier 3 passes.
 
 Outcome, feature, and WFA rows are not built merely because stages 3-5 appear
 before the mechanism section in the pipeline inventory. Their exact definitions
@@ -156,21 +156,21 @@ release-wide certificate must re-open every certified artifact and prove exact
 set compatibility. Synthetic fault injection covers every market and major
 phase, and the provider-free production rehearsal covers terminal Windows path
 depth without registering a task. The V10 ES-2025 canary remains separate.
-Complete ES, NQ, CL, GC, ZN, and 6E 2010-2025 checkpoints passed two-pass
+Complete ES, NQ, CL, GC, ZN, 6E, SR3, ZB, and 6J 2010-2025 checkpoints passed two-pass
 maximum-robustness certification. Their certified development rows from 2010
-through the declared July 2025 development cutoff are active as 96 annual
+through the declared July 2025 development cutoff are active as 136 annual
 research-ready causal-price files. The partial 2025 files are non-selection
-research only; July 14 onward remains inaccessible. The other 35 markets have
+research only; July 14 onward remains inaccessible. The other 32 markets have
 not started. This incremental
 release makes no full-41, Alpha, model, evaluation, or holdout claim.
 
-The six-market research-facing annual active view is materialized at
+The nine-market research-facing annual active view is materialized at
 `data/active/causally_gated_normalized/{market}/{year}/{year}.parquet`, with an
 adjacent `{year}.parquet.manifest.json`. Each annual file must be derived only
 from the compatible certified V10 monthly artifacts and independently prove
 the same logical rows, ordering, counts, timestamps, source release, source
 contract, causal contract, and development cutoff. The active layout contains
-no month directories. The six-market release was staged inactive, read back
+no month directories. The nine-market release was staged inactive, read back
 completely, independently certified, and activated catalog-last with rollback
 evidence. After all 41 individual certificates and the release-wide certificate
 pass, a separately approved successor may add the remaining compatible
@@ -226,15 +226,15 @@ restart at Stage 0 synthetic engineering after the required foundations and
 mechanism freeze exist.
 
 Final historical evaluation is currently
-`BLOCKED_FINAL_252_AUTHORITY_UNRESOLVED`. No active manifest or pointer exists,
-so holdout and forward access remain forbidden. The 41 markets are the
+`SEALED_AUTHORITY_RESOLVED_ACCESS_FORBIDDEN`. The active manifest defines the
+holdout but grants no value access or evaluation authority. The 41 markets are the
 scientific universe, not an automatic deployment list. Forward deployment
 consideration requires both per-market Alpha eligibility and live-execution
 eligibility; OHLCV alone does not certify spread, depth, queue position,
 market impact, or live fills.
 
 - Development end (exclusive): `2025-07-13T22:00:00Z`.
-- Declared Final-252 custody interval: 2025-07-14 through 2026-07-13; active authority bytes unresolved and access forbidden.
+- Active Final-252 interval: 2025-07-14 through 2026-07-13; authority resolved, sealed, and access forbidden.
 - Forward timestamp boundary: `2026-07-14T00:00:00Z`.
 - General 2023–2024 official-session continuity remains unresolved and is not
   established by the purpose-limited final-252 manifest.

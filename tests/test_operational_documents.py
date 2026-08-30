@@ -572,7 +572,7 @@ def _assert_project_outline_is_concise_current_runbook() -> None:
         "Direct DBN use by features, models, WFA, or backtests is forbidden",
         "seven-market development canary ran once under consumed authority",
         "Final Sealed 252-Session Holdout",
-        "UNRESOLVED AUTHORITY / ACCESS FORBIDDEN",
+            "SEALED / AUTHORITY RESOLVED / ACCESS FORBIDDEN",
         "NEXT CONTROLLED GATE: EXECUTION-DESIGN CONTRACT FREEZE (NO ROW READ)",
     ):
         assert required.lower() in lowered
@@ -884,7 +884,7 @@ def test_current_documents_describe_the_future_mechanism_ladder_without_overclai
         "one equity family",
         "balanced 16",
         "41-market scientific universe",
-        "UNRESOLVED_AUTHORITY_HOLDOUT_ACCESS_FORBIDDEN",
+            "SEALED_AUTHORITY_RESOLVED_ACCESS_FORBIDDEN",
         "No new mechanism has started",
     ):
         assert required.lower() in normalized.lower()
