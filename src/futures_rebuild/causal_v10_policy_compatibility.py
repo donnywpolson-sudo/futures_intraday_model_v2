@@ -18,12 +18,12 @@ POLICY_PATH = Path("src/futures_rebuild/research_gateway_policy.py")
 CANARY_PATH = Path("src/futures_rebuild/causal_observation_canary.py")
 SOURCE_CLOSURE_PATH = Path("src/futures_rebuild/causal_source_closure.py")
 FROZEN_POLICY_SHA256 = "5f8e8eea2600c60506f3017923bdf82e7882f7d8a475958bded3877f36fd01f3"
-CURRENT_POLICY_SHA256 = "100eba3d6f5135493dd88de284a20c673b78e7bdee0cacda0d271d52b551b81b"
+CURRENT_POLICY_SHA256 = "bc4d0e4d06a10ce89285f80e4c48046741bc8b673a88c35379b68511e1e1e299"
 FROZEN_CANARY_SHA256 = "84e4da015466cc0abbac26c6deac20037355682d74889bdb7410ea7d07b907f6"
-CURRENT_CANARY_SHA256 = "916ff41b4155b35f44b2c49f79aa6c53034eb408965c6ba6119e7298ac6493a7"
+CURRENT_CANARY_SHA256 = "b86a20861fde1e24cb1c09a65e3d5a982e72a3f65bb6f0bc80f637b093169097"
 FROZEN_SOURCE_CLOSURE_SHA256 = "834ce6c556f93b208963adc207082e14291f6c2863fa234824dd2e9518199fdc"
 CURRENT_SOURCE_CLOSURE_SHA256 = "48b0bbc3ec10208ecac219c87e18cad52d0adf838a04d8c5a1f6e3b00105751b"
-GATE_SCHEMA = "causal_v10_gateway_policy_compatibility/1.2.0"
+GATE_SCHEMA = "causal_v10_gateway_policy_compatibility/1.3.0"
 MARKET_MAXIMUM_OUTPUT_BYTES = 800_000_000
 MARKET_MAXIMUM_PEAK_ADDITIONAL_BYTES = 1_600_000_000
 MARKET_MINIMUM_FREE_AFTER_PEAK_BYTES = 64 * 1024**3
@@ -51,9 +51,11 @@ def _gate(root: Path) -> dict[str, object]:
         "sidecar_identity_rules_changed": False,
         "standard_query_epoch_rules_changed": False,
         "metadata_shape_compatibility_added": True,
+        "backfill_midnight_boundary_normalization_added": True,
         "diagnostic_parent_duplicate_exclusion_added": True,
         "receipt_scope_changed": False,
         "research_rules_changed": False,
+        "scientific_governance_binding_added": True,
         "market_maximum_output_bytes": MARKET_MAXIMUM_OUTPUT_BYTES,
         "market_maximum_peak_additional_bytes": MARKET_MAXIMUM_PEAK_ADDITIONAL_BYTES,
         "market_minimum_free_after_peak_bytes": MARKET_MINIMUM_FREE_AFTER_PEAK_BYTES,

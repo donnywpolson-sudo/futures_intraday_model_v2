@@ -39,9 +39,11 @@ def test_policy_compatibility_is_exact_and_non_authorizing() -> None:
     assert gate["causal_observation_operation_changed"] is False
     assert gate["receipt_scope_changed"] is False
     assert gate["research_rules_changed"] is False
+    assert gate["scientific_governance_binding_added"] is True
     assert gate["sidecar_identity_rules_changed"] is False
     assert gate["standard_query_epoch_rules_changed"] is False
     assert gate["metadata_shape_compatibility_added"] is True
+    assert gate["backfill_midnight_boundary_normalization_added"] is True
     assert gate["diagnostic_parent_duplicate_exclusion_added"] is True
     assert gate["full_universe_storage_policy_changed"] is False
     assert gate["publication_authorized"] is False

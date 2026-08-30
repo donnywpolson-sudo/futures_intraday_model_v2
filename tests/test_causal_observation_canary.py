@@ -182,6 +182,15 @@ def test_historical_backfill_sidecar_builds_exact_query_contract(tmp_path: Path)
     assert contract["schema"] == "ohlcv-1h"
     assert contract["stype_in"] == "continuous"
     assert contract["symbols"] == ["6N.v.0"]
+    assert contract["start"] == "2010-06-06"
+    assert contract["end"] == "2011-01-01"
+
+    payload["request_end_exclusive"] = "2011-01-02T00:00:00Z"
+    sidecar.write_text(json.dumps(payload), encoding="utf-8")
+    entry["sha256"] = sha256_file(sidecar)
+    entry["size_bytes"] = sidecar.stat().st_size
+    with pytest.raises(IntegrityError, match="interval differs"):
+        _query_contract(tmp_path, entry)
 
 
 def test_bounded_2025_registered_hardlink_reaches_real_decoder_path(

@@ -43,6 +43,7 @@ from .foundation.decoder import (
     iter_statistics,
     iter_statuses,
 )
+from .foundation.snapshot import dbn_filename_interval
 from .foundation.identity import DefinitionIndex
 from .foundation.economics import EconomicsRuleBook
 from .foundation.records import (
@@ -455,6 +456,13 @@ def _query_contract(root: Path, sidecar_entry: Mapping[str, object]) -> dict[str
         start = payload.get("request_start_inclusive")
         end = payload.get("request_end_exclusive")
         symbols = payload.get("source_symbols")
+        filename_start, filename_end = dbn_filename_interval(Path(declared_path).name)
+        if start not in {filename_start, f"{filename_start}T00:00:00Z"} or end not in {
+            filename_end,
+            f"{filename_end}T00:00:00Z",
+        }:
+            raise IntegrityError("historical backfill sidecar interval differs from its DBN path")
+        start, end = filename_start, filename_end
     else:
         declared_path = payload.get("path")
         declared_sha256 = payload.get("file_sha256")
