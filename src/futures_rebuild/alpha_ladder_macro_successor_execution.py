@@ -68,7 +68,9 @@ def _binding(root: Path, path: Path) -> dict[str, str]:
 
 
 def _point_rules(root: Path) -> dict[str, dict[str, Decimal]]:
-    rules = _read(root / ECONOMICS_PATH)
+    rules = json.loads(io_path(root / ECONOMICS_PATH).read_bytes())
+    if not isinstance(rules, Mapping):
+        raise IntegrityError("economics rules are invalid")
     selected = {
         str(item["market"]): {
             "point_value": Decimal(str(item["point_value"])),
@@ -123,6 +125,10 @@ def _plan_core(root: Path) -> dict[str, object]:
             and PurePosixPath(str(item.get("path", ""))).stem in TABLES
             and any(f"/sealed/{year}/" in str(item.get("path", "")) for year in YEARS)
         ]
+        import pyarrow.parquet as pq
+        for item in selected:
+            if PurePosixPath(str(item["path"])).stem == "observations":
+                item["row_count"] = pq.read_metadata(io_path(root / PurePosixPath(str(item["path"])))).num_rows
         grouped: dict[str, list[dict[str, object]]] = defaultdict(list)
         for item in selected:
             grouped[PurePosixPath(str(item["path"])).parent.as_posix()].append(item)

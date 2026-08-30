@@ -97,14 +97,11 @@ def test_wrong_order_or_result_bearing_evidence_is_rejected() -> None:
         )
 
 
-def test_successor_gateway_requires_the_exact_rank1_bound_scope() -> None:
+def test_consumed_successor_gateway_operation_is_retired() -> None:
     scope = {key: "a" * 64 for key in ALPHA_LADDER_MACRO_SUCCESSOR_SCOPE_KEYS}
     scope.update({
         "operation_kind": "PRE_RESULT_MACRO_SUCCESSOR_EXECUTION_PROXY_AND_SEAL",
         "markets": "SR3,ZB,6J", "years": "2018,2019,2020,2021,2022",
     })
-    require_current_real_history_operation(ALPHA_LADDER_MACRO_SUCCESSOR_OPERATION, scope)
-    missing = dict(scope)
-    missing.pop("rank1_pointer_id")
-    with pytest.raises(UnauthorizedOperation, match="gateway scope"):
-        require_current_real_history_operation(ALPHA_LADDER_MACRO_SUCCESSOR_OPERATION, missing)
+    with pytest.raises(UnauthorizedOperation, match="consumed macro successor operation is retired"):
+        require_current_real_history_operation(ALPHA_LADDER_MACRO_SUCCESSOR_OPERATION, scope)

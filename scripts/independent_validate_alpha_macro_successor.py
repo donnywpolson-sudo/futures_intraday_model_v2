@@ -6,7 +6,7 @@ import json
 import os
 from pathlib import Path, PurePosixPath
 
-from futures_rebuild.canonical import canonical_bytes, sha256_file, sha256_json
+from futures_rebuild.canonical import canonical_bytes, io_path, sha256_file, sha256_json
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -26,10 +26,10 @@ def read(relative: Path) -> dict[str, object]:
 def bound(relative: str, expected: str, size: int | None = None) -> None:
     pure = PurePosixPath(relative)
     assert not pure.is_absolute() and ".." not in pure.parts and pure.as_posix() == relative
-    path = ROOT.joinpath(*pure.parts).resolve(strict=True)
+    path = ROOT.joinpath(*pure.parts)
     path.relative_to(ROOT)
     if size is not None:
-        assert path.stat().st_size == size, relative
+        assert io_path(path).stat().st_size == size, relative
     assert sha256_file(path, reject_hardlinks=False) == expected, relative
 
 

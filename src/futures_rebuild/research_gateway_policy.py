@@ -39,6 +39,12 @@ CAUSAL_OBSERVATION_V10_CANARY_OPERATION = (
 ALPHA_LADDER_MACRO_SUCCESSOR_OPERATION = (
     "RUN_ALPHA_LADDER_MACRO_SUCCESSOR_EXECUTION_PROXY_ONCE"
 )
+ALPHA_LADDER_SR3_DIAGNOSTIC_OPERATION = (
+    "DIAGNOSE_ALPHA_LADDER_SR3_UNKNOWN_ONCE"
+)
+ALPHA_LADDER_SR3_REMEDIATION_OPERATION = (
+    "RUN_ALPHA_LADDER_SR3_REMEDIATION_ONCE"
+)
 ALPHA_LADDER_MACRO_SUCCESSOR_SCOPE_KEYS = frozenset(
     {
         "operation_kind",
@@ -103,6 +109,7 @@ PREPARATORY_REAL_HISTORY_OPERATIONS = frozenset(
         "AUDIT_V12_LOCAL_CAUSAL_RELEASE_ALTERNATIVES_READ_ONLY",
         "AUDIT_V9_REGISTERED_SOURCE_DEPENDENCY_WINDOWS_READ_ONLY",
         ALPHA_LADDER_READINESS_CENSUS_OPERATION,
+        ALPHA_LADDER_SR3_DIAGNOSTIC_OPERATION,
         CAUSAL_OBSERVATION_BOUNDED_2025_SMOKE_OPERATION,
         CAUSAL_OBSERVATION_CANARY_OPERATION,
         CAUSAL_OBSERVATION_FULL_BUILD_OPERATION,
@@ -136,26 +143,28 @@ def require_current_real_history_operation(
 
     if operation in PREPARATORY_REAL_HISTORY_OPERATIONS:
         return
-    if operation == ALPHA_LADDER_MACRO_SUCCESSOR_OPERATION:
+    if operation == ALPHA_LADDER_SR3_REMEDIATION_OPERATION:
         research_scope = {
             key: value for key, value in scope.items() if key not in _APPROVAL_SCOPE_KEYS
         }
-        hashes = ALPHA_LADDER_MACRO_SUCCESSOR_SCOPE_KEYS - {
-            "operation_kind", "markets", "years",
+        required = {
+            "operation_kind", "market", "years", "consumed_closure_id",
+            "policy_id", "diagnostic_evidence_id", "carried_evidence_id",
+            "catalog_sha256", "limits_sha256", "implementation_sha256",
+            "plan_id", "plan_sha256",
         }
+        hashes = required - {"operation_kind", "market", "years"}
         if (
-            set(research_scope) != ALPHA_LADDER_MACRO_SUCCESSOR_SCOPE_KEYS
-            or research_scope.get("operation_kind")
-            != "PRE_RESULT_MACRO_SUCCESSOR_EXECUTION_PROXY_AND_SEAL"
-            or research_scope.get("markets") != "SR3,ZB,6J"
+            set(research_scope) != required
+            or research_scope.get("operation_kind") != "POST_DIAGNOSTIC_SR3_REMEDIATION_AND_SEAL"
+            or research_scope.get("market") != "SR3"
             or research_scope.get("years") != "2018,2019,2020,2021,2022"
-            or any(
-                re.fullmatch(r"[0-9a-f]{64}", research_scope.get(key, "")) is None
-                for key in hashes
-            )
+            or any(re.fullmatch(r"[0-9a-f]{64}", research_scope.get(key, "")) is None for key in hashes)
         ):
-            raise UnauthorizedOperation("macro successor gateway scope is invalid")
+            raise UnauthorizedOperation("SR3 remediation gateway scope is invalid")
         return
+    if operation == ALPHA_LADDER_MACRO_SUCCESSOR_OPERATION:
+        raise UnauthorizedOperation("consumed macro successor operation is retired")
     if operation != CERTIFIED_TRIAL_EXECUTION_OPERATION:
         raise UnauthorizedOperation(
             "real-history trial execution is retired outside the certified gateway"
