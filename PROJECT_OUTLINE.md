@@ -8,6 +8,11 @@ controls durable safety and research integrity, and active pointers and their
 bound contracts control exact identity. If prose differs from those live
 authorities, the live authorities win.
 
+All current and new pipeline times use DST-aware Pacific Time
+(`America/Los_Angeles`); canonical event timestamps remain UTC. Exchange-local
+calendar definitions and immutable historical evidence keep their original
+timezone semantics.
+
 This file grants no provider access, market-row read, holdout or forward
 access, publication, Git staging/commit/push, activation, trading, or order
 authority.
@@ -16,191 +21,180 @@ Final-252 authority status: `SEALED_AUTHORITY_RESOLVED_ACCESS_FORBIDDEN`. Succes
 
 ## 2. Current status
 
-| Area | Current state |
+Read the **Experiment board** and **Selected preparation: exact settings** in
+[CURRENT_WORKFLOW.md](CURRENT_WORKFLOW.md) for the selected hypothesis, inputs,
+target, model/rule, comparisons, execution status and next blocker. Those settings
+belong to an experiment; no single feature pack or model defines this pipeline.
+
+| Layer | Role |
 | --- | --- |
-| Canonical DBN source | **COMPLETE / FROZEN / VALIDATED** |
-| Source closure and old-derived-data retirement | **COMPLETE / ACTIVE** |
-| Clean restart | **COMPLETE / CERTIFIED** |
-| Causal-observation contract | **FROZEN** |
-| Observation-only safety implementation | **BUILT / VALIDATED / REMOTELY RECOVERABLE** |
-| Causal observation release | **NINE-MARKET ACTIVE / FULL 41 NOT BUILT** |
-| Development-only canary | **V10 ES-2025 EXECUTED / PASSED / INACTIVE** |
-| Full development builder | **ES / NQ / CL / GC / ZN / 6E / SR3 / ZB / 6J CERTIFIED / OTHER 32 NOT STARTED** |
-| Outcomes | **NOT STARTED** |
-| Features | **NOT STARTED** |
-| WFA | **NOT STARTED** |
-| New mechanism | **NOT STARTED** |
-| Final Sealed 252-Session Holdout | **SEALED / AUTHORITY RESOLVED / ACCESS FORBIDDEN** |
-| Forward monitoring | **NOT STARTED** |
+| Research safeguards | Stable information-timing, chronological, evidence, budget and access requirements |
+| Shared infrastructure | Certified observations, numerical tools, guarded execution, history and reporting reused across studies |
+| Experiment choices | A frozen question, claim, scope, target, feature set, model/rule, benchmarks and decision criteria |
 
-Direct DBN use by features, models, WFA, or backtests is forbidden. Raw DBN
-may feed only the frozen development-only causal-observation contract through
-the committed observation-only safety implementation. The representative
-seven-market development canary ran once under consumed authority and passed
-independent verification; its candidates remain unpublished and inactive. The
-full 41-market development release is not built. Earlier full-41 attempts
-failed closed and their inactive partitions are retained only as evidence; they
-do not conflict with the certified nine-market active subset.
+The reusable discovery sequence is **propose -> declare -> check
+feasibility/readiness -> validate mechanics -> approve and run -> assess evidence
+-> close or qualify**. A complete decision may be unsupported or inconclusive;
+a mechanical failure is a different outcome. A finding does not grant automatic
+continuation or establish alpha.
 
-The canonical DBN source is frozen and validated, and active source closure
-blocks old derived inputs and retired execution paths. Prior foundation
-releases may remain as historical evidence. They do not mean that the new
-clean-restart 41-market development-only causal observation foundation has
-been built or activated.
+The certified causal observation release is published. Its active catalog and
+[verified cutover](reports/causal_compact_successor_v1/CUTOVER.md) establish the
+complete set; the former nine-market view is retained as rollback. Direct DBN
+use by features, models, WFA, or backtests is forbidden. Raw DBN may feed only
+the frozen development-only causal-observation contract. The seven-market
+development canary ran once under consumed authority; its evidence remains
+separate from the completed production foundation.
+
+The installed discovery operation allowlist is empty. Software availability,
+permission to execute, completion and scientific qualification are distinct.
+The original L0 trading experiment remains inactive; completed predictive screens
+are narrower studies, not evidence that L0 economic qualification passed.
+The cockpit is observation-only, with no order-transmission path.
+
+New minute-input studies use the active strict window checks in
+`futures_rebuild.model_input_admission.read_windows`; see the minute safeguards
+in [CURRENT_WORKFLOW.md](CURRENT_WORKFLOW.md). Gaps, disputed intervals, rolls
+and premature inputs refuse affected windows; incomplete outcomes remain
+indeterminate. Optional open interest and settlement remain diagnostic-only.
+This infrastructure activation starts no experiment and grants no research access.
+
+The [focused safeguard audit](docs/DISCOVERY_WORKFLOW_AUDIT.md) records checked
+components and known limits. Historical calibration reports retain their original
+scope; engineering checks cannot clear a statistical-validation failure.
 
 ## 3. Full pipeline
 
+This 15-phase route describes the economic-research ladder. It is not a claim
+that every stage is running, or that every predictive study must implement a
+trading policy. The selected study uses its own declared inputs and claim.
+
 1. Canonical Source Custody and Closure
 2. Causal Observation Foundation
-3. Outcome/Target Foundation
-4. Feature Foundation
-5. Chronological Validation and WFA
-6. Mechanism Definition and Freeze
-7. Stage 0 and Tier 0 — Synthetic Engineering, then ES Qualification
-8. Tier 1 — Frozen Independent-Family Core Pack
-9. Tier 2 — Balanced 16-Market Replication
-10. Tier 3 — Full 41-Market Replication
-11. Final Sealed 252-Session Holdout
-12. Post-Cutoff Forward Monitoring
+3. Research and Access Contract
+4. Outcome/Target Foundation
+5. Feature Library, Bounded Expansion, and Selection Procedure
+6. Mechanism and Evaluation Protocol Freeze
+7. Synthetic Mechanics Validation
+8. Tier 0 — Nested Chronological WFA and ES Pilot
+9. Tier 1 — Independent Cross-Market Qualification
+10. Optional Broad-Generality Branch — Balanced 16-Market Replication
+11. Optional Broad-Generality Branch — Full 41-Market Replication
+12. One-Shot Development-Regime Stress Test — 2023 through July 13, 2025
+13. Frozen-Algorithm Refit Without Evaluation
+14. Final Sealed 252-Session Holdout
+15. Post-Cutoff Forward Monitoring
 
-Internal phase names may remain in code, but they are not the primary
-user-facing pipeline.
+These are the user-facing phase numbers. Immutable code, schema, registry, and
+historical-evidence identifiers retain their original Stage labels and hashes;
+they are compatibility names, not a second pipeline numbering system.
+The current contract sets `broad_generality_claim=false`, so its route is
+Phases 1–9, then 12–15. Phases 10–11 are not applicable; later broadening must
+start a new Phase 3 contract before result access.
 
-## 4. Stage table
+## 4. Phase table
 
-| Stage | Status | Main input | Main output | Main gate |
+The research-design rows below describe the original L0 trading-policy experiment,
+not the selected closing-momentum preparation.
+The adopted retrospective screen retains a distinct study identity and narrower
+claim in the same pipeline. It does not supersede original L0 economic gates or
+acquire historical execution authority through software adoption.
+
+| Phase | Design status | Data/access status | Main output | Main gate |
 | --- | --- | --- | --- | --- |
-| 1. Canonical Source Custody and Closure | Complete | Canonical DBN custody | Frozen validated source plus active no-read closure | Current source contract and closure proof pass |
-| 2. Causal Observation Foundation | Nine markets active; full 41 not built | Certified V10 development-only observations | Active annual subset plus immutable V10 evidence | Remaining markets require separate certification and successor activation |
-| 3. Outcome/Target Foundation | Not started for the new mechanism | Certified causal observations | Separate immutable outcomes | Point-in-time maturity and separation contract |
-| 4. Feature Foundation | Not started for the new mechanism | Certified causal observations | Separate immutable features | Availability, leakage, and transform checks |
-| 5. Chronological Validation and WFA | Not started for the new mechanism | Frozen outcomes and features | Chronological folds and WFA evidence | Training-only transforms, purge, and embargo where required |
-| 6. Mechanism Definition and Freeze | Not started for the new mechanism | Preregistered development evidence | One frozen mechanism identity | Finite budget and preregistration pass |
-| 7. Stage 0 and Tier 0 — Synthetic Engineering, then ES Qualification | Not started for the new mechanism | Frozen mechanism and approved Tier 0 inputs | Synthetic certificate and ES decision | Synthetic mechanics make no Alpha claim; ES must pass and failure closes the mechanism |
-| 8. Tier 1 — Frozen Independent-Family Core Pack | Not started for the new mechanism | Passing ES mechanism and a pre-result ZN-or-6E selector | NQ, CL, GC, and selected-macro per-market evidence | CL, GC, and macro pass; NQ stays visible; one mechanism and no tuning |
-| 9. Tier 2 — Balanced 16-Market Replication | Not started for the new mechanism | Passing Tier 1 mechanism | Balanced replication evidence | Frozen identity and Tier 2 gates pass |
-| 10. Tier 3 — Full 41-Market Replication | Not started for the new mechanism | Passing Tier 2 mechanism | Traditional and satellite replication evidence | Traditional 38 pass independently; satellites cannot rescue failure |
-| 11. Final Sealed 252-Session Holdout | Sealed and authority-resolved; access forbidden | Passing unchanged Tier 3 mechanism plus separate single-use authority | No evaluation yet | Active pristine manifest and explicit single-use access authority required |
-| 12. Post-Cutoff Forward Monitoring | Not started | Final frozen candidate after the holdout decision | Forward-only monitoring evidence | No research selection or rescue from forward results |
+| 1. Canonical Source Custody and Closure | Complete | Canonical custody only; no-read closure active | Frozen validated source | Source contract and closure proof pass |
+| 2. Causal Observation Foundation | All 41 markets certified; compact view active | No new experiment row access granted | 609 annual files; immutable V10 evidence | Complete-set compatibility and catalog-last cutover passed |
+| 3. Research and Access Contract | Inactive L0 candidate successor | No row access | Explicit trading question; 40 new configurations | Source readiness and access approval; confirmation separately blocked |
+| 4. Outcome/Target Foundation | Inactive | Synthetic only | Same-contract opening-print target | Strict endpoint maturity |
+| 5. Feature Library, Bounded Expansion, and Selection Procedure | Inactive | Synthetic only | Two packs; ten profiles | Causal 61-bar history; inner selection |
+| 6. Mechanism and Evaluation Protocol Freeze | Prepared | No execution authority | Fixed-window position ledger | Unpriced execution stops market |
+| 7. Synthetic Mechanics Validation | Engineering only | Synthetic only | Nested search, replay, reload | No alpha claim |
+| 8. Tier 0 — Nested Chronological WFA and ES Pilot | Inactive | ES access absent | Development procedure | Source readiness and approval |
+| 9. Tier 1 — Independent Cross-Market Qualification | Inactive | NQ/CL/GC access absent | Separate development results | Confirmation not ready |
+| 10. Optional Broad-Generality Branch — Balanced 16-Market Replication | **Not applicable to the current contract** | Not authorized | Optional balanced replication evidence | Requires a new preregistered Phase 3 broad-generality claim |
+| 11. Optional Broad-Generality Branch — Full 41-Market Replication | **Not applicable to the current contract** | Not authorized | Optional full-universe evidence | Requires the same pre-result broad-generality claim and passing Phase 10 |
+| 12. One-Shot Development-Regime Stress Test — 2023 through July 13, 2025 | Not started | Development-stress rows not authorized | One whole-period decision plus report-only 2023, 2024, and 2025-to-cutoff slices | Slices are not gates; failure closes that market; no retry |
+| 13. Frozen-Algorithm Refit Without Evaluation | Not started | Refit access not authorized | Fit-parameter artifact only | Same algorithm; no performance evaluation |
+| 14. Final Sealed 252-Session Holdout | Sealed; authority identity resolved | **Access forbidden** | No evaluation yet | Separate single-use access approval required |
+| 15. Post-Cutoff Forward Monitoring | Not started | Forward access not authorized | Forward-only monitoring evidence | No research selection, rescue, or trading authority |
 
 Exact approvals, receipts, identities, hashes, and detailed evidence
 requirements belong in the current contracts, not in this outline.
 
-## 5. Next-stage requirements
+## 5. Next-phase requirements
 
-The family-aware Alpha ladder is active and remotely recoverable. The new
-mechanism is `NOT_STARTED`, ZN or 6E is not selected, and the immediate next
-boundary is the pre-result execution-design freeze. The prepared design grants
-no authority to read rows or execute the selector, but it currently revalidates
-against the active Alpha ladder and canonical source. The required order is:
+Use the selected experiment and precise blocker in CURRENT_WORKFLOW.md. Prepare
+a new scientific declaration only for a justified question, with inherited
+exposure and prior failures visible. Reuse supported numerical and reporting
+components; do not silently borrow another study's access or success criteria.
+Missing readiness evidence or an invalid uncertainty method remains a block.
 
-1. freeze the execution-design contract;
-2. prepare a one-use ZN/6E execution-proxy row-read authorization;
-3. execute the execution-proxy selector only after approval;
-4. freeze the selected macro;
-5. separately define and freeze the mechanism;
-6. run Stage 0 synthetic engineering;
-7. qualify Tier 0 ES;
-8. qualify Tier 1 NQ, CL, GC, and the selected macro;
-9. replicate through the exact balanced Tier 2 set of 16;
-10. replicate through the exact Tier 3 set of 41; and
-11. obtain separate single-use Final-252 access authority only after Tier 3 passes.
+For a hypothesis following the 15-phase economic route:
 
-Outcome, feature, and WFA rows are not built merely because stages 3-5 appear
-before the mechanism section in the pipeline inventory. Their exact definitions
-belong to the mechanism freeze and are constructed only afterward under the
-required row authority.
+1. Declare its claim, predicted market/session scope, competing explanations,
+   target, inputs, comparisons, finite search budget and stopping rules.
+2. Bind Phase 3 to the current causal, research and access contracts. Obtain
+   separate authority before any result-bearing source read.
+3. Define point-in-time targets and features in Phases 4-5, then freeze the
+   complete mechanism and evaluation protocol in Phase 6.
+4. Validate mechanics on generated data in Phase 7. No alpha claim follows.
+5. In Phase 8, fit transformations and select models only within earlier training
+   folds; evaluate later periods without reselection from their results.
+6. Apply the declared independent market qualification in Phase 9. Phases 10-11
+   require a preregistered broad-generality claim; they are not automatic expansion.
+7. After qualification, apply the one-shot development-regime stress test,
+   parameter-only refit, separately authorized sealed test and forward monitoring.
 
-The active historical design is Rank 1. The 2018-2022 interval is the only
-discovery, feature-selection, fitting, WFA, and mechanism-selection window.
-After a market's qualification result is sealed, its unchanged mechanism gets
-one non-pristine recent-regime challenge from 2023 through the declared
-development cutoff. Challenge failure follows the active ladder's
-market and tier failure rules with no retry or tuning. After a pass, only fit
-parameters may be refit over the complete 2018-to-cutoff development interval;
-no further performance evaluation is allowed before Final-252. The binding
-authority is `configs/active_alpha_historical_research_design.json`, which grants
-design identity but no row read, fitting, WFA, evaluation, or holdout access.
+Data-driven transforms are refit on training data; constant/duplicate removal and
+selection actually occur in Phase 8 through inner WFA for the original L0 route.
+There is no full-sample redundancy or feature selection and no
+open-ended formula discovery. Pure fixed-rule predictive studies may require no fitting; their own
+frozen declarations specify the applicable tests and claim ceiling.
 
-The frozen causal-observation contract and committed observation-only safety
-implementation define:
+The original [L0 experiment guide](docs/L0_ALPHA_CANDIDATE.md) owns its five/seven
+feature packs and trading-policy details. The preserved
+[rolling-hour research](docs/ROLLING_HOUR_RESEARCH.md),
+[profit-aligned successor](docs/PROFIT_ALIGNED_RESEARCH.md) and
+[strategy-discovery successor](docs/STRATEGY_DISCOVERY_SUCCESSOR.md) retain their
+separate inactive designs and blocks. Their feature libraries and economic
+criteria are not default settings for a new hypothesis. Preserved
+`configs/fixed_hour_model_comparison_v1.json` and its successors remain evidence;
+this outline does not amend their scientific contracts.
 
-- the development-only boundary;
-- bar start, end, and availability semantics;
-- point-in-time actual contract identity;
-- roll handling;
-- project-session versus official-schedule semantics;
-- missingness and quality states;
-- cadence authority and reconciliation;
-- backward/as-of joins and staleness;
-- tradability;
-- storage and materialization;
-- independent certification; and
-- exclusion of micros, holdout, forward, outcomes, features, and evaluation.
+The active historical design is Rank 1: discovery, feature selection, fitting,
+WFA and mechanism selection use 2018-2022. The later development-regime stress
+test is not independent confirmation. A failure cannot trigger tuning or retry.
+After a pass, only fitted parameters may change in the final refit; no additional
+performance evaluation is allowed before Final-252. The historical-design pointer
+gives design identity, not row access or execution permission.
 
-The canary produced 48,635 valid observations with no invalid quality rows or
-duplicates. Its 940 observed gaps and all incomplete official schedule states
-remained `UNKNOWN_FAIL_CLOSED`; one ES roll discontinuity was recorded, and
-cadence comparisons never overwrote source evidence. No real negative-price
-row appeared, so negative-price support remains synthetic-test proven.
-
-V10 uses one frozen 41-market order and writes inactive candidates below
-`data/causally_gated_normalized/v10/<checkpoint-set>/<market>/<attempt>/`.
-Normalization seals each completed year; a fresh attempt can reuse only a
-hash-bound contiguous sealed-year prefix after rechecking its predecessor
-failure, complete file inventory, source identity, and continuity state. A
-market advances only after two full independent replays in separate processes
-produce identical evidence and an immutable market certificate. Later-market
-failure cannot change an earlier certificate. After all 41 pass, one inactive
-release-wide certificate must re-open every certified artifact and prove exact
-set compatibility. Synthetic fault injection covers every market and major
-phase, and the provider-free production rehearsal covers terminal Windows path
-depth without registering a task. The V10 ES-2025 canary remains separate.
-Complete ES, NQ, CL, GC, ZN, 6E, SR3, ZB, and 6J 2010-2025 checkpoints passed two-pass
-maximum-robustness certification. Their certified development rows from 2010
-through the declared July 2025 development cutoff are active as 136 annual
-research-ready causal-price files. The partial 2025 files are non-selection
-research only; July 14 onward remains inaccessible. The other 32 markets have
-not started. This incremental
-release makes no full-41, Alpha, model, evaluation, or holdout claim.
-
-The nine-market research-facing annual active view is materialized at
-`data/active/causally_gated_normalized/{market}/{year}/{year}.parquet`, with an
-adjacent `{year}.parquet.manifest.json`. Each annual file must be derived only
-from the compatible certified V10 monthly artifacts and independently prove
-the same logical rows, ordering, counts, timestamps, source release, source
-contract, causal contract, and development cutoff. The active layout contains
-no month directories. The nine-market release was staged inactive, read back
-completely, independently certified, and activated catalog-last with rollback
-evidence. After all 41 individual certificates and the release-wide certificate
-pass, a separately approved successor may add the remaining compatible
-markets. The month-partitioned V10 tree remains immutable certification and
-recovery evidence and is not deleted by active-view publication.
-
-The V10 ES-2025 canary is a separate inactive role below
-`data/causally_gated_normalized/v10/_canary/ES/<attempt>/`. It is bounded to
-seven registered source families, one producer decode, one fresh-process
-independent replay, seven monthly partitions, and a six-hour total runtime.
-Even on PASS its bytes cannot count as, seed, or be reused by the complete ES
-market checkpoint; only its exact verified terminal identity may advance the
-campaign from canary to ES normalization.
+Certified V10 monthly artifacts remain immutable audit/recovery evidence. The
+research-facing compact view has one annual observation file and adjacent
+manifest per materialized market-year under
+`data/active/causally_gated_normalized/{market}/{year}/{year}.parquet`.
+Catalog metadata controls exact intervals and identities. Partial 2025 development
+prefixes are non-selection research only. Publication preserved the predecessor
+and authorizes neither evidence deletion nor another research run.
 
 ## 6. Universe, tiers, and time boundaries
 
-The standard ladder successor fixes 41 standard roots and 17 deferred micros
-for future counted mechanisms only. It does not reopen the prior failed
-mechanism. Exact standard tier membership is:
+Every future hypothesis must freeze its expected market, family, asset-class,
+and session scope before outcome access. Corroboration follows that predicted
+scope. The standard ladder successor fixes 41 standard roots and 17 deferred
+micros for future counted mechanisms claiming broad generality only. It does not
+reopen the prior failed mechanism. Exact standard tier membership is:
 
-- **Stage 0 — Synthetic Engineering:** no real-history Alpha claim; freeze the
+- **Phase 7 — Synthetic Engineering:** no real-history Alpha claim; freeze the
   material mechanism before Tier 0.
-- **Tier 0 — ES Qualification:** ES is mandatory; failure closes the mechanism,
-  and NQ cannot rescue it.
-- **Tier 1 — Frozen Core Pack:** NQ, CL, GC, and exactly one preselected ZN or
-  6E. Macro selection is pending and must use a separately approved pre-result
-  execution gate.
-- **Tier 2 — Balanced 16-Market Replication:** ES, NQ, CL, NG, RB, GC, HG,
+- **Phase 8 / Tier 0 — ES Pilot:** ES is the first engineering pilot. For the inactive
+  terminal successor, an economic failure closes ES only; NQ cannot rescue ES.
+- **Phase 9 / Tier 1 — Independent Qualification:** NQ, CL, and GC fit independently.
+  Their failures do not veto a qualified ES market. The terminal
+  `NO_ELIGIBLE_MACRO_DIVERSIFIER` disposition is retained; no macro market may
+  be selected or substituted.
+- **Phase 10 / Tier 2 — Balanced 16-Market Replication:** ES, NQ, CL, NG, RB, GC, HG,
   SR3, ZN, ZB, 6E, 6J, ZC, ZS, LE, HE.
-- **Tier 3 — Full 41-Market Replication:** ES, NQ, RTY, YM, CL, NG, RB, HO,
+- **Phase 11 / Tier 3 — Full 41-Market Replication:** ES, NQ, RTY, YM, CL, NG, RB, HO,
   GC, SI, HG, PL, SR3, SR1, ZQ, TN, ZT, ZF, ZN, ZB, UB, 6A, 6B, 6C, 6E,
   6J, 6M, 6N, 6S, ZC, ZS, ZL, ZM, ZW, KE, LE, HE, GF, BTC, ETH, PA.
 
@@ -208,30 +202,40 @@ Tier 3 contains 38 traditional markets and the BTC, ETH, and PA satellites.
 The traditional group must pass independently; satellite results cannot rescue
 traditional failure.
 
-Independent family credits are capped at one each: ES/NQ together are one
-equity family, CL is energy, GC is metals, and the selected ZN or 6E is macro.
+The historical broad-generality policy caps cross-domain family credits at one each: ES/NQ together are one
+equity family, CL is energy, and GC is metals. The active successor retains
+the terminal `NO_ELIGIBLE_MACRO_DIVERSIFIER` disposition and makes no macro claim.
 NQ remains a correlated equity extension: its result is always reported, its
 failure makes NQ individually Alpha-ineligible, and it cannot substitute for
-ES, CL, GC, or macro. All per-market failures remain visible; aggregate scores
+ES, CL, or GC. All per-market failures remain visible; aggregate scores
 are supplemental and cannot rescue a required failure.
 
+Before registration, the bounded mechanism must bind one conformed scientific
+pass function. The active readiness policy governs unless an explicit
+conformance rule says otherwise; unresolved conflicts block registration. The
+terminal micro-exhaustion screen inherited conservative prior count 168 and
+became counted mechanism 169. It failed before WFA or promotion.
+
 The deferred micros are MES, MCL, MGC, M6E, MNQ, MYM, M2K, M6A, SIL, MBT,
-MET, M6B, MJY, MCD, MSF, MNG, and MHG. They are excluded from the next
+MET, M6B, MJY, MCD, MSF, MNG, and MHG. They are excluded from the
 41-market foundation, cannot rescue standard-market failure, and cannot create
 a micro-specific or second holdout.
 
-The previous mechanism is closed after failure at Tier 0 ES qualification.
-It cannot advance or be retried. A new mechanism has not started and must
-restart at Stage 0 synthetic engineering after the required foundations and
-mechanism freeze exist.
+The prior Tier 0 mechanism and the bounded ES flow-continuation rescue are
+closed after ES failures. Neither can advance, be retried, or be rescued by a
+new holding horizon or threshold. No successor historical evaluation is active. A new mechanism requires its
+own foundations and freeze before Phase 7 synthetic engineering; local
+preparation does not reopen a closed family.
 
 Final historical evaluation is currently
 `SEALED_AUTHORITY_RESOLVED_ACCESS_FORBIDDEN`. The active manifest defines the
-holdout but grants no value access or evaluation authority. The 41 markets are the
-scientific universe, not an automatic deployment list. Forward deployment
-consideration requires both per-market Alpha eligibility and live-execution
-eligibility; OHLCV alone does not certify spread, depth, queue position,
-market impact, or live fills.
+holdout but grants no value access or evaluation authority. The 41 markets are a
+scientific universe, not an automatic deployment list. This research pipeline
+ends at Phase 15 and never authorizes trading. Any later deployment uses a
+separate execution-qualification pipeline covering bid/ask or order-book fill
+simulation, latency, slippage, market impact, capacity, rolls, paper trading,
+operational controls, and separate live-order approval. OHLCV proxies certify
+none of those items.
 
 - Development end (exclusive): `2025-07-13T22:00:00Z`.
 - Active Final-252 interval: 2025-07-14 through 2026-07-13; authority resolved, sealed, and access forbidden.
@@ -267,5 +271,3 @@ Current contracts hold detailed evidence requirements. Git history and
 `docs/LEGACY_WORKFLOWS.md` identifies retired workflow surfaces. Prior
 foundation releases remain evidence only and do not override active pointers,
 contracts, or closure.
-
-NEXT CONTROLLED GATE: EXECUTION-DESIGN CONTRACT FREEZE (NO ROW READ)

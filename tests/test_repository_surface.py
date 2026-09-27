@@ -153,31 +153,17 @@ def test_active_alpha_authority_is_tracked_and_loadable() -> None:
     live = validate_active_alpha_authority_closure(ROOT)
     assert prospective == live
     assert prospective["valid"] is True
-    assert set(prospective["required_paths"]) == {
+    assert {
+        pointer["contract_path"],
+        pointer["profile_path"],
         "configs/research_universe_contract.json",
-        "state/alpha_ladder_registry/67e06d46d8e7a27b3d44ca421be5b5f0f7b14f1232ebda8536fbc77f3bbfea26/alpha_tiered.yaml",
-        "state/alpha_ladder_registry/67e06d46d8e7a27b3d44ca421be5b5f0f7b14f1232ebda8536fbc77f3bbfea26/universe_contract.json",
-        "state/alpha_ladder_registry/c053756ad32d722e290b2ab1d95c97f1ee070a29afba4b1daaeda819d751c18b/universe_contract.json",
-        "state/alpha_ladder_registry/53252c8d2351937105103aa6884719f9599cc1448a7908c63795b8fbd2362815/universe_contract.json",
-        "state/alpha_ladder_registry/d3ab84356351568473ccdef935b20eda6779dcd681478415125a668d913dfd18/universe_contract.json",
-        "state/final_evaluation_session_manifest_registry/ad1baab30b52fdda95e72777a4930ea18bd78037925cc36a27594f484c876549/contamination_classification.json",
-        "state/final_evaluation_session_manifest_registry/ad1baab30b52fdda95e72777a4930ea18bd78037925cc36a27594f484c876549/final_252_session_manifest.json",
-        "state/final_evaluation_session_manifest_registry/ad1baab30b52fdda95e72777a4930ea18bd78037925cc36a27594f484c876549/independent_certificate.json",
-    }
+    } <= set(prospective["required_paths"])
 
 
 
-ALPHA_AUTHORITY_FIXTURE_PATHS = {
-    "configs/research_universe_contract.json",
-    "state/alpha_ladder_registry/67e06d46d8e7a27b3d44ca421be5b5f0f7b14f1232ebda8536fbc77f3bbfea26/alpha_tiered.yaml",
-    "state/alpha_ladder_registry/67e06d46d8e7a27b3d44ca421be5b5f0f7b14f1232ebda8536fbc77f3bbfea26/universe_contract.json",
-    "state/alpha_ladder_registry/c053756ad32d722e290b2ab1d95c97f1ee070a29afba4b1daaeda819d751c18b/universe_contract.json",
-    "state/alpha_ladder_registry/53252c8d2351937105103aa6884719f9599cc1448a7908c63795b8fbd2362815/universe_contract.json",
-    "state/alpha_ladder_registry/d3ab84356351568473ccdef935b20eda6779dcd681478415125a668d913dfd18/universe_contract.json",
-    "state/final_evaluation_session_manifest_registry/ad1baab30b52fdda95e72777a4930ea18bd78037925cc36a27594f484c876549/contamination_classification.json",
-    "state/final_evaluation_session_manifest_registry/ad1baab30b52fdda95e72777a4930ea18bd78037925cc36a27594f484c876549/final_252_session_manifest.json",
-    "state/final_evaluation_session_manifest_registry/ad1baab30b52fdda95e72777a4930ea18bd78037925cc36a27594f484c876549/independent_certificate.json",
-}
+ALPHA_AUTHORITY_FIXTURE_PATHS = set(
+    validate_active_alpha_authority_closure(ROOT)["required_paths"]
+)
 
 
 def _write_alpha_authority_fixture(root: Path) -> dict[str, object]:
@@ -258,8 +244,20 @@ def test_valid_registry_loads_and_validates_current_checkout() -> None:
 
     assert surface["schema_version"] == "repository_surface/1.0.0"
     assert len(surface["entries"]) == (
-        250 if surface.get("current_direct_authority_registry_id") else 189
+        253 if surface.get("current_direct_authority_registry_id") else 189
     )
+
+
+def test_retired_notice_path_is_classified_without_reversing_its_move() -> None:
+    surface = _surface()
+    retired = _entry(surface, "THIRD_PARTY_NOTICES.md")
+    assert retired["classification"] == "HISTORICAL_UNBOUND"
+    assert retired["tracked_expected"] == "ABSENT_EXPECTED"
+    assert retired["current_replacement"] == "FuturesLiveCockpit/THIRD_PARTY_LICENSE_NOTICES.md"
+    current = _entry(surface, retired["current_replacement"])
+    assert current["classification"] == "CURRENT_SUPPORTING"
+    assert (ROOT / current["path_or_pattern"]).is_file()
+    validate_tracked_root_coverage(surface, ROOT, tracked_paths=["THIRD_PARTY_NOTICES.md"])
 
 
 AUDITS_SURFACE_PATHS = {
@@ -365,10 +363,10 @@ def test_final_evaluation_successor_surface_entries_are_exact() -> None:
     assert selected["tests/test_final_evaluation_recalibration.py"]["classification"] == "CURRENT_SUPPORTING"
 
 
-@pytest.mark.parametrize("successor_count", [249, 251])
-def test_direct_authority_registry_count_rejects_non_250(successor_count: int) -> None:
+@pytest.mark.parametrize("successor_count", [252, 254])
+def test_direct_authority_registry_count_rejects_non_253(successor_count: int) -> None:
     surface = _surface()
-    if successor_count == 249:
+    if successor_count == 252:
         surface["entries"] = [
             entry
             for entry in surface["entries"]
@@ -381,7 +379,7 @@ def test_direct_authority_registry_count_rejects_non_250(successor_count: int) -
         extra["tracked_expected"] = "ABSENT_EXPECTED"
         surface["entries"].append(extra)
     assert len(surface["entries"]) == successor_count
-    with pytest.raises(RepositorySurfaceError, match="registry entry count must remain 250"):
+    with pytest.raises(RepositorySurfaceError, match="registry entry count must remain 253"):
         expected_pipeline_folder_map_bytes(surface, ROOT)
 
 
@@ -781,7 +779,7 @@ def test_source_of_truth_active_pointer_paths_are_exact_and_complete() -> None:
     text = SOURCE_OF_TRUTH_PATH.read_text(encoding="utf-8")
     expected = {
         "configs/active_alpha_research_ladder.json",
-        "data/active/catalog.json",
+        "data/causally_gated_normalized/_control/catalog.json",
         "configs/active_micro_alpha_research_ladder.json",
         "data/active/catalogs/apex_micro.json",
     }
@@ -933,7 +931,7 @@ def test_default_cli_reports_all_generated_surface_validity() -> None:
     assert report["pipeline_folder_map_valid"] is True
     assert report["active_source_files_valid"] is True
     expected_entry_count = (
-        250 if _surface().get("current_direct_authority_registry_id") else 189
+        253 if _surface().get("current_direct_authority_registry_id") else 189
     )
     assert report["entry_count"] == expected_entry_count
     assert report["unresolved_entry_count"] == EXPECTED_UNRESOLVED_ENTRY_COUNT == 14

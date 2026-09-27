@@ -68,6 +68,7 @@ SUPPORTED_SCHEMAS = {
     "trades",
 }
 RECEIVE_TIME_COVERAGE_SCHEMAS = {
+    "bbo-1s",
     "definition",
     "statistics",
     "status",

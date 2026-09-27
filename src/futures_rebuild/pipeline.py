@@ -16,6 +16,7 @@ import numpy as np
 
 from .canonical import canonical_bytes, sha256_json
 from .alpha_research_ladder import load_active_ladder
+from .bias_robustness_successor import governance_ledgers
 from .historical_builder import build_synthetic_research_run
 from .historical_engine_contracts import (
     HistoricalResearchDataset,
@@ -25,7 +26,7 @@ from .historical_engine_contracts import (
 from .historical_evaluator import evaluate_frozen_research_run
 from .historical_splitter import split_synthetic_research_run
 from .profiles import ProfileContractError, validate_profiles
-from .errors import ContractError
+from .errors import ContractError, IntegrityError
 from .prop_firm_eod_risk import build_active_draft_policy
 from .prop_firm_phase8 import build_phase8_preparation
 from .research import (
@@ -328,6 +329,8 @@ def build_parser() -> argparse.ArgumentParser:
     subparsers.add_parser("validate-profiles")
     subparsers.add_parser("prop-firm-risk-policy")
     subparsers.add_parser("prop-firm-phase8")
+    subparsers.add_parser("research-governance-ledgers")
+    subparsers.add_parser("rolling-hour-research")
     subparsers.add_parser("smoke")
     for phase in PHASES:
         subparsers.add_parser(f"phase{phase.lower()}")
@@ -351,12 +354,19 @@ def main(argv: Sequence[str] | None = None) -> int:
                     "prop-firm-risk-policy",
                     "prop-firm-phase8",
                 ],
+                "read_only_interfaces": ["research-governance-ledgers", "rolling-hour-research"],
+                "current_research_interface": "rolling-hour-research",
+                "current_research_state": "INACTIVE_SUCCESSOR_STATISTICAL_QUALIFICATION_BLOCKED",
+                "phase_numbering_note": "Below are legacy smoke labels; PROJECT_OUTLINE.md defines research Phases 1-15.",
                 "phases": [
                     {"phase": phase, "purpose": PHASE_PURPOSES[phase]}
                     for phase in PHASES
                 ],
                 "authority": dict(NO_AUTHORITY),
             }
+        elif args.command == "rolling-hour-research":
+            from .rolling_hour_preparation import build_bundle
+            result = build_bundle(root)
         elif args.command == "validate-profiles":
             result = validate_profiles(profiles, repository_root=root)
             contract, profile = load_active_ladder(root)
@@ -380,6 +390,10 @@ def main(argv: Sequence[str] | None = None) -> int:
             result = build_active_draft_policy(root=root)
         elif args.command == "prop-firm-phase8":
             result = build_phase8_preparation(root=root)
+        elif args.command == "research-governance-ledgers":
+            result = governance_ledgers(root)
+            if result["unresolved_count"]:
+                raise IntegrityError("research governance ledgers contain unresolved joins")
         else:
             full = run_synthetic_pipeline(
                 profile_path=profiles, repository_root=root
@@ -391,7 +405,13 @@ def main(argv: Sequence[str] | None = None) -> int:
                 result = next(
                     item for item in full["phases"] if item["phase"] == requested
                 )
-    except (ContractError, ProfileContractError, PipelineGateError, ValueError) as exc:
+    except (
+        ContractError,
+        IntegrityError,
+        ProfileContractError,
+        PipelineGateError,
+        ValueError,
+    ) as exc:
         raise SystemExit(f"BLOCKED: {exc}") from exc
 
     if args.output is not None:

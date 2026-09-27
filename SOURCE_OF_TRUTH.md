@@ -32,7 +32,7 @@
 | Role | Registry path |
 | --- | --- |
 | Standard Alpha pointer | `configs/active_alpha_research_ladder.json` |
-| Standard active data catalog | `data/active/catalog.json` |
+| Standard active data catalog | `data/causally_gated_normalized/_control/catalog.json` |
 | Micro source-selection pointer | `configs/active_micro_alpha_research_ladder.json` |
 | Micro source catalog | `data/active/catalogs/apex_micro.json` |
 

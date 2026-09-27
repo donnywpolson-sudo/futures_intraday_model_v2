@@ -633,6 +633,7 @@ def test_demo_engine_exposes_41_markets_states_and_cached_timeframes() -> None:
         assert len(payload["markets"]) == 41
         assert payload["quick_markets"] == ["ES", "CL", "ZN", "6E", "NQ"]
         assert payload["chart_ranges"] == ["1D", "1W", "1M"]
+        assert payload["display_tz"] == "America/Los_Angeles"
         market_names = {
             market["symbol"]: market["name"] for market in payload["markets"]
         }
@@ -3036,7 +3037,7 @@ def test_packaged_windowed_self_check_uses_exit_code_without_stdout(
     assert cockpit_app.main(["--self-check"]) == 0
 
 
-def test_local_chart_time_formatting_handles_pacific_time_and_dst() -> None:
+def test_chart_time_formatting_is_pacific_and_handles_dst() -> None:
     node = shutil.which("node")
     if node is None:
         # Equivalent dependency-free contract validation for hosts without
@@ -3046,6 +3047,7 @@ def test_local_chart_time_formatting_handles_pacific_time_and_dst() -> None:
         from zoneinfo import ZoneInfo
 
         source = (assets_dir() / "time-format.js").read_text(encoding="utf-8")
+        assert 'PROJECT_TIMEZONE = "America/Los_Angeles"' in source
         assert 'timeZoneName: "short"' in source
         assert 'hour12: true' in source
         assert 'second: "2-digit"' in source
@@ -3073,7 +3075,7 @@ const values = {
 process.stdout.write(JSON.stringify(values));
 """
     env = dict(os.environ)
-    env["TZ"] = "America/Los_Angeles"
+    env["TZ"] = "America/Chicago"
     result = subprocess.run(
         [node, "-e", script, str(assets_dir() / "time-format.js")],
         check=True,
@@ -3096,7 +3098,7 @@ process.stdout.write(JSON.stringify(values));
     assert values["afterFallback"].endswith("PST")
 
 
-def test_frontend_is_local_attributed_and_bounded() -> None:
+def test_frontend_is_pacific_attributed_and_bounded() -> None:
     html = (assets_dir() / "index.html").read_text(encoding="utf-8")
     javascript = (assets_dir() / "app.js").read_text(encoding="utf-8")
     stylesheet = (assets_dir() / "styles.css").read_text(encoding="utf-8")
@@ -3246,7 +3248,7 @@ def test_frontend_is_local_attributed_and_bounded() -> None:
     assert "formatLocalEventTime" in time_format
     assert "formatLocalTickMark" in time_format
     assert "hour12: true" in time_format
-    assert "Computer local time" in html
+    assert "Pacific Time" in html
     assert "state.browserDemo = false" in javascript
     assert "Market-data startup exceeded 60 seconds" in javascript
     assert "Market view unavailable" in javascript

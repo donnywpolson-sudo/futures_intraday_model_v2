@@ -190,11 +190,14 @@ class RepoBoundary:
         return candidate
 
     def assert_snapshot_path(self, path: Path) -> Path:
+        from .custody_successor import resolve_snapshot, NEW_ROOT, OLD_ROOT
+        path = resolve_snapshot(self.active_root, path)
+        subtree = NEW_ROOT if path.is_relative_to(self.active_root / NEW_ROOT) else OLD_ROOT
         candidate = self.assert_active_path(
-            path, purpose="source snapshot", subtree="data/vault/source_snapshots"
+            path, purpose="source snapshot", subtree=subtree.as_posix()
         )
         relative = candidate.relative_to(
-            (self.active_root / "data" / "vault" / "source_snapshots").resolve(
+            (self.active_root / subtree).resolve(
                 strict=False
             )
         )

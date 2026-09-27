@@ -483,7 +483,7 @@ def test_demo_mode_uses_isolated_state_root(
     calls: dict[str, object] = {}
     monkeypatch.setattr(cockpit_app, "app_data_dir", lambda: tmp_path)
 
-    def fake_run_desktop(*, engine: object, state_path: Path, demo: bool) -> int:
+    def fake_run_desktop(*, engine: object, state_path: Path, demo: bool, candidate_reports=None) -> int:
         calls.update({"engine": engine, "state_path": state_path, "demo": demo})
         return 0
 

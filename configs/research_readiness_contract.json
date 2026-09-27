@@ -2,7 +2,7 @@
   "schema_version": 1,
   "contract_version": "2.1.0-robustness-monitoring",
   "project": "futures_intraday_model_v2",
-  "contract_status": "IMPLEMENTED_SYNTHETICALLY_VALIDATED_DATA_FOUNDATION_ABSENT",
+  "contract_status": "IMPLEMENTED_SYNTHETICALLY_VALIDATED_CAUSAL_OBSERVATION_FOUNDATION_ACTIVE",
   "independence": {
     "common_interpreter_allowed": true,
     "byte_identical_provenance_preserving_source_copies_allowed": true,
@@ -55,7 +55,7 @@
   },
   "readiness": {
     "target_state": "HISTORICAL_RESEARCH_READY",
-    "current_state": "SYNTHETIC_CONTRACTS_PASS_DATA_FOUNDATION_NOT_BUILT",
+    "current_state": "CAUSAL_OBSERVATION_FOUNDATION_ACTIVE_TRIAL_REGISTRATION_REQUIRES_ROW_CERTIFICATE",
     "ready": false,
     "readiness_is_execution_authority": false,
     "document_or_config_creation_marks_ready": false,

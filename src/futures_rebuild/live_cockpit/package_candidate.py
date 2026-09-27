@@ -103,7 +103,7 @@ PACKAGE_INPUTS = (
     "configs/environment.lock.json",
     "configs/offline_vault_environment.lock.json",
     "configs/runtime_wheel_lock.json",
-    "THIRD_PARTY_NOTICES.md",
+    "FuturesLiveCockpit/THIRD_PARTY_LICENSE_NOTICES.md",
     "pyproject.toml",
     "requirements-runtime.lock",
     "requirements.lock",
@@ -119,7 +119,7 @@ ARCHIVE_PATHS = (
     "FuturesLiveCockpit/_internal/futures_live_cockpit.py",
     "configs/alpha_tiered.yaml",
     "configs/live_cockpit_smoke_plan.json",
-    "THIRD_PARTY_NOTICES.md",
+    "FuturesLiveCockpit/THIRD_PARTY_LICENSE_NOTICES.md",
 )
 FORBIDDEN_PACKAGE_NAMES = frozenset(
     {

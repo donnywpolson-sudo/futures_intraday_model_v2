@@ -94,7 +94,7 @@ _RETAINED_PHYSICAL_TEMPLATES = {
 }
 _LOGICAL_PATTERNS = {
     "dbn": re.compile(
-        rf"^data/dbn/(definition|ohlcv_1d|ohlcv_1h|ohlcv_1m|ohlcv_1s|statistics|status|trades)/{_MARKET}/{_YEAR}/{_SEGMENT}$"
+        rf"^data/dbn/(?:(definition|ohlcv_1d|ohlcv_1h|ohlcv_1m|ohlcv_1s|statistics|status|trades)/{_MARKET}/{_YEAR}/{_SEGMENT}|bbo_1s/(6E|6J|CL|ES|GC|HE|HG|LE|MCL|MES|NG|NQ|RB|SR3|ZB|ZC|ZN|ZS)/(?P<bbo_year>\d{{4}})/(?P=bbo_year)-\d{{2}}-\d{{2}}(?:_\d{{4}}-\d{{2}}-\d{{2}})?\.dbn\.zst(?:\.manifest\.json)?|tbbo/(6E|6J|CL|ES|GC|HE|HG|LE|NG|NQ|RB|SR3|ZB|ZC|ZN|ZS)/(?P<tbbo_year>\d{{4}})/(?P=tbbo_year)-\d{{2}}-\d{{2}}_\d{{4}}-\d{{2}}-\d{{2}}\.dbn\.zst(?:\.manifest\.json)?)$"
     ),
     "raw": re.compile(rf"^data/raw/{_MARKET}/{_YEAR}/{_SEGMENT}/{_SEGMENT}$"),
     "causally_gated_normalized": re.compile(
@@ -438,8 +438,8 @@ def verify_data_release_manifest(
                 purpose="manifested data file",
                 subtree=f"data/{manifest.phase}",
             )
-            assert_plain_file(physical)
-            if physical.stat().st_size != entry.size or sha256_file(physical) != entry.sha256:
+            info = assert_plain_file(physical)
+            if info.st_size != entry.size or sha256_file(physical) != entry.sha256:
                 raise IntegrityError(f"manifested data file failed verification: {entry.logical_path}")
     return manifest
 
@@ -830,15 +830,15 @@ def verify_data_tree_closure(boundary: RepoBoundary) -> dict[str, int]:
                 if manifest.phase in RETAINED_RELEASE_ID_COPY_PHASES:
                     retained_path = manifest.retained_release_id_relative_path(entry)
                     retained_file = boundary.active_root / retained_path
-                    if retained_file.exists():
+                    if io_path(retained_file).exists():
                         boundary.assert_active_path(
                             retained_file,
                             purpose="retained release-ID transition copy",
                             subtree=f"data/{manifest.phase}",
                         )
-                        assert_plain_file(retained_file)
+                        info = assert_plain_file(retained_file)
                         if (
-                            retained_file.stat().st_size != entry.size
+                            info.st_size != entry.size
                             or sha256_file(retained_file) != entry.sha256
                         ):
                             raise IntegrityError(
@@ -859,11 +859,8 @@ def verify_data_tree_closure(boundary: RepoBoundary) -> dict[str, int]:
         if not root.exists():
             continue
         assert_no_linklike_ancestors(root)
-        for path in root.rglob("*"):
-            if is_linklike(path):
-                raise IntegrityError("data tree contains a link-like path")
-            if path.is_file():
-                observed.add(path.relative_to(boundary.active_root).as_posix())
+        for path in iter_plain_files(root, reject_hardlinks=False):
+            observed.add(path.relative_to(boundary.active_root).as_posix())
     if observed != set(manifested) | set(retained):
         raise IntegrityError("data tree contains orphaned or missing manifested files")
     return {"data_files": len(observed), "manifests": manifests}

@@ -1,0 +1,153 @@
+{
+  "audit_remediations": [
+    {
+      "finding": 1,
+      "resolution": "Canonical promotion remains deferred until a separately validated catalog successor supports bbo-1s and its bundle layout."
+    },
+    {
+      "finding": 2,
+      "resolution": "BBO custody does not modify the active source contract or add BBO to any Alpha source allowlist."
+    },
+    {
+      "finding": 3,
+      "resolution": "Every daily request must return an exact zero fresh cost and the aggregate fresh billable size must remain within the hard cap before any row download."
+    },
+    {
+      "finding": 4,
+      "resolution": "The fixed request ledger is revalidated against the current bbo-1s entitlement range and continuous mappings immediately before every new or resumed download."
+    },
+    {
+      "finding": 5,
+      "resolution": "ZN.v.0 and 6E.v.0 are retained as explicitly requested auxiliary execution evidence and are prohibited from implying a current Alpha consumer."
+    },
+    {
+      "finding": 6,
+      "resolution": "Acquisition certifies byte custody only; row quality, contract matching, spread, size, duplicate, and timestamp checks require separate row-access authority."
+    },
+    {
+      "finding": 7,
+      "resolution": "Canonical promotion is provider-free, non-urgent, separately approved, and cannot run as part of acquisition."
+    }
+  ],
+  "canonical_promotion": {
+    "active_source_contract_change": false,
+    "alpha_source_allowlist_change": false,
+    "catalog_compatible_now": false,
+    "destination": "data/dbn/bbo_1s/execution_bundle_v1",
+    "mode": "CREATE_ONLY_VERIFIED_COPY_PRESERVE_PROVIDER_STAGING",
+    "publication_staging_root": "state/data_publication_staging/l1_bbo1s_canonical_promotion",
+    "requires_independent_validation": true,
+    "requires_separate_approval": true,
+    "state": "DEFERRED_PROVIDER_FREE_NOT_PART_OF_ACQUISITION"
+  },
+  "credential_source": {
+    "binding": "PATH_ONLY_CONTENT_NEVER_REPORTED",
+    "path": "api.env"
+  },
+  "dataset": "GLBX.MDP3",
+  "expected_billable_bytes": 1650862880,
+  "implementation_sha256": "2671eeed589ca6331ab3d594771750210bd70739aada11877359a4742169ae69",
+  "forbidden": {
+    "active_data_mutation": true,
+    "alpha_feature_or_target_use": true,
+    "canonical_promotion_during_acquisition": true,
+    "credential_log_stage_or_report": true,
+    "dbn_row_decode": true,
+    "holdout_or_forward_evaluation": true,
+    "model_fit_or_prediction": true,
+    "overwrite_existing_files": true,
+    "trading_or_order_access": true
+  },
+  "limits": {
+    "maximum_billable_bytes": 2000000000,
+    "maximum_host_runtime_seconds": 21600,
+    "maximum_metadata_calls": 524,
+    "maximum_metadata_attempts": 2096,
+    "maximum_parallel_downloads": 4,
+    "maximum_retries_per_request": 3,
+    "maximum_staged_bytes": 5000000000,
+    "maximum_timeseries_attempts": 1044,
+    "minimum_billable_bytes": 1400000000,
+    "minimum_nonempty_requests": 250,
+    "required_free_disk_bytes": 5000000000,
+    "throttled_parallel_downloads": 2
+  },
+  "operation": "ACQUIRE_L1_EXECUTION_BBO_1S_QUARANTINE_V1_ONCE",
+  "period": {
+    "end_date_inclusive": "2026-08-31",
+    "local_end_exclusive": "12:10:00",
+    "local_start_inclusive": "09:55:00",
+    "request_count": 261,
+    "start_date_inclusive": "2025-09-01",
+    "timezone": "America/Chicago",
+    "weekdays_only": true
+  },
+  "plan_id": "37c3ea675bdbe18ac32a842d1a399c2fd33c82b76f18435bcf169e9f7fffcb7f",
+  "preflight": {
+    "all_symbols_must_resolve_without_partial_or_not_found": true,
+    "dataset_schema_range_must_cover_every_request": true,
+    "empty_sessions_are_explicit_sidecars_without_download": true,
+    "exact_zero_cost_required_per_daily_request": true,
+    "fresh_billable_size_required_per_daily_request": true,
+    "revalidate_before_resume": true,
+    "stop_before_first_download_on_failure": true
+  },
+  "provider": "Databento",
+  "purpose": "Preserve narrow one-year top-of-book execution evidence without admitting it to Alpha research.",
+  "request_symbol_order": [
+    "ES.v.0",
+    "NQ.v.0",
+    "CL.v.0",
+    "GC.v.0",
+    "ZN.v.0",
+    "6E.v.0",
+    "MES.v.0",
+    "MES.v.1",
+    "MCL.v.0",
+    "MCL.v.1"
+  ],
+  "research_classification": "PARTIAL_FINAL_HOLDOUT_PLUS_EARLY_FORWARD_EXECUTION_EVIDENCE_SEALED",
+  "schema": "bbo-1s",
+  "schema_version": "l1_execution_quarantine_plan/1.0.0",
+  "staging": {
+    "acquisition_event_root": "state/provider_acquisition_events/l1_execution_quarantine_v1",
+    "acquisition_record_root": "state/provider_acquisitions/l1_execution_quarantine_v1",
+    "attempt_root": "state/provider_acquisition_staging/l1_execution_quarantine_v1",
+    "file_partition": "ONE_COMBINED_TEN_SYMBOL_DBN_PER_NONEMPTY_WEEKDAY",
+    "raw_template": "raw/bbo-1s/<year>/<trade_date>.dbn.zst",
+    "sidecar_template": "sidecars/bbo-1s/<year>/<trade_date>.json",
+    "state": "SEALED_PROVIDER_CUSTODY_NOT_ROW_QUALITY_CERTIFIED",
+    "wire_compression": "zstd",
+    "wire_encoding": "dbn"
+  },
+  "state": "PREPARED_REQUIRES_SEPARATE_PROVIDER_ACQUISITION_APPROVAL",
+  "stype_in": "continuous",
+  "stype_out": "instrument_id",
+  "symbols": {
+    "auxiliary_no_current_alpha_consumer": [
+      "ZN.v.0",
+      "6E.v.0"
+    ],
+    "current_alpha_authority": [
+      "ES.v.0",
+      "NQ.v.0",
+      "CL.v.0",
+      "GC.v.0"
+    ],
+    "mapped_micro_roll_candidates": [
+      "MES.v.0",
+      "MES.v.1",
+      "MCL.v.0",
+      "MCL.v.1"
+    ]
+  },
+  "worker_policy": {
+    "honor_retry_after": true,
+    "isolated_provider_client_per_worker": true,
+    "one_request_owned_by_one_worker": true,
+    "preserve_failed_partials": true,
+    "reduce_to_two_workers_after_http_429": true,
+    "retry_only_network_http_429_or_http_5xx": true,
+    "stop_scheduling_after_first_terminal_failure": true
+  }
+}

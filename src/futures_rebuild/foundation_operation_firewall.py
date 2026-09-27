@@ -71,7 +71,7 @@ def issue_current_source_closure_context(
     contract_id = contract.get("contract_id")
     boundary = contract.get("operation_boundary")
     if (
-        contract.get("schema_version") != "canonical_dbn_source_contract/4.0.0"
+        contract.get("schema_version") != "canonical_dbn_source_contract/5.0.0"
         or re.fullmatch(r"[0-9a-f]{64}", str(contract_id)) is None
         or not isinstance(boundary, dict)
         or boundary.get("current_operation") != CURRENT_SOURCE_CLOSURE_OPERATION

@@ -524,6 +524,20 @@ def test_multiplier_uses_contract_quantity_not_point_value_for_cent_quotes() -> 
     assert state == "RULEBOOK_VALUE_PROVIDER_UNIT_QTY_UNAVAILABLE"
 
 
+def test_multiplier_uses_rulebook_for_declared_non_multiplier_provider_unit() -> None:
+    multiplier, state = _resolve_multiplier(
+        rulebook=RULEBOOK,
+        market="ZQ",
+        definition=_definition(
+            market="ZQ",
+            raw_symbol="ZQH4",
+            unit_of_measure_qty_nano=1_000_000_000,
+        ),
+    )
+    assert multiplier == 4_167_000_000_000
+    assert state == "RULEBOOK_VALUE_PROVIDER_UNIT_QTY_UNAVAILABLE"
+
+
 def test_decoder_admits_exact_canary_reference_bar_schemas(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

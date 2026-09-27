@@ -20,6 +20,7 @@ from .alpha_research_ladder import load_active_ladder, validate_stage_registrati
 from .boundary import RepoBoundary
 from .canonical import canonical_bytes, sha256_file, sha256_json
 from .certified_research_gateway import CertifiedResearchGateway
+from .research_gateway_policy import scientific_governance_binding
 from .errors import IntegrityError, UnauthorizedOperation
 from .preexecution_fold_certification import load_registration_ready_certificate
 
@@ -144,6 +145,7 @@ def _registration(
             "evidence_sha256": ARTIFACT_SHA256["pilot_readiness_certificate.json"],
             "certificate_id": PILOT_CERTIFICATE_ID,
         },
+        "scientific_governance_binding": scientific_governance_binding(root),
         "readiness_publication_binding": {
             "publication_path": (PUBLISHED_ROOT / "publication_manifest.json").as_posix(),
             "publication_id": publication["publication_id"],

@@ -1,0 +1,6 @@
+# Approved optional research-only wheels: CPython 3.11 / Windows x86-64.
+# No upgrades to the existing runtime. Install with --require-hashes.
+--only-binary=:all:
+numpy==2.4.4 --hash=sha256:6bbe4eb67390b0a0265a2c25458f6b90a409d5d069f1041e6aff1e27e3d9a79e
+xgboost==3.0.5 --hash=sha256:660774249d28a729ba8d22dd3d2c048c56e58f65a683b25ef3252e3383fe956f
+scipy==1.17.1 --hash=sha256:d30e57c72013c2a4fe441c2fcb8e77b14e152ad48b5464858e07e2ad9fbfceff

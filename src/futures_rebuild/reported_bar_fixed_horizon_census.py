@@ -32,7 +32,7 @@ PROTOCOL_SHA256 = "f2d6b5bffe65a46827cadfc45dfbdcebe37131cd4ba7cc7bcabe78f1b4585
 PLAN_PATH = Path("configs/reported_bar_fixed_horizon_source_census_plan.json")
 OUTPUT_ROOT = Path("state/unpublished_evidence/reported_bar_fixed_horizon_source_census")
 ACTIVE_CALENDAR_POINTER = Path("configs/active_cash_open_impulse_historical_calendar.json")
-ACTIVE_CATALOG_PATH = Path("data/active/catalog.json")
+ACTIVE_CATALOG_PATH = Path("data/causally_gated_normalized/_control/catalog.json")
 RUNNER_PATH = Path("scripts/run_reported_bar_fixed_horizon_source_census.py")
 REQUIRED_COLUMNS = frozenset(
     {"actual_identity_hash", "disposition", "event_at_ns", "exchange_session_date", "source_row_sha256"}

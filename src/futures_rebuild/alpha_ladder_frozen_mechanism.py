@@ -18,6 +18,8 @@ from .errors import IntegrityError, UnauthorizedOperation
 MECHANISM_SCHEMA = "alpha_ladder_frozen_mechanism/1.0.0"
 COUNTED_SUCCESSOR_SCHEMAS = frozenset({
     "alpha_ladder_full_regular_source_observable_successor/1.0.0",
+    "fixed_hour_ridge_frozen_mechanism/1.0.0",
+    "fixed_hour_multifamily_frozen_mechanism/1.0.0",
 })
 TIER0_CERTIFICATE_SCHEMA = "alpha_ladder_tier0_synthetic_certificate/1.0.0"
 TIER0_DECISION_SCHEMA = "alpha_ladder_stage_decision/1.0.0"

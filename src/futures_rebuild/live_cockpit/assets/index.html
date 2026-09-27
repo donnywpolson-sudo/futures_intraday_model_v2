@@ -51,11 +51,12 @@
                 <h2 id="instrument-contract">Resolving contract</h2>
                 <span id="focus-state" class="state-badge waiting">WAITING</span>
               </div>
-              <p id="instrument-meta">Continuous front contract · Computer local time</p>
+              <p id="instrument-meta">Continuous front contract · Pacific Time</p>
             </div>
           </section>
 
           <section class="header-actions">
+            <button id="candidate-reports-open" class="control-button" type="button" aria-haspopup="dialog" aria-controls="candidate-reports-dialog" title="L0 candidate reports">Research</button>
             <div class="interval-control">
               <span class="control-label">Range</span>
               <div id="chart-range-list" class="chart-range-list" aria-label="Chart range"></div>
@@ -94,6 +95,58 @@
           </section>
         </header>
 
+        <section id="replay-panel" hidden aria-label="Offline simulation playback">
+          <strong id="replay-label">SYNTHETIC SIMULATION — TEST STRATEGY</strong>
+          <div id="replay-library" hidden>
+            <div class="replay-controls">
+              <label>Session <select id="replay-session"></select></label>
+              <button id="replay-random" type="button">Random session</button>
+              <span id="replay-library-count"></span>
+            </div>
+            <details id="replay-exclusions"><summary>Excluded dates</summary><ul id="replay-exclusion-list"></ul></details>
+          </div>
+          <div class="replay-controls">
+            <button id="replay-open" type="button">Open saved run</button>
+            <button id="replay-play" type="button">Play</button>
+            <button id="replay-pause" type="button">Pause</button>
+            <button id="replay-step" type="button">Step one bar</button>
+            <button id="replay-next" type="button" hidden>Next prediction</button>
+            <button id="replay-restart" type="button">Restart</button>
+            <label>Playback rate <select id="replay-speed"><option value="1">1 bar/sec</option><option value="10">10 bars/sec</option><option value="100">100 bars/sec</option></select></label>
+            <span id="replay-clock" role="status">Ready</span>
+          </div>
+          <p id="replay-account"></p>
+          <p id="replay-context" hidden></p>
+          <section id="replay-inspector" hidden aria-label="Recorded model inputs and prediction">
+            <p id="replay-prediction"></p>
+            <div class="replay-outcome-line">
+              <p id="replay-outcome"></p>
+              <button id="replay-outcome-jump" type="button" hidden>Jump to outcome</button>
+            </div>
+            <details id="replay-inputs">
+              <summary>Inspect predictions and inputs</summary>
+              <div class="replay-detail-body">
+                <label>Inspect reached bar <select id="replay-inspect-bar"></select></label>
+                <p id="replay-prediction-exact"></p>
+                <p id="replay-reason"></p>
+                <div id="replay-feature-table" class="replay-log" hidden><table><thead><tr><th>Feature (saved order)</th><th>Value</th></tr></thead><tbody id="replay-features"></tbody></table></div>
+              </div>
+            </details>
+          </section>
+          <details id="replay-run-details">
+            <summary>Run details and assumptions</summary>
+            <div class="replay-detail-body">
+              <p id="replay-model"></p>
+              <p id="replay-decision"></p>
+            </div>
+          </details>
+          <details id="replay-trades"><summary>Simulated fills and test assumptions</summary>
+            <p id="replay-assumptions"></p>
+            <div class="replay-log"><table><thead><tr><th>Time (Pacific)</th><th>Side</th><th>Contracts</th><th>Price</th><th>Commission</th></tr></thead><tbody id="replay-fills"></tbody></table></div>
+          </details>
+          <p id="replay-summary" hidden></p>
+          <p id="replay-error" role="alert" hidden></p>
+        </section>
         <div id="workspace-content" class="workspace-content">
         <section class="chart-card" aria-label="Focused futures chart">
           <div class="chart-toolbar">
@@ -250,6 +303,12 @@
       </div>
     </section>
 
+    <dialog id="candidate-reports-dialog" aria-labelledby="candidate-reports-title">
+      <header class="candidate-report-heading"><div><p class="eyebrow">L0 development research</p><h2 id="candidate-reports-title">Candidate reports</h2></div><button id="candidate-reports-close" type="button" aria-label="Close candidate reports">Close</button></header>
+      <p>Closed-trade reference P&amp;L. These reports do not establish alpha, pass research gates, or select a winner.</p>
+      <div id="candidate-reports-content" aria-live="polite">No report catalog loaded.</div>
+    </dialog>
+    <script src="candidate-reports.js"></script>
     <script src="lightweight-charts.standalone.production.js"></script>
     <script src="time-format.js"></script>
     <script src="app.js?v=chart-first-2"></script>

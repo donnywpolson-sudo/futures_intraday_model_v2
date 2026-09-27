@@ -49,7 +49,7 @@ ACTIVE_SOURCE_HEADER = (
     "# Virtual view only; no file is moved or hidden, and this file grants no operational authority.",
 )
 EXPECTED_REGISTRY_ENTRY_COUNT = 189
-DIRECT_AUTHORITY_REGISTRY_ENTRY_COUNT = 250
+DIRECT_AUTHORITY_REGISTRY_ENTRY_COUNT = 253
 EXPECTED_UNRESOLVED_ENTRY_COUNT = 14
 EXPECTED_PUBLIC_COMMAND_COUNT = 7
 
@@ -196,7 +196,7 @@ REQUIRED_ROLE_PATHS = {
     "DURABLE_SAFETY_POLICY_AUTHORITY": "AGENTS.md",
     "PUBLIC_PACKAGE_AND_COMMAND_AUTHORITY": "pyproject.toml",
     "ACTIVE_STANDARD_ALPHA_IDENTITY": "configs/active_alpha_research_ladder.json",
-    "ACTIVE_STANDARD_DATA_SELECTION": "data/active/catalog.json",
+    "ACTIVE_STANDARD_DATA_SELECTION": "data/causally_gated_normalized/_control/catalog.json",
     "ACTIVE_MICRO_SOURCE_SELECTION": "configs/active_micro_alpha_research_ladder.json",
     "ACTIVE_MICRO_DATA_SELECTION": "data/active/catalogs/apex_micro.json",
     "MICRO_CONTRACT_UNIVERSE_POLICY": "configs/micro_contract_universe_v1.json",
@@ -2000,7 +2000,8 @@ def validate_active_alpha_authority_candidate(
                     f"Alpha transitive authority target is invalid: {relative}"
                 ) from exc
             visited_documents.add(relative)
-            documents.append(nested)
+            if nested.get("schema_version") != "bounded_alpha_discovery_contract/1.4.0":
+                documents.append(nested)
     return {
         "valid": True,
         "contract_id": pointer["contract_id"],

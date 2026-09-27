@@ -1,0 +1,106 @@
+{
+  "authority": {
+    "active_source_contract_change": false,
+    "alpha_source_allowlist_change": false,
+    "canonical_publication": false,
+    "dbn_row_read": false,
+    "provider_access": false,
+    "trading_or_order_access": false
+  },
+  "implementation": {
+    "path": "src/futures_rebuild/l1_execution_bbo_1s_market_partition.py",
+    "sha256": "1c59d48d4ecc1f48224339c5115a26724e81abd709f02c9f56636229fd338576"
+  },
+  "layout": {
+    "canonical_dbn_template": "data/dbn/bbo_1s/{market}/{year}/{trade_date}.dbn.zst",
+    "canonical_sidecar_template": "data/dbn/bbo_1s/{market}/{year}/{trade_date}.dbn.zst.manifest.json",
+    "combined_file_promotion_forbidden": true,
+    "provider_native_market_partition_required": true,
+    "trade_date_basis": "AMERICA_CHICAGO_LOCAL_DATE"
+  },
+  "limits": {
+    "maximum_billable_bytes": 10000000000,
+    "maximum_host_runtime_seconds": 21600,
+    "maximum_metadata_attempts": 37592,
+    "maximum_metadata_calls": 9398,
+    "maximum_parallel_preflight_requests": 6,
+    "maximum_parallel_downloads": 4,
+    "maximum_retries_per_request": 3,
+    "maximum_staged_bytes": 5000000000,
+    "maximum_timeseries_attempts": 18792,
+    "minimum_billable_bytes": 1400000000,
+    "minimum_nonempty_requests": 4500,
+    "minimum_nonempty_requests_per_market": 250,
+    "request_count": 4698,
+    "required_free_disk_bytes": 5000000000,
+    "throttled_parallel_downloads": 2
+  },
+  "market_symbol_groups": {
+    "ES": ["ES.v.0"],
+    "NQ": ["NQ.v.0"],
+    "CL": ["CL.v.0"],
+    "GC": ["GC.v.0"],
+    "ZN": ["ZN.v.0"],
+    "6E": ["6E.v.0"],
+    "MES": ["MES.v.0", "MES.v.1"],
+    "MCL": ["MCL.v.0", "MCL.v.1"],
+    "NG": ["NG.v.0"],
+    "RB": ["RB.v.0"],
+    "HG": ["HG.v.0"],
+    "SR3": ["SR3.v.0"],
+    "ZB": ["ZB.v.0"],
+    "6J": ["6J.v.0"],
+    "ZC": ["ZC.v.0"],
+    "ZS": ["ZS.v.0"],
+    "LE": ["LE.v.0"],
+    "HE": ["HE.v.0"]
+  },
+  "operation": "ACQUIRE_L1_EXECUTION_BBO_1S_MARKET_PARTITION_V1_ONCE",
+  "period": {
+    "end_date_inclusive": "2026-08-31",
+    "local_end_exclusive": "12:10:00",
+    "local_start_inclusive": "09:55:00",
+    "request_count": 261,
+    "start_date_inclusive": "2025-09-01",
+    "timezone": "America/Chicago",
+    "weekdays_only": true
+  },
+  "plan_id": "5281c106b27af8ff8255a4f02be5dc8c1052517672fb5f0d7d517f5e1570b3b5",
+  "predecessor": {
+    "acquisition_manifest_id": "15dc5ccf4fdfcf4f48d586086f8fad2c2dee36f40f53e7763e47102b042edd83",
+    "acquisition_manifest_path": "state/provider_acquisition_staging/l1_execution_quarantine_v1/2a5621a9a895512cbd499f7a034217f255e3d509bbb0f86efff977e86b675730/manifest.json",
+    "acquisition_manifest_sha256": "e49c286b16268348bc1bfb384aa5aba2a6c6ec1a3c15b0da987ae6dbe60d6b06",
+    "acquisition_plan_id": "37c3ea675bdbe18ac32a842d1a399c2fd33c82b76f18435bcf169e9f7fffcb7f",
+    "acquisition_plan_path": "configs/l1_execution_quarantine_plan_v1.json",
+    "acquisition_plan_sha256": "4ec413f1c668f4df0e4021924f08e6d62fc0cef17bd2b74fa1c5e56ca985a504",
+    "acquisition_record_path": "state/provider_acquisitions/l1_execution_quarantine_v1/15dc5ccf4fdfcf4f48d586086f8fad2c2dee36f40f53e7763e47102b042edd83.json",
+    "acquisition_record_sha256": "2475f8d6a0a061ec8c0da9f995ef300475b2bcc907e4075619ed2967bd6a1bb1"
+  },
+  "provider_degraded_dates": {
+    "dates": [
+      "2025-09-17",
+      "2025-09-24",
+      "2025-11-28",
+      "2026-03-16",
+      "2026-04-10",
+      "2026-07-30"
+    ],
+    "evidence_artifact_present": false,
+    "evidence_basis": "USER_REPORTED_DATABENTO_WARNING_FROM_COMPLETED_ACQUISITION",
+    "required_disposition": "PROVIDER_DEGRADED_QUARANTINED",
+    "scope_without_narrower_authoritative_evidence": "ALL_EIGHTEEN_MARKETS"
+  },
+  "schema_version": "l1_execution_bbo_1s_market_partition_plan/1.0.0",
+  "staging": {
+    "candidate_template": "state/provider_acquisition_staging/l1_bbo1s_mp_v1/{receipt_id}/{market}/{year}/{trade_date}.dbn.zst",
+    "create_only": true,
+    "preserve_failed_partials": true,
+    "canonical_publication": false
+  },
+  "state": "PREPARED_REQUIRES_SEPARATE_PROVIDER_APPROVAL",
+  "zero_billable_session_policy": {
+    "predecessor_combined_request_dates": ["2025-12-25", "2026-01-01"],
+    "fresh_zero_billable_disposition": "PROVIDER_ZERO_BILLABLE_NO_DBN_NOT_ROW_QUALITY_CERTIFIED",
+    "market_schedule_certified": false
+  }
+}

@@ -9,8 +9,8 @@ from pathlib import Path
 import pytest
 
 from futures_rebuild.alpha_research_ladder import (
-    build_qualification_successor_contract,
-    build_qualification_successor_profile,
+    build_hypothesis_conditional_successor_contract,
+    build_hypothesis_conditional_successor_profile,
     load_active_ladder,
     validate_contract,
     validate_profile,
@@ -55,25 +55,28 @@ def _source_documents() -> list[dict[str, object]]:
 def test_qualification_successor_pointer_is_exact_and_non_authorizing() -> None:
     pointer = json.loads((ROOT / "configs/active_alpha_research_ladder.json").read_text(encoding="utf-8"))
     assert pointer == {
-        "contract_id": "67e06d46d8e7a27b3d44ca421be5b5f0f7b14f1232ebda8536fbc77f3bbfea26",
-        "contract_path": "state/alpha_ladder_registry/67e06d46d8e7a27b3d44ca421be5b5f0f7b14f1232ebda8536fbc77f3bbfea26/universe_contract.json",
-        "contract_sha256": "d0ecaaf4ef29ef6a6b8648d007b4c6ef5fee4d7b1f7b5d6633ac41f0d42f2f9d",
-        "pointer_id": "1b842b5af0afbf2fa6b580c653b09df4ff21d433258de4da8866cc14a6491bd3",
-        "profile_id": "6567f48886d2e9af1eb2386ab274952123cbe82747a9d4b431adbadb773b1992",
-        "profile_path": "state/alpha_ladder_registry/67e06d46d8e7a27b3d44ca421be5b5f0f7b14f1232ebda8536fbc77f3bbfea26/alpha_tiered.yaml",
-        "profile_sha256": "87d01f8ebabca62ae0d37311f8de9c0215c79bb148bc616b8222af582efe8fcb",
+        "contract_id": "e0725390e137fd6d4670d29e181bbb36dc8a826835605bbb5fe2be1275ec86b8",
+        "contract_path": "state/alpha_ladder_registry/e0725390e137fd6d4670d29e181bbb36dc8a826835605bbb5fe2be1275ec86b8/universe_contract.json",
+        "contract_sha256": "163386ae639308737298eac173127a600cf3780212b1207e2f54e942dcdab567",
+        "pointer_id": "1ef9908ad1b52f2fb9acfb0b7add3a6b7c4c3fe02c8fc20b20396298abcb35c4",
+        "profile_id": "f50697bda61fc0e5cbc48943e12e19132ea35d88d44238f54c4b61c05259d4d3",
+        "profile_path": "state/alpha_ladder_registry/e0725390e137fd6d4670d29e181bbb36dc8a826835605bbb5fe2be1275ec86b8/alpha_tiered.yaml",
+        "profile_sha256": "381ddfe9c27bce91cd61651fcf25f665aeb013b7abac4325ac7b871b3daa8b38",
         "schema_version": "active_alpha_research_ladder/1.0.0",
     }
 
 
 def test_qualification_successor_loads_without_reinterpreting_the_predecessor() -> None:
     contract, profile = load_active_ladder(ROOT)
-    assert contract["contract_id"] == "67e06d46d8e7a27b3d44ca421be5b5f0f7b14f1232ebda8536fbc77f3bbfea26"
-    assert profile["profile_id"] == "6567f48886d2e9af1eb2386ab274952123cbe82747a9d4b431adbadb773b1992"
-    assert contract["predecessor"]["contract_id"] == "c053756ad32d722e290b2ab1d95c97f1ee070a29afba4b1daaeda819d751c18b"
+    assert contract["contract_id"] == "e0725390e137fd6d4670d29e181bbb36dc8a826835605bbb5fe2be1275ec86b8"
+    assert profile["profile_id"] == "f50697bda61fc0e5cbc48943e12e19132ea35d88d44238f54c4b61c05259d4d3"
+    assert contract["predecessor"]["contract_id"] == "67e06d46d8e7a27b3d44ca421be5b5f0f7b14f1232ebda8536fbc77f3bbfea26"
     assert contract["stages"]["final_historical_evaluation"]["status"] == "SEALED_AUTHORITY_RESOLVED_ACCESS_FORBIDDEN"
     assert contract["stages"]["tier_2"]["evaluation_pack"] == ["ES", "NQ", "CL", "NG", "RB", "GC", "HG", "SR3", "ZN", "ZB", "6E", "6J", "ZC", "ZS", "LE", "HE"]
     assert contract["stages"]["tier_3"]["satellite_can_rescue_traditional_failure"] is False
+    assert contract["stages"]["tier_0"]["scientific_gate_condition"].endswith("INCLUDES_ES")
+    assert contract["stages"]["tier_2"]["applicability"].endswith("BROAD_GENERALITY")
+    assert profile["profiles"]["tier_3"]["applicability"].endswith("BROAD_GENERALITY")
 
 
 def test_final_252_successor_is_sealed_but_access_remains_forbidden() -> None:
@@ -99,7 +102,7 @@ def test_recovery_does_not_fabricate_the_broken_successor_targets() -> None:
 def test_successor_authority_closure_is_fresh_checkout_recoverable() -> None:
     report = validate_active_alpha_authority_closure(ROOT)
     assert report["valid"] is True
-    assert report["contract_id"] == "67e06d46d8e7a27b3d44ca421be5b5f0f7b14f1232ebda8536fbc77f3bbfea26"
+    assert report["contract_id"] == "e0725390e137fd6d4670d29e181bbb36dc8a826835605bbb5fe2be1275ec86b8"
 
 def test_predecessor_pointer_remains_git_recoverable_historical_evidence() -> None:
     pointer_path = ROOT / "configs/active_alpha_research_ladder.json"
@@ -181,7 +184,7 @@ def test_final_binding_successor_preserves_current_qualification_ladder(
         "access_allowed": False,
     }
     failure = current["prior_failed_mechanism"]
-    contract = build_qualification_successor_contract(
+    contract = build_hypothesis_conditional_successor_contract(
         predecessor_path=pointer["contract_path"],
         predecessor_sha256=pointer["contract_sha256"],
         predecessor_contract_id=pointer["contract_id"],
@@ -198,7 +201,7 @@ def test_final_binding_successor_preserves_current_qualification_ladder(
 
     contract_path = tmp_path / "universe_contract.json"
     contract_path.write_bytes(canonical_bytes(contract) + b"\n")
-    profile = build_qualification_successor_profile(
+    profile = build_hypothesis_conditional_successor_profile(
         contract_path=contract_path.as_posix(),
         contract_sha256=sha256_file(contract_path),
         contract_id=contract["contract_id"],

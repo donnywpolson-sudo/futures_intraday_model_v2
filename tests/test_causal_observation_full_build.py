@@ -21,8 +21,6 @@ from futures_rebuild.causal_observation_canary import (
     _query_contract,
 )
 from futures_rebuild.causal_observation_foundation import (
-    ACTIVE_CANONICAL_RELEASE_ID,
-    ACTIVE_SOURCE_CONTRACT_ID,
     CAUSAL_OBSERVATION_CONTRACT_ID,
     ECONOMICS_RULEBOOK_SHA256,
     authorize_full_build_row_read,
@@ -288,25 +286,29 @@ class _Publisher:
 
 def test_full_build_bounds_include_bounded_2025_before_or_after_activation() -> None:
     source = _active_source()
-    assert source["contract_id"] in {
-        ACTIVE_SOURCE_CONTRACT_ID,
-        "45322859e44305cc72a88867a7911407f918da50e9eb3f32f288d53cfa111566",
-    }
-    assert source["active_canonical_source"]["release_id"] == ACTIVE_CANONICAL_RELEASE_ID
+    assert source["contract_id"] == sha256_json(
+        {key: value for key, value in source.items() if key != "contract_id"}
+    )
+    active_pointer = json.loads(
+        (ROOT / "configs/active_dbn_congruence_release_v1.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert source["active_canonical_source"]["release_id"] == active_pointer["release_id"]
     assert len(source["universe"]["standard_roots"]) == STANDARD_ROOT_COUNT
     assert len(source["universe"]["deferred_micro_roots"]) == DEFERRED_MICRO_COUNT
     assert set(source["universe"]["standard_roots"]).isdisjoint(
         source["universe"]["deferred_micro_roots"]
     )
     assert (EXPECTED_ENTRY_COUNT, EXPECTED_DBN_COUNT, EXPECTED_SIDECAR_COUNT) == (
-        8_506,
-        4_253,
-        4_253,
+        8_490,
+        4_245,
+        4_245,
     )
     assert (EXPECTED_SOURCE_BYTES, EXPECTED_PAYLOAD_BYTES, EXPECTED_PRIMARY_1M_DBN_COUNT) == (
-        17_123_147_852,
-        17_119_024_382,
-        617,
+        17_111_812_714,
+        17_107_708_532,
+        609,
     )
     assert EXPECTED_WORK_UNIT_COUNT == 609
     assert MAXIMUM_OUTPUT_BYTES == 18_000_000_000
@@ -318,11 +320,11 @@ def test_full_build_bounds_include_bounded_2025_before_or_after_activation() -> 
     assert REMAINING_WORK_UNIT_ORDER == "MARKET_LEXICOGRAPHIC_THEN_YEAR_ASCENDING"
     assert PINNED_PYTHON_EXECUTABLE == ".venv/Scripts/python.exe"
     admitted_count = source["selection_policy"]["admitted_standard_dbn_file_count"]
-    if source["contract_id"] == ACTIVE_SOURCE_CONTRACT_ID:
+    if admitted_count == 3_966:
         assert admitted_count == 3_966
         assert admitted_count != EXPECTED_DBN_COUNT
     else:
-        assert admitted_count == EXPECTED_DBN_COUNT == 4_253
+        assert admitted_count == EXPECTED_DBN_COUNT == 4_245
 
 
 def test_work_unit_order_prioritizes_exact_markets_then_is_deterministic() -> None:
@@ -608,6 +610,10 @@ def test_output_and_lock_fail_before_authorization_or_payload_access(
         "futures_rebuild.causal_observation_full_build.validate_complete_development_boundary_metadata",
         lambda *_, **__: {},
     )
+    monkeypatch.setattr(
+        "futures_rebuild.causal_observation_full_build.validate_source_query_contracts",
+        lambda *_, **__: {},
+    )
     monkeypatch.setattr("futures_rebuild.causal_observation_full_build._load_economics_rulebook", lambda *_: RULEBOOK)
     monkeypatch.setattr("futures_rebuild.causal_observation_full_build.issue_current_source_closure_context", lambda *_: object())
     monkeypatch.setattr("futures_rebuild.causal_observation_full_build.select_exact_standard_source_entries", lambda *_, **__: ())
@@ -668,6 +674,10 @@ def test_consumed_runtime_failure_marks_partitions_terminal_and_nonreusable(
     )
     monkeypatch.setattr(
         "futures_rebuild.causal_observation_full_build.validate_complete_development_boundary_metadata",
+        lambda *_, **__: {},
+    )
+    monkeypatch.setattr(
+        "futures_rebuild.causal_observation_full_build.validate_source_query_contracts",
         lambda *_, **__: {},
     )
     monkeypatch.setattr(

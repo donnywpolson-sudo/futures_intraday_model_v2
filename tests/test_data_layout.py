@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from futures_rebuild.canonical import canonical_bytes
+from futures_rebuild.canonical import canonical_bytes, io_path
 from futures_rebuild.data_layout import (
     DataReleaseManifest,
     DataReleaseReceipt,
@@ -182,6 +182,36 @@ def test_closure_rejects_orphan_data_file(boundary) -> None:
         verify_data_tree_closure(boundary)
 
 
+def test_closure_handles_extended_length_paths(boundary) -> None:
+    stage = boundary.active_root / "state" / "data_publication_staging" / "long"
+    stage.mkdir(parents=True)
+    (stage / "rows").write_bytes(b"rows")
+    interval = "x" * 190
+    manifest = DataReleaseManifest.build(
+        stage,
+        phase="raw",
+        release_kind="long_path_regression",
+        schema_version="1",
+        logical_paths={"rows": f"data/raw/ES/2024/{interval}/rows"},
+    )
+    entry = manifest.files[0]
+    target = boundary.active_root / manifest.physical_relative_path(entry)
+    assert len(str(target)) >= 260
+    io_path(target.parent).mkdir(parents=True)
+    io_path(target).write_bytes(b"rows")
+    manifest_path = (
+        boundary.active_root
+        / "manifests"
+        / "data_releases"
+        / "raw"
+        / f"{manifest.release_id}.json"
+    )
+    manifest_path.parent.mkdir(parents=True)
+    manifest_path.write_bytes(canonical_bytes(manifest.as_dict()) + b"\n")
+
+    assert verify_data_tree_closure(boundary) == {"data_files": 1, "manifests": 1}
+
+
 def test_layout_contract_matches_implementation(boundary) -> None:
     source = Path(__file__).parents[1] / "configs" / "data_layout_contract.json"
     target = boundary.active_root / "configs" / "data_layout_contract.json"
@@ -220,6 +250,95 @@ def test_dbn_manifest_resolves_flat_and_closure_rejects_historical_copy(
     retained.write_bytes(flat.read_bytes())
     with pytest.raises(IntegrityError, match="orphaned"):
         verify_data_tree_closure(boundary)
+
+
+def test_dbn_layout_accepts_market_partitioned_daily_or_annual_bbo(boundary) -> None:
+    stage = boundary.active_root / "state" / "data_publication_staging" / "bbo"
+    stage.mkdir(parents=True)
+    (stage / "day.dbn.zst").write_bytes(b"dbn")
+    (stage / "day.dbn.zst.manifest.json").write_bytes(b"{}\n")
+    manifest = DataReleaseManifest.build(
+        stage,
+        phase="dbn",
+        release_kind="bbo_1s_custody",
+        schema_version="1.0.0",
+        logical_paths={
+            "day.dbn.zst": "data/dbn/bbo_1s/ES/2025/2025-09-17.dbn.zst",
+            "day.dbn.zst.manifest.json": (
+                "data/dbn/bbo_1s/ES/2025/2025-09-17.dbn.zst.manifest.json"
+            ),
+        },
+    )
+    assert len(manifest.files) == 2
+
+    annual = "data/dbn/bbo_1s/ES/2025/2025-09-01_2026-01-01.dbn.zst"
+    annual_manifest = DataReleaseManifest.build(
+        stage,
+        phase="dbn",
+        release_kind="bbo_1s_annual_custody",
+        schema_version="1.0.0",
+        logical_paths={
+            "day.dbn.zst": annual,
+            "day.dbn.zst.manifest.json": f"{annual}.manifest.json",
+        },
+    )
+    assert len(annual_manifest.files) == 2
+
+    for wrong in (
+        "data/dbn/bbo_1s/2025/2025-09-17.dbn.zst",
+        "data/dbn/bbo_1s/RTY/2025/2025-09-17.dbn.zst",
+        "data/dbn/bbo_1s/ES/2024/2025-09-17.dbn.zst",
+        "data/dbn/bbo_1s/ES/2025/2024-09-17_2025-09-18.dbn.zst",
+    ):
+        with pytest.raises(ContractError, match="phase template"):
+            DataReleaseManifest.build(
+                stage,
+                phase="dbn",
+                release_kind="bbo_1s_custody",
+                schema_version="1.0.0",
+                logical_paths={
+                    "day.dbn.zst": wrong,
+                    "day.dbn.zst.manifest.json": (
+                        "data/dbn/bbo_1s/ES/2025/2025-09-17.dbn.zst.manifest.json"
+                    ),
+                },
+            )
+
+
+def test_dbn_layout_accepts_only_certified_monthly_tbbo(boundary) -> None:
+    stage = boundary.active_root / "state" / "data_publication_staging" / "tbbo"
+    stage.mkdir(parents=True)
+    (stage / "month.dbn.zst").write_bytes(b"dbn")
+    (stage / "month.dbn.zst.manifest.json").write_bytes(b"{}\n")
+    logical = "data/dbn/tbbo/ES/2025/2025-09-01_2025-10-01.dbn.zst"
+    manifest = DataReleaseManifest.build(
+        stage,
+        phase="dbn",
+        release_kind="tbbo_16_market_certified_canonical_custody",
+        schema_version="1.0.0",
+        logical_paths={
+            "month.dbn.zst": logical,
+            "month.dbn.zst.manifest.json": f"{logical}.manifest.json",
+        },
+    )
+    assert len(manifest.files) == 2
+
+    for wrong in (
+        "data/dbn/tbbo/RTY/2025/2025-09-01_2025-10-01.dbn.zst",
+        "data/dbn/tbbo/ES/2026/2025-09-01_2025-10-01.dbn.zst",
+        "data/dbn/tbbo/ES/2025/2025-09-01.dbn.zst",
+    ):
+        with pytest.raises(ContractError, match="phase template"):
+            DataReleaseManifest.build(
+                stage,
+                phase="dbn",
+                release_kind="tbbo_16_market_certified_canonical_custody",
+                schema_version="1.0.0",
+                logical_paths={
+                    "month.dbn.zst": wrong,
+                    "month.dbn.zst.manifest.json": f"{logical}.manifest.json",
+                },
+            )
 
 
 def test_publication_recovers_after_data_promotion_before_manifest(

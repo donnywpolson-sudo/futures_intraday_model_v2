@@ -47,7 +47,7 @@ def _score(values: np.ndarray, *, metric: str) -> np.ndarray:
     return means / deviations
 
 
-def exhaustive_cscv_pbo(
+def _exhaustive_cscv_pbo_one(
     strategy_returns: np.ndarray,
     *,
     strategy_ids: tuple[str, ...],
@@ -106,3 +106,48 @@ def exhaustive_cscv_pbo(
         metric,
         "MECHANICS_ONLY",
     )
+
+
+def exhaustive_cscv_pbo_batch(
+    strategy_returns: np.ndarray,
+    *,
+    strategy_ids: tuple[str, ...],
+    blocks: int,
+    metric: str = "mean",
+    maximum_combinations: int = 200_000,
+    tie_tolerance: float = 0.0,
+) -> tuple[CSCVResult, ...]:
+    """Run the canonical CSCV kernel over a leading campaign dimension."""
+
+    values = finite_float64(strategy_returns, name="strategy_returns", ndim=3)
+    return tuple(
+        _exhaustive_cscv_pbo_one(
+            campaign,
+            strategy_ids=strategy_ids,
+            blocks=blocks,
+            metric=metric,
+            maximum_combinations=maximum_combinations,
+            tie_tolerance=tie_tolerance,
+        )
+        for campaign in values
+    )
+
+
+def exhaustive_cscv_pbo(
+    strategy_returns: np.ndarray,
+    *,
+    strategy_ids: tuple[str, ...],
+    blocks: int,
+    metric: str = "mean",
+    maximum_combinations: int = 200_000,
+    tie_tolerance: float = 0.0,
+) -> CSCVResult:
+    values = finite_float64(strategy_returns, name="strategy_returns", ndim=2)
+    return exhaustive_cscv_pbo_batch(
+        values[None, ...],
+        strategy_ids=strategy_ids,
+        blocks=blocks,
+        metric=metric,
+        maximum_combinations=maximum_combinations,
+        tie_tolerance=tie_tolerance,
+    )[0]

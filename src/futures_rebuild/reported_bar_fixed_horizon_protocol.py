@@ -237,7 +237,7 @@ def build_protocol(
             "configs/active_cash_open_impulse_historical_calendar.json": sha256_file(
                 root / "configs/active_cash_open_impulse_historical_calendar.json"
             ),
-            "data/active/catalog.json": sha256_file(root / "data/active/catalog.json"),
+            "data/causally_gated_normalized/_control/catalog.json": sha256_file(root / "data/causally_gated_normalized/_control/catalog.json"),
             "src/futures_rebuild/active_data_view.py": sha256_file(
                 root / "src/futures_rebuild/active_data_view.py"
             ),

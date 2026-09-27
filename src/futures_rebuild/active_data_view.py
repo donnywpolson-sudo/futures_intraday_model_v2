@@ -36,7 +36,7 @@ from .runtime_environment import require_locked_repository_environment
 
 
 CONTRACT_PATH = Path("configs/active_data_view_contract.json")
-ACTIVE_ROOT = Path("data/active")
+ACTIVE_ROOT = Path("data/causally_gated_normalized/_control")
 ACTIVE_PAYLOAD_ROOT = ACTIVE_ROOT / "causally_gated_normalized"
 CATALOG_PATH = ACTIVE_ROOT / "catalog.json"
 STAGING_ROOT = Path("state/active_data_view_staging")
@@ -894,8 +894,14 @@ def validate_catalog(
         year = _plain_year(raw.get("year"))
         key = f"{market}/{year}"
         keys.append(key)
-        expected_parquet, expected_sidecar = _canonical_target(market, year)
+        if 'annual_release_key' in raw:
+            from .annual_foundation_release import minute_paths
+            expected_parquet, expected_sidecar = minute_paths(raw)
+        else:
+            expected_parquet, expected_sidecar = _canonical_target(market, year)
         disposition = raw.get("disposition")
+        if disposition == CERTIFICATION_STATE and "annual_release_key" not in raw:
+            raise IntegrityError("Only certified annual payloads may be selected by relocated controls")
         cohort = (
             cohort_for_coverage(
                 year=year,
@@ -1606,15 +1612,23 @@ def _load_view_catalog(
     catalog = _load_canonical(active / "catalog.json", "active catalog")
     validate_catalog(catalog)
     expected = {"catalog.json"}
+    # Prior compact files remain rollback material; only canonical extras qualify.
+    allow_unreferenced_append_files = False
     for raw in catalog["entries"]:
         assert isinstance(raw, dict)
         if raw["disposition"] != CERTIFICATION_STATE:
+            continue
+        if 'annual_release_key' in raw:
             continue
         parquet_relative = str(raw["parquet_path"]).removeprefix("data/active/")
         sidecar_relative = str(raw["sidecar_path"]).removeprefix("data/active/")
         if parquet_relative.startswith("/") or sidecar_relative.startswith("/"):
             raise IntegrityError("catalog paths are outside the active root")
         expected.update({parquet_relative, sidecar_relative})
+    if (active / "timeframes.json").exists():
+        from .causal_timeframe_view import registered_active_metadata
+
+        expected.update(registered_active_metadata(active))
     if allow_unreferenced_append_files:
         actual: set[str] = set()
         for path in active.rglob("*"):
@@ -1659,6 +1673,10 @@ def verify_view(
     for raw in catalog["entries"]:
         assert isinstance(raw, dict)
         if raw["disposition"] != CERTIFICATION_STATE:
+            continue
+        if 'annual_release_key' in raw:
+            from .annual_foundation_release import verify_minute
+            verify_minute(active.parents[2], raw)
             continue
         parquet_relative = str(raw["parquet_path"]).removeprefix("data/active/")
         sidecar_relative = str(raw["sidecar_path"]).removeprefix("data/active/")
@@ -1979,6 +1997,7 @@ def publish_initial(
     plan: Mapping[str, object],
     approval: Mapping[str, object],
 ) -> dict[str, object]:
+    raise UnauthorizedOperation('Compact publication is retired; use the coordinated annual publisher')
     root = repository_root.resolve(strict=True)
     boundary = RepoBoundary(active_root=root)
     boundary.assert_active_path(root / ACTIVE_ROOT / "_probe", purpose="active publication")
@@ -2083,6 +2102,7 @@ def publish_full_successor(
     plan: Mapping[str, object],
     approval: Mapping[str, object],
 ) -> dict[str, object]:
+    raise UnauthorizedOperation('Compact publication is retired; use the coordinated annual publisher')
     root = repository_root.resolve(strict=True)
     plan_id = _plain_sha256(plan.get("plan_id"), "publication plan ID")
     approval_id = verify_approval(
@@ -2126,6 +2146,12 @@ def publish_full_successor(
     rollback.parent.mkdir(parents=True, exist_ok=True)
     _require_same_volume(active, stage, rollback.parent)
     with FileLease(root / PUBLICATION_LOCK):
+        if (
+            _load_view_catalog(active, allow_unreferenced_append_files=False) != current
+            or _load_view_catalog(stage, allow_unreferenced_append_files=False) != successor
+            or rollback.exists()
+        ):
+            raise IntegrityError("full-successor inputs changed while acquiring publication lease")
         _write_journal(
             journal,
             plan_id=plan_id,
@@ -2190,6 +2216,7 @@ def publish_append_only(
     plan: Mapping[str, object],
     approval: Mapping[str, object],
 ) -> dict[str, object]:
+    raise UnauthorizedOperation('Compact publication is retired; use the coordinated annual publisher')
     root = repository_root.resolve(strict=True)
     plan_id = _plain_sha256(plan.get("plan_id"), "publication plan ID")
     approval_id = verify_approval(
@@ -2355,6 +2382,9 @@ def resolve(
         raise UnauthorizedOperation("requested purpose is not permitted for this cohort")
     if purpose == "SELECTION" and entry["selection_eligible"] is not True:
         raise UnauthorizedOperation("only the discovery cohort permits selection")
+    if 'annual_release_key' in entry:
+        from .annual_foundation_release import verify_minute
+        return verify_minute(root, entry)
     relative = PurePosixPath(str(entry["parquet_path"])).relative_to(
         PurePosixPath("data/active")
     )
@@ -2392,6 +2422,14 @@ def resolve(
     if sha256_file(path) != entry["parquet_sha256"]:
         raise IntegrityError("resolved Parquet changed after active-view verification")
     return path
+
+
+def resolve_partitions(*, repository_root: Path, market: str, year: int,
+                       timeframe: str, purpose: str, require_status: bool = False) -> tuple[Path, ...]:
+    """Explicit cadence API; preserves the legacy single-file 1m resolver."""
+    from .causal_timeframe_view import resolve_partitions as resolve_timeframe
+    return resolve_timeframe(repository_root=repository_root, market=market, year=year,
+                             timeframe=timeframe, purpose=purpose, require_status=require_status)
 
 
 def _parser() -> argparse.ArgumentParser:

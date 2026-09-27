@@ -34,7 +34,7 @@ Rows below resolve from canonical registry roles. Directory or file presence nev
 | Generated active-source-files view | `ACTIVE_SOURCE_FILES.txt` | `CURRENT_SUPPORTING` | no | Deterministically rendered from the tracked path inventory and configs/repository_surface.json. It lists only files classified CURRENT_OPERATIONAL or CURRENT_SUPPORTING and is a virtual active-source view that does not physically move or hide files. It is not normal-work authority, not safety-policy authority, and not the canonical registry. It grants no provider, research, data-read, publication, installation, trading, deletion, Git, or active-state authority. Historical paths remain preserved in place, and absent paths in sanitized no-Git exports do not establish deletion or retirement. |
 | Public package and commands | `pyproject.toml` | `CURRENT_OPERATIONAL` | no | Defines the Python package, dependency surface, pytest baseline, and public console commands. |
 | Standard Alpha pointer | `configs/active_alpha_research_ladder.json` | `CURRENT_OPERATIONAL` | no | Machine-readable standard Alpha contract and profile pointer; distinct from the micro source pointer. |
-| Standard active data catalog | `data/active/catalog.json` | `CURRENT_OPERATIONAL` | yes | Machine-local standard-data selection metadata; absence is permitted in provider-free source exports. |
+| Standard active data catalog | `data/causally_gated_normalized/_control/catalog.json` | `CURRENT_OPERATIONAL` | yes | Machine-local standard-data selection metadata; absence is permitted in provider-free source exports. |
 | Micro source-selection pointer | `configs/active_micro_alpha_research_ladder.json` | `CURRENT_OPERATIONAL` | yes | Machine-local source-only micro pointer. It states that the mechanism is not frozen and permits no evaluation, holdout, forward, or registration action. |
 | Micro source catalog | `data/active/catalogs/apex_micro.json` | `CURRENT_OPERATIONAL` | yes | Accepted Apex-named micro catalog retained at its lineage-bound path; absence is permitted in provider-free source exports. |
 | Current real-history boundary | `src/futures_rebuild/certified_research_gateway.py` | `CURRENT_OPERATIONAL` | no | The sole current real-history registration and trial-execution gateway; use remains separately controlled. |
@@ -76,7 +76,7 @@ Each family appears once. Its exact root entry supplies the role, tracking/local
 | `scripts/` | `SCRIPT_ROOT` | `CURRENT_OPERATIONAL`, `CURRENT_SUPPORTING`, `HISTORICAL_HASH_BOUND`, `PREPARED_NOT_EXECUTED`, `REGENERABLE_CACHE`, `UNRESOLVED_MANUAL_REVIEW` | `MIXED`; local-only: no | `PRESERVE` | Mixed current helpers, prepare-only interfaces, and hash-bound historical command surfaces. |
 | `tests/` | `TEST_ROOT` | `CURRENT_SUPPORTING`, `REGENERABLE_CACHE` | `MIXED`; local-only: no | `PRESERVE` | Provider-free current, high-risk, legacy, and local-evidence lanes coexist under explicit selection. |
 | `docs/` | `DOCUMENTATION_ROOT` | `CURRENT_SUPPORTING`, `HISTORICAL_HASH_BOUND` | `MIXED`; local-only: no | `PRESERVE` | Current supporting documentation plus explicitly classified historical guidance. |
-| `FuturesLiveCockpit/` | `MIXED_COCKPIT_PACKAGING_ROOT` | `CURRENT_OPERATIONAL`, `GENERATED_OUTPUT`, `MIXED_PACKAGING_SOURCE_OUTPUT` | `MIXED`; local-only: yes | `NO_AUTOMATIC_DELETE` | Tracked packaging inputs coexist with ignored executable and onedir runtime output; never apply a directory-wide cleanup rule. |
+| `FuturesLiveCockpit/` | `MIXED_COCKPIT_PACKAGING_ROOT` | `CURRENT_OPERATIONAL`, `CURRENT_SUPPORTING`, `GENERATED_OUTPUT`, `MIXED_PACKAGING_SOURCE_OUTPUT` | `MIXED`; local-only: yes | `NO_AUTOMATIC_DELETE` | Tracked packaging inputs coexist with ignored executable and onedir runtime output; never apply a directory-wide cleanup rule. |
 | `build/` | `CONCURRENT_BUILD_OUTPUT` | `UNRESOLVED_MANUAL_REVIEW` | `UNTRACKED_GENERATED`; local-only: yes | `MANUAL_REVIEW_REQUIRED` | Local build output may contain a current candidate, rollback material, diagnostics, or interrupted work; exact review is required. |
 | `dist/` | `ABSENT_OR_GENERATED_DISTRIBUTION_ROOT` | `GENERATED_OUTPUT` | `ABSENT_EXPECTED`; local-only: yes | `NO_AUTOMATIC_DELETE` | Distribution output may be absent or generated; any future contents require exact revalidation. |
 | `tmp/` | `AMBIGUOUS_LOCAL_REFERENCE_ROOT` | `UNRESOLVED_MANUAL_REVIEW` | `IGNORED_LOCAL`; local-only: yes | `MANUAL_REVIEW_REQUIRED` | Contains reference downloads and possible only local copies, not a proven cache. |
@@ -89,10 +89,10 @@ The counts below use only the canonical classification vocabulary and count regi
 
 | Classification | Entry count |
 | --- | --- |
-| `CURRENT_OPERATIONAL` | 43 |
+| `CURRENT_OPERATIONAL` | 40 |
 | `CURRENT_SUPPORTING` | 42 |
-| `HISTORICAL_HASH_BOUND` | 98 |
-| `HISTORICAL_UNBOUND` | 3 |
+| `HISTORICAL_HASH_BOUND` | 103 |
+| `HISTORICAL_UNBOUND` | 4 |
 | `PREPARED_NOT_EXECUTED` | 6 |
 | `GENERATED_OUTPUT` | 10 |
 | `REGENERABLE_CACHE` | 17 |

@@ -33,6 +33,7 @@ from .databento_auth import (  # noqa: E402
     normalize_api_key,
 )
 from .observation_status import OperatorStatusState, print_operator_status  # noqa: E402
+from ..time_policy import PROJECT_TIMEZONE_NAME  # noqa: E402
 
 
 DEFAULT_DATASET = "GLBX.MDP3"
@@ -49,7 +50,7 @@ DEFAULT_NO_DATA_WARNING_SECONDS = 60.0
 DEFAULT_CHART_TIMEFRAME = "1m"
 SUPPORTED_CHART_TIMEFRAMES = ("1m", "5m", "15m", "30m", "1h", "4h", "1d")
 DEFAULT_CHART_TIMEFRAMES = ",".join(SUPPORTED_CHART_TIMEFRAMES)
-DEFAULT_DISPLAY_TZ = "local"
+DEFAULT_DISPLAY_TZ = PROJECT_TIMEZONE_NAME
 SELECTION_STATE_FILENAME = "live_chart_feed_state.json"
 VSCODE_RUN_BUTTON_ARGS = (
     "--historical-backfill",

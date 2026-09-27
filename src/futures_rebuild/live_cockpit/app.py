@@ -48,6 +48,7 @@ APP_NAME = "Futures Live Cockpit"
 STATE_FILENAME = "state.json"
 CACHE_FILENAME = "bars.sqlite3"
 REQUIRED_ASSETS = (
+    "candidate-reports.js",
     "index.html",
     "styles.css",
     "time-format.js",
@@ -122,9 +123,9 @@ def assets_dir() -> Path:
     return Path(__file__).resolve().parent / "assets"
 
 
-def desktop_asset_target(*, demo: bool) -> str:
+def desktop_asset_target(*, demo: bool, replay: bool = False) -> str:
     """Return a native local path so pywebview serves assets over loopback HTTP."""
-    mode = "demo" if demo else "live"
+    mode = "replay" if replay else ("demo" if demo else "live")
     return f"{(assets_dir() / 'index.html').resolve()}?mode={mode}"
 
 
@@ -483,8 +484,10 @@ class CockpitController:
         engine: CockpitEngine,
         *,
         state_path: Path,
+        candidate_reports: dict[str, Any] | None = None,
     ) -> None:
         self.engine = engine
+        self.candidate_reports = candidate_reports
         self.state_path = state_path
         self.window: object | None = None
         self._ready = False
@@ -735,6 +738,8 @@ class CockpitController:
                 auto_confirm_plan = self._reserve_automatic_confirmation(payload)
                 message = {**message, "payload": self._decorate_history_status(payload)}
         with self._lock:
+            if message.get("type") == "replay_update":
+                self._pending = [pending for pending in self._pending if pending.get("type") != "replay_update"]
             if message.get("type") == "bar_update":
                 payload = message.get("payload")
                 if isinstance(payload, Mapping):
@@ -1006,6 +1011,44 @@ class CockpitApi:
     def bootstrap(self) -> dict[str, Any]:
         return self._controller.bootstrap()
 
+    def replay_command(self, action: str, speed: int | None = None, index: int | None = None) -> dict:
+        from .replay import ReplayCockpitEngine
+        if not isinstance(self._controller.engine, ReplayCockpitEngine):
+            raise ValueError("Replay controls require replay mode")
+        return self._controller.engine.command(action, speed, index)
+
+    def select_replay_session(self, session: str | None = None) -> dict:
+        from .replay import ReplayCockpitEngine
+        if not isinstance(self._controller.engine, ReplayCockpitEngine):
+            raise ValueError("Session selection requires replay mode")
+        return self._controller.engine.select_session(session)
+
+    def open_replay_run(self) -> dict:
+        from .replay import ReplayCockpitEngine
+        if not isinstance(self._controller.engine, ReplayCockpitEngine):
+            raise ValueError("Opening saved runs requires replay mode")
+        if self._controller.window is None:
+            raise ValueError("Desktop window is unavailable")
+        import webview
+        selected = self._controller.window.create_file_dialog(
+            webview.FileDialog.OPEN, allow_multiple=False,
+            directory=str(self._controller.engine.directory),
+            file_types=("Saved results (*.json)",))
+        if not selected:
+            return {"ok": True, "cancelled": True}
+        path = Path(selected[0])
+        if path.name not in {"result.json", "library.json"}:
+            raise ValueError("Choose a completed result.json or library.json")
+        self._controller.engine.open_run(path)
+        return {"ok": True}
+
+    def candidate_reports(self) -> dict[str, Any]:
+        # Prepared at explicit catalog load; no source reader, fitting or live-engine call.
+        return self._controller.candidate_reports or {
+            "reports": [], "comparisons": [],
+            "unavailable_reason": "No L0 report catalog supplied. No observations were loaded.",
+        }
+
     def poll_events(self, limit: int = 100) -> list[dict[str, Any]]:
         return self._controller.poll_events(limit)
 
@@ -1050,7 +1093,11 @@ def build_arg_parser() -> argparse.ArgumentParser:
         description="Observation-only Windows futures chart cockpit."
     )
     parser.add_argument("--market", type=normalize_market, default=None)
+    parser.add_argument("--replay-run", type=Path, help="Display saved results without starting a model or provider.")
     parser.add_argument("--timeframe", type=normalize_timeframe, default=None)
+    parser.add_argument("--study-summaries", type=Path, default=None, help="Explicit discovery metadata catalog")
+    parser.add_argument("--candidate-reports", type=Path, default=None,
+                        help="Show an explicit derived L0 report catalog; no source or research loader.")
     parser.add_argument(
         "--demo", action="store_true", help="Run deterministic data without a provider connection."
     )
@@ -1076,7 +1123,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def run_desktop(*, engine: CockpitEngine, state_path: Path, demo: bool) -> int:
+def run_desktop(*, engine: CockpitEngine, state_path: Path, demo: bool, replay: bool = False,
+                candidate_reports: dict[str, Any] | None = None) -> int:
     try:
         import webview
     except ModuleNotFoundError:
@@ -1089,10 +1137,11 @@ def run_desktop(*, engine: CockpitEngine, state_path: Path, demo: bool) -> int:
         return 3
     controller: CockpitController | None = None
     try:
-        asset_target = desktop_asset_target(demo=demo)
+        asset_target = desktop_asset_target(demo=demo, replay=True) if replay else desktop_asset_target(demo=demo)
         controller = CockpitController(
             engine,
             state_path=state_path,
+            candidate_reports=candidate_reports,
         )
         api = CockpitApi(controller)
         window = webview.create_window(
@@ -1106,7 +1155,7 @@ def run_desktop(*, engine: CockpitEngine, state_path: Path, demo: bool) -> int:
         )
         controller.attach_window(window)
         window.events.closed += controller.request_stop
-        with demo_webview2_offline_environment(demo=demo):
+        with demo_webview2_offline_environment(demo=demo or replay):
             webview.start(gui="edgechromium", debug=False, http_server=True)
     finally:
         if controller is not None:
@@ -1123,11 +1172,12 @@ def main(argv: list[str] | None = None) -> int:
             args.demo,
             args.prepare_live_smoke,
             args.run_approved_live_smoke,
+            args.replay_run is not None,
         )
     )
     if selected_modes > 1:
         raise SystemExit(
-            "--self-check, --demo, --prepare-live-smoke, and the approved smoke task are mutually exclusive"
+            "--self-check, --demo, --replay-run, --prepare-live-smoke, and the approved smoke task are mutually exclusive"
         )
     smoke_paths = (
         args.smoke_plan,
@@ -1152,6 +1202,16 @@ def main(argv: list[str] | None = None) -> int:
         )
     if any(path is not None for path in smoke_paths):
         raise SystemExit("smoke task paths require the approved smoke task mode")
+    if args.replay_run is not None:
+        if any(value is not None for value in (args.market, args.timeframe, args.candidate_reports, args.study_summaries)):
+            raise SystemExit("Replay uses its saved run; market, timeframe, and research catalogs cannot be overridden")
+        from .replay import ReplayCockpitEngine
+        try:
+            replay_engine = ReplayCockpitEngine(args.replay_run)
+        except (OSError, ValueError, TypeError, KeyError) as exc:
+            raise SystemExit(f"Cannot open replay: {exc}") from exc
+        return run_desktop(engine=replay_engine, state_path=app_data_dir() / "replay" / STATE_FILENAME,
+                           demo=False, replay=True)
     if args.self_check:
         result = self_check()
         # PyInstaller's windowed bootloader sets stdout to None. The exit code
@@ -1172,6 +1232,14 @@ def main(argv: list[str] | None = None) -> int:
             )
         )
         return 0
+    candidate_reports = None
+    if args.candidate_reports is not None:
+        from ..l0_alpha_reporting import load_catalog
+        candidate_reports = load_catalog(args.candidate_reports)
+    if args.study_summaries is not None:
+        from ..discovery import load_catalog as load_studies
+        studies = load_studies(args.study_summaries)
+        candidate_reports = {**(candidate_reports or studies), "study_summaries": studies["study_summaries"]}
     root = app_data_dir()
     if args.demo:
         root = root / "demo"
@@ -1217,4 +1285,5 @@ def main(argv: list[str] | None = None) -> int:
             chart_range=chart_range,
             focus_stream_enabled=False,
         )
-    return run_desktop(engine=engine, state_path=state_path, demo=args.demo)
+    return run_desktop(engine=engine, state_path=state_path, demo=args.demo,
+                       candidate_reports=candidate_reports)

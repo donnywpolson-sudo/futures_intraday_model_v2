@@ -47,8 +47,8 @@ def deflated_sharpe_ratio(
         raise ResearchContractError("raw_trial_count must equal a census of at least two")
     if not (0 <= selected_index < count):
         raise ResearchContractError("selected_trial_index is out of bounds")
-    if selection_rule != "MAX_SHARPE":
-        raise ResearchContractError("only prebound MAX_SHARPE selection is supported")
+    if selection_rule not in {"MAX_SHARPE", "PREREGISTERED_INNER_WFA_WINNER"}:
+        raise ResearchContractError("unsupported DSR selection rule")
     if len(values) < 3:
         raise ResearchContractError("DSR needs at least three returns")
     try:
@@ -73,12 +73,15 @@ def deflated_sharpe_ratio(
         census[selected_index], selected_sharpe, rtol=tolerance, atol=tolerance
     ):
         raise ResearchContractError("selected returns do not match the bound trial census row")
-    maximum = float(np.max(census))
-    winners = np.flatnonzero(
-        np.isclose(census, maximum, rtol=tolerance, atol=tolerance)
-    )
-    if len(winners) != 1 or int(winners[0]) != selected_index:
-        raise ResearchContractError("selected trial is not the unique deterministic census winner")
+    if selection_rule == "MAX_SHARPE":
+        maximum = float(np.max(census))
+        winners = np.flatnonzero(
+            np.isclose(census, maximum, rtol=tolerance, atol=tolerance)
+        )
+        if len(winners) != 1 or int(winners[0]) != selected_index:
+            raise ResearchContractError(
+                "selected trial is not the unique deterministic census winner"
+            )
     try:
         with np.errstate(over="raise", invalid="raise", divide="raise"):
             trial_mean = float(np.mean(census, dtype=np.float64))

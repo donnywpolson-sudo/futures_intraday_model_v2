@@ -1,0 +1,57 @@
+{
+  "acquisition": {
+    "attempt_path": "state/provider_acquisition_staging/l1_bbo1s_mp_v1/22b0ff4ed1738b5f026023838fe98cd1b908e0947ec05ea7b0dd5d8d41919245",
+    "plan_id": "5281c106b27af8ff8255a4f02be5dc8c1052517672fb5f0d7d517f5e1570b3b5",
+    "record_id": "c16cdcd0dd1b0ad9966a7b4ce1507c1ba7178b8cf683ff86613d10ae3a79a797",
+    "record_path": "state/provider_acquisitions/l1_execution_bbo_1s_market_partition_v1/c16cdcd0dd1b0ad9966a7b4ce1507c1ba7178b8cf683ff86613d10ae3a79a797.json",
+    "record_sha256": "611ec3ae7d920d989781c1e54315b1d607aa6e1687affcd1fe6f3423c3610646"
+  },
+  "adjudication": {
+    "eligible_disposition": "CERTIFIED_SOURCE_ELIGIBLE_NOT_ALPHA_ACTIVE",
+    "provider_degraded_disposition": "PROVIDER_DEGRADED_EXCLUDED_NO_AUTHORITATIVE_WAIVER",
+    "row_quality_defect_disposition": "ROW_QUALITY_DEFECT_EXCLUDED_NO_WAIVER",
+    "zero_billable_disposition": "PROVIDER_ZERO_BILLABLE_EXCLUDED_NO_DBN"
+  },
+  "authority": {
+    "alpha_activation": false,
+    "canonical_publication": true,
+    "dbn_row_read": true,
+    "provider_access": false,
+    "trading_or_orders": false
+  },
+  "canonical_layout": {
+    "dbn": "data/dbn/bbo_1s/{market}/{year}/{trade_date}.dbn.zst",
+    "sidecar": "data/dbn/bbo_1s/{market}/{year}/{trade_date}.dbn.zst.manifest.json"
+  },
+  "degraded_dates": [
+    "2025-09-17",
+    "2025-09-24",
+    "2025-11-28",
+    "2026-03-16",
+    "2026-04-10",
+    "2026-07-30"
+  ],
+  "implementation": {
+    "path": "src/futures_rebuild/l1_execution_bbo_1s_certification.py",
+    "sha256": "b536677e8a2e068d251425522920c715889eac11c2219e93aa44d70ba81bd869"
+  },
+  "maximum_workers": 4,
+  "minimum_free_bytes": 5000000000,
+  "operation": "CERTIFY_L1_EXECUTION_BBO_1S_MARKET_PARTITION_V1_ONCE",
+  "plan_id": "60e98412c2244fa4eec82564aa51b1925ca4a22d5fa0b0357fc7f8b60673c088",
+  "publication_operation": "PUBLISH_RELEASE",
+  "quality_gates": {
+    "complete_scan_repetitions": 2,
+    "dbn_file_count": 4625,
+    "decode_to_eof": true,
+    "duplicate_record_identity_gate": "ZERO_FOR_ELIGIBILITY_OTHERWISE_EXCLUDE_PARTITION",
+    "exact_metadata_and_dtype": true,
+    "mapped_instrument_observation_gate": "ZERO_FOR_ELIGIBILITY_OTHERWISE_EXCLUDE_PARTITION",
+    "price_size_sentinel_and_spread_gate": "ZERO_FOR_ELIGIBILITY_OTHERWISE_EXCLUDE_PARTITION",
+    "provider_degraded_never_waived": true,
+    "timestamp_interval_and_order": true,
+    "zero_billable_never_fabricated": true
+  },
+  "schema_version": "l1_execution_bbo_1s_certification_plan/1.0.0",
+  "state": "APPROVED_CURRENT_TASK_FAIL_CLOSED_PROVIDER_FREE_CERTIFY_ADJUDICATE_CATALOG_PUBLISH"
+}

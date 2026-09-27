@@ -7,6 +7,7 @@ import pytest
 
 from futures_rebuild.errors import UnauthorizedOperation
 from futures_rebuild.research_gateway_policy import (
+    BIAS_GATEWAY_SCHEMA,
     CERTIFIED_GATEWAY_SCHEMA,
     CERTIFIED_TRIAL_EXECUTION_OPERATION,
     SOURCE_COMPATIBILITY_CENSUS_OPERATION,
@@ -45,7 +46,10 @@ def test_every_retired_trial_operation_fails_closed(operation: str) -> None:
         require_current_real_history_operation(operation, {})
 
 
-def test_certified_operation_requires_every_immutable_binding() -> None:
+def test_certified_operation_requires_every_immutable_binding(monkeypatch) -> None:
+    # Isolate the lower policy validator. The installed discovery layer's six
+    # dispatches and empty allowlist are exercised in test_discovery.py.
+    monkeypatch.setattr("futures_rebuild.discovery.require_adopted_scope", lambda *args: None)
     scope = {
         "gateway_schema": CERTIFIED_GATEWAY_SCHEMA,
         "operation_kind": "TRIAL_HISTORICAL_EXECUTION",
@@ -63,11 +67,54 @@ def test_certified_operation_requires_every_immutable_binding() -> None:
         "predecessor_decision_sha256": "8" * 64,
         "session_manifest_sha256": "9" * 64,
         "pilot_evaluation_session_ids_sha256": "a" * 64,
+        "scientific_policy_sha256": "b" * 64,
+        "global_trial_ledger_head": "c" * 64,
+        "conservative_legacy_attempt_count": "105",
     }
     require_current_real_history_operation(
         CERTIFIED_TRIAL_EXECUTION_OPERATION, scope,
     )
     for key in tuple(scope):
+        changed = dict(scope)
+        changed.pop(key)
+        with pytest.raises(UnauthorizedOperation):
+            require_current_real_history_operation(
+                CERTIFIED_TRIAL_EXECUTION_OPERATION, changed,
+            )
+
+
+def test_bias_gate_operation_requires_stage_2_5_contract_binding(monkeypatch) -> None:
+    monkeypatch.setattr("futures_rebuild.discovery.require_adopted_scope", lambda *args: None)
+    scope = {
+        "gateway_schema": BIAS_GATEWAY_SCHEMA,
+        "operation_kind": "TRIAL_HISTORICAL_EXECUTION",
+        "trial_id": "1" * 64,
+        "trial_family": "future",
+        "protocol_id": "protocol",
+        "registration_path": "state/trial_registry/future/" + "1" * 64 + ".json",
+        "registration_sha256": "2" * 64,
+        "readiness_certificate_id": "3" * 64,
+        "readiness_evidence_sha256": "4" * 64,
+        "alpha_ladder_contract_id": "5" * 64,
+        "alpha_ladder_profile_id": "6" * 64,
+        "alpha_ladder_stage": "tier_1",
+        "mechanism_sha256": "7" * 64,
+        "predecessor_decision_sha256": "8" * 64,
+        "session_manifest_sha256": "9" * 64,
+        "pilot_evaluation_session_ids_sha256": "a" * 64,
+        "scientific_policy_sha256": "b" * 64,
+        "global_trial_ledger_head": "c" * 64,
+        "conservative_legacy_attempt_count": "105",
+        "causal_search_access_contract_id": "d" * 64,
+        "causal_search_access_contract_sha256": "e" * 64,
+        "pre_evaluation_declaration_id": "f" * 64,
+        "pre_evaluation_declaration_sha256": "0" * 64,
+    }
+    require_current_real_history_operation(CERTIFIED_TRIAL_EXECUTION_OPERATION, scope)
+    for key in (
+        "causal_search_access_contract_id",
+        "causal_search_access_contract_sha256",
+    ):
         changed = dict(scope)
         changed.pop(key)
         with pytest.raises(UnauthorizedOperation):

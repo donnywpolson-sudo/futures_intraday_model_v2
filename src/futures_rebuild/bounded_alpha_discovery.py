@@ -12,10 +12,12 @@ from typing import Mapping, Sequence
 
 from .canonical import canonical_bytes, sha256_file, sha256_json
 from .errors import IntegrityError
+from .research_gateway_policy import scientific_governance_binding
 
 
 CONTRACT_PATH = Path("configs/bounded_alpha_discovery_contract_v1.json")
 CERTIFICATE_ROOT = Path("state/preexecution_certificates/bounded_alpha_discovery")
+SCIENTIFIC_POLICY_PATH = Path("configs/research_readiness_contract.json")
 CATALOG_PATH = Path("data/active/catalog.json")
 HISTORICAL_DESIGN_PATH = Path("configs/active_alpha_historical_research_design.json")
 PREDECESSOR_LADDER_PATH = Path("configs/active_alpha_research_ladder_macro_successor.json")
@@ -66,6 +68,21 @@ def build_contract(root: Path) -> dict[str, object]:
     design = _read(root / HISTORICAL_DESIGN_PATH)
     ladder = _read(root / PREDECESSOR_LADDER_PATH)
     closure = _read(root / MACRO_CLOSURE_PATH)
+    policy = _read(root / SCIENTIFIC_POLICY_PATH)
+    nested_wfa = policy.get("nested_wfa")
+    if not isinstance(nested_wfa, dict):
+        raise IntegrityError("active scientific policy lacks nested WFA")
+    outer_wfa = nested_wfa.get("outer")
+    inner_wfa = nested_wfa.get("inner")
+    if not isinstance(outer_wfa, dict) or not isinstance(inner_wfa, dict):
+        raise IntegrityError("active scientific policy WFA schedule is invalid")
+    schedule_values = (
+        outer_wfa.get("minimum_folds"), outer_wfa.get("initial_train_sessions"),
+        outer_wfa.get("test_sessions"), inner_wfa.get("folds"),
+        inner_wfa.get("validation_sessions"),
+    )
+    if any(type(value) is not int or value <= 0 for value in schedule_values):
+        raise IntegrityError("active scientific policy WFA schedule is invalid")
     entries = catalog.get("entries")
     if not isinstance(entries, list) or len(entries) != 144:
         raise IntegrityError("bounded discovery requires the certified 144-entry catalog")
@@ -86,15 +103,86 @@ def build_contract(root: Path) -> dict[str, object]:
         raise IntegrityError("bounded discovery requires the terminal no-macro closure")
     candidates = enumerate_candidates()
     core: dict[str, object] = {
-        "schema_version": "bounded_alpha_discovery_contract/1.0.0",
+        "schema_version": "bounded_alpha_discovery_contract/1.4.0",
         "state": "PRE_RESULT_PREPARATION_ONLY_NOT_REGISTERED",
         "classification": "NEW_COUNTED_MECHANISM_RESTARTING_AT_SYNTHETIC_ENGINEERING",
         "hypothesis": (
-            "A bounded search over causal intraday trend, volatility, and volume state "
-            "can select on ES one stable after-cost predictor that replicates unchanged "
+            "A bounded search over point-in-time-legal intraday trend, volatility, and volume state "
+            "can select on ES one stable after-cost predictor that corroborates unchanged "
             "to NQ, CL, and GC."
         ),
+        "claim_policy": {
+            "default_claim_ceiling": "ROBUST_PREDICTIVE_ASSOCIATION",
+            "point_in_time_causal_ordering_scope": (
+                "INFORMATION_AVAILABILITY_ONLY_NOT_ECONOMIC_CAUSAL_IDENTIFICATION"
+            ),
+            "requested_claim_level": "ROBUST_PREDICTIVE_ASSOCIATION",
+            "stronger_causal_status": {
+                "requested": False,
+                "promotion_label": "CAUSALLY_SUPPORTED_MECHANISM",
+                "must_be_frozen_before_outcome_access": True,
+                "required_if_requested": [
+                    "MECHANISM_SPECIFIC_COMPETING_EXPLANATIONS",
+                    "MECHANISM_SPECIFIC_NEGATIVE_CONTROLS",
+                    "BOUNDARY_PREDICTIONS",
+                    "IDENTIFICATION_ARGUMENT",
+                ],
+                "missing_requirement_action": (
+                    "RETAIN_ROBUST_PREDICTIVE_ASSOCIATION_CEILING"
+                ),
+            },
+        },
+        "mechanism_card": {
+            "frozen_before": "HISTORICAL_OUTCOME_OR_OUTER_EVALUATION_ACCESS",
+            "proposed_incremental_claim": (
+                "POINT_IN_TIME_INTRADAY_STATE_ADDS_PREDICTIVE_INFORMATION_BEYOND_"
+                "FROZEN_COMMON_EXPOSURES"
+            ),
+            "competing_explanations": [
+                {
+                    "name": "UNCONDITIONAL_TIME_OF_DAY_DIRECTION",
+                    "expected_boundary": "CANDIDATE_MUST_BEAT_FOLD_LOCAL_UNCONDITIONAL_DIRECTION",
+                    "discriminating_test": "FROZEN_BASELINE_FOLD_LOCAL_UNCONDITIONAL_DIRECTION",
+                },
+                {
+                    "name": "SIMPLE_SHORT_HORIZON_MOMENTUM_OR_REVERSAL",
+                    "expected_boundary": "CANDIDATE_MUST_BEAT_BOTH_PREVIOUS_BAR_SIGN_RULES",
+                    "discriminating_test": (
+                        "FROZEN_BASELINES_PREVIOUS_BAR_SIGN_MOMENTUM_AND_REVERSAL"
+                    ),
+                },
+                {
+                    "name": "SHARED_TREND_VOLATILITY_OR_RISK_ON_OFF_REGIME",
+                    "expected_boundary": (
+                        "EVERY_PREREGISTERED_MARKET_FAMILY_LEAVE_ONE_REGIME_"
+                        "CLUSTER_OUT_INCREMENTAL_EFFECT_MUST_RETAIN_AT_LEAST_"
+                        "50_PERCENT_AND_REMAIN_STRICTLY_POSITIVE"
+                    ),
+                    "discriminating_test": (
+                        "PREREGISTERED_FAMILY_LEAVE_ONE_REGIME_CLUSTER_OUT_RETENTION"
+                    ),
+                    "retention_rule": {
+                        "effect_metric": (
+                            "CANDIDATE_MINUS_STRONGEST_FROZEN_COMPETING_BASELINE_"
+                            "STRESS_NET_PNL_USD_PER_SESSION"
+                        ),
+                        "comparison_unit": "PREREGISTERED_MARKET_FAMILY",
+                        "exclusion_unit": (
+                            "TRAINING_ONLY_TREND_VOLATILITY_REGIME_CLUSTER"
+                        ),
+                        "retention_fraction_formula": (
+                            "LEAVE_ONE_CLUSTER_OUT_INCREMENTAL_EFFECT_DIVIDED_BY_"
+                            "FULL_SAMPLE_INCREMENTAL_EFFECT"
+                        ),
+                        "minimum_retention_fraction": "0.50",
+                        "every_leave_one_cluster_out_effect_strictly_positive": True,
+                    },
+                },
+            ],
+            "missing_or_changed_after_freeze_action": "FAIL_PROMOTION_CLOSE_MECHANISM",
+        },
         "bindings": {
+            "scientific_governance": scientific_governance_binding(root),
             "catalog": {
                 "path": CATALOG_PATH.as_posix(),
                 "sha256": sha256_file(root / CATALOG_PATH),
@@ -119,15 +207,98 @@ def build_contract(root: Path) -> dict[str, object]:
                 "role": "IMMUTABLE_PREDECESSOR_NOT_EXECUTION_AUTHORITY",
             },
         },
+        "scientific_policy_conformance": {
+            "decision": "ACTIVE_POLICY_IS_SOLE_PROMOTION_FRAMEWORK",
+            "unresolved_conflict_action": "BLOCK_REGISTRATION",
+            "policy_sections": {
+                name: "INHERITED_WITHOUT_REPLACEMENT"
+                for name in (
+                    "independence", "authorization", "readiness", "source_roles",
+                    "trial_ledger", "sample_contract", "purge_embargo", "nested_wfa",
+                    "fold_local_fit_audit", "uncertainty", "multiple_testing", "costs",
+                    "baselines", "negative_controls", "sleeves", "power", "robustness",
+                    "prospective_monitoring", "binding_gate", "role_isolation",
+                    "research_basis",
+                )
+            },
+        },
         "market_progression": {
+            "scope_declaration": {
+                "frozen_before_outcome_access": True,
+                "claim": "CROSS_FAMILY_ES_NQ_CL_GC_ONLY",
+                "predicted_effect_markets": list(MARKETS),
+                "broad_41_market_generality_claim": False,
+                "corroboration_rule": "ONLY_PREREGISTERED_PREDICTED_SCOPE",
+                "evidence_label": "CROSS_DOMAIN_CORROBORATION_NOT_INDEPENDENT_REPLICATION",
+            },
             "tier_0_discovery_market": "ES",
-            "tier_1_replication_markets": list(MARKETS),
+            "es_pilot_role": (
+                "ENGINEERING_AND_SCIENTIFIC_GATE_BECAUSE_ES_EFFECT_IS_PREDICTED"
+            ),
+            "es_alpha_failure_rejects_hypothesis": True,
+            "tier_1_corroboration_markets": list(MARKETS),
             "tier_1_incremental_markets": ["NQ", "CL", "GC"],
-            "required_independent_anchors": ["ES", "CL", "GC"],
+            "required_family_anchors": ["ES", "CL", "GC"],
             "nq_is_correlated_extension": True,
             "nq_cannot_rescue_anchor_failure": True,
             "macro_diversification_claim": False,
             "macro_candidates_excluded_because": "TERMINAL_EXECUTION_INELIGIBILITY_NOT_ALPHA_RESULTS",
+        },
+        "evidence_accounting": {
+            "market_families": {
+                "EQUITY_INDEX": ["ES", "NQ"],
+                "ENERGY": ["CL"],
+                "METALS": ["GC"],
+            },
+            "regime_clusters": {
+                "method": "OUTER_TRAINING_TERCILES_CARTESIAN_PRODUCT",
+                "cutpoints_fit_on": "EACH_MARKET_OUTER_TRAINING_ONLY",
+                "volatility_input": "realized_volatility_10",
+                "volatility_labels": ["LOW", "MIDDLE", "HIGH"],
+                "trend_input": "log_return_10",
+                "trend_labels": ["NEGATIVE", "MIDDLE", "POSITIVE"],
+            },
+            "required_reports": [
+                "PER_MARKET", "PER_MARKET_FAMILY", "PER_REGIME_CLUSTER",
+                "MARKET_FAMILY_BY_REGIME_CLUSTER",
+            ],
+            "market_count_is_independence_count": False,
+            "fold_count_is_independence_count": False,
+            "cross_market_inference": {
+                "input": "SYNCHRONIZED_COMPLETE_EXCHANGE_SESSION_INCREMENTAL_RETURN_VECTORS",
+                "family_aggregation": "EQUAL_WEIGHT_WITHIN_PREREGISTERED_MARKET_FAMILY",
+                "resampling_unit": "COMMON_COMPLETE_EXCHANGE_SESSION",
+                "same_date_dependence_preserved": True,
+                "evidence_label": "CROSS_DOMAIN_CORROBORATION_NOT_INDEPENDENT_REPLICATION",
+            },
+            "missing_report_action": "FAIL_PROMOTION",
+        },
+        "construction_sensitivity": {
+            "frozen_before": "HISTORICAL_OUTCOME_OR_OUTER_EVALUATION_ACCESS",
+            "variants": [
+                {"variant_id": "CANONICAL_DECLARED_CONSTRUCTION", "interpretation": "PRIMARY_PROMOTION_CONSTRUCTION"},
+                {"variant_id": "EXCLUDE_ACTUAL_CONTRACT_ROLL_TRANSITION_SESSIONS", "interpretation": "ROLL_CONVENTION_DIAGNOSTIC"},
+                {"variant_id": "AVAILABLE_TIME_STRICTLY_BEFORE_DECISION_CHECKPOINT", "interpretation": "BAR_BOUNDARY_DIAGNOSTIC"},
+                {"variant_id": "EXCLUDE_SESSIONS_WITH_ELIGIBILITY_WINDOW_MISSINGNESS", "interpretation": "MISSINGNESS_DIAGNOSTIC"},
+            ],
+            "unsupported_variant_action": "REPORT_UNSUPPORTED_WITH_REASON_NEVER_IMPUTE",
+            "missing_report_action": "FAIL_PROMOTION",
+            "instability_action": "NARROW_CLAIM_OR_INCONCLUSIVE_ROBUSTNESS",
+            "post_result_variant_selection_allowed": False,
+        },
+        "event_concentration": {
+            "effect_metric": "CANDIDATE_MINUS_STRONGEST_FROZEN_COMPETING_BASELINE_STRESS_NET_PNL_USD",
+            "reports": {
+                "largest_session_share": "MAX_SESSION_EFFECT_DIVIDED_BY_TOTAL_INCREMENTAL_EFFECT",
+                "largest_contiguous_event_block_share": (
+                    "MAX_CONTIGUOUS_5_COMPLETE_EXCHANGE_SESSION_EFFECT_DIVIDED_BY_"
+                    "TOTAL_INCREMENTAL_EFFECT"
+                ),
+            },
+            "maximum_share_before_instability": "0.50",
+            "applies_to": "EACH_REQUIRED_MARKET_AND_PREREGISTERED_MARKET_FAMILY",
+            "instability_action": "NARROW_TO_EVENT_DEPENDENT_CLAIM_OR_INCONCLUSIVE_ROBUSTNESS",
+            "missing_report_action": "FAIL_PROMOTION",
         },
         "decision_and_execution": {
             "checkpoint": "10:00:05_AMERICA_CHICAGO",
@@ -175,9 +346,15 @@ def build_contract(root: Path) -> dict[str, object]:
         "folds": {
             "selection_start_inclusive": "2018-01-01T00:00:00Z",
             "selection_end_exclusive": "2023-01-01T00:00:00Z",
-            "outer": {"count": 8, "initial_training_sessions": 504, "evaluation_sessions": 63},
+            "outer": {
+                "count": outer_wfa["minimum_folds"],
+                "initial_training_sessions": outer_wfa["initial_train_sessions"],
+                "evaluation_sessions": outer_wfa["test_sessions"],
+            },
             "inner_per_outer_training": {
-                "count": 3, "minimum_training_sessions": 252, "evaluation_sessions": 63,
+                "count": inner_wfa["folds"],
+                "minimum_training_sessions": 252,
+                "evaluation_sessions": inner_wfa["validation_sessions"],
             },
             "purge_minutes": 120,
             "embargo_sessions": 1,
@@ -194,24 +371,70 @@ def build_contract(root: Path) -> dict[str, object]:
             },
             "may_be_reduced_after_results": False,
         },
+        "economic_significance": {
+            "research_screen": {
+                "claim": "HISTORICAL_RESEARCH_SCREEN_ONLY",
+                "primary_metric": (
+                    "MEAN_STRESS_COST_NET_PNL_USD_PER_COMPLETE_ELIGIBLE_SESSION_"
+                    "INCLUDING_ZERO_NO_TRADE"
+                ),
+                "mees_usd_per_session": "10.00",
+                "confidence_requirement": (
+                    "MULTIPLICITY_ADJUSTED_ONE_SIDED_95PCT_LOWER_BOUND_"
+                    "STRICTLY_GREATER_THAN_MEES"
+                ),
+                "cost_basis": "FROZEN_PROVISIONAL_STRESS_RESEARCH_COSTS",
+                "frozen_before": "HISTORICAL_OUTCOME_OR_OUTER_EVALUATION_ACCESS",
+            },
+            "deployment": {
+                "claim": "DEPLOYMENT_ELIGIBILITY_ONLY",
+                "primary_metric": (
+                    "MEAN_EXACT_EXECUTION_COST_NET_PNL_USD_PER_COMPLETE_ELIGIBLE_"
+                    "SESSION_INCLUDING_ZERO_NO_TRADE"
+                ),
+                "mees_usd_per_session": "20.00",
+                "confidence_requirement": (
+                    "ONE_SIDED_95PCT_LOWER_BOUND_STRICTLY_GREATER_THAN_MEES"
+                ),
+                "cost_basis": "EXACT_CURRENT_PROVIDER_ACCOUNT_AND_EXECUTION_EVIDENCE",
+                "frozen_before": "EXECUTION_OR_FORWARD_EVIDENCE_ACCESS",
+                "exact_costs_required_at_gate": True,
+            },
+            "research_pass_satisfies_deployment_gate": False,
+            "missing_or_unfrozen_value_action": "FAIL_CLOSED",
+        },
         "baselines": [
             "flat_no_trade", "fold_local_unconditional_direction",
             "previous_reported_bar_sign_momentum", "previous_reported_bar_sign_reversal",
             "risk_matched_always_long", "risk_matched_always_short",
         ],
         "multiplicity": {
-            "method": "CENTERED_SESSION_BLOCK_BOOTSTRAP_MAX_CANDIDATE_STATISTIC",
-            "resamples": 5000,
-            "session_block_length": 20,
-            "seed": 106,
-            "family_size": len(candidates),
-            "tier_0_adjusted_p_maximum": "0.10",
-            "tier_1_adjusted_p_maximum": "0.05",
+            "framework": "ACTIVE_SCIENTIFIC_POLICY_ONLY",
+            "information_family": {
+                "legacy_conservative_attempts": 105,
+                "current_candidate_alternatives": len(candidates),
+                "dsr_trial_count": 105 + len(candidates),
+                "unledgered_outcome_informed_choice_action": "INVALID_CONFIRMATORY_INFERENCE",
+            },
+            "pbo": {
+                "current_candidate_count": len(candidates),
+                "required_matrix": "COMPLETE_COMMON_SESSION_STRESS_COST_RETURNS",
+                "legacy_matrix_status": "UNAVAILABLE",
+                "missing_or_incomparable_matrix_status": "UNAVAILABLE_NO_POSITIVE_CREDIT",
+            },
         },
         "promotion": {
             "common": [
                 "STRESS_NET_PNL_POSITIVE", "BEAT_ZERO_AND_EVERY_MANDATORY_BASELINE",
                 "COMPLETE_COVERAGE_LINEAGE_AND_AUTHORITY", "MAXIMUM_DRAWDOWN_USD_NOT_OVER_1500",
+                "RESEARCH_SCREEN_MEES_CONFIDENCE_BOUND_PASS",
+                "FROZEN_COMPETING_EXPLANATION_TESTS_PASS",
+                "FAMILY_AND_REGIME_EVIDENCE_REPORT_COMPLETE",
+                "SCIENTIFIC_POLICY_CONFORMANCE_PASS",
+                "COMPLETE_INFORMATION_FAMILY_DSR_PASS",
+                "CONSTRUCTION_SENSITIVITY_COMPLETE",
+                "COMMON_SESSION_CROSS_MARKET_INFERENCE_COMPLETE",
+                "EVENT_CONCENTRATION_INTERPRETATION_COMPLETE",
             ],
             "tier_0_es": {
                 "minimum_trades": 40, "positive_outer_folds_required": 5,
@@ -235,7 +458,12 @@ def build_contract(root: Path) -> dict[str, object]:
             "same_frozen_candidate_required": True,
             "required_positive_markets": ["ES", "CL", "GC"],
         },
-        "final_252": {"access_allowed": False, "status": "INACCESSIBLE_UNRESOLVED_AUTHORITY"},
+        "final_252": {
+            "status_source": {
+                "path": "configs/active_alpha_research_ladder.json",
+                "stage": "final_historical_evaluation",
+            },
+        },
         "gateway": {
             "registration_and_claim": "CertifiedResearchGateway",
             "historical_operation": "EXECUTE_CERTIFIED_TRIAL_HISTORICAL_SCREEN",
@@ -269,9 +497,14 @@ def select_candidate(
     candidates = contract.get("search", {}).get("candidates")  # type: ignore[union-attr]
     if not isinstance(candidates, list):
         raise IntegrityError("bounded discovery candidates are missing")
+    folds = contract.get("folds")
+    inner_folds = folds.get("inner_per_outer_training") if isinstance(folds, Mapping) else None
+    fold_count = inner_folds.get("count") if isinstance(inner_folds, Mapping) else None
+    if type(fold_count) is not int or fold_count <= 0:
+        raise IntegrityError("bounded discovery inner-fold schedule is missing")
     ordered = [str(candidate["candidate_id"]) for candidate in candidates]
-    if set(scores) != set(ordered) or any(len(values) != 3 for values in scores.values()):
-        raise IntegrityError("candidate scores must cover all 27 candidates and three inner folds")
+    if set(scores) != set(ordered) or any(len(values) != fold_count for values in scores.values()):
+        raise IntegrityError("candidate scores must cover all 27 candidates and configured inner folds")
     if any(
         type(value) not in {int, float} or not math.isfinite(value)
         for values in scores.values() for value in values
@@ -284,9 +517,10 @@ def select_candidate(
 def build_synthetic_certificate(root: Path, contract: Mapping[str, object]) -> dict[str, object]:
     frozen = validate_contract(root, contract)
     ordered = [item["candidate_id"] for item in frozen["search"]["candidates"]]  # type: ignore[index]
-    zeros = {str(candidate_id): (0.0, 0.0, 0.0) for candidate_id in ordered}
+    fold_count = int(frozen["folds"]["inner_per_outer_training"]["count"])  # type: ignore[index]
+    zeros = {str(candidate_id): (0.0,) * fold_count for candidate_id in ordered}
     winner = dict(zeros)
-    winner[str(ordered[-1])] = (1.0, 1.0, 1.0)
+    winner[str(ordered[-1])] = (1.0,) * fold_count
     checks = {
         "candidate_count_exact": len(ordered) == 27 and len(set(ordered)) == 27,
         "deterministic_tie_break": select_candidate(frozen, zeros) == ordered[0],

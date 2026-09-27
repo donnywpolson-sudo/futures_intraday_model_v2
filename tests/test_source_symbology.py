@@ -13,6 +13,7 @@ from futures_rebuild.source_symbology import (
     [
         ("definition", "parent", ["ES.FUT"]),
         ("ohlcv-1m", "continuous", ["ES.v.0"]),
+        ("tbbo", "continuous", ["ES.v.0"]),
         ("statistics", "continuous", ["ES.v.0"]),
         ("statistics", "parent", ["ES.FUT"]),
         ("status", "continuous", ["ES.v.0"]),

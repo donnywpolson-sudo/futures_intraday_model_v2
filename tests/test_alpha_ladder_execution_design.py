@@ -11,6 +11,7 @@ from futures_rebuild.alpha_ladder_execution_design import (
     evaluate_execution_proxy, load_execution_design_contract,
     select_macro_execution_candidate, validate_execution_design_contract,
 )
+from futures_rebuild.alpha_ladder_macro_successor_identity import build_identities
 from futures_rebuild.canonical import sha256_json
 from futures_rebuild.errors import IntegrityError, UnauthorizedOperation
 pytestmark = pytest.mark.current
@@ -47,6 +48,19 @@ def test_contract_is_canonical_deterministic_and_bound() -> None:
     assert tuple(first["macro_selector"]["candidates"]) == ("ZN", "6E")
 
 
+def test_active_execution_identity_resolves_mutable_status_from_ladder() -> None:
+    pointer = json.loads(
+        (ROOT / "configs/active_alpha_ladder_execution_design.json").read_bytes()
+    )
+    core = {key: value for key, value in pointer.items() if key != "pointer_id"}
+    assert pointer["pointer_id"] == sha256_json(core)
+    assert pointer["alpha_ladder_status_source"] == {
+        "path": "configs/active_alpha_research_ladder.json",
+        "stage": "final_historical_evaluation",
+    }
+    assert "alpha_ladder_binding" not in pointer
+
+
 def test_active_rank1_historical_design_is_exact_and_non_authorizing() -> None:
     pointer = json.loads((ROOT / ACTIVE_DESIGN_PATH).read_bytes())
     core = {key: value for key, value in pointer.items() if key != "pointer_id"}
@@ -69,9 +83,27 @@ def test_active_rank1_historical_design_is_exact_and_non_authorizing() -> None:
     assert refit["allowed_change"] == "FIT_PARAMETERS_ONLY"
     assert refit["performance_evaluation_after_refit_before_final_252"] is False
     assert pointer["final_252"] == {
-        "access_allowed": False,
         "only_independent_historical_confirmation": True,
-        "status": "BLOCKED_FINAL_252_AUTHORITY_UNRESOLVED",
+        "status_source": {
+            "path": "configs/active_alpha_research_ladder.json",
+            "stage": "final_historical_evaluation",
+        },
+    }
+    active = json.loads((ROOT / "configs/active_alpha_research_ladder.json").read_bytes())
+    ladder = json.loads((ROOT / active["contract_path"]).read_bytes())
+    assert ladder["stages"]["final_historical_evaluation"]["status"] == (
+        "SEALED_AUTHORITY_RESOLVED_ACCESS_FORBIDDEN"
+    )
+
+
+def test_rank1_rebuild_does_not_copy_mutable_final_252_status() -> None:
+    rank1 = build_identities(ROOT)["rank1"]
+    assert rank1["final_252"] == {
+        "only_independent_historical_confirmation": True,
+        "status_source": {
+            "path": "configs/active_alpha_research_ladder.json",
+            "stage": "final_historical_evaluation",
+        },
     }
 
 

@@ -1,0 +1,80 @@
+{
+  "credential_source": "file api.env",
+  "dataset": "GLBX.MDP3",
+  "expected_billable_bytes_informational": 28934630640,
+  "forbidden": {
+    "active_data_mutation": true,
+    "alpha_feature_or_target_use": true,
+    "credential_log_stage_or_report": true,
+    "dbn_row_decode": true,
+    "holdout_or_forward_evaluation": true,
+    "model_fit_or_prediction": true,
+    "overwrite_existing_files": true,
+    "research_source_admission": true,
+    "trading_or_order_access": true
+  },
+  "implementation_sha256": "4b48fce52da8ac09127d3fd19e2cc37e16eaa0a8bf6ecf8bb6a8b2c118afa2ac",
+  "limits": {
+    "maximum_billable_bytes": 40000000000,
+    "maximum_host_runtime_seconds": 21600,
+    "maximum_metadata_attempts": 1544,
+    "maximum_metadata_calls": 386,
+    "maximum_parallel_downloads": 4,
+    "maximum_retries_per_request": 3,
+    "maximum_staged_bytes": 40000000000,
+    "maximum_timeseries_attempts": 768,
+    "minimum_nonempty_requests": 192,
+    "required_free_disk_bytes": 45000000000,
+    "throttled_parallel_downloads": 2
+  },
+  "markets": [
+    "ES",
+    "NQ",
+    "CL",
+    "GC",
+    "NG",
+    "RB",
+    "HG",
+    "SR3",
+    "ZN",
+    "ZB",
+    "6E",
+    "6J",
+    "ZC",
+    "ZS",
+    "LE",
+    "HE"
+  ],
+  "operation": "ACQUIRE_TBBO_16_MARKET_RECENT_YEAR_V1_ONCE",
+  "period": {
+    "end_exclusive": "2026-09-01T00:00:00Z",
+    "partition": "calendar_month",
+    "request_count": 192,
+    "start_inclusive": "2025-09-01T00:00:00Z"
+  },
+  "plan_id": "b3ae52e6aa430b8ab38c10c6313be3b7affad4b73d5160e34ca9e360cdecfeed",
+  "publication": {
+    "active_catalog_change": false,
+    "active_dbn_release_change": false,
+    "active_source_contract_change": false,
+    "operation": "PUBLISH_TBBO_16_MARKET_SEALED_CUSTODY_V1",
+    "publication_implementation_sha256": "63ee81265f760ee0af9c4a3c3041c7117db34c198deca67f7f1ce1624e56450b",
+    "registry_root": "state/tbbo_custody_registry",
+    "requires_separate_approval": true,
+    "vault_root": "data/vault/source_snapshots"
+  },
+  "schema": "tbbo",
+  "schema_version": "tbbo_16_market_acquisition_plan/1.0.0",
+  "source_symbology_sha256": "78870218776ee3df37ffd29c7a27c063234898693ed336d56624d89cc36a203d",
+  "staging": {
+    "attempt_root": "state/provider_acquisition_staging/tbbo_16_market_v1",
+    "event_root": "state/provider_acquisition_events/tbbo_16_market_v1",
+    "file_template": "snapshot/dbn/tbbo/{market}/{year}/{start_date}_{end_date}.dbn.zst",
+    "record_root": "state/provider_acquisitions/tbbo_16_market_v1",
+    "sidecar_template": "snapshot/dbn/tbbo/{market}/{year}/{start_date}_{end_date}.dbn.zst.manifest.json",
+    "state": "SEALED_PROVIDER_CUSTODY_NOT_ROW_QUALITY_CERTIFIED"
+  },
+  "state": "PREPARED_REQUIRES_BOUNDED_PROVIDER_ACQUISITION",
+  "stype_in": "continuous",
+  "stype_out": "instrument_id"
+}

@@ -39,7 +39,7 @@ REJECTED_REPORT_PATH = Path(
     f"{REJECTED_PROTOCOL_ID}/fold_readiness_certificate.json"
 )
 REJECTED_REPORT_SHA256 = "57b6d368d3cfcaaFF98a247b8d8bd12cc01e52d423a439e887aaf6e6278a8570".lower()
-ACTIVE_CATALOG_PATH = Path("data/active/catalog.json")
+ACTIVE_CATALOG_PATH = Path("data/causally_gated_normalized/_control/catalog.json")
 
 
 @dataclass(frozen=True)

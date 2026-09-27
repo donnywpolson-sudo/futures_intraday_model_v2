@@ -67,7 +67,13 @@ def _contract_and_context(
 
 def _declared_dbn_identity(sidecar: Mapping[str, Any], dbn_path: Path) -> tuple[str, int]:
     canonical = sidecar.get("canonical_dbn")
-    if isinstance(canonical, Mapping):
+    if sidecar.get("schema_version") == "annual_dbn_successor_sidecar/1.0.0":
+        if (not isinstance(canonical, Mapping)
+                or "project_relative_path" in canonical
+                or canonical.get("logical_path") != dbn_path.as_posix()):
+            raise IntegrityError("annual canonical sidecar path binding differs")
+        digest, size = canonical.get("sha256"), canonical.get("size_bytes")
+    elif isinstance(canonical, Mapping):
         if canonical.get("project_relative_path") != dbn_path.as_posix():
             raise IntegrityError("canonical sidecar path binding differs")
         digest, size = canonical.get("sha256"), canonical.get("size_bytes")
@@ -151,6 +157,11 @@ def reconstruct_content_inventory(
     rows: list[dict[str, object]] = []
     sidecars: list[Path] = []
     for directory, directories, filenames in os.walk(dbn_root):
+        if Path(directory) == dbn_root and "_source_snapshots" in directories:
+            from .custody_successor import validate_source_partition
+            if validate_source_partition(root, contract.get("custody_partition")) != dbn_root / "_source_snapshots":
+                raise IntegrityError("custody partition is outside canonical source root")
+            directories.remove("_source_snapshots")
         directories.sort()
         for filename in sorted(filenames):
             if filename.endswith(_SIDECAR_SUFFIX):
@@ -178,7 +189,7 @@ def _validate_contract_documents(
     *,
     inventory_path_override: Path | None,
 ) -> tuple[Mapping[str, Any], list[dict[str, object]]]:
-    if contract.get("schema_version") != "canonical_dbn_source_contract/4.0.0":
+    if contract.get("schema_version") != "canonical_dbn_source_contract/5.0.0":
         raise IntegrityError("current source contract schema differs")
     if contract.get("authority") != {
         "activation": False,
@@ -236,6 +247,14 @@ def _validate_contract_documents(
     universe = contract.get("universe")
     if not isinstance(universe, Mapping) or set(universe["standard_roots"]) & set(universe["deferred_micro_roots"]):
         raise IntegrityError("standard and micro source lanes are absent or overlap")
+    from .custody_successor import validate_source_partition
+    partition = contract.get("custody_partition")
+    validate_source_partition(root, partition)
+    if (source.get("canonical_file_count") != len(content_rows)
+            or source.get("canonical_total_bytes") != sum(row["size_bytes"] for row in content_rows)
+            or source.get("complete_root_file_count") != len(content_rows) + partition["file_count"]
+            or source.get("complete_root_total_bytes") != source["canonical_total_bytes"] + partition["total_bytes"]):
+        raise IntegrityError("physical source-root accounting differs")
     return source, content_rows
 
 
@@ -262,7 +281,7 @@ def validate_source_contract_metadata(
     contract_path: Path | None = None,
     inventory_path_override: Path | None = None,
 ) -> dict[str, object]:
-    """Validate installed contract paths and immutable metadata without source traversal."""
+    """Validate installed contract paths and immutable metadata and the custody partition file metadata."""
 
     root = repository_root.resolve(strict=True)
     _, contract = _contract_and_context(root, contract_path, operation_context)

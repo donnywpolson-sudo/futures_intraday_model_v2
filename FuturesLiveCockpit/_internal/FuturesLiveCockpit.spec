@@ -20,7 +20,7 @@ a = Analysis(
             str(repo_root / 'src' / 'futures_rebuild' / 'live_cockpit' / 'assets'),
             'futures_rebuild/live_cockpit/assets',
         ),
-        (str(repo_root / 'THIRD_PARTY_NOTICES.md'), '.'),
+        (str(repo_root / 'FuturesLiveCockpit/THIRD_PARTY_LICENSE_NOTICES.md'), '.'),
         (str(support_root / 'FuturesLiveCockpit.spec'), '.'),
         (str(support_root / 'futures_live_cockpit.py'), '.'),
     ],

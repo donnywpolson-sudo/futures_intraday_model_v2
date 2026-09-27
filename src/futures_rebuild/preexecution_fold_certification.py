@@ -594,6 +594,9 @@ def build_fold_readiness_certificate(
 def validate_fold_readiness_certificate(
     certificate: Mapping[str, object], *, root: Path,
 ) -> dict[str, object]:
+    from . import l0_development_admission as l0
+    if certificate.get("schema_version") == l0.CERTIFICATE_SCHEMA:
+        return l0.validate_certificate(root, certificate)
     core = dict(certificate)
     certificate_id = core.pop("certificate_id", None)
     if certificate_id != sha256_json(core) or core.get("schema_version") != SCHEMA_VERSION:
@@ -649,6 +652,9 @@ def require_registration_ready(
         or validated.get("evidence_class") != ROW_CERTIFIED
     ):
         raise UnauthorizedOperation("trial registration lacks a passing row-certified fold gate")
+    from . import l0_development_admission as l0
+    if validated.get("schema_version") == l0.CERTIFICATE_SCHEMA:
+        l0.require_active(root, validated)
     return str(validated["certificate_id"])
 
 
@@ -682,6 +688,9 @@ def require_execution_ready_before_claim(
         or validated.get("evidence_class") != ROW_CERTIFIED
     ):
         raise UnauthorizedOperation("historical execution lacks a passing fold gate")
+    from . import l0_development_admission as l0
+    if validated.get("schema_version") == l0.CERTIFICATE_SCHEMA:
+        l0.validate_registration(root, registration, validated)
     return claim_authorization()
 
 
@@ -702,6 +711,9 @@ def load_execution_ready_registration(
         or validated.get("evidence_class") != ROW_CERTIFIED
     ):
         raise UnauthorizedOperation("historical execution lacks a passing fold gate")
+    from . import l0_development_admission as l0
+    if validated.get("schema_version") == l0.CERTIFICATE_SCHEMA:
+        l0.validate_registration(root, registration, validated)
     return registration, validated
 
 
@@ -715,6 +727,9 @@ def create_registration_after_gate(
         root=root, path=certificate_evidence_path,
     )
     require_registration_ready(certificate, root=root)
+    from . import l0_development_admission as l0
+    if certificate.get("schema_version") == l0.CERTIFICATE_SCHEMA:
+        l0.validate_registration(root, payload, certificate)
     _validate_registration_binding(
         registration=payload,
         certificate=certificate,

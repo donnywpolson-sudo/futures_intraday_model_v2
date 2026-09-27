@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import json
 import multiprocessing
+import os
 import queue
+import tempfile
 import time as monotonic_time
 from collections import defaultdict
 from collections.abc import Mapping, Sequence
@@ -1198,6 +1200,29 @@ def _replay_process_worker(
         )
 
 
+def _replay_process_file_worker(
+    root: str,
+    plan: dict[str, object],
+    checkpoint: dict[str, object],
+    result_path: str,
+) -> None:
+    """Spawned entrypoint using a file handoff when Windows pipes are unavailable."""
+
+    try:
+        evidence = _replay_once(Path(root), plan, checkpoint)
+        payload = {"status": "PASS", "payload": evidence.as_dict()}
+    except BaseException as exc:  # process boundary must preserve terminal evidence
+        payload = {
+            "status": "FAIL",
+            "payload": {"error_type": type(exc).__name__, "error_message": str(exc)},
+        }
+    temporary = Path(f"{result_path}.tmp")
+    with temporary.open("w", encoding="utf-8", newline="\n") as stream:
+        json.dump(payload, stream, sort_keys=True, separators=(",", ":"))
+        stream.write("\n")
+    os.replace(temporary, result_path)
+
+
 def _receive_replay_process_result(
     process: object,
     result_queue: object,
@@ -1245,6 +1270,49 @@ def _receive_replay_process_result(
     return status, payload
 
 
+def _receive_replay_process_file_result(
+    process: object,
+    result_path: Path,
+    *,
+    timeout_seconds: float | None,
+) -> tuple[object, object]:
+    """Wait for an atomically written child result without named-pipe IPC."""
+
+    deadline = (
+        None
+        if timeout_seconds is None
+        else monotonic_time.monotonic() + timeout_seconds
+    )
+    while not result_path.exists():
+        if deadline is not None and monotonic_time.monotonic() >= deadline:
+            if process.is_alive():  # type: ignore[attr-defined]
+                process.terminate()  # type: ignore[attr-defined]
+                process.join()  # type: ignore[attr-defined]
+            raise IntegrityError("independent replay process exceeded its runtime ceiling")
+        if not process.is_alive():  # type: ignore[attr-defined]
+            process.join()  # type: ignore[attr-defined]
+            raise IntegrityError(
+                "independent replay process exited without evidence: "
+                f"{process.exitcode}"  # type: ignore[attr-defined]
+            )
+        monotonic_time.sleep(0.1)
+
+    try:
+        envelope = json.loads(result_path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, ValueError) as exc:
+        raise IntegrityError("independent replay process wrote invalid evidence") from exc
+    process.join(timeout=5)  # type: ignore[attr-defined]
+    if process.is_alive():  # type: ignore[attr-defined]
+        process.terminate()  # type: ignore[attr-defined]
+        process.join()  # type: ignore[attr-defined]
+        raise IntegrityError(
+            "independent replay process did not exit after delivering evidence"
+        )
+    if not isinstance(envelope, Mapping):
+        raise IntegrityError("independent replay process evidence is not an object")
+    return envelope.get("status"), envelope.get("payload")
+
+
 def _run_replay_in_fresh_process(
     root: Path,
     plan: Mapping[str, object],
@@ -1254,18 +1322,23 @@ def _run_replay_in_fresh_process(
 ) -> ReplayEvidence:
     """Run one replay in a fresh spawned interpreter and return canonical evidence."""
 
+    descriptor, temporary_name = tempfile.mkstemp(
+        prefix=".v10-replay-", suffix=".json", dir=_io_path(root)
+    )
+    os.close(descriptor)
+    result_path = Path(temporary_name)
+    result_path.unlink()
     context = multiprocessing.get_context("spawn")
-    result_queue = context.Queue(maxsize=1)
     process = context.Process(
-        target=_replay_process_worker,
-        args=(str(root), dict(plan), dict(checkpoint), result_queue),
+        target=_replay_process_file_worker,
+        args=(str(root), dict(plan), dict(checkpoint), str(result_path)),
         name=f"V10-{plan['target_market']}-independent-replay",
     )
     process.start()
     try:
-        status, payload = _receive_replay_process_result(
+        status, payload = _receive_replay_process_file_result(
             process,
-            result_queue,
+            result_path,
             timeout_seconds=timeout_seconds,
         )
     except BaseException:
@@ -1274,8 +1347,8 @@ def _run_replay_in_fresh_process(
             process.join()
         raise
     finally:
-        result_queue.close()
-        result_queue.join_thread()
+        result_path.unlink(missing_ok=True)
+        Path(f"{result_path}.tmp").unlink(missing_ok=True)
     if process.exitcode != 0 or status != "PASS" or not isinstance(payload, Mapping):
         error_type = payload.get("error_type") if isinstance(payload, Mapping) else None
         error_message = payload.get("error_message") if isinstance(payload, Mapping) else None
@@ -1396,6 +1469,7 @@ def certify_complete_market_certificate_set(
     repository_root: Path,
     checkpoint_set: Mapping[str, object],
     market_certificates: Sequence[Mapping[str, object]],
+    compatibility_manifest: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Create the inactive release-wide certificate from 41 robust market certificates."""
 
@@ -1406,6 +1480,13 @@ def certify_complete_market_certificate_set(
     current_certifier_sha256 = sha256_file(
         root / "src/futures_rebuild/causal_observation_market_certification.py"
     )
+    compatibility_id = None
+    if compatibility_manifest is not None:
+        from .causal_market_binding_compatibility import validate_compatibility_manifest
+
+        compatibility_id = validate_compatibility_manifest(
+            root, compatibility_manifest, checkpoint_set, market_certificates
+        )
     by_market: dict[str, Mapping[str, object]] = {}
     all_paths: set[str] = set()
     for certificate in market_certificates:
@@ -1433,8 +1514,8 @@ def certify_complete_market_certificate_set(
             or certificate.get("source_contract_id") != checkpoint_set.get("source_contract_id")
             or certificate.get("source_release_id") != checkpoint_set.get("canonical_release_id")
             or certificate.get("causal_contract_id") != checkpoint_set.get("causal_contract_id")
-            or certificate.get("certifier_implementation_sha256")
-            != current_certifier_sha256
+            or (compatibility_id is None and certificate.get("certifier_implementation_sha256")
+                != current_certifier_sha256)
             or certificate.get("replay_passes") != REPLAY_PASSES
             or not isinstance(evidence, Mapping)
             or not isinstance(inventory, list)
@@ -1478,7 +1559,7 @@ def certify_complete_market_certificate_set(
             certificate.get("certifier_implementation_bindings_sha256")
             for certificate in by_market.values()
         }
-    ) != 1:
+    ) != 1 and compatibility_id is None:
         raise IntegrityError("market certificates use incompatible certifier bindings")
     ordered_ids = [str(by_market[market]["certificate_id"]) for market in MARKET_ORDER]
     core = {
@@ -1512,4 +1593,14 @@ def certify_complete_market_certificate_set(
         "publication_authorized": False,
         "activation_authorized": False,
     }
+    if compatibility_id is not None:
+        core.update({
+            "schema_version": "causal_observation_41_market_compatible_certificate/2.0.0",
+            "compatibility_manifest_id": compatibility_id,
+            "compatibility_scope": "EXISTING_COMPLETED_REPLAY_RESULTS_ONLY",
+            "original_terminal_id": compatibility_manifest["terminal_id"],
+            "market_rebuilds": 0,
+            "additional_replay_passes": 0,
+            "fresh_execution_authorized": False,
+        })
     return {**core, "certificate_id": sha256_json(core)}

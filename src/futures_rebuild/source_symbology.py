@@ -16,7 +16,7 @@ QUERY_CONTRACT_VERSION = "1.0.0"
 
 
 _CONTINUOUS_ONLY_SCHEMAS = frozenset(
-    {"ohlcv-1d", "ohlcv-1h", "ohlcv-1m", "ohlcv-1s", "trades"}
+    {"ohlcv-1d", "ohlcv-1h", "ohlcv-1m", "ohlcv-1s", "tbbo", "trades"}
 )
 _MIXED_MARKET_STATE_SCHEMAS = frozenset({"statistics", "status"})
 _SUPPORTED_SCHEMAS = (

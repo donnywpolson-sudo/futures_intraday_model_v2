@@ -25,8 +25,8 @@
   ];
   const DEFAULT_VISUAL_UPDATE_HZ = 15;
   const ADAPTIVE_VISUAL_UPDATE_HZ = 5;
-  const DEMO_EXCHANGE_CLOCK = new Intl.DateTimeFormat("en-US", {
-    timeZone: "America/Chicago",
+  const DEMO_PROJECT_CLOCK = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/Los_Angeles",
     hour: "2-digit",
     minute: "2-digit",
     hourCycle: "h23",
@@ -326,6 +326,13 @@
     if (LWC.createSeriesMarkers && state.candleSeries) {
       state.predictionMarkers = LWC.createSeriesMarkers(state.candleSeries, []);
     }
+    state.chart.subscribeClick(param => {
+      if (state.mode !== "replay" || !replayInspection || param.time == null) return;
+      const index = replayInspection.records.findIndex(row => Date.parse(row.bar.opened_at) / 1000 === param.time);
+      if (index < 0) return;
+      document.getElementById("replay-inspect-bar").value = String(index);
+      inspectReplayBar();
+    });
     const timeScale = state.chart.timeScale();
     if (timeScale.subscribeVisibleLogicalRangeChange) {
       timeScale.subscribeVisibleLogicalRangeChange(queueSessionBoundaryRender);
@@ -448,6 +455,7 @@
   }
 
   function renderPredictionMarker() {
+    if (state.mode === "replay") return;
     if (!state.predictionMarkers?.setMarkers) return;
     const prediction = state.prediction;
     const forecast = prediction?.forecast;
@@ -472,6 +480,11 @@
   }
 
   function renderPrediction() {
+    if (state.mode === "replay") {
+      elements.predictionCard.hidden = true;
+      elements.predictionLayerOption.hidden = true;
+      return;
+    }
     const prediction = state.prediction;
     const synthetic = Boolean(prediction?.synthetic || state.predictionCapability.synthetic);
     const repositoryModel = prediction?.source === "REPOSITORY_MODEL";
@@ -1022,6 +1035,10 @@
   }
 
   function renderHistoryPolicy() {
+    if (state.mode === "replay") {
+      elements.historyPolicyDialog.hidden = true;
+      return;
+    }
     const policy = state.historyPolicy || {};
     const mode = String(policy.mode || "UNDECIDED").toUpperCase();
     elements.historyPolicyMode.textContent = mode === "AUTO"
@@ -1260,6 +1277,7 @@
   }
 
   async function chooseMarket(market) {
+    if (state.mode === "replay") return;
     if (!market || market === state.selectedMarket) return;
     const previousMarket = state.selectedMarket;
     const previousContract = state.contract;
@@ -1320,6 +1338,7 @@
   }
 
   async function chooseTimeframe(timeframe) {
+    if (state.mode === "replay") return;
     if (!state.timeframes.includes(timeframe) || timeframe === state.timeframe) return;
     state.timeframe = timeframe;
     clearSelectionContext();
@@ -1340,6 +1359,7 @@
   }
 
   async function chooseChartRange(chartRange) {
+    if (state.mode === "replay") return;
     if (!state.chartRanges.includes(chartRange) || chartRange === state.chartRange) return;
     if (!state.quickMarkets.includes(state.selectedMarket) && chartRange !== "1W") return;
     const previousRange = state.chartRange;
@@ -1424,7 +1444,7 @@
     state.quickMarkets = Array.isArray(payload.quick_markets) ? payload.quick_markets : DEFAULT_QUICK_MARKETS;
     state.chartRanges = Array.isArray(payload.chart_ranges) ? payload.chart_ranges : DEFAULT_CHART_RANGES;
     state.chartRange = state.chartRanges.includes(payload.chart_range) ? payload.chart_range : "1W";
-    if (!state.quickMarkets.includes(state.selectedMarket)) state.chartRange = "1W";
+    if (payload.mode !== "replay" && !state.quickMarkets.includes(state.selectedMarket)) state.chartRange = "1W";
     state.mode = payload.mode || "live";
     state.historyPolicy = {
       ...state.historyPolicy,
@@ -1439,7 +1459,7 @@
     state.statuses.clear();
     state.markets.forEach((market) => state.statuses.set(market.symbol, { ...market, state: market.status || "WAITING" }));
     elements.instrumentSymbol.textContent = state.selectedMarket;
-    elements.instrumentMeta.textContent = "Continuous front contract · Computer local time";
+    elements.instrumentMeta.textContent = "Continuous front contract · Pacific Time";
     resetHistoryState();
     applyUiPreferences(payload.ui_preferences || {});
     clearSelectionContext();
@@ -1449,6 +1469,14 @@
     renderHistoryPolicy();
     initializeChart();
     if (state.startupWatchdog) window.clearTimeout(state.startupWatchdog);
+    if (state.mode === "replay") {
+      document.body.classList.add("replay-mode");
+      document.getElementById("replay-panel").hidden = false;
+      elements.instrumentMeta.textContent = "Offline recorded simulation · Pacific Time";
+      elements.marketSearch.disabled = true;
+      elements.timeframeSelect.disabled = true;
+      return;
+    }
     state.startupWatchdog = window.setTimeout(() => {
       state.startupWatchdog = null;
       if (!elements.chartEmpty.classList.contains("hidden")) {
@@ -1583,6 +1611,195 @@
     }
   }
 
+  let replayInspection = null;
+  let replayOutcomeIndex = null;
+  function inspectReplayBar() {
+    const payload = replayInspection;
+    if (!payload) return;
+    const row = payload.records[Number(document.getElementById("replay-inspect-bar").value)];
+    const meta = payload.metadata;
+    const info = row?.inspection;
+    document.getElementById("replay-model").textContent = `Model ${meta.strategy} · ${meta.model_id} · Session ${meta.session} · ${meta.disposition} · Training labels through ${meta.training_cutoff}`;
+    document.getElementById("replay-prediction").textContent = info?.prediction != null
+      ? `Forecast: ${Number(info.prediction).toFixed(2)} ${meta.forecast_units} · ${meta.horizon_minutes}-minute horizon`
+      : !row ? "Press Play or Step one bar to begin."
+      : info.status === "CONTEXT" ? info.reasons.some(reason => reason.includes("Outcome-only"))
+        ? "Outcome-only tail · No further predictions scheduled." : "Lookback context · No prediction scheduled for this bar."
+      : "No prediction available · See inspection details.";
+    const index = Number(document.getElementById("replay-inspect-bar").value);
+    const diagnostic = meta.kind === "historical_diagnostics";
+    const outcome = payload.records.flatMap(record => record.outcomes || []).find(value => value.decision_index === index);
+    document.getElementById("replay-outcome").textContent = !diagnostic
+      ? "Outcome comparison unavailable in this saved run."
+      : info?.prediction == null ? "" : outcome
+      ? `Actual: ${Number(outcome.actual_ticks).toFixed(2)} ticks · Error (actual − predicted): ${Number(outcome.error_ticks).toFixed(2)} ticks`
+      : "Outcome pending.";
+    document.getElementById("replay-outcome-jump").hidden = !diagnostic || info?.prediction == null;
+    document.getElementById("replay-outcome-jump").disabled = !!outcome;
+    state.predictionMarkers?.setMarkers(info?.prediction == null ? [] : [{
+      time: Date.parse(row.bar.opened_at) / 1000, position: "aboveBar", color: "#74a7ff",
+      shape: "circle", text: "Selected forecast"}]);
+    document.getElementById("replay-prediction-exact").textContent = info?.prediction != null
+      ? `Prediction: ${info.prediction} ${meta.forecast_units} · ${meta.horizon_minutes}-minute horizon · ${meta.target}`
+      : "No prediction at this bar.";
+    document.getElementById("replay-reason").textContent = info
+      ? `${info.status}: ${info.reasons.join(", ")} · Available ${row.available_at}${info.decision_at ? ` · Decision ${info.decision_at} · Feature window starts ${info.feature_window_start}` : ""}`
+      : "Step forward to inspect recorded inputs.";
+    if (outcome) document.getElementById("replay-reason").textContent +=
+      ` · Actual ${outcome.actual_ticks} ticks · Error ${outcome.error_ticks} ticks · Outcome available ${outcome.available_at}`;
+    const body = document.getElementById("replay-features");
+    body.replaceChildren();
+    document.getElementById("replay-feature-table").hidden = !info?.features;
+    if (info?.features) meta.feature_names.forEach((name, index) => {
+      const tr = document.createElement("tr");
+      for (const value of [name, info.features[index]]) {
+        const td = document.createElement("td"); td.textContent = value; tr.append(td);
+      }
+      body.append(tr);
+    });
+  }
+  document.getElementById("replay-inspect-bar").addEventListener("change", inspectReplayBar);
+
+  function applyReplay(payload) {
+    if (state.mode !== "replay") return;
+    const rows = payload.records;
+    const meta = payload.metadata;
+    const historical = ["historical_predictions", "historical_diagnostics"].includes(meta.kind);
+    const bars = rows.map(row => ({time: Date.parse(row.bar.opened_at) / 1000,
+      open: Number(row.bar.open), high: Number(row.bar.high), low: Number(row.bar.low),
+      close: Number(row.bar.close), volume: row.bar.volume}));
+    applySnapshot({market: meta.market, contract: meta.contract, timeframe: "1m", generation: 1,
+      bars, markers: [], source: "offline-replay"});
+    elements.timeframeSelect.disabled = true;
+    document.querySelectorAll(".chart-range-button, .market-row").forEach(button => { button.disabled = true; });
+    const fills = rows.flatMap(row => row.fills || []);
+    state.predictionMarkers?.setMarkers(fills.map(fill => ({time: Date.parse(fill.time) / 1000,
+      position: fill.side === "BUY" ? "belowBar" : "aboveBar", color: fill.side === "BUY" ? "#79d6ac" : "#ff9292",
+      shape: fill.side === "BUY" ? "arrowUp" : "arrowDown", text: `${fill.side} ${fill.quantity} @ ${fill.price}`})));
+    const last = rows.at(-1);
+    const account = last?.account;
+    const money = value => new Intl.NumberFormat("en-US", {style: "currency", currency: "USD"}).format(Number(value));
+    const put = (id, text) => { document.getElementById(id).textContent = text; };
+    put("replay-label", meta.label);
+    elements.instrumentMeta.textContent = `${historical ? meta.session : "Synthetic session"} · 1-minute bars · Pacific Time`;
+    document.getElementById("replay-context").hidden = !historical;
+    put("replay-context", historical ? `${meta.strategy} · ${meta.disposition}${meta.evaluation_context ? ` · ${meta.evaluation_context}` : ""}` : "");
+    const library = payload.library;
+    document.getElementById("replay-library").hidden = !library;
+    if (library) {
+      const select = document.getElementById("replay-session");
+      if (select.dataset.library !== library.spec_id) {
+        const included = library.sessions.filter(entry => entry.status === "INCLUDED");
+        const excluded = library.sessions.filter(entry => entry.status === "EXCLUDED");
+        select.replaceChildren(...included.map(entry => {
+          const option = document.createElement("option"); option.value = entry.session;
+          option.textContent = `${entry.session} · ${entry.contract}`; return option;
+        }));
+        document.getElementById("replay-exclusion-list").replaceChildren(...excluded.map(entry => {
+          const item = document.createElement("li"); item.textContent = `${entry.session}: ${entry.reasons.join(", ")}`; return item;
+        }));
+        put("replay-library-count", `${included.length} available · ${excluded.length} excluded`);
+        document.getElementById("replay-exclusions").hidden = !excluded.length;
+        select.dataset.library = library.spec_id;
+      }
+      select.value = meta.session;
+    }
+    document.getElementById("replay-next").hidden = !historical;
+    document.getElementById("replay-next").disabled = payload.cursor === payload.total;
+    if (!historical) put("replay-model", "");
+    put("replay-clock", `${payload.cursor}/${payload.total} bars · ${last ? `${formatEventTime(Date.parse(last.available_at || last.bar.closed_at) / 1000)} local` : "Not started"} · ${payload.playing ? "Playing" : "Paused"}`);
+    put("replay-account", historical ? "No trading policy — trades and P&L unavailable." : account
+      ? `Position ${account.position} · Realized (after slippage) ${money(account.realized_pnl)} · Unrealized ${money(account.unrealized_pnl)} · Commissions ${money(account.commissions)} · Slippage included ${money(account.slippage_cost)} · Total costs ${money(account.total_costs)} · Equity ${money(account.equity)} · Drawdown from peak ${money(account.drawdown)}`
+      : `Position 0 · Starting equity ${money(meta.settings.initial_balance)}`);
+    put("replay-decision", historical ? meta.availability_assumption : `Strategy: ${meta.strategy} · Latest decision: ${!last ? "None yet" : last.decision === null ? "Abstain / retain position" : `Target ${last.decision}`} · Next-bar open fills`);
+    put("replay-assumptions", historical ? "" : `Test assumptions only: tick ${meta.settings.tick_size}, point value $${meta.settings.point_value}, commission $${meta.settings.commission_per_side}/contract/side, adverse slippage ${meta.settings.slippage_ticks} tick(s). Slippage is already included in P&L; it is not deducted twice.`);
+    document.getElementById("replay-trades").hidden = historical;
+    document.getElementById("replay-inspector").hidden = !historical;
+    if (historical) {
+      const select = document.getElementById("replay-inspect-bar");
+      const oldIndex = Number(select.value);
+      const follow = !replayInspection || !replayInspection.records.length || oldIndex === replayInspection.records.length - 1
+        || payload.cursor < replayInspection.cursor || meta.spec_id !== replayInspection.metadata.spec_id
+        || meta.session !== replayInspection.metadata.session;
+      select.replaceChildren(...rows.map((row, index) => {
+        const option = document.createElement("option"); option.value = String(index);
+        option.textContent = `${index + 1}: ${formatEventTime(Date.parse(row.available_at) / 1000)} · ${row.inspection.status}`;
+        return option;
+      }));
+      select.disabled = !rows.length;
+      select.value = String(follow ? rows.length - 1 : Math.min(oldIndex, rows.length - 1));
+      if (replayOutcomeIndex !== null && replayInspection?.metadata.session === meta.session
+          && replayInspection.metadata.spec_id === meta.spec_id && replayOutcomeIndex < rows.length) {
+        select.value = String(replayOutcomeIndex);
+      }
+      replayOutcomeIndex = null;
+      replayInspection = payload;
+      inspectReplayBar();
+    } else { replayInspection = null; document.getElementById("replay-features").replaceChildren(); }
+    const body = document.getElementById("replay-fills");
+    body.replaceChildren();
+    for (const fill of fills) {
+      const tr = document.createElement("tr");
+      for (const value of [`${formatEventTime(Date.parse(fill.time) / 1000)} local`, fill.side, fill.quantity, fill.price, money(fill.commission)]) {
+        const td = document.createElement("td"); td.textContent = String(value); tr.append(td);
+      }
+      body.append(tr);
+    }
+    const done = payload.cursor === payload.total;
+    document.getElementById("replay-play").disabled = done || payload.playing;
+    document.getElementById("replay-pause").disabled = !payload.playing;
+    document.getElementById("replay-step").disabled = done;
+    document.getElementById("replay-speed").value = String(payload.speed);
+    document.getElementById("replay-summary").hidden = !done;
+    put("replay-summary", !done ? "" : historical
+      ? `Complete · ${payload.summary.predictions} predictions · ${payload.summary.refused} refused decisions · ${payload.summary.message} Inspection only; no profitability claim.`
+      : `Complete · Final equity ${money(payload.summary.account.equity)} · ${payload.summary.open_position ? "Position remains open, marked to final close" : "Flat"} · Pending decision ${payload.summary.pending_decision_cancelled ? "cancelled" : "none"}. Mechanics test only; no profitability claim.`);
+    elements.sourceState.textContent = "Recorded one-minute bars · no live connection";
+    setFocusStatus("HISTORICAL_ONLY", "Offline simulation replay");
+    elements.focusState.textContent = "Offline replay";
+    elements.chartEmptyTitle.textContent = "Replay ready";
+    elements.chartEmptyDetail.textContent = "Press Play or Step one bar. No future bars are displayed.";
+    setOverviewStatus("HISTORICAL_ONLY", historical ? "Historical model inspection" : "Offline synthetic session");
+  }
+
+  async function replayCommand(action, speed = null, index = null) {
+    const error = document.getElementById("replay-error");
+    error.hidden = true;
+    try { await window.pywebview.api.replay_command(action, speed, index); }
+    catch (reason) { error.textContent = `Playback failed: ${reason}`; error.hidden = false; }
+  }
+  for (const action of ["play", "pause", "step", "restart"]) {
+    document.getElementById(`replay-${action}`).addEventListener("click", () => replayCommand(action));
+  }
+  document.getElementById("replay-speed").addEventListener("change", event => replayCommand("speed", Number(event.target.value)));
+  document.getElementById("replay-next").addEventListener("click", () => {
+    document.getElementById("replay-inspect-bar").value = String((replayInspection?.records.length || 0) - 1);
+    replayCommand("next_prediction");
+  });
+  document.getElementById("replay-outcome-jump").addEventListener("click", () => {
+    replayOutcomeIndex = Number(document.getElementById("replay-inspect-bar").value);
+    replayCommand("outcome", null, replayOutcomeIndex);
+  });
+  async function selectReplaySession(session = null) {
+    const error = document.getElementById("replay-error"); error.hidden = true;
+    try { await window.pywebview.api.select_replay_session(session); }
+    catch (reason) {
+      error.textContent = `Session unavailable: ${reason}`; error.hidden = false;
+      document.getElementById("replay-session").value = replayInspection?.metadata.session || "";
+    }
+  }
+  document.getElementById("replay-session").addEventListener("change", event => selectReplaySession(event.target.value));
+  document.getElementById("replay-random").addEventListener("click", () => selectReplaySession());
+  document.getElementById("replay-open").addEventListener("click", async () => {
+    const error = document.getElementById("replay-error");
+    const button = document.getElementById("replay-open");
+    error.hidden = true;
+    button.disabled = true;
+    try { await window.pywebview.api.open_replay_run(); }
+    catch (reason) { error.textContent = `Cannot open run: ${reason}`; error.hidden = false; }
+    finally { button.disabled = false; }
+  });
+
   function receive(message, renderMarketStatus = true) {
     if (!message || message.v !== PROTOCOL_VERSION || !message.payload) return;
     if (message.type === "bootstrap") applyBootstrap(message.payload);
@@ -1593,6 +1810,7 @@
     else if (message.type === "data_health") applyDataHealth(message.payload);
     else if (message.type === "prediction_update") applyPrediction(message.payload);
     else if (message.type === "history_cache_status") applyHistoryCacheStatus(message.payload);
+    else if (message.type === "replay_update") applyReplay(message.payload);
   }
 
   function receiveBatch(messages) {
@@ -1726,9 +1944,9 @@
     for (let index = bars.length - 1; index >= 0; index -= 1) {
       const bar = bars[index];
       const parts = Object.fromEntries(
-        DEMO_EXCHANGE_CLOCK.formatToParts(new Date(bar.time * 1000)).map((part) => [part.type, part.value]),
+        DEMO_PROJECT_CLOCK.formatToParts(new Date(bar.time * 1000)).map((part) => [part.type, part.value]),
       );
-      if (parts.hour === "17" && parts.minute === "00") {
+      if (parts.hour === "15" && parts.minute === "00") {
         demoSessionOpenTime = bar.time;
         return bar.open;
       }
@@ -1899,7 +2117,7 @@
         chart_range: "1W",
         chart_ranges: DEFAULT_CHART_RANGES,
         quick_markets: DEFAULT_QUICK_MARKETS,
-        display_tz: "local",
+        display_tz: "America/Los_Angeles",
         mode: "demo",
         history_update_policy: {
           policy_version: 1,
@@ -2106,6 +2324,7 @@
   });
 
   function updateClock() {
+    if (state.mode === "replay") return;
     renderPrediction();
     renderDataHealth();
   }

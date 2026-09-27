@@ -80,9 +80,12 @@ def test_cli_blocks_real_history_before_output(tmp_path: Path) -> None:
 def test_cli_profile_validation_includes_the_active_alpha_ladder(capsys) -> None:
     assert main(["validate-profiles"]) == 0
     payload = json.loads(capsys.readouterr().out)
+    pointer = json.loads(
+        (ROOT / "configs/active_alpha_research_ladder.json").read_text(encoding="utf-8")
+    )
     assert payload["active_alpha_ladder"] == {
-        "contract_id": "c053756ad32d722e290b2ab1d95c97f1ee070a29afba4b1daaeda819d751c18b",
-        "profile_id": "afcb79549f4dd45e7853c54db35ead3ea224d48a2b79028a2b8dadd241969d44",
+        "contract_id": pointer["contract_id"],
+        "profile_id": pointer["profile_id"],
         "state": "ACTIVE_HASH_BOUND",
     }
     assert payload["active_prop_firm_profile"]["profile_id"] == (

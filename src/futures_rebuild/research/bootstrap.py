@@ -65,7 +65,7 @@ def stationary_bootstrap_index_rows(
     mean_block_length: float,
     seed: int,
 ) -> Iterator[np.ndarray]:
-    """Yield one O(T)-memory row, using a fixed per-row RNG draw order."""
+    """Yield rows in bounded batches while preserving the fixed RNG draw order."""
 
     n, resamples, block, checked_seed = _validated_generation(
         n_observations=n_observations,
@@ -74,18 +74,19 @@ def stationary_bootstrap_index_rows(
         seed=seed,
     )
     generator = np.random.Generator(np.random.PCG64(checked_seed))
-    for _ in range(resamples):
-        restart = generator.random((1, n), dtype=np.float64)
-        starts = generator.random((1, n), dtype=np.float64)
-        yield stationary_bootstrap_index_kernel(
+    for start in range(0, resamples, 256):
+        count = min(256, resamples - start)
+        uniforms = generator.random((count, 2, n), dtype=np.float64)
+        rows = stationary_bootstrap_index_kernel(
             n_observations=n,
             mean_block_length=block,
-            restart_uniforms=restart,
-            start_uniforms=starts,
-        )[0]
+            restart_uniforms=uniforms[:, 0],
+            start_uniforms=uniforms[:, 1],
+        )
+        yield from rows
 
 
-def stationary_bootstrap_indices(
+def _stationary_bootstrap_indices_one(
     *,
     n_observations: int,
     n_resamples: int,
@@ -115,12 +116,64 @@ def stationary_bootstrap_indices(
     return result
 
 
+def stationary_bootstrap_indices_batch(
+    *,
+    n_observations: int,
+    n_resamples: int,
+    mean_block_length: float,
+    seeds: tuple[int, ...],
+    maximum_materialized_bytes: int = 256 * 1024 * 1024,
+) -> np.ndarray:
+    if not seeds:
+        raise ResearchContractError("at least one campaign seed is required")
+    bytes_required = len(seeds) * n_resamples * n_observations * np.dtype(np.int64).itemsize
+    if bytes_required > maximum_materialized_bytes:
+        raise ResearchContractError("batched index tensor exceeds memory cap")
+    return np.stack(
+        [
+            _stationary_bootstrap_indices_one(
+                n_observations=n_observations,
+                n_resamples=n_resamples,
+                mean_block_length=mean_block_length,
+                seed=seed,
+                maximum_materialized_bytes=maximum_materialized_bytes,
+            )
+            for seed in seeds
+        ],
+        axis=0,
+    )
+
+
+def stationary_bootstrap_indices(
+    *,
+    n_observations: int,
+    n_resamples: int,
+    mean_block_length: float,
+    seed: int,
+    maximum_materialized_bytes: int = 256 * 1024 * 1024,
+) -> np.ndarray:
+    return stationary_bootstrap_indices_batch(
+        n_observations=n_observations,
+        n_resamples=n_resamples,
+        mean_block_length=mean_block_length,
+        seeds=(seed,),
+        maximum_materialized_bytes=maximum_materialized_bytes,
+    )[0]
+
+
 def apply_shared_indices(values: np.ndarray, indices: np.ndarray) -> np.ndarray:
     matrix = finite_float64(values, name="values", ndim=2)
+    return apply_shared_indices_batch(matrix[None, ...], indices)[0]
+
+
+def apply_shared_indices_batch(values: np.ndarray, indices: np.ndarray) -> np.ndarray:
+    """Apply identical date indices to every campaign and aligned column."""
+
+    array = finite_float64(values, name="values", ndim=3)
     if not isinstance(indices, np.ndarray) or indices.dtype != np.dtype(np.int64):
         raise ResearchContractError("indices must be an int64 numpy array")
-    if indices.ndim != 2 or indices.shape[1] != matrix.shape[0]:
+    if indices.ndim != 2 or indices.shape[1] != array.shape[1]:
         raise ResearchContractError("indices must have shape (B,T)")
-    if indices.size == 0 or bool(np.any((indices < 0) | (indices >= len(matrix)))):
+    if indices.size == 0 or bool(np.any((indices < 0) | (indices >= array.shape[1]))):
         raise ResearchContractError("indices contain an invalid observation")
-    return matrix[indices, :]
+    return array[:, indices, :]

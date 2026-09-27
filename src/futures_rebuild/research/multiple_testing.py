@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import islice
 
 import numpy as np
 
@@ -13,7 +14,7 @@ from .contracts import (
     finite_float64,
     require_unique_ascii_ids,
 )
-from .hac import hac_t_statistic
+from .hac import hac_t_statistic_batch
 
 
 @dataclass(frozen=True)
@@ -86,7 +87,7 @@ def romano_wolf_stepdown(
     )
 
 
-def romano_wolf_from_differentials(
+def _romano_wolf_from_differentials_one(
     differentials: np.ndarray,
     *,
     hypothesis_ids: tuple[str, ...],
@@ -111,10 +112,7 @@ def romano_wolf_from_differentials(
         raise ResearchContractError("too few bootstrap resamples")
     if cap < 1 or resamples > cap // np.dtype(np.float64).itemsize // len(ids):
         raise ResearchContractError("bootstrap statistic matrix exceeds memory cap")
-    observed = np.asarray(
-        [hac_t_statistic(values[:, column], lag=hac_lag) for column in range(len(ids))],
-        dtype=np.float64,
-    )
+    observed = hac_t_statistic_batch(values.T, lag=hac_lag)
     centered = values - np.mean(values, axis=0, dtype=np.float64)
     bootstrap_statistics = np.empty((resamples, len(ids)), dtype=np.float64)
     rows = stationary_bootstrap_index_rows(
@@ -123,12 +121,16 @@ def romano_wolf_from_differentials(
         mean_block_length=mean_block_length,
         seed=seed,
     )
-    for resample, indices in enumerate(rows):
-        sample = centered[indices, :]
-        for column in range(len(ids)):
-            bootstrap_statistics[resample, column] = hac_t_statistic(
-                sample[:, column], lag=hac_lag
-            )
+    start = 0
+    while start < resamples:
+        batch_rows = tuple(islice(rows, min(256, resamples - start)))
+        samples = centered[np.stack(batch_rows)]
+        count = len(batch_rows)
+        bootstrap_statistics[start:start + count] = hac_t_statistic_batch(
+            samples.transpose(0, 2, 1).reshape(count * len(ids), values.shape[0]),
+            lag=hac_lag,
+        ).reshape(count, len(ids))
+        start += count
     return romano_wolf_stepdown(
         observed,
         bootstrap_statistics,
@@ -137,3 +139,62 @@ def romano_wolf_from_differentials(
         minimum_resamples=minimum_resamples,
         maximum_bootstrap_stat_bytes=maximum_bootstrap_stat_bytes,
     )
+
+
+def romano_wolf_from_differentials_batch(
+    differentials: np.ndarray,
+    *,
+    hypothesis_ids: tuple[str, ...],
+    hac_lag: int,
+    mean_block_length: float,
+    n_resamples: int,
+    seeds: tuple[int, ...],
+    tail: str = "greater",
+    minimum_resamples: int = 999,
+    maximum_bootstrap_stat_bytes: int = 256 * 1024 * 1024,
+) -> tuple[RomanoWolfResult, ...]:
+    """Run the canonical synchronized-date max-T kernel by campaign."""
+
+    values = finite_float64(differentials, name="differentials", ndim=3)
+    if len(seeds) != values.shape[0]:
+        raise ResearchContractError("one deterministic seed is required per campaign")
+    return tuple(
+        _romano_wolf_from_differentials_one(
+            campaign,
+            hypothesis_ids=hypothesis_ids,
+            hac_lag=hac_lag,
+            mean_block_length=mean_block_length,
+            n_resamples=n_resamples,
+            seed=seeds[index],
+            tail=tail,
+            minimum_resamples=minimum_resamples,
+            maximum_bootstrap_stat_bytes=maximum_bootstrap_stat_bytes,
+        )
+        for index, campaign in enumerate(values)
+    )
+
+
+def romano_wolf_from_differentials(
+    differentials: np.ndarray,
+    *,
+    hypothesis_ids: tuple[str, ...],
+    hac_lag: int,
+    mean_block_length: float,
+    n_resamples: int,
+    seed: int,
+    tail: str = "greater",
+    minimum_resamples: int = 999,
+    maximum_bootstrap_stat_bytes: int = 256 * 1024 * 1024,
+) -> RomanoWolfResult:
+    values = finite_float64(differentials, name="differentials", ndim=2)
+    return romano_wolf_from_differentials_batch(
+        values[None, ...],
+        hypothesis_ids=hypothesis_ids,
+        hac_lag=hac_lag,
+        mean_block_length=mean_block_length,
+        n_resamples=n_resamples,
+        seeds=(seed,),
+        tail=tail,
+        minimum_resamples=minimum_resamples,
+        maximum_bootstrap_stat_bytes=maximum_bootstrap_stat_bytes,
+    )[0]

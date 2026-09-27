@@ -21,6 +21,7 @@ from futures_rebuild.canonical import sha256_json
 from .feed import (
     DEFAULT_CONTINUOUS_SUFFIX,
     DEFAULT_DATASET,
+    DEFAULT_DISPLAY_TZ,
     DEFAULT_HISTORICAL_SCHEMA,
     DEFAULT_SCHEMA,
     DEFAULT_STYPE_IN,
@@ -490,7 +491,7 @@ def _bootstrap_payload(
         "quick_markets": [
             market for market in QUICK_CHART_MARKETS if market in symbols
         ],
-        "display_tz": "local",
+        "display_tz": DEFAULT_DISPLAY_TZ,
         "mode": mode,
         "observation_only": True,
         "prediction_capability": {

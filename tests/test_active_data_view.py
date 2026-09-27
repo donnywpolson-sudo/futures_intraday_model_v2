@@ -484,6 +484,30 @@ def test_failed_full_successor_restores_last_known_good(
     assert restored["catalog_sha256"] == current_catalog["catalog_sha256"]
 
 
+def test_full_successor_rechecks_catalog_after_acquiring_lease(tmp_path, monkeypatch):
+    initial = _plan(mode=UpdateMode.INITIAL, entries=[{"market": "ES", "year": 2022}])
+    _write_stage(tmp_path, plan_id=initial["plan_id"], markets=[("ES", 2022)])
+    publish_initial(repository_root=tmp_path, staging=tmp_path / active.STAGING_ROOT / initial["plan_id"],
+                    plan=initial, approval=_approval(initial))
+    successor = _plan(mode=UpdateMode.FULL_SUCCESSOR, entries=[{"market": "ES", "year": 2022, "correction": True}])
+    _write_stage(tmp_path, plan_id=successor["plan_id"], markets=[("ES", 2022)], active_view_id="f" * 64)
+    real_acquire = active.FileLease.acquire
+    def concurrent_catalog(lease):
+        result = real_acquire(lease)
+        path = tmp_path / active.ACTIVE_ROOT / "catalog.json"
+        catalog = json.loads(path.read_bytes())
+        catalog["active_view_id"] = "e" * 64
+        catalog["catalog_sha256"] = sha256_json({k: v for k, v in catalog.items() if k != "catalog_sha256"})
+        path.write_bytes(canonical_bytes(catalog) + b"\n")
+        return result
+    monkeypatch.setattr(active.FileLease, "acquire", concurrent_catalog)
+    with pytest.raises(IntegrityError, match="changed while acquiring"):
+        publish_full_successor(repository_root=tmp_path, staging=tmp_path / active.STAGING_ROOT / successor["plan_id"],
+                               plan=successor, approval=_approval(successor))
+    assert (tmp_path / active.ACTIVE_ROOT / "catalog.json").exists()
+    assert not any((tmp_path / active.ROLLBACK_ROOT).iterdir())
+
+
 def test_pending_or_interrupted_publication_never_silently_recovers(
     tmp_path: Path,
 ) -> None:

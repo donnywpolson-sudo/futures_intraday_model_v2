@@ -214,6 +214,20 @@ class ProviderDefinition:
         )
 
 
+@lru_cache(maxsize=1024)
+def _valid_bar_source_hashes(release: str, manifest: str, source: str) -> bool:
+    """Reuse only immutable source checks; each row identity is checked below."""
+    return all(re.fullmatch(r"[0-9a-f]{64}", digest) is not None
+               for digest in (release, manifest, source))
+
+
+@lru_cache(maxsize=1024)
+def _valid_bar_source_path(path: str) -> bool:
+    relative = PurePosixPath(path)
+    return bool(path and not relative.is_absolute() and ".." not in relative.parts
+                and relative.as_posix() == path)
+
+
 @dataclass(frozen=True)
 class ProviderBar:
     dataset: str
@@ -256,21 +270,11 @@ class ProviderBar:
         opening, high, low, closing = prices
         if high < max(opening, closing) or low > min(opening, closing) or high < low:
             raise ContractError("bar OHLC ordering is invalid")
-        for digest in (
-            self.source_release_id,
-            self.source_manifest_sha256,
-            self.source_file_sha256,
-            self.row_sha256,
-        ):
-            if re.fullmatch(r"[0-9a-f]{64}", digest) is None:
-                raise ContractError("bar release/row hashes are invalid")
-        relative = PurePosixPath(self.source_file_path)
-        if (
-            not self.source_file_path
-            or relative.is_absolute()
-            or ".." in relative.parts
-            or relative.as_posix() != self.source_file_path
-        ):
+        if (not _valid_bar_source_hashes(self.source_release_id, self.source_manifest_sha256,
+                                        self.source_file_sha256)
+                or re.fullmatch(r"[0-9a-f]{64}", self.row_sha256) is None):
+            raise ContractError("bar release/row hashes are invalid")
+        if not _valid_bar_source_path(self.source_file_path):
             raise ContractError("bar source file path is invalid")
 
     @property

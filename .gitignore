@@ -47,6 +47,7 @@ build/
 dist/
 tmp/
 FuturesLiveCockpit/*
+!FuturesLiveCockpit/THIRD_PARTY_LICENSE_NOTICES.md
 !FuturesLiveCockpit/_internal/
 FuturesLiveCockpit/_internal/*
 !FuturesLiveCockpit/_internal/FuturesLiveCockpit.spec

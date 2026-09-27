@@ -1,0 +1,86 @@
+{
+  "schema_version": "tbbo_quality_certification_plan/1.0.0",
+  "state": "PREPARATION_ONLY_NO_ROWS_DECODED",
+  "operations": {
+    "prepare": "PREPARE_TBBO_16_MARKET_ROW_QUALITY_V1",
+    "supplement": "ACQUIRE_AND_SEAL_TBBO_16_MARKET_DEFINITION_STATUS_SUPPLEMENT_V1_ONCE",
+    "certify": "CERTIFY_TBBO_16_MARKET_ROW_QUALITY_V1_ONCE"
+  },
+  "tbbo_snapshot_id": "bb6daab99dbd203775d558da22a69f9e8ad6c63a1114de57a1bc4f8d5c44cb31",
+  "markets": [
+    "ES",
+    "NQ",
+    "CL",
+    "GC",
+    "NG",
+    "RB",
+    "HG",
+    "SR3",
+    "ZN",
+    "ZB",
+    "6E",
+    "6J",
+    "ZC",
+    "ZS",
+    "LE",
+    "HE"
+  ],
+  "degraded_utc_dates": [
+    "2025-09-17",
+    "2025-09-24",
+    "2025-11-28",
+    "2026-01-31",
+    "2026-03-15",
+    "2026-03-16",
+    "2026-03-21",
+    "2026-04-10",
+    "2026-05-24",
+    "2026-07-30",
+    "2026-08-29"
+  ],
+  "boundary_sessions": [
+    "2025-09-01",
+    "2026-09-01"
+  ],
+  "market_quarantined_utc_dates": {
+    "SR3": [
+      "2026-05-17"
+    ]
+  },
+  "market_quarantine_dependency_policy": "EXCLUDE_UTC_DATE_AND_EVERY_DEPENDENT_SESSION_FEATURE_WINDOW",
+  "status_utc_midnight_snapshot_policy": "CARRY_FORWARD_STATE_NOT_NEW_SESSION_EVIDENCE",
+  "status_only_session_policy": "REPORT_MISSING_NOT_INFER_CLOSED_NON_BLOCKING_NO_SYNTHETIC_ROWS",
+  "identical_tbbo_row_policy": "RETAIN_REPORT_NON_BLOCKING_NO_DEDUPLICATION",
+  "historical_session_policy": "DATABENTO_EMPIRICAL_OBSERVABILITY_17_00_AMERICA_CHICAGO_ROLL_NOT_OFFICIAL_CME_CALENDAR",
+  "forbidden": {
+    "active_catalog_or_source_mutation": true,
+    "alpha_feature_target_model_or_evaluation": true,
+    "credential_log_stage_or_report": true,
+    "decoded_dataset_creation": true,
+    "provider_access_during_preparation": true,
+    "row_decode_during_preparation": true,
+    "trading_or_order_access": true
+  },
+  "supplement": {
+    "dataset": "GLBX.MDP3",
+    "start_inclusive": "2026-07-14T00:00:00Z",
+    "end_exclusive": "2026-09-01T00:00:00Z",
+    "request_count": 32,
+    "maximum_billable_bytes": 650000000,
+    "maximum_staged_bytes": 650000000,
+    "required_free_disk_bytes": 1000000000,
+    "maximum_external_cost_usd": "0"
+  },
+  "quality_scan": {
+    "maximum_batch_rows": 1000000,
+    "maximum_workers": 4,
+    "maximum_runtime_seconds": 21600,
+    "maximum_output_bytes": 67108864
+  },
+  "implementation_sha256": "8691ef8189c38d5928af07dd8175d08ef38c9a5f642fb39edf612b08ae079bba",
+  "acquisition_plan_sha256": "24cd32798b14a4605a734b4acff1dffabbfb9b00887e23c28c4c6ec7ae73fee9",
+  "historical_policy_sha256": "1b1c3b2e681cad9476d09e48610c8cea82d8da3c11da409fbebe1cf74ce389c8",
+  "tbbo_registry_sha256": "843a34b7cb6788c039435763628d50a685fc9af816598a9a0fba178493002efa",
+  "status_session_diagnostic_sha256": "24725fc1851d0cfb1799e7afe22e1b629052691d9e3fbc810aece2797ff6fbd2",
+  "plan_id": "1bc805fda863e01a58426f9484b3860dba7a06ee45f542bb9b10eb446c745be4"
+}

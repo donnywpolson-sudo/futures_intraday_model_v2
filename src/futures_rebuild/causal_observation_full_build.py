@@ -64,12 +64,12 @@ PLAN_SCHEMA = "development_causal_observation_full_build_plan/1.5.0"
 RESULT_SCHEMA = "development_causal_observation_full_build_result/1.0.0"
 FAILURE_SCHEMA = "development_causal_observation_full_build_failure/1.1.0"
 RUNTIME_PROJECTION_SCHEMA = "causal_full_build_runtime_projection/1.0.0"
-EXPECTED_ENTRY_COUNT = 8_506
-EXPECTED_DBN_COUNT = 4_253
-EXPECTED_SIDECAR_COUNT = 4_253
-EXPECTED_SOURCE_BYTES = 17_123_147_852
-EXPECTED_PAYLOAD_BYTES = 17_119_024_382
-EXPECTED_PRIMARY_1M_DBN_COUNT = 617
+EXPECTED_ENTRY_COUNT = 8_490
+EXPECTED_DBN_COUNT = 4_245
+EXPECTED_SIDECAR_COUNT = 4_245
+EXPECTED_SOURCE_BYTES = 17_111_812_714
+EXPECTED_PAYLOAD_BYTES = 17_107_708_532
+EXPECTED_PRIMARY_1M_DBN_COUNT = 609
 EXPECTED_WORK_UNIT_COUNT = 609
 MAXIMUM_PARTITION_COUNT = 6_963
 MAXIMUM_OUTPUT_BYTES = 18_000_000_000
@@ -565,6 +565,38 @@ def _load_exact_source_entries(
     ):
         raise IntegrityError("full development source inventory counts or identity differ")
     return selected
+
+
+def validate_source_query_contracts(
+    root: Path,
+    entries: Sequence[Mapping[str, object]],
+    *,
+    expected_count: int = EXPECTED_DBN_COUNT,
+) -> dict[str, object]:
+    """Validate every selected sidecar without opening a DBN payload."""
+
+    pairs: dict[str, dict[str, Mapping[str, object]]] = defaultdict(dict)
+    for entry in entries:
+        path = str(entry["path"])
+        base = path.removesuffix(".manifest.json")
+        kind = str(entry["kind"])
+        if kind in pairs[base]:
+            raise IntegrityError("full development source pair is duplicate")
+        pairs[base][kind] = entry
+    contracts: list[dict[str, object]] = []
+    for pair in pairs.values():
+        if set(pair) != {"DBN", "SIDECAR"}:
+            raise IntegrityError("full development source lacks an exact DBN/sidecar pair")
+        sidecar = dict(pair["SIDECAR"])
+        sidecar["paired_dbn_sha256"] = pair["DBN"]["sha256"]
+        sidecar["paired_dbn_size_bytes"] = pair["DBN"]["size_bytes"]
+        contracts.append(_query_contract(root, sidecar))
+    if len(contracts) != expected_count:
+        raise IntegrityError("full development query-contract count differs")
+    return {
+        "query_contract_count": len(contracts),
+        "query_contracts_sha256": sha256_json(contracts),
+    }
 
 
 def validate_full_build_execution_environment(
@@ -1153,6 +1185,7 @@ def run_authorized_full_build(
         selected,
         standard_roots=frozenset(source_contract["universe"]["standard_roots"]),
     )
+    validate_source_query_contracts(root, selected)
     closure_context = issue_current_source_closure_context(root)
     selected = select_exact_standard_source_entries(
         root,

@@ -94,6 +94,7 @@ def _cell(row: int, column: int, value: str | float) -> WorkbookCell:
     return WorkbookCell("Hours", row, column, value)
 
 
+@pytest.mark.current
 def test_family_schedule_accepts_repeated_dates_and_abbreviated_months() -> None:
     cells = [
         _cell(0, 0, "2019 Christmas Holiday Schedule"),
@@ -116,6 +117,7 @@ def test_family_schedule_accepts_repeated_dates_and_abbreviated_months() -> None
     assert schedule.state_at(datetime(2019, 12, 25, 8, 29)) is False
 
 
+@pytest.mark.current
 def test_family_schedule_fails_closed_for_duplicate_family_rows() -> None:
     cells = [
         _cell(0, 0, "2020 Schedule"),
@@ -128,6 +130,7 @@ def test_family_schedule_fails_closed_for_duplicate_family_rows() -> None:
         parse_family_schedule(cells, label_pattern=re.compile("FX Products"))
 
 
+@pytest.mark.current
 def test_family_schedule_uses_trade_day_clause_in_compact_into_heading() -> None:
     cells = [
         _cell(0, 0, "2020 Labor Day Schedule"),
@@ -142,6 +145,7 @@ def test_family_schedule_uses_trade_day_clause_in_compact_into_heading() -> None
     assert schedule.calendar_dates == (datetime(2020, 9, 7).date(),)
 
 
+@pytest.mark.current
 def test_compact_schedule_parses_day_only_heading_and_textual_close() -> None:
     cells = [
         _cell(0, 1, "Christmas Schedule: December 23, 2021 - December 27, 2021"),
@@ -158,6 +162,63 @@ def test_compact_schedule_parses_day_only_heading_and_textual_close() -> None:
     assert schedule.state_at(datetime(2021, 12, 26, 18, 0)) is True
 
 
+@pytest.mark.current
+@pytest.mark.parametrize("label", ["        Calendar Date", "Calendar Trade"])
+def test_compact_header_alias_and_overnight_open_use_actual_calendar_day(label) -> None:
+    cells = [
+        _cell(0, 0, "CME Memorial Day Schedule: May 24, 2019 - May 28, 2019"),
+        _cell(1, 0, label),
+        _cell(1, 1, "Friday,May 24"),
+        _cell(1, 2, "Sunday,May 26 into Monday,May 27"),
+        _cell(1, 3, "Monday,May 27"),
+        _cell(1, 4, "Mon,May 27 into Tues,May 28"),
+        _cell(2, 0, "Products"),
+        *[_cell(2, i, event) for i, event in enumerate(("CLOSE", "OPEN", "HALT", "OPEN"), 1)],
+        _cell(3, 0, "Equity "),
+        _cell(3, 1, "Regular @ 1600 CT / 2100 UTC"),
+        _cell(3, 2, "Regular @ 1700 CT / 2200 UTC"),
+        _cell(3, 3, "1200 CT / 1700 UTC"),
+        _cell(3, 4, "Regular @ 1700 CT / 2200 UTC"),
+    ]
+    schedule = parse_family_schedule(cells, label_pattern=re.compile("Equity"))
+    assert [(event.at, event.event) for event in schedule.events] == [
+        (datetime(2019, 5, 24, 16), "CLOSE"),
+        (datetime(2019, 5, 26, 17), "OPEN"),
+        (datetime(2019, 5, 27, 12), "HALT"),
+        (datetime(2019, 5, 27, 17), "OPEN"),
+    ]
+    assert schedule.state_at(datetime(2019, 5, 27, 9)) is True
+    assert schedule.state_at(datetime(2019, 5, 27, 13)) is False
+
+
+@pytest.mark.current
+def test_owned_new_year_typo_keeps_dates_from_content_not_filename_or_sheet() -> None:
+    cells = [
+        _cell(0, 0, "New Years Schedule: December 31, 2019 - January 2, 2020"),
+        _cell(1, 0, "Calendar Trade"),
+        _cell(1, 1, "Tuesday,Dec 31"), _cell(1, 2, "Wednessday, Jan 1"),
+        _cell(1, 3, "Wednesday, Jan 1"),
+        _cell(2, 1, "CLOSE"), _cell(2, 2, "CLOSED"), _cell(2, 3, "OPEN"),
+        _cell(3, 0, "Equity"), _cell(3, 1, "Regular @ 1600 CT / 2200 UTC"),
+        _cell(3, 2, "Closed for New Year's"), _cell(3, 3, "Regular @ 1700 CT / 2300 UTC"),
+    ]
+    schedule = parse_family_schedule(cells, label_pattern=re.compile("Equity"))
+    assert schedule.state_at(datetime(2020, 1, 1, 9)) is False
+    assert schedule.state_at(datetime(2020, 1, 1, 18)) is True
+    assert schedule.calendar_dates[0].year == 2019
+    assert schedule.calendar_dates[-1].year == 2020
+
+
+@pytest.mark.current
+def test_abbreviated_weekday_mismatch_still_rejected() -> None:
+    cells = [_cell(0, 0, "2020 January Schedule"), _cell(1, 0, "Calendar Date"),
+             _cell(1, 1, "Tues, Jan 1, 2020"), _cell(2, 1, "OPEN"),
+             _cell(3, 0, "Equity"), _cell(3, 1, 0.5)]
+    with pytest.raises(IntegrityError, match="no valid year"):
+        parse_family_schedule(cells, label_pattern=re.compile("Equity"))
+
+
+@pytest.mark.current
 def test_window_fails_when_a_halt_occurs_inside_it() -> None:
     day = datetime(2022, 7, 4)
     schedule = FamilySchedule(

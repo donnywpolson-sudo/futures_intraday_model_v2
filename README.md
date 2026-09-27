@@ -5,6 +5,54 @@ project. It combines immutable GLBX.MDP3 data releases, point-in-time
 causality, explicit research gates, and an observation-only Windows live
 cockpit.
 
+Browse [hypotheses, tests and results](docs/RESEARCH_INDEX.md) for each study's
+declaration, implementation, attempts and result, plus the organization audit
+and guidance on which performance statistics apply.
+
+The current [L0 alpha-candidate experiment](docs/L0_ALPHA_CANDIDATE.md) implements
+the fixed Pacific window, ten candidates per market, daily-dollar selection,
+chronological position replay, no-trade selection and frozen L1 diagnostics.
+The current pipeline includes the approved retrospective screen access integration
+and unchanged shared reporting. Earlier adopted artifacts are preserved; exact
+component versions and bindings are listed in `CURRENT_WORKFLOW.md`. The
+[reporting adoption](state/unpublished_evidence/l0_alpha_candidate_v1/reporting_adoption_v2/task_report.md)
+is complete within this one pipeline; visual correctness remains unverified.
+L0 itself remains inactive, without historical admission, registration or fitting.
+Training-support counts do not resolve calendar, execution, source/fee or final
+admission evidence.
+
+Tasks #1 and #2 contribute to this same repository and research goal. #1 coordinates;
+#2's reporting/comparison/lineage/cockpit work is integrated. The
+[corrected retrospective screen](state/unpublished_evidence/l0_order_readiness_v1/retrospective_screen_adoption_v1/REPORT.md)
+completed all 96 fits and 32 windows with no supported predictive improvement
+in any of its four markets. Its completion and time-of-day diagnostic remain
+preserved; prediction scores are not economics. The owner-requested
+[ES-to-NQ screen](state/unpublished_evidence/l0_order_readiness_v1/es_nq_transfer_adoption_v1/REPORT.md)
+has an adopted access integration. Its
+[corrected replacement preparation](state/unpublished_evidence/l0_order_readiness_v1/es_nq_transfer_adoption_v1/source_binding_repair_v1/REPORT.md)
+reconciled all ten partitions and 28,710 scheduled decisions; all eight training
+populations meet minimum support. The first failed attempt remains preserved.
+Its [fixed evaluation](state/unpublished_evidence/l0_order_readiness_v1/es_nq_transfer_adoption_v1/source_binding_repair_v1/evaluation_task_v1/REPORT.md)
+completed all sixteen fits/eight windows with no supported predictive lead.
+No economic replay or activation occurred; no further fitting is authorized.
+Follow [CURRENT_WORKFLOW.md](CURRENT_WORKFLOW.md) for current state and authority.
+Validate installed preparation with `python -m futures_rebuild.l0_alpha_preparation validate`.
+
+The preserved [V8 assumed-cost research predecessor](docs/ALL_MARKET_COST_REMEDIATION_PLAN.md)
+retains causal OHLCV-1m, refreshes forecasts each eligible minute, and evaluates
+flat-only entries with fixed 60-minute holds. Its three existing feature packs
+use training-only nested selection under a frozen adverse cost assumption and
+complete base/adverse/severe policy replay. EDGE is diagnostic only. It is
+inactive and synthetic-only; historical evidence and qualification remain
+blocked. Validate its frozen binding with
+`python -m futures_rebuild.rolling_hour_assumed_preparation validate`.
+The prior quote-based V7 configuration and evidence remain preserved.
+
+The preserved [profit-aligned research successor](docs/PROFIT_ALIGNED_RESEARCH.md) uses
+fixed-contract daily dollar P&L, quote-based costs and fresh 252-session
+confirmation. It remains inactive; synthetic mechanics do not establish alpha
+or real-source readiness.
+
 The project makes no alpha or trading claim. Provider calls, real-history
 evaluation, WFA/OOS, prediction materialization, candidate sealing, holdout
 access, live smoke, trading, remote push, and destructive operations require
@@ -32,39 +80,51 @@ For future counted mechanisms, the prepared ladder successor separates Stage 0
 synthetic engineering from the mandatory ES Tier 0 pilot. Tier 1 uses one frozen
 pack: NQ, CL, GC, and one pre-result-selected ZN or 6E; no macro is selected yet.
 ES/NQ together count as one equity family, while CL, GC, and the selected macro
-provide energy, metals, and macro evidence. Tier 2 preserves the balanced 16
-markets and Tier 3 preserves the 41-market scientific universe. Every market
+provide energy, metals, and macro evidence. Hypotheses must preregister their
+predicted scope. Tier 2's balanced 16 markets and Tier 3's 41-market scientific
+universe apply only to broad-generality hypotheses. Every evaluated market
 result remains visible. Scientific Alpha eligibility is separate from
 live-execution eligibility, and both are required before deployment
-consideration. Final historical evaluation remains blocked until a passing,
-unchanged Tier 3 mechanism receives separate single-use holdout access
-authorization. No new mechanism has started.
+consideration. Final historical evaluation remains blocked until an unchanged
+mechanism has passed every tier applicable to its preregistered hypothesis scope
+and receives separate single-use holdout access authorization. No successor
+mechanism has started.
 
 The canonical source and clean-restart baseline are complete. The
 development-only causal-observation contract is frozen, and its observation-only
 safety implementation is built, validated, committed, and remotely recoverable.
 The seven-market development canary ran once, passed independent verification,
-and remains unpublished and inactive. The full 41-market causal observation
-release is not built. Later full-build attempts remained inactive and failed
-closed and remain evidence only. V10 is the immutable monthly certification
-source and performs compact Parquet/Zstandard normalization plus two-pass
+and remains unpublished and inactive. The complete 41-market causal observation
+release is certified and its compact annual view is active. Earlier failed
+full-build attempts remain inactive evidence only. V10 is the immutable monthly
+certification source and performs compact Parquet/Zstandard normalization plus two-pass
 independent certification one market at a time, with immutable market and
-sealed-year checkpoints. It is
-synthetic-test proven. Complete ES, NQ, CL, GC, ZN, 6E, SR3, ZB, and 6J 2010-2025
-checkpoints passed two-pass maximum-robustness certification. Their certified
-development rows from 2010 through the exclusive `2025-07-13T22:00:00Z`
-cutoff are active as 136 annual research-ready causal-price Parquets at
+sealed-year checkpoints. All 41 market certificates are preserved; a successor
+complete-set certificate established compatibility without rebuilding markets.
+The certified development view contains 609 annual files and 139,892,740 rows,
+from each market's available start through the exclusive `2025-07-13T22:00:00Z`
+cutoff, at
 `data/active/causally_gated_normalized/{market}/{year}/{year}.parquet`. The
 partial 2025 files are interval-bound non-selection research; July 14 onward
-remains inaccessible. The other 32 markets have not
-started, and the active subset makes no full-universe or Alpha claim. The
-certified V10 monthly evidence remains immutable. The Final Sealed 252-Session
+remains inaccessible. The catalog contains 617 entries, including eight protected
+SR3 entries that are not materialized. Publication grants no new experiment,
+Alpha, model, evaluation, or holdout authority. The certified V10 monthly evidence
+and predecessor active-view rollback remain preserved. See the
+[verified compact-view cutover](reports/causal_compact_successor_v1/CUTOVER.md).
+The Final Sealed 252-Session
 Holdout remains pristine and unread. See
 `PROJECT_OUTLINE.md` for the current pipeline and status.
 
-The immediate next gate is the separate freeze of the already prepared
-execution-design contract, followed by a one-use ZN/6E execution-proxy selector.
-Outcomes, features, WFA, Alpha evaluation, and the macro choice remain unstarted.
+The bounded eight-variant ES flow-continuation rescue executed once and returned
+official result `STOP_NO_ECONOMIC_EDGE`; no candidate qualified and WFA did not
+run. The family is closed, including the unexecuted four-variant 30-minute
+proposal, which cannot become a result-informed retry. No new mechanism has
+been rescued. The separate ES micro-exhaustion candidate ran once as counted
+mechanism 169 and failed its 2018-2020 screen; 2021-2022 WFA data was not read.
+It is closed without retry and marked non-promotable because its pre-outcome
+declaration omitted the required competing-explanations mechanism card.
+Provider access, 2023+ data, holdout, forward, activation, and trading remain
+unauthorized. No new mechanism has started after this terminal screen.
 
 ## Repository map
 

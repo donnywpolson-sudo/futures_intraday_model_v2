@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import stat
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -36,6 +37,82 @@ def canonical_bytes(value: Any) -> bytes:
     ).encode("utf-8")
 
 
+def canonical_authority_file_bytes(value: Any) -> bytes:
+    """Return complete canonical authority JSON bytes, including one final LF."""
+
+    return canonical_bytes(value) + b"\n"
+
+
+def write_new_canonical_authority(path: Path, value: Any) -> bytes:
+    """Create or verify one immutable canonical authority JSON file."""
+
+    expected = canonical_authority_file_bytes(value)
+    if io_path(path).exists():
+        actual = io_path(path).read_bytes()
+        if actual != expected:
+            raise IntegrityError(f"immutable authority path already has different bytes: {path}")
+        return actual
+    path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=io_path(path.parent))
+    temporary = Path(temporary_name)
+    try:
+        with os.fdopen(descriptor, "wb") as stream:
+            stream.write(expected)
+            stream.flush()
+            os.fsync(stream.fileno())
+        try:
+            os.link(temporary, io_path(path))
+        except FileExistsError:
+            actual = io_path(path).read_bytes()
+            if actual != expected:
+                raise IntegrityError(f"immutable authority path was concurrently created with different bytes: {path}")
+        fsync_directory(io_path(path.parent))
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
+    actual = io_path(path).read_bytes()
+    if actual != expected or json.loads(actual) != value:
+        raise IntegrityError(f"immutable authority read-back validation failed: {path}")
+    return actual
+
+
+def read_canonical_authority(
+    path: Path, *, expected_sha256: str | None = None,
+    identity_field: str | None = None, expected_identity: str | None = None,
+    expected_schema: str | None = None,
+) -> dict[str, Any]:
+    """Read authority JSON only when its exact bytes and optional bindings agree."""
+
+    raw = io_path(path).read_bytes()
+    if expected_sha256 is not None and sha256_bytes(raw) != expected_sha256:
+        raise IntegrityError(f"authority file SHA-256 changed: {path}")
+
+    def unique_pairs(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+        result: dict[str, Any] = {}
+        for key, value in pairs:
+            if key in result:
+                raise IntegrityError(f"authority JSON contains duplicate key: {key}")
+            result[key] = value
+        return result
+
+    try:
+        payload = json.loads(raw, object_pairs_hook=unique_pairs)
+    except (UnicodeError, ValueError) as exc:
+        raise IntegrityError(f"authority JSON is unreadable: {path}") from exc
+    if not isinstance(payload, dict) or raw != canonical_authority_file_bytes(payload):
+        raise IntegrityError(f"authority JSON bytes are not canonical: {path}")
+    if expected_schema is not None and payload.get("schema_version") != expected_schema:
+        raise IntegrityError(f"authority JSON schema changed: {path}")
+    if identity_field is not None:
+        identity = payload.get(identity_field)
+        core = {key: value for key, value in payload.items() if key != identity_field}
+        if identity != sha256_json(core) or (expected_identity is not None and identity != expected_identity):
+            raise IntegrityError(f"authority JSON identity changed: {path}")
+    return payload
+
+
 def sha256_bytes(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
@@ -64,7 +141,9 @@ def assert_plain_file(path: Path, *, reject_hardlinks: bool = True) -> os.stat_r
     if not stat.S_ISREG(info.st_mode):
         raise ContractError(f"expected a regular file: {path}")
     if reject_hardlinks and info.st_nlink != 1:
-        raise ContractError(f"hard-linked files are forbidden: {path}")
+        from .custody_successor import registered_hardlink
+        if not registered_hardlink(path):
+            raise ContractError(f"hard-linked files are forbidden: {path}")
     return info
 
 
@@ -88,7 +167,7 @@ def sha256_file(path: Path, *, reject_hardlinks: bool = True) -> str:
     return digest.hexdigest()
 
 
-def iter_plain_files(root: Path) -> tuple[Path, ...]:
+def iter_plain_files(root: Path, *, reject_hardlinks: bool = True) -> tuple[Path, ...]:
     """Enumerate exact regular files beneath ``root`` with long-path-safe I/O."""
 
     if not io_path(root).is_dir() or is_linklike(root):
@@ -111,7 +190,7 @@ def iter_plain_files(root: Path) -> tuple[Path, ...]:
                 if entry.is_dir(follow_symlinks=False):
                     pending.append(child_relative)
                 elif entry.is_file(follow_symlinks=False):
-                    assert_plain_file(child)
+                    assert_plain_file(child, reject_hardlinks=reject_hardlinks)
                     files.append(child)
                 else:
                     raise ContractError(f"unsupported filesystem entry: {child}")

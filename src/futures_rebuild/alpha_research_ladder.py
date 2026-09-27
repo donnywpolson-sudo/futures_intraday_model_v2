@@ -21,10 +21,18 @@ LEGACY_CONTRACT_SCHEMA = "alpha_research_ladder_contract/1.0.0"
 CONTRACT_SCHEMA = "alpha_research_ladder_contract/2.0.0"
 QUALIFICATION_CONTRACT_SCHEMA = "alpha_research_ladder_contract/4.0.0"
 FINAL_252_CONTRACT_SCHEMA = "alpha_research_ladder_contract/5.0.0"
+HYPOTHESIS_CONDITIONAL_CONTRACT_SCHEMA = "alpha_research_ladder_contract/6.0.0"
+BIAS_GATE_CONTRACT_SCHEMA = "alpha_research_ladder_contract/7.0.0"
+BIAS_REMEDIATION_CONTRACT_SCHEMA = "alpha_research_ladder_contract/8.0.0"
+CANONICAL_BIAS_REMEDIATION_CONTRACT_SCHEMA = "alpha_research_ladder_contract/9.0.0"
 LEGACY_PROFILE_SCHEMA = "alpha_research_ladder_profile/1.0.0"
 PROFILE_SCHEMA = "alpha_research_ladder_profile/2.0.0"
 QUALIFICATION_PROFILE_SCHEMA = "alpha_research_ladder_profile/4.0.0"
 FINAL_252_PROFILE_SCHEMA = "alpha_research_ladder_profile/5.0.0"
+HYPOTHESIS_CONDITIONAL_PROFILE_SCHEMA = "alpha_research_ladder_profile/6.0.0"
+BIAS_GATE_PROFILE_SCHEMA = "alpha_research_ladder_profile/7.0.0"
+BIAS_REMEDIATION_PROFILE_SCHEMA = "alpha_research_ladder_profile/8.0.0"
+CANONICAL_BIAS_REMEDIATION_PROFILE_SCHEMA = "alpha_research_ladder_profile/9.0.0"
 POINTER_SCHEMA = "active_alpha_research_ladder/1.0.0"
 SESSION_MANIFEST_SCHEMA = "alpha_ladder_session_manifest/1.0.0"
 DECISION_SCHEMA = "alpha_ladder_stage_decision/1.0.0"
@@ -519,11 +527,223 @@ def build_qualification_successor_contract(
     return {**core, "contract_id": sha256_json(core)}
 
 
+def build_hypothesis_conditional_successor_contract(
+    *, predecessor_path: str, predecessor_sha256: str,
+    predecessor_contract_id: str, predecessor_profile_id: str,
+    predecessor_pointer_id: str, prior_failure_closure_id: str,
+    prior_failed_mechanism_id: str, final_252_binding: Mapping[str, object],
+) -> dict[str, object]:
+    """Make ladder gates conditional on the preregistered hypothesis scope."""
+
+    final_252_binding = _mapping(final_252_binding, "final 252 manifest binding")
+    prior = build_qualification_successor_contract(
+        predecessor_path=predecessor_path,
+        predecessor_sha256=predecessor_sha256,
+        predecessor_contract_id=predecessor_contract_id,
+        predecessor_profile_id=predecessor_profile_id,
+        predecessor_pointer_id=predecessor_pointer_id,
+        prior_failure_closure_id=prior_failure_closure_id,
+        prior_failed_mechanism_id=prior_failed_mechanism_id,
+        final_252_binding=final_252_binding,
+    )
+    core = {key: value for key, value in prior.items() if key != "contract_id"}
+    core["schema_version"] = HYPOTHESIS_CONDITIONAL_CONTRACT_SCHEMA
+    core["hypothesis_scope_policy"] = {
+        "freeze_before": "HISTORICAL_OUTCOME_OR_OUTER_EVALUATION_ACCESS",
+        "required_dimensions": [
+            "MARKETS", "MARKET_FAMILIES", "ASSET_CLASSES", "SESSIONS",
+        ],
+        "scientific_replication_rule": "ONLY_PREREGISTERED_PREDICTED_SCOPE",
+        "broad_generality_tiers": ["tier_2", "tier_3"],
+        "missing_or_ambiguous_scope": "FAIL_CLOSED",
+    }
+    stages = core["stages"]
+    assert isinstance(stages, dict)
+    stages["tier_0"]["scientific_gate_condition"] = (
+        "PREREGISTERED_PREDICTED_SCOPE_INCLUDES_ES"
+    )
+    stages["tier_0"]["es_outside_predicted_scope_result_use"] = (
+        "ENGINEERING_ONLY_NOT_ALPHA_GATE"
+    )
+    stages["tier_1"]["applicability"] = (
+        "ONLY_PREREGISTERED_PREDICTED_MARKETS_AND_FAMILIES"
+    )
+    for stage in ("tier_2", "tier_3"):
+        stages[stage]["applicability"] = (
+            "REQUIRED_ONLY_FOR_PREREGISTERED_BROAD_GENERALITY"
+        )
+    stages["final_historical_evaluation"]["predecessor_requirement"] = (
+        "UNCHANGED_MECHANISM_PASSES_EVERY_APPLICABLE_SCOPE_CONDITIONAL_TIER"
+    )
+    return {**core, "contract_id": sha256_json(core)}
+
+
+def build_bias_gate_successor_contract(
+    *, predecessor_path: str, predecessor_sha256: str,
+    predecessor_contract_id: str, predecessor_profile_id: str,
+    predecessor_pointer_id: str, prior_failure_closure_id: str,
+    prior_failed_mechanism_id: str, final_252_binding: Mapping[str, object],
+    semantic_predecessor: Mapping[str, object],
+) -> dict[str, object]:
+    """Add the inactive Stage 2.5, challenge, and refit topology."""
+
+    prior = build_hypothesis_conditional_successor_contract(
+        predecessor_path=predecessor_path,
+        predecessor_sha256=predecessor_sha256,
+        predecessor_contract_id=predecessor_contract_id,
+        predecessor_profile_id=predecessor_profile_id,
+        predecessor_pointer_id=predecessor_pointer_id,
+        prior_failure_closure_id=prior_failure_closure_id,
+        prior_failed_mechanism_id=prior_failed_mechanism_id,
+        final_252_binding=final_252_binding,
+    )
+    semantic_predecessor = _mapping(semantic_predecessor, "semantic predecessor")
+    for key in ("path", "sha256", "contract_id", "profile_id", "pointer_id"):
+        if not isinstance(semantic_predecessor.get(key), str) or not semantic_predecessor[key]:
+            raise IntegrityError(f"semantic predecessor {key} is absent")
+    _digest(semantic_predecessor["sha256"], "semantic predecessor SHA-256")
+    for key in ("contract_id", "profile_id", "pointer_id"):
+        _digest(semantic_predecessor[key], f"semantic predecessor {key}")
+
+    core = {key: value for key, value in prior.items() if key != "contract_id"}
+    core["schema_version"] = BIAS_GATE_CONTRACT_SCHEMA
+    core["semantic_predecessor"] = dict(semantic_predecessor)
+    core["causal_search_access_contract"] = {
+        "required_schema": "causal_search_access_contract/1.0.0",
+        "required_before": "OUTCOME_TARGET_FEATURE_OR_WFA_ROW_ACCESS",
+        "registration_and_execution_binding_required": True,
+        "material_change_action": "NEW_COUNTED_MECHANISM_RESTARTS_AT_STAGE_2_5",
+    }
+    stages = core["stages"]
+    assert isinstance(stages, dict)
+    stages["recent_regime_challenge"] = {
+        "role": "ONE_SHOT_SCOPE_WIDE_RECENT_REGIME_CHALLENGE",
+        "start_inclusive": "2023-01-01T00:00:00Z",
+        "end_exclusive": "2025-07-13T22:00:00Z",
+        "after": "LAST_APPLICABLE_SCOPE_MATCHED_REPLICATION_STAGE",
+        "maximum_attempts": 1,
+        "same_frozen_candidate_required": True,
+        "failure_action": "CLOSE_MECHANISM_NO_RETRY",
+    }
+    stages["deterministic_refit"] = {
+        "role": "FROZEN_ALGORITHM_REFIT_WITHOUT_EVALUATION",
+        "training_start_inclusive": "2018-01-01T00:00:00Z",
+        "training_end_exclusive": "2025-07-13T22:00:00Z",
+        "fit_parameters_only": True,
+        "performance_evaluation_allowed": False,
+        "required_predecessor": "recent_regime_challenge",
+    }
+    stages["final_historical_evaluation"]["predecessor_requirement"] = (
+        "DETERMINISTIC_REFIT_COMPLETE_NO_EVALUATION"
+    )
+    mechanism_freeze = core["mechanism_freeze"]
+    assert isinstance(mechanism_freeze, dict)
+    mechanism_freeze["same_identity_required_through"] = [
+        "tier_0", "tier_1", "tier_2", "tier_3", "recent_regime_challenge",
+    ]
+    core["transition_order"] = [
+        "synthetic_engineering", "tier_0", "tier_1", "tier_2", "tier_3",
+        "recent_regime_challenge", "deterministic_refit",
+        "final_historical_evaluation", "forward_monitoring",
+    ]
+    return {**core, "contract_id": sha256_json(core)}
+
+
+def build_bias_remediation_successor_contract(
+    *, predecessor_path: str, predecessor_sha256: str,
+    predecessor_contract_id: str, predecessor_profile_id: str,
+    predecessor_pointer_id: str, prior_failure_closure_id: str,
+    prior_failed_mechanism_id: str, final_252_binding: Mapping[str, object],
+    semantic_predecessor: Mapping[str, object],
+) -> dict[str, object]:
+    """Close Stage 3+, challenge, refit, claim, and forward prerequisites."""
+
+    prior = build_bias_gate_successor_contract(
+        predecessor_path=predecessor_path,
+        predecessor_sha256=predecessor_sha256,
+        predecessor_contract_id=predecessor_contract_id,
+        predecessor_profile_id=predecessor_profile_id,
+        predecessor_pointer_id=predecessor_pointer_id,
+        prior_failure_closure_id=prior_failure_closure_id,
+        prior_failed_mechanism_id=prior_failed_mechanism_id,
+        final_252_binding=final_252_binding,
+        semantic_predecessor=semantic_predecessor,
+    )
+    core = {key: value for key, value in prior.items() if key != "contract_id"}
+    core["schema_version"] = BIAS_REMEDIATION_CONTRACT_SCHEMA
+    core["causal_search_access_contract"] = {
+        "required_schema": "causal_search_access_contract/2.0.0",
+        "required_before": "ANY_STAGE_3_PLUS_RESULT_BEARING_ROW_OPENER",
+        "registration_and_execution_binding_required": True,
+        "pre_evaluation_declaration_required": True,
+        "legacy_active_action": "BLOCKED_STAGE_2_5_ACTIVE_AUTHORITY_REQUIRED",
+        "material_change_action": "NEW_COUNTED_MECHANISM_RESTARTS_AT_STAGE_2_5_INHERIT_HISTORY",
+    }
+    core["macro_disposition"] = "NO_ELIGIBLE_MACRO_DIVERSIFIER"
+    family_validation = core["family_validation"]
+    assert isinstance(family_validation, dict)
+    macro = family_validation["macro"]
+    assert isinstance(macro, dict)
+    macro["selection_status"] = "NO_ELIGIBLE_MACRO_DIVERSIFIER"
+    macro["selected_root"] = None
+    stages = core["stages"]
+    assert isinstance(stages, dict)
+    tier_1 = stages["tier_1"]
+    assert isinstance(tier_1, dict)
+    macro_slot = tier_1["macro_slot"]
+    assert isinstance(macro_slot, dict)
+    macro_slot["selection_status"] = "NO_ELIGIBLE_MACRO_DIVERSIFIER"
+    macro_slot["selected_root"] = None
+    mechanism_freeze = core["mechanism_freeze"]
+    assert isinstance(mechanism_freeze, dict)
+    mechanism_freeze["material_change_action"] = (
+        "NEW_COUNTED_MECHANISM_RESTARTS_AT_STAGE_2_5_INHERIT_HISTORY"
+    )
+    core["governance_gates"] = {
+        "pre_evaluation_declaration": "pre_evaluation_declaration/1.0.0",
+        "challenge_claim": "recent_regime_program_claim/1.0.0",
+        "refit_contract": "deterministic_refit_contract/1.0.0",
+        "refit_output": "deterministic_refit_parameter_output/1.0.0",
+        "claim_ceiling": "ROBUST_PREDICTIVE_ASSOCIATION",
+        "causal_claim_action": "BLOCKED_CAUSAL_IDENTIFICATION_CONTRACT_REQUIRED",
+        "forward_protocol": "forward_monitoring_protocol/1.0.0",
+        "missing_forward_protocol_action": "BLOCKED_FORWARD_MONITORING_PROTOCOL_NOT_FROZEN",
+    }
+    return {**core, "contract_id": sha256_json(core)}
+
+
+def build_canonical_bias_remediation_successor_contract(
+    predecessor: Mapping[str, object], *, predecessor_path: str,
+    predecessor_sha256: str, stage_2_5_binding: Mapping[str, object],
+) -> dict[str, object]:
+    """Rebind the validated v8 semantics to canonical Stage 2.5 authority."""
+
+    if predecessor.get("schema_version") != BIAS_REMEDIATION_CONTRACT_SCHEMA:
+        raise IntegrityError("canonical bias successor requires a schema-v8 predecessor")
+    binding = _mapping(stage_2_5_binding, "Stage 2.5 binding")
+    if set(binding) != {"contract_id", "path", "sha256", "schema_version"}:
+        raise IntegrityError("Stage 2.5 binding keys are not exact")
+    core = {key: value for key, value in predecessor.items() if key != "contract_id"}
+    core["schema_version"] = CANONICAL_BIAS_REMEDIATION_CONTRACT_SCHEMA
+    core["canonical_predecessor"] = {
+        "contract_id": predecessor["contract_id"], "path": predecessor_path,
+        "sha256": predecessor_sha256,
+        "supersession_reason": "NONCANONICAL_TERMINAL_NEWLINE",
+    }
+    gate = dict(_mapping(core["causal_search_access_contract"], "Stage 2.5 gate"))
+    gate["required_schema"] = str(binding["schema_version"])
+    gate["contract_binding"] = dict(binding)
+    core["causal_search_access_contract"] = gate
+    return {**core, "contract_id": sha256_json(core)}
+
+
 def validate_contract(payload: Mapping[str, object]) -> dict[str, object]:
     schema = payload.get("schema_version")
     if schema not in {
         LEGACY_CONTRACT_SCHEMA, CONTRACT_SCHEMA, QUALIFICATION_CONTRACT_SCHEMA,
-        FINAL_252_CONTRACT_SCHEMA,
+        FINAL_252_CONTRACT_SCHEMA, HYPOTHESIS_CONDITIONAL_CONTRACT_SCHEMA,
+        BIAS_GATE_CONTRACT_SCHEMA, BIAS_REMEDIATION_CONTRACT_SCHEMA,
+        CANONICAL_BIAS_REMEDIATION_CONTRACT_SCHEMA,
     }:
         raise IntegrityError("unsupported Alpha ladder contract schema")
     assert isinstance(schema, str)
@@ -546,7 +766,7 @@ def validate_contract(payload: Mapping[str, object]) -> dict[str, object]:
             predecessor_contract_id=str(predecessor.get("contract_id", "")),
         )
         expected_stages = set(LEVELS)
-    else:
+    elif schema in {QUALIFICATION_CONTRACT_SCHEMA, FINAL_252_CONTRACT_SCHEMA}:
         prior_failure = _mapping(
             payload.get("prior_failed_mechanism"), "prior failed mechanism",
         )
@@ -569,6 +789,109 @@ def validate_contract(payload: Mapping[str, object]) -> dict[str, object]:
         )
         expected_stages = {
             "synthetic_engineering", "tier_0", "tier_1", "tier_2", "tier_3",
+            "final_historical_evaluation", "forward_monitoring",
+        }
+    elif schema == HYPOTHESIS_CONDITIONAL_CONTRACT_SCHEMA:
+        prior_failure = _mapping(
+            payload.get("prior_failed_mechanism"), "prior failed mechanism",
+        )
+        expected = build_hypothesis_conditional_successor_contract(
+            predecessor_path=str(predecessor.get("path", "")),
+            predecessor_sha256=str(predecessor.get("sha256", "")),
+            predecessor_contract_id=str(predecessor.get("contract_id", "")),
+            predecessor_profile_id=str(predecessor.get("profile_id", "")),
+            predecessor_pointer_id=str(predecessor.get("pointer_id", "")),
+            prior_failure_closure_id=str(prior_failure.get("closure_id", "")),
+            prior_failed_mechanism_id=str(prior_failure.get("mechanism_id", "")),
+            final_252_binding=_mapping(
+                _mapping(
+                    stages.get("final_historical_evaluation"),
+                    "final historical evaluation",
+                ).get("manifest_binding"),
+                "final 252 manifest binding",
+            ),
+        )
+        expected_stages = {
+            "synthetic_engineering", "tier_0", "tier_1", "tier_2", "tier_3",
+            "final_historical_evaluation", "forward_monitoring",
+        }
+    elif schema == BIAS_GATE_CONTRACT_SCHEMA:
+        prior_failure = _mapping(
+            payload.get("prior_failed_mechanism"), "prior failed mechanism",
+        )
+        expected = build_bias_gate_successor_contract(
+            predecessor_path=str(predecessor.get("path", "")),
+            predecessor_sha256=str(predecessor.get("sha256", "")),
+            predecessor_contract_id=str(predecessor.get("contract_id", "")),
+            predecessor_profile_id=str(predecessor.get("profile_id", "")),
+            predecessor_pointer_id=str(predecessor.get("pointer_id", "")),
+            prior_failure_closure_id=str(prior_failure.get("closure_id", "")),
+            prior_failed_mechanism_id=str(prior_failure.get("mechanism_id", "")),
+            final_252_binding=_mapping(
+                _mapping(
+                    stages.get("final_historical_evaluation"),
+                    "final historical evaluation",
+                ).get("manifest_binding"),
+                "final 252 manifest binding",
+            ),
+            semantic_predecessor=_mapping(
+                payload.get("semantic_predecessor"), "semantic predecessor",
+            ),
+        )
+        expected_stages = {
+            "synthetic_engineering", "tier_0", "tier_1", "tier_2", "tier_3",
+            "recent_regime_challenge", "deterministic_refit",
+            "final_historical_evaluation", "forward_monitoring",
+        }
+    elif schema == BIAS_REMEDIATION_CONTRACT_SCHEMA:
+        prior_failure = _mapping(
+            payload.get("prior_failed_mechanism"), "prior failed mechanism",
+        )
+        expected = build_bias_remediation_successor_contract(
+            predecessor_path=str(predecessor.get("path", "")),
+            predecessor_sha256=str(predecessor.get("sha256", "")),
+            predecessor_contract_id=str(predecessor.get("contract_id", "")),
+            predecessor_profile_id=str(predecessor.get("profile_id", "")),
+            predecessor_pointer_id=str(predecessor.get("pointer_id", "")),
+            prior_failure_closure_id=str(prior_failure.get("closure_id", "")),
+            prior_failed_mechanism_id=str(prior_failure.get("mechanism_id", "")),
+            final_252_binding=_mapping(
+                _mapping(stages.get("final_historical_evaluation"), "final historical evaluation").get("manifest_binding"),
+                "final 252 manifest binding",
+            ),
+            semantic_predecessor=_mapping(payload.get("semantic_predecessor"), "semantic predecessor"),
+        )
+        expected_stages = {
+            "synthetic_engineering", "tier_0", "tier_1", "tier_2", "tier_3",
+            "recent_regime_challenge", "deterministic_refit",
+            "final_historical_evaluation", "forward_monitoring",
+        }
+    else:
+        canonical_predecessor = _mapping(payload.get("canonical_predecessor"), "canonical predecessor")
+        gate = _mapping(payload.get("causal_search_access_contract"), "Stage 2.5 gate")
+        binding = _mapping(gate.get("contract_binding"), "Stage 2.5 binding")
+        prior_core = {
+            key: value for key, value in payload.items()
+            if key not in {"contract_id", "canonical_predecessor"}
+        }
+        prior_core["schema_version"] = BIAS_REMEDIATION_CONTRACT_SCHEMA
+        prior_gate = dict(gate)
+        prior_gate.pop("contract_binding", None)
+        prior_gate["required_schema"] = "causal_search_access_contract/2.0.0"
+        prior_core["causal_search_access_contract"] = prior_gate
+        prior = {**prior_core, "contract_id": sha256_json(prior_core)}
+        if prior["contract_id"] != canonical_predecessor.get("contract_id"):
+            raise IntegrityError("canonical ladder predecessor identity changed")
+        validate_contract(prior)
+        expected = build_canonical_bias_remediation_successor_contract(
+            prior,
+            predecessor_path=str(canonical_predecessor.get("path", "")),
+            predecessor_sha256=str(canonical_predecessor.get("sha256", "")),
+            stage_2_5_binding=binding,
+        )
+        expected_stages = {
+            "synthetic_engineering", "tier_0", "tier_1", "tier_2", "tier_3",
+            "recent_regime_challenge", "deterministic_refit",
             "final_historical_evaluation", "forward_monitoring",
         }
     if dict(payload) != expected:
@@ -824,6 +1147,158 @@ def build_qualification_successor_profile(
     return {**core, "profile_id": sha256_json(core)}
 
 
+def build_hypothesis_conditional_successor_profile(
+    *, contract_path: str, contract_sha256: str, contract_id: str,
+    final_252_binding: Mapping[str, object],
+) -> dict[str, object]:
+    """Build the scope-conditional operational view for schema v6."""
+
+    final_252_binding = _mapping(final_252_binding, "final 252 manifest binding")
+    prior = build_qualification_successor_profile(
+        contract_path=contract_path,
+        contract_sha256=contract_sha256,
+        contract_id=contract_id,
+        final_252_binding=final_252_binding,
+    )
+    core = {key: value for key, value in prior.items() if key != "profile_id"}
+    core["schema_version"] = HYPOTHESIS_CONDITIONAL_PROFILE_SCHEMA
+    core["hypothesis_scope_policy"] = {
+        "freeze_before": "HISTORICAL_OUTCOME_OR_OUTER_EVALUATION_ACCESS",
+        "required_dimensions": [
+            "MARKETS", "MARKET_FAMILIES", "ASSET_CLASSES", "SESSIONS",
+        ],
+        "scientific_replication_rule": "ONLY_PREREGISTERED_PREDICTED_SCOPE",
+        "broad_generality_tiers": ["tier_2", "tier_3"],
+        "missing_or_ambiguous_scope": "FAIL_CLOSED",
+    }
+    profiles = core["profiles"]
+    assert isinstance(profiles, dict)
+    profiles["tier_0"]["scientific_gate_condition"] = (
+        "PREREGISTERED_PREDICTED_SCOPE_INCLUDES_ES"
+    )
+    profiles["tier_0"]["es_outside_predicted_scope_result_use"] = (
+        "ENGINEERING_ONLY_NOT_ALPHA_GATE"
+    )
+    profiles["tier_1"]["applicability"] = (
+        "ONLY_PREREGISTERED_PREDICTED_MARKETS_AND_FAMILIES"
+    )
+    for stage in ("tier_2", "tier_3"):
+        profiles[stage]["applicability"] = (
+            "REQUIRED_ONLY_FOR_PREREGISTERED_BROAD_GENERALITY"
+        )
+    profiles["final_historical_evaluation"]["predecessor_requirement"] = (
+        "UNCHANGED_MECHANISM_PASSES_EVERY_APPLICABLE_SCOPE_CONDITIONAL_TIER"
+    )
+    return {**core, "profile_id": sha256_json(core)}
+
+
+def build_bias_gate_successor_profile(
+    *, contract_path: str, contract_sha256: str, contract_id: str,
+    final_252_binding: Mapping[str, object],
+) -> dict[str, object]:
+    """Build the inactive operational view for the Stage 2.5 successor."""
+
+    prior = build_hypothesis_conditional_successor_profile(
+        contract_path=contract_path,
+        contract_sha256=contract_sha256,
+        contract_id=contract_id,
+        final_252_binding=final_252_binding,
+    )
+    core = {key: value for key, value in prior.items() if key != "profile_id"}
+    core["schema_version"] = BIAS_GATE_PROFILE_SCHEMA
+    core["causal_search_access_contract"] = {
+        "required_schema": "causal_search_access_contract/1.0.0",
+        "required_before": "OUTCOME_TARGET_FEATURE_OR_WFA_ROW_ACCESS",
+        "registration_and_execution_binding_required": True,
+    }
+    profiles = core["profiles"]
+    assert isinstance(profiles, dict)
+    profiles["recent_regime_challenge"] = {
+        "maximum_attempts": 1,
+        "period": "2023-01-01T00:00:00Z_TO_2025-07-13T22:00:00Z",
+        "same_frozen_candidate_required": True,
+        "failure_action": "CLOSE_MECHANISM_NO_RETRY",
+    }
+    profiles["deterministic_refit"] = {
+        "period": "2018-01-01T00:00:00Z_TO_2025-07-13T22:00:00Z",
+        "fit_parameters_only": True,
+        "performance_evaluation_allowed": False,
+        "required_status": "REFIT_COMPLETE_NO_EVALUATION",
+    }
+    profiles["final_historical_evaluation"]["predecessor_requirement"] = (
+        "DETERMINISTIC_REFIT_COMPLETE_NO_EVALUATION"
+    )
+    core["operational_gate_identifiers"] = {
+        **core["operational_gate_identifiers"],
+        "recent_regime_challenge": "challenge",
+        "deterministic_refit": "refit",
+    }
+    return {**core, "profile_id": sha256_json(core)}
+
+
+def build_bias_remediation_successor_profile(
+    *, contract_path: str, contract_sha256: str, contract_id: str,
+    final_252_binding: Mapping[str, object],
+) -> dict[str, object]:
+    prior = build_bias_gate_successor_profile(
+        contract_path=contract_path,
+        contract_sha256=contract_sha256,
+        contract_id=contract_id,
+        final_252_binding=final_252_binding,
+    )
+    core = {key: value for key, value in prior.items() if key != "profile_id"}
+    core["schema_version"] = BIAS_REMEDIATION_PROFILE_SCHEMA
+    core["causal_search_access_contract"] = {
+        "required_schema": "causal_search_access_contract/2.0.0",
+        "required_before": "ANY_STAGE_3_PLUS_RESULT_BEARING_ROW_OPENER",
+        "registration_and_execution_binding_required": True,
+        "pre_evaluation_declaration_required": True,
+    }
+    core["macro_disposition"] = "NO_ELIGIBLE_MACRO_DIVERSIFIER"
+    family_validation = core["family_validation"]
+    assert isinstance(family_validation, dict)
+    macro = family_validation["macro"]
+    assert isinstance(macro, dict)
+    macro["selection_status"] = "NO_ELIGIBLE_MACRO_DIVERSIFIER"
+    macro["selected_root"] = None
+    profiles = core["profiles"]
+    assert isinstance(profiles, dict)
+    tier_1 = profiles["tier_1"]
+    assert isinstance(tier_1, dict)
+    tier_1["macro_selection_status"] = "NO_ELIGIBLE_MACRO_DIVERSIFIER"
+    core["governance_gates"] = {
+        "challenge": "recent_regime_program_claim/1.0.0",
+        "refit": "deterministic_refit_contract/1.0.0",
+        "claim_ceiling": "ROBUST_PREDICTIVE_ASSOCIATION",
+        "forward": "forward_monitoring_protocol/1.0.0",
+    }
+    return {**core, "profile_id": sha256_json(core)}
+
+
+def build_canonical_bias_remediation_successor_profile(
+    predecessor: Mapping[str, object], *, predecessor_path: str,
+    predecessor_sha256: str, contract_path: str, contract_sha256: str,
+    contract_id: str, stage_2_5_binding: Mapping[str, object],
+) -> dict[str, object]:
+    if predecessor.get("schema_version") != BIAS_REMEDIATION_PROFILE_SCHEMA:
+        raise IntegrityError("canonical bias profile requires a schema-v8 predecessor")
+    core = {key: value for key, value in predecessor.items() if key != "profile_id"}
+    core["schema_version"] = CANONICAL_BIAS_REMEDIATION_PROFILE_SCHEMA
+    core["canonical_predecessor"] = {
+        "profile_id": predecessor["profile_id"], "path": predecessor_path,
+        "sha256": predecessor_sha256,
+        "supersession_reason": "NONCANONICAL_TERMINAL_NEWLINE",
+    }
+    core["contract_binding"] = {
+        "path": contract_path, "sha256": contract_sha256, "contract_id": contract_id,
+    }
+    gate = dict(_mapping(core["causal_search_access_contract"], "Stage 2.5 gate"))
+    gate["required_schema"] = str(stage_2_5_binding["schema_version"])
+    gate["contract_binding"] = dict(stage_2_5_binding)
+    core["causal_search_access_contract"] = gate
+    return {**core, "profile_id": sha256_json(core)}
+
+
 def validate_profile(
     payload: Mapping[str, object], *, root: Path,
     prepared_contract_path: Path | None = None,
@@ -831,7 +1306,9 @@ def validate_profile(
     schema = payload.get("schema_version")
     if schema not in {
         LEGACY_PROFILE_SCHEMA, PROFILE_SCHEMA, QUALIFICATION_PROFILE_SCHEMA,
-        FINAL_252_PROFILE_SCHEMA,
+        FINAL_252_PROFILE_SCHEMA, HYPOTHESIS_CONDITIONAL_PROFILE_SCHEMA,
+        BIAS_GATE_PROFILE_SCHEMA, BIAS_REMEDIATION_PROFILE_SCHEMA,
+        CANONICAL_BIAS_REMEDIATION_PROFILE_SCHEMA,
     }:
         raise IntegrityError("unsupported Alpha ladder profile schema")
     assert isinstance(schema, str)
@@ -853,23 +1330,70 @@ def validate_profile(
         PROFILE_SCHEMA: CONTRACT_SCHEMA,
         QUALIFICATION_PROFILE_SCHEMA: QUALIFICATION_CONTRACT_SCHEMA,
         FINAL_252_PROFILE_SCHEMA: FINAL_252_CONTRACT_SCHEMA,
+        HYPOTHESIS_CONDITIONAL_PROFILE_SCHEMA: HYPOTHESIS_CONDITIONAL_CONTRACT_SCHEMA,
+        BIAS_GATE_PROFILE_SCHEMA: BIAS_GATE_CONTRACT_SCHEMA,
+        BIAS_REMEDIATION_PROFILE_SCHEMA: BIAS_REMEDIATION_CONTRACT_SCHEMA,
+        CANONICAL_BIAS_REMEDIATION_PROFILE_SCHEMA: CANONICAL_BIAS_REMEDIATION_CONTRACT_SCHEMA,
     }[schema]
     if contract.get("schema_version") != expected_contract_schema:
         raise IntegrityError("ladder profile and contract schema generations differ")
     if binding.get("contract_id") != contract.get("contract_id"):
         raise IntegrityError("profile contract identity changed")
+    if schema == CANONICAL_BIAS_REMEDIATION_PROFILE_SCHEMA:
+        predecessor = _mapping(payload.get("canonical_predecessor"), "canonical predecessor")
+        gate = _mapping(payload.get("causal_search_access_contract"), "Stage 2.5 gate")
+        prior_core = {
+            key: value for key, value in payload.items()
+            if key not in {"profile_id", "canonical_predecessor"}
+        }
+        prior_core["schema_version"] = BIAS_REMEDIATION_PROFILE_SCHEMA
+        prior_gate = dict(gate)
+        prior_gate.pop("contract_binding", None)
+        prior_gate["required_schema"] = "causal_search_access_contract/2.0.0"
+        prior_core["causal_search_access_contract"] = prior_gate
+        old_binding = dict(_mapping(prior_core["contract_binding"], "old contract binding"))
+        contract_predecessor = _mapping(contract.get("canonical_predecessor"), "contract predecessor")
+        old_binding.update({
+            "path": contract_predecessor.get("path"),
+            "sha256": contract_predecessor.get("sha256"),
+            "contract_id": contract_predecessor.get("contract_id"),
+        })
+        prior_core["contract_binding"] = old_binding
+        prior = {**prior_core, "profile_id": sha256_json(prior_core)}
+        if prior["profile_id"] != predecessor.get("profile_id"):
+            raise IntegrityError("canonical profile predecessor identity changed")
+        expected = build_canonical_bias_remediation_successor_profile(
+            prior,
+            predecessor_path=str(predecessor.get("path", "")),
+            predecessor_sha256=str(predecessor.get("sha256", "")),
+            contract_path=str(binding.get("path", "")),
+            contract_sha256=str(binding.get("sha256", "")),
+            contract_id=str(binding.get("contract_id", "")),
+            stage_2_5_binding=_mapping(gate.get("contract_binding"), "Stage 2.5 binding"),
+        )
+        if dict(payload) != expected:
+            raise IntegrityError("ladder profile semantics drifted")
+        return dict(payload)
     builder = {
         LEGACY_PROFILE_SCHEMA: _build_legacy_profile,
         PROFILE_SCHEMA: build_profile,
         QUALIFICATION_PROFILE_SCHEMA: build_qualification_successor_profile,
         FINAL_252_PROFILE_SCHEMA: build_qualification_successor_profile,
+        HYPOTHESIS_CONDITIONAL_PROFILE_SCHEMA: build_hypothesis_conditional_successor_profile,
+        BIAS_GATE_PROFILE_SCHEMA: build_bias_gate_successor_profile,
+        BIAS_REMEDIATION_PROFILE_SCHEMA: build_bias_remediation_successor_profile,
     }[schema]
     builder_kwargs: dict[str, object] = {
         "contract_path": str(binding.get("path")),
         "contract_sha256": str(binding.get("sha256")),
         "contract_id": str(binding.get("contract_id")),
     }
-    if schema == FINAL_252_PROFILE_SCHEMA:
+    if schema in {
+        FINAL_252_PROFILE_SCHEMA,
+        HYPOTHESIS_CONDITIONAL_PROFILE_SCHEMA,
+        BIAS_GATE_PROFILE_SCHEMA,
+        BIAS_REMEDIATION_PROFILE_SCHEMA,
+    }:
         builder_kwargs["final_252_binding"] = _mapping(
             _mapping(contract.get("stages"), "stages").get(
                 "final_historical_evaluation"
@@ -1203,6 +1727,8 @@ def validate_stage_decision(
             active_contract.get("contract_id") == contract_id
             and active_contract.get("schema_version") in {
                 QUALIFICATION_CONTRACT_SCHEMA, FINAL_252_CONTRACT_SCHEMA,
+                BIAS_GATE_CONTRACT_SCHEMA, BIAS_REMEDIATION_CONTRACT_SCHEMA,
+                CANONICAL_BIAS_REMEDIATION_CONTRACT_SCHEMA,
             }
         )
     if qualification_contract and expected_stage in {"holdout", "forward"}:
@@ -1211,6 +1737,19 @@ def validate_stage_decision(
             if active_contract.get("schema_version") == FINAL_252_CONTRACT_SCHEMA
             else "Final-252 authority is unresolved and access is forbidden"
         )
+    if expected_stage == "challenge" and (
+        payload.get("attempt_count") != 1
+        or payload.get("same_frozen_candidate") is not True
+        or payload.get("tuning_design_change_or_retry") is not False
+    ):
+        raise UnauthorizedOperation("recent-regime challenge is not one-shot and frozen")
+    if expected_stage == "refit" and (
+        payload.get("fit_parameters_only") is not True
+        or payload.get("algorithm_changed") is not False
+        or payload.get("performance_evaluation") is not False
+        or payload.get("status") != "REFIT_COMPLETE_NO_EVALUATION"
+    ):
+        raise UnauthorizedOperation("deterministic refit performed evaluation or changed the algorithm")
     if expected_stage == "tier_0":
         if root is None:
             raise IntegrityError("Tier 0 decision validation requires repository context")
@@ -1221,6 +1760,18 @@ def validate_stage_decision(
         validate_tier0_certificate(
             certificate, contract_id=contract_id, mechanism_sha256=mechanism_sha256,
         )
+    elif (
+        qualification_contract
+        and active_contract.get("schema_version") in {
+            BIAS_GATE_CONTRACT_SCHEMA, BIAS_REMEDIATION_CONTRACT_SCHEMA,
+            CANONICAL_BIAS_REMEDIATION_CONTRACT_SCHEMA,
+        }
+        and expected_stage == "tier_1"
+    ):
+        evidence = _mapping(payload.get("promotion_evidence"), "promotion evidence")
+        markets = _strings(payload.get("scope_markets"), "scope-matched Tier 1 markets")
+        from .alpha_ladder_frozen_mechanism import validate_promotion_evidence
+        validate_promotion_evidence(evidence, stage=expected_stage, markets=markets)
     elif qualification_contract and expected_stage == "tier_1":
         evidence = _mapping(payload.get("promotion_evidence"), "promotion evidence")
         es_result = _mapping(evidence.get("es_tier0_result"), "ES Tier-0 result")
@@ -1282,6 +1833,14 @@ def validate_session_manifest(
             or payload.get("embargo_applied") is not True
         ):
             raise UnauthorizedOperation("pilot fold is not the locked 504/63 chronological fold")
+    elif stage == "refit":
+        by_market = _mapping(payload.get("training_session_ids_by_market"), "refit sessions")
+        if set(by_market) != set(markets) or payload.get("performance_evaluation") is not False:
+            raise UnauthorizedOperation("refit manifest is not fit-only for the exact scope")
+        for market, values in by_market.items():
+            sessions = _strings(values, f"{market} refit sessions")
+            if len(set(sessions)) != len(sessions) or tuple(sorted(sessions)) != sessions:
+                raise IntegrityError("refit sessions are not unique and chronological")
     else:
         by_market = _mapping(payload.get("evaluation_session_ids_by_market"), "stage sessions")
         if set(by_market) != set(markets):
@@ -1309,7 +1868,12 @@ def validate_stage_registration(
     contract, profile = load_active_ladder(root)
     binding = _mapping(registration.get("alpha_ladder_binding"), "Alpha ladder binding")
     stage = str(binding.get("stage", ""))
-    if stage not in STAGES:
+    bias_gate = contract.get("schema_version") in {
+        BIAS_GATE_CONTRACT_SCHEMA, BIAS_REMEDIATION_CONTRACT_SCHEMA,
+        CANONICAL_BIAS_REMEDIATION_CONTRACT_SCHEMA,
+    }
+    allowed_stages = (*STAGES, "challenge", "refit") if bias_gate else STAGES
+    if stage not in allowed_stages:
         raise UnauthorizedOperation("real-history registration has no current Alpha ladder stage")
     if stage == "tier_0":
         raise UnauthorizedOperation("Tier 0 is synthetic-only")
@@ -1320,6 +1884,8 @@ def validate_stage_registration(
         raise IntegrityError("registration is not bound to the active Alpha ladder")
     qualification_contract = contract.get("schema_version") in {
         QUALIFICATION_CONTRACT_SCHEMA, FINAL_252_CONTRACT_SCHEMA,
+        BIAS_GATE_CONTRACT_SCHEMA, BIAS_REMEDIATION_CONTRACT_SCHEMA,
+        CANONICAL_BIAS_REMEDIATION_CONTRACT_SCHEMA,
     }
     if qualification_contract and stage in {"holdout", "forward"}:
         raise UnauthorizedOperation(
@@ -1328,9 +1894,18 @@ def validate_stage_registration(
             else "Final-252 authority is unresolved and access is forbidden"
         )
 
+    causal_contract: Mapping[str, object] | None = None
     selected_macro: str | None = None
     tier1_markets = CORE
-    if qualification_contract:
+    if bias_gate:
+        from .causal_search_access_contract import load_registration_contract
+        causal_contract = load_registration_contract(root, registration, required=True)
+        assert causal_contract is not None
+        causal_scope = _mapping(causal_contract.get("scope"), "causal/search/access scope")
+        tier1_markets = _strings(
+            causal_scope.get("tier_1_incremental_markets"), "Tier 1 incremental markets",
+        )
+    elif qualification_contract:
         selector_path = str(binding.get("macro_selection_path", ""))
         selector_sha = str(binding.get("macro_selection_sha256", ""))
         if not selector_path or not selector_sha:
@@ -1363,10 +1938,23 @@ def validate_stage_registration(
     ):
         raise IntegrityError("registration frozen mechanism binding changed")
 
-    expected_markets = {
+    expected_markets_by_stage = {
         "pilot": ("ES",), "tier_1": tier1_markets, "tier_2": BALANCED,
         "tier_3": ALL_APPROVED, "holdout": ALL_APPROVED, "forward": ALL_APPROVED,
-    }[stage]
+    }
+    if bias_gate:
+        assert causal_contract is not None
+        causal_scope = _mapping(causal_contract.get("scope"), "causal/search/access scope")
+        protected_markets = _strings(
+            causal_scope.get("predicted_effect_markets"), "predicted-effect markets",
+        )
+        expected_markets_by_stage.update({
+            "challenge": protected_markets,
+            "refit": protected_markets,
+            "holdout": protected_markets,
+            "forward": protected_markets,
+        })
+    expected_markets = expected_markets_by_stage[stage]
     requirements = _mapping(certificate.get("requirements"), "readiness requirements")
     if certificate.get("protocol_id") != mechanism_id:
         raise UnauthorizedOperation("row certificate covers a different frozen mechanism")
@@ -1383,9 +1971,21 @@ def validate_stage_registration(
     predecessor_path = str(binding.get("predecessor_decision_path", ""))
     predecessor_sha = str(binding.get("predecessor_decision_sha256", ""))
     predecessor = _load_json(root, predecessor_path, predecessor_sha)
+    predecessor_stage = PREDECESSOR.get(stage)
+    if bias_gate:
+        assert causal_contract is not None
+        causal_scope = _mapping(causal_contract.get("scope"), "causal/search/access scope")
+        predecessor_stage = {
+            "challenge": str(causal_scope.get("replication_terminal_stage", "")),
+            "refit": "challenge",
+            "holdout": "refit",
+            "forward": "holdout",
+        }.get(stage, predecessor_stage)
+    if not predecessor_stage:
+        raise UnauthorizedOperation("stage predecessor is undefined")
     validate_stage_decision(
         predecessor, contract_id=str(contract["contract_id"]),
-        mechanism_sha256=mechanism, expected_stage=PREDECESSOR[stage], root=root,
+        mechanism_sha256=mechanism, expected_stage=predecessor_stage, root=root,
     )
 
     manifest_path = str(binding.get("session_manifest_path", ""))
@@ -1406,6 +2006,27 @@ def validate_stage_registration(
         evaluation = manifest["evaluation_session_ids"]
         assert isinstance(evaluation, list)
         pilot_eval_sha = sha256_json(evaluation)
+        pilot_only_deferred = (
+            causal_contract is not None
+            and causal_contract.get("schema_version")
+            == "causal_search_access_contract/2.3.0"
+        )
+        if pilot_only_deferred:
+            if binding.get("next_stage_status") != (
+                "BLOCKED_UNTIL_SEPARATELY_AUTHORIZED_ROW_CERTIFIED_READINESS"
+            ):
+                raise UnauthorizedOperation(
+                    "multi-family pilot must leave every later stage blocked"
+                )
+            return {
+                "alpha_ladder_contract_id": str(contract["contract_id"]),
+                "alpha_ladder_profile_id": str(profile["profile_id"]),
+                "alpha_ladder_stage": stage,
+                "mechanism_sha256": mechanism,
+                "predecessor_decision_sha256": predecessor_sha,
+                "session_manifest_sha256": manifest_sha,
+                "pilot_evaluation_session_ids_sha256": str(pilot_eval_sha),
+            }
         next_path = str(binding.get("tier_1_readiness_evidence_path", ""))
         next_manifest_path = str(binding.get("tier_1_session_manifest_path", ""))
         if not next_path or not next_manifest_path:

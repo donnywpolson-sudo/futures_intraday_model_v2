@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 import yaml
 
+import futures_rebuild.certified_research_gateway as gateway_module
 from futures_rebuild.alpha_research_ladder import (
     ACTIVE_POINTER_PATH,
     ALL_APPROVED,
@@ -38,6 +39,9 @@ from futures_rebuild.preexecution_fold_certification import (
 )
 from futures_rebuild.research_gateway_policy import (
     CERTIFIED_TRIAL_EXECUTION_OPERATION,
+    LEGACY_TRIAL_PENALTY_PATH,
+    RESEARCH_READINESS_POLICY_PATH,
+    scientific_governance_binding,
 )
 
 
@@ -189,6 +193,11 @@ def _registration(
     root: Path, certificate: dict[str, object], evidence_path: Path,
     *, alpha_ladder_binding: dict[str, object] | None = None,
 ) -> dict[str, object]:
+    for relative in (RESEARCH_READINESS_POLICY_PATH, LEGACY_TRIAL_PENALTY_PATH):
+        target = root / relative
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes((Path(__file__).resolve().parents[1] / relative).read_bytes())
     core = {
         "schema_version": "future_trial_registration/1.0.0",
         "trial_family": certificate["trial_family"],
@@ -198,10 +207,53 @@ def _registration(
             "evidence_sha256": sha256(evidence_path.read_bytes()).hexdigest(),
             "certificate_id": certificate["certificate_id"],
         },
+        "scientific_governance_binding": scientific_governance_binding(root),
     }
     if alpha_ladder_binding is not None:
         core["alpha_ladder_binding"] = alpha_ladder_binding
     return {**core, "trial_id": sha256_json(core)}
+
+
+def test_gateway_rejects_missing_or_stale_scientific_governance(
+    tmp_path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(gateway_module, "require_stage3_active_authority", lambda _root: ({}, {}, {}))
+    monkeypatch.setattr(gateway_module, "validate_row_request", lambda _root, _request: {})
+    monkeypatch.setattr(gateway_module, "registration_contract_scope", lambda *_args, **_kwargs: {})
+    sources = _materialize_sources(tmp_path)
+    ladder_binding, stage_bindings, mechanism_id = _gateway_ladder_context(tmp_path)
+    certificate = _certificate(
+        source_bindings={**sources, **stage_bindings}, protocol_id=mechanism_id,
+    )
+    evidence_path = _certificate_evidence(tmp_path, certificate)
+    gateway = CertifiedResearchGateway(tmp_path, RepoBoundary(tmp_path))
+    registrations = []
+    for field in (None, "scientific_policy", "global_trial_ledger", "legacy_attempts"):
+        registration = _registration(
+            tmp_path, certificate, evidence_path,
+            alpha_ladder_binding=ladder_binding,
+        )
+        registration["stage3_access_request"] = {}
+        if field is None:
+            registration.pop("scientific_governance_binding")
+        elif field == "legacy_attempts":
+            registration["scientific_governance_binding"][field][  # type: ignore[index]
+                "conservative_count"
+            ] = 104
+        else:
+            key = "sha256" if field == "scientific_policy" else "head"
+            registration["scientific_governance_binding"][field][key] = "0" * 64  # type: ignore[index]
+        core = {key: value for key, value in registration.items() if key != "trial_id"}
+        registration["trial_id"] = sha256_json(core)
+        registrations.append(registration)
+    for registration in registrations:
+        with pytest.raises(IntegrityError, match="scientific governance"):
+            gateway.register_trial(
+                registration_path=(tmp_path / "state/trial_registry/future"
+                                   / f"{registration['trial_id']}.json"),
+                registration=registration,
+                readiness_evidence_path=evidence_path,
+            )
 
 
 def _gateway_ladder_context(
@@ -384,7 +436,12 @@ def test_passing_row_certification_allows_registration_and_claim(tmp_path) -> No
     assert result == "claimed" and claimed == [True]
 
 
-def test_current_gateway_derives_exact_scope_and_consumes_once(tmp_path) -> None:
+def test_current_gateway_derives_exact_scope_and_consumes_once(
+    tmp_path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(gateway_module, "require_stage3_active_authority", lambda _root: ({}, {}, {}))
+    monkeypatch.setattr(gateway_module, "validate_row_request", lambda _root, _request: {})
+    monkeypatch.setattr(gateway_module, "registration_contract_scope", lambda *_args, **_kwargs: {})
     sources = _materialize_sources(tmp_path)
     ladder_binding, ladder_sources, mechanism_id = _gateway_ladder_context(tmp_path)
     sources.update(ladder_sources)
@@ -393,6 +450,10 @@ def test_current_gateway_derives_exact_scope_and_consumes_once(tmp_path) -> None
     registration = _registration(
         tmp_path, certificate, evidence_path,
         alpha_ladder_binding=ladder_binding,
+    )
+    registration["stage3_access_request"] = {}
+    registration["trial_id"] = sha256_json(
+        {key: value for key, value in registration.items() if key != "trial_id"}
     )
     registration_path = (
         tmp_path / "state" / "trial_registry" / "future"
@@ -443,7 +504,12 @@ def test_current_gateway_derives_exact_scope_and_consumes_once(tmp_path) -> None
         )
 
 
-def test_current_gateway_rejects_scope_substitution_before_claim(tmp_path) -> None:
+def test_current_gateway_rejects_scope_substitution_before_claim(
+    tmp_path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(gateway_module, "require_stage3_active_authority", lambda _root: ({}, {}, {}))
+    monkeypatch.setattr(gateway_module, "validate_row_request", lambda _root, _request: {})
+    monkeypatch.setattr(gateway_module, "registration_contract_scope", lambda *_args, **_kwargs: {})
     sources = _materialize_sources(tmp_path)
     ladder_binding, ladder_sources, mechanism_id = _gateway_ladder_context(tmp_path)
     sources.update(ladder_sources)
@@ -452,6 +518,10 @@ def test_current_gateway_rejects_scope_substitution_before_claim(tmp_path) -> No
     registration = _registration(
         tmp_path, certificate, evidence_path,
         alpha_ladder_binding=ladder_binding,
+    )
+    registration["stage3_access_request"] = {}
+    registration["trial_id"] = sha256_json(
+        {key: value for key, value in registration.items() if key != "trial_id"}
     )
     registration_path = (
         tmp_path / "state" / "trial_registry" / "future"

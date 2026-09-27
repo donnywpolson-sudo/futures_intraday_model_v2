@@ -33,6 +33,12 @@ from .economics import (
     build_pnl_row,
     pnl_rows_to_float64,
 )
+from .feature_foundation import (
+    build_feature_foundation_run_audit,
+    build_fold_feature_manifest,
+    validate_feature_foundation_contract,
+    validate_fold_feature_manifest,
+)
 from .hac import HACMeanResult, hac_t_statistic, newey_west_mean
 from .interval_identity import (
     DecisionTimeIdentityCharter,
@@ -51,7 +57,12 @@ from .multiple_testing import (
     romano_wolf_from_differentials,
     romano_wolf_stepdown,
 )
-from .power import PowerPlan, training_only_mde
+from .power import (
+    PowerPlan,
+    build_final_252_power_plan,
+    training_only_mde,
+    validate_final_252_power_plan,
+)
 from .robustness import (
     FoldEffect,
     RobustnessState,
@@ -76,6 +87,7 @@ from .sleeves import (
     evaluate_research_book,
     evaluate_synthetic_sleeve,
 )
+from .scope_inference import joint_scope_test
 from .splits import (
     InnerFold,
     NestedFold,
@@ -134,6 +146,9 @@ __all__ = [
     "assess_inference_unit",
     "assess_interval_identity_bundle",
     "build_pnl_row",
+    "build_feature_foundation_run_audit",
+    "build_final_252_power_plan",
+    "build_fold_feature_manifest",
     "circular_block_derangement_indices",
     "coverage_denominator_indices",
     "deflated_sharpe_ratio",
@@ -145,6 +160,7 @@ __all__ = [
     "evaluate_variant_stability",
     "exhaustive_cscv_pbo",
     "hac_t_statistic",
+    "joint_scope_test",
     "make_synthetic_permit",
     "nested_chronological_splits",
     "newey_west_mean",
@@ -158,5 +174,8 @@ __all__ = [
     "stationary_bootstrap_indices",
     "synthetic_noise_control",
     "training_only_mde",
+    "validate_feature_foundation_contract",
+    "validate_final_252_power_plan",
+    "validate_fold_feature_manifest",
     "verify_deterministic_repeat",
 ]

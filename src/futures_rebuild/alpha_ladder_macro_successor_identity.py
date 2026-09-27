@@ -105,6 +105,13 @@ def build_identities(repository_root: Path) -> dict[str, dict[str, object]]:
         "successor_ladder": {"path": LADDER_POINTER_PATH.as_posix(), "pointer_id": ladder["pointer_id"]},
         "successor_execution_design": {"path": EXECUTION_POINTER_PATH.as_posix(), "pointer_id": execution["pointer_id"]},
         "active_data_binding": catalog_binding,
+        "final_252": {
+            "only_independent_historical_confirmation": True,
+            "status_source": {
+                "path": "configs/active_alpha_research_ladder.json",
+                "stage": "final_historical_evaluation",
+            },
+        },
     })
     rank1_core.pop("active_alpha_ladder_binding", None)
     rank1_core.pop("active_execution_design_binding", None)

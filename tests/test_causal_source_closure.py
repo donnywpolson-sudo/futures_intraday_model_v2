@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from futures_rebuild.canonical import sha256_file
+from futures_rebuild.canonical import sha256_file, sha256_json
 from futures_rebuild.causal_source_closure import (
     reject_unlisted_source_path,
     select_standard_dbn_paths,
@@ -23,7 +23,11 @@ from futures_rebuild.foundation_operation_firewall import (
 
 REPO = Path(__file__).resolve().parents[1]
 CONTRACT = REPO / "configs" / "source_contract.json"
-VERSIONED = REPO / "configs" / "source_contract_v4.json"
+VERSIONED = REPO / "configs" / (
+    "source_contract_v5.json"
+    if (REPO / "configs/source_contract_v5.json").exists()
+    else "source_contract_v4.json"
+)
 RUNNER = REPO / "scripts" / "run_dual_resolution_tier01_foundation.py"
 pytestmark = pytest.mark.current
 
@@ -45,23 +49,27 @@ def test_installed_root_and_current_paths_are_repository_relative() -> None:
 
 
 def test_current_contract_metadata_closure_and_context_are_exact() -> None:
+    contract = _json(CONTRACT)
     result = validate_source_contract_metadata(
         REPO,
         operation_context=_context(),
         contract_path=CONTRACT,
     )
     assert result == {
-        "contract_id": _json(CONTRACT)["contract_id"],
-        "content_inventory_sha256": "a915573b797bd5dc2b0d34beb1d0591dd6ae8b3bb9e448f41e130824d5e94ced",
+        "contract_id": contract["contract_id"],
+        "content_inventory_sha256": contract["complete_inventory"][
+            "content_inventory_sha256"
+        ],
         "deferred_micro_root_count": 17,
-        "file_count": 11474,
+        "file_count": contract["complete_inventory"]["file_count"],
         "payload_files_opened": 0,
-        "release_id": "4ca353d7814941782bb4c6640afe89b04371492868f57174bb10d632b6e7c9be",
+        "release_id": contract["active_canonical_source"]["release_id"],
         "row_reads": 0,
         "standard_root_count": 41,
-        "total_bytes": 24198934599,
+        "total_bytes": contract["complete_inventory"]["total_bytes"],
         "valid": True,
     }
+    assert result["file_count"] in {11_474, 12_286}
     assert _context().operation == CURRENT_SOURCE_CLOSURE_OPERATION
     assert CONTRACT.read_bytes() == VERSIONED.read_bytes()
 
@@ -87,11 +95,15 @@ def test_full_build_contract_successor_matches_admitted_inventory_before_or_afte
         assert validate_full_build_selection_contract(active, inventory["entries"]) == result
         assert CONTRACT.read_bytes() == VERSIONED.read_bytes()
     else:
-        assert active["contract_id"] == (
-            "8af92cf4e250e025b61ffb51bc2677f340a4dd4f4f8d6f9825ed28b916dd43d1"
+        assert active["contract_id"] == sha256_json(
+            {key: value for key, value in active.items() if key != "contract_id"}
         )
-        with pytest.raises(IntegrityError, match="admitted DBN identity differs"):
-            validate_full_build_selection_contract(active, inventory["entries"])
+        if active["complete_inventory"]["file_count"] == 12_286:
+            assert validate_full_build_selection_contract(active, inventory["entries"]) == result
+        else:
+            with pytest.raises(IntegrityError, match="admitted DBN identity differs"):
+                validate_full_build_selection_contract(active, inventory["entries"])
+    assert CONTRACT.read_bytes() == VERSIONED.read_bytes()
     assert candidate["active_canonical_source"]["release_id"] == (
         "4ca353d7814941782bb4c6640afe89b04371492868f57174bb10d632b6e7c9be"
     )

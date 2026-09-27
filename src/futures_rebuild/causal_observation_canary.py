@@ -157,7 +157,12 @@ def _resolve_multiplier(
     integral = expected.to_integral_value()
     if expected != integral or integral <= 0:
         raise IntegrityError("pinned economics multiplier is not a positive nanounit integer")
-    if raw not in {0, INT32_NULL, INT64_NULL} and resolved.provider_unit_qty_state != "PROVIDER_DEFINITION_CROSSCHECK_MATCH":
+    if (
+        market not in rulebook.non_multiplier_provider_unit_markets
+        and raw not in {0, INT32_NULL, INT64_NULL}
+        and resolved.provider_unit_qty_state
+        != "PROVIDER_DEFINITION_CROSSCHECK_MATCH"
+    ):
         raise IntegrityError("positive provider multiplier lacks an exact rulebook crosscheck")
     return int(integral), resolved.provider_unit_qty_state
 

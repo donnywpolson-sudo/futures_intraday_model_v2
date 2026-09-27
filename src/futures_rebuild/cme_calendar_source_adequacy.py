@@ -221,6 +221,12 @@ class WorkbookCell:
     value: str | float
 
 
+def _rk_number(rk: int) -> float:
+    value = (float(struct.unpack("<i", struct.pack("<I", rk))[0] >> 2) if rk & 2
+             else struct.unpack("<d", struct.pack("<Q", (rk & 0xFFFFFFFC) << 32))[0])
+    return value / 100 if rk & 1 else value
+
+
 def parse_biff8_cells(stream: bytes) -> tuple[WorkbookCell, ...]:
     strings = _shared_strings(stream)
     sheets: list[tuple[int, str]] = []
@@ -238,6 +244,8 @@ def parse_biff8_cells(stream: bytes) -> tuple[WorkbookCell, ...]:
         for _, record_id, data in _records(stream, start=offset):
             if record_id == 0x000A:
                 break
+            if record_id in (0x0203, 0x027E) and len(data) != (14 if record_id == 0x0203 else 10):
+                raise IntegrityError("CME workbook numeric record length is invalid")
             if record_id == 0x00FD and len(data) == 10:
                 row, column = struct.unpack_from("<HH", data)
                 string_index = _u32(data, 6)
@@ -246,17 +254,24 @@ def parse_biff8_cells(stream: bytes) -> tuple[WorkbookCell, ...]:
                 results.append(WorkbookCell(name, row, column, strings[string_index]))
             elif record_id == 0x0203 and len(data) == 14:
                 row, column = struct.unpack_from("<HH", data)
+                if column > 255:
+                    raise IntegrityError("CME workbook numeric column is invalid")
                 results.append(WorkbookCell(name, row, column, struct.unpack_from("<d", data, 6)[0]))
             elif record_id == 0x027E and len(data) == 10:
                 row, column = struct.unpack_from("<HH", data)
-                rk = _u32(data, 6)
-                if rk & 0x02:
-                    value = float(struct.unpack("<i", struct.pack("<I", rk))[0] >> 2)
-                else:
-                    value = struct.unpack("<d", struct.pack("<Q", (rk & 0xFFFFFFFC) << 32))[0]
-                if rk & 0x01:
-                    value /= 100
-                results.append(WorkbookCell(name, row, column, value))
+                if column > 255:
+                    raise IntegrityError("CME workbook numeric column is invalid")
+                results.append(WorkbookCell(name, row, column, _rk_number(_u32(data, 6))))
+            elif record_id == 0x00BD:
+                if len(data) < 18:
+                    raise IntegrityError("CME workbook MULRK record is truncated")
+                row, first = struct.unpack_from("<HH", data)
+                last = _u16(data, len(data) - 2)
+                if not first < last <= 255 or len(data) != 6 + 6 * (last - first + 1):
+                    raise IntegrityError("CME workbook MULRK cell count or columns differ")
+                for column in range(first, last + 1):
+                    results.append(WorkbookCell(name, row, column,
+                                               _rk_number(_u32(data, 6 + 6 * (column - first)))))
     return tuple(results)
 
 
@@ -283,15 +298,20 @@ _WEEKDAYS = {
         ("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
     )
 }
+_WEEKDAYS.update({name[:3]: value for name, value in tuple(_WEEKDAYS.items())})
+# Spellings present in the owned compact CME workbooks. The resulting date
+# must still match its weekday; these aliases do not relax date validation.
+_WEEKDAYS.update(tues=1, thurs=3, wednessday=2)
+_WEEKDAY_LABEL = "|".join(_WEEKDAYS)
 _DATE_LABEL = re.compile(
-    r"^\s*(?:(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*,?\s*)?"
+    rf"^\s*(?:({_WEEKDAY_LABEL})\s*,?\s*)?"
     r"(jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|"
     r"jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)"
     r"\s+(\d{1,2})(?:\s*,?\s*(20\d{2}))?\s*$",
     re.I,
 )
 _DATE_DAY_ONLY = re.compile(
-    r"^\s*(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\s*,?\s*(\d{1,2})\s*$",
+    rf"^\s*({_WEEKDAY_LABEL})\s*,?\s*(\d{{1,2}})\s*$",
     re.I,
 )
 
@@ -428,7 +448,9 @@ def parse_family_schedule(
             if observed_sheet == sheet
         }
         calendar_row = next(
-            (row for row, values in rows.items() if values.get(0) in {"Calendar Date", "Products"}),
+            (row for row, values in rows.items()
+             if isinstance(values.get(0), str)
+             and values[0].strip().lower() in {"calendar date", "calendar trade", "products"}),
             None,
         )
         if calendar_row is None:
@@ -448,9 +470,15 @@ def parse_family_schedule(
             (column, value) for column, value in rows[calendar_row].items()
             if column > 0 and isinstance(value, str) and value.strip()
         )
-        parsed_dates = _choose_chronological_dates(
-            [str(value) for _, value in date_columns], title=title,
-        )
+        # An OPEN under "Sunday into Monday" occurs on Sunday evening;
+        # a HALT/CLOSE under that heading occurs on the later calendar day.
+        # Using the trade-day clause for every event moves an opening a day late.
+        date_labels = []
+        for column, value in date_columns:
+            clauses = re.split(r"\s+into\s+", str(value), flags=re.I)
+            header = str(headers.get(column, "")).strip().upper()
+            date_labels.append(clauses[0] if "OPEN" in header else clauses[-1])
+        parsed_dates = _choose_chronological_dates(date_labels, title=title)
         column_dates = dict(zip((column for column, _ in date_columns), parsed_dates))
         family_rows = []
         for row, values in rows.items():

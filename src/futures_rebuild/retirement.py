@@ -210,7 +210,7 @@ def scan_retirement_readiness(repository_root: Path) -> dict[str, Any]:
     complete_inventory = source.get("complete_inventory")
     source_authority = source.get("authority")
     source_ready = (
-        source.get("schema_version") == "canonical_dbn_source_contract/4.0.0"
+        source.get("schema_version") == "canonical_dbn_source_contract/5.0.0"
         and source.get("status")
         == "CURRENT_SUCCESSOR_NON_AUTHORIZING_ACTIVE_ONLY_AT_EXACT_ALIAS"
         and type(active_source) is dict
@@ -218,9 +218,9 @@ def scan_retirement_readiness(repository_root: Path) -> dict[str, Any]:
         and type(active_source.get("release_id")) is str
         and len(active_source["release_id"]) == 64
         and type(complete_inventory) is dict
-        and active_source.get("complete_root_file_count")
+        and active_source.get("canonical_file_count")
         == complete_inventory.get("file_count")
-        and active_source.get("complete_root_total_bytes")
+        and active_source.get("canonical_total_bytes")
         == complete_inventory.get("total_bytes")
         and type(source_authority) is dict
         and source_authority.get("provider") is False

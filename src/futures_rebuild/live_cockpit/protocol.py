@@ -23,6 +23,7 @@ EVENT_TYPES = frozenset(
         "data_health",
         "prediction_update",
         "history_cache_status",
+        "replay_update",
     }
 )
 MARKET_STATES = frozenset({"LIVE", "WAITING", "STALE", "ERROR"})
@@ -492,6 +493,44 @@ def validate_event(message: Mapping[str, Any]) -> None:
         validate_data_health_payload(payload)
     elif message.get("type") == "history_cache_status":
         validate_history_cache_payload(payload)
+    elif message.get("type") == "replay_update":
+        from ..simulation_records import (MAX_BARS, SCHEMA, HISTORICAL_SCHEMA, DIAGNOSTIC_SCHEMA, validate_bundle,
+                                          validate_metadata, validate_records, validate_historical_records,
+                                          validate_diagnostic_records, validate_library)
+        fields = {"metadata", "cursor", "total", "playing", "speed", "records", "summary"}
+        _exact_fields(payload, fields | ({"library"} if "library" in payload else set()), name="replay")
+        if payload.get("library") is not None:
+            validate_library(payload["library"])
+            if not any(e["status"] == "INCLUDED" and e["session"] == payload["metadata"].get("session")
+                       and e["contract"] == payload["metadata"].get("contract") for e in payload["library"]["sessions"]):
+                raise ValueError("Replay is not a playable library session")
+            if any(payload["metadata"].get(k) != payload["library"][k] for k in ("model_id", "spec_id")):
+                raise ValueError("Replay library provenance mismatch")
+        cursor = _nonnegative_int(payload["cursor"], name="cursor")
+        total = _nonnegative_int(payload["total"], name="total")
+        if not 0 <= cursor <= total <= MAX_BARS or total == 0:
+            raise ValueError("Invalid replay cursor")
+        if type(payload["playing"]) is not bool or type(payload["speed"]) is not int or payload["speed"] not in (1, 10, 100):
+            raise ValueError("Invalid replay controls")
+        if not isinstance(payload["records"], list) or len(payload["records"]) != cursor:
+            raise ValueError("Replay prefix mismatch")
+        if cursor < total and payload["summary"] is not None:
+            raise ValueError("Premature final summary")
+        validate_metadata(payload["metadata"])
+        diagnostic = payload["metadata"].get("kind") == "historical_diagnostics"
+        historical = diagnostic or payload["metadata"].get("kind") == "historical_predictions"
+        if cursor == total:
+            if payload["playing"]:
+                raise ValueError("Completed replay cannot be playing")
+            validate_bundle({"schema": DIAGNOSTIC_SCHEMA if diagnostic else HISTORICAL_SCHEMA if historical else SCHEMA, "status": "COMPLETE", "metadata": payload["metadata"],
+                             "records": payload["records"], "summary": payload["summary"]})
+        elif cursor:
+            if diagnostic:
+                validate_diagnostic_records(payload["records"], payload["metadata"])
+            elif historical:
+                validate_historical_records(payload["records"], payload["metadata"])
+            else:
+                validate_records(payload["records"], payload["metadata"]["contract"], payload["metadata"]["settings"]["tick_size"])
 
 def timestamp_seconds(value: datetime | str | int | float) -> int:
     if isinstance(value, datetime):

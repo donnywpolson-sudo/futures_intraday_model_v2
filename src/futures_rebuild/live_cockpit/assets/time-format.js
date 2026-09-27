@@ -2,6 +2,7 @@
   "use strict";
 
   const formatters = new Map();
+  const PROJECT_TIMEZONE = "America/Los_Angeles";
 
   function formatter(locale, key, options) {
     const cacheKey = `${locale || "default"}:${key}`;
@@ -26,6 +27,7 @@
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
+      timeZone: PROJECT_TIMEZONE,
       timeZoneName: "short",
     }).format(date);
   }
@@ -39,6 +41,7 @@
       hour: "numeric",
       minute: "2-digit",
       hour12: true,
+      timeZone: PROJECT_TIMEZONE,
       timeZoneName: "short",
     }).format(date);
   }
@@ -51,6 +54,7 @@
       minute: "2-digit",
       second: "2-digit",
       hour12: true,
+      timeZone: PROJECT_TIMEZONE,
       timeZoneName: "short",
     }).format(date);
   }
@@ -59,11 +63,11 @@
     const date = timestampDate(time);
     if (!date) return null;
     const definitions = {
-      0: ["year", { year: "numeric" }],
-      1: ["month", { month: "short" }],
-      2: ["day", { month: "short", day: "numeric" }],
-      3: ["minute", { hour: "numeric", minute: "2-digit", hour12: true }],
-      4: ["second", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true }],
+      0: ["year", { year: "numeric", timeZone: PROJECT_TIMEZONE }],
+      1: ["month", { month: "short", timeZone: PROJECT_TIMEZONE }],
+      2: ["day", { month: "short", day: "numeric", timeZone: PROJECT_TIMEZONE }],
+      3: ["minute", { hour: "numeric", minute: "2-digit", hour12: true, timeZone: PROJECT_TIMEZONE }],
+      4: ["second", { hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true, timeZone: PROJECT_TIMEZONE }],
     };
     const definition = definitions[Number(tickMarkType)];
     if (!definition) return null;

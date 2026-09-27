@@ -1,0 +1,121 @@
+{
+  "schema_version": "l0_cutoff_alignment_plan/1.0.0",
+  "state": "PREPARED_REQUIRES_SEPARATE_PROVIDER_APPROVAL",
+  "operation": "ACQUIRE_L0_AUG31_CUTOFF_ALIGNMENT_QUARANTINE_V1_ONCE",
+  "purpose": "EXTEND_ALL_CURRENT_L0_RAW_FAMILIES_TO_AUGUST_31_2026_IN_SEALED_STAGING_ONLY",
+  "dataset": "GLBX.MDP3",
+  "interval": {
+    "start_inclusive_utc": "2026-07-14T00:00:00Z",
+    "end_exclusive_utc": "2026-09-01T00:00:00Z"
+  },
+  "standard_roots": [
+    "ES", "NQ", "RTY", "YM", "CL", "NG", "RB", "HO", "GC", "SI", "HG", "PL", "SR3", "SR1", "ZQ", "TN", "ZT", "ZF", "ZN", "ZB", "UB", "6A", "6B", "6C", "6E", "6J", "6M", "6N", "6S", "ZC", "ZS", "ZL", "ZM", "ZW", "KE", "LE", "HE", "GF", "BTC", "ETH", "PA"
+  ],
+  "micro_roots": [
+    "M2K", "M6A", "M6B", "M6E", "MBT", "MCD", "MCL", "MES", "MET", "MGC", "MHG", "MJY", "MNG", "MNQ", "MSF", "MYM", "SIL"
+  ],
+  "request_root_order": [
+    "ES", "NQ", "RTY", "YM", "CL", "NG", "RB", "HO", "GC", "SI", "HG", "PL", "SR3", "SR1", "ZQ", "TN", "ZT", "ZF", "ZN", "ZB", "UB", "6A", "6B", "6C", "6E", "6J", "6M", "6N", "6S", "ZC", "ZS", "ZL", "ZM", "ZW", "KE", "LE", "HE", "GF", "BTC", "ETH", "PA", "M2K", "M6A", "M6B", "M6E", "MBT", "MCD", "MCL", "MES", "MET", "MGC", "MHG", "MJY", "MNG", "MNQ", "MSF", "MYM", "SIL"
+  ],
+  "families": [
+    {
+      "directory": "definition",
+      "schema": "definition",
+      "stype_in": "parent",
+      "symbol_template": "{root}.FUT"
+    },
+    {
+      "directory": "status",
+      "schema": "status",
+      "stype_in": "continuous",
+      "symbol_template": "{root}.v.0"
+    },
+    {
+      "directory": "statistics",
+      "schema": "statistics",
+      "stype_in": "continuous",
+      "symbol_template": "{root}.v.0"
+    },
+    {
+      "directory": "ohlcv_1m",
+      "schema": "ohlcv-1m",
+      "stype_in": "continuous",
+      "symbol_template": "{root}.v.0"
+    },
+    {
+      "directory": "ohlcv_1s",
+      "schema": "ohlcv-1s",
+      "stype_in": "continuous",
+      "symbol_template": "{root}.v.0"
+    },
+    {
+      "directory": "ohlcv_1h",
+      "schema": "ohlcv-1h",
+      "stype_in": "continuous",
+      "symbol_template": "{root}.v.0"
+    },
+    {
+      "directory": "ohlcv_1d",
+      "schema": "ohlcv-1d",
+      "stype_in": "continuous",
+      "symbol_template": "{root}.v.0"
+    }
+  ],
+  "request_count": 406,
+  "expected_compressed_bytes": 344338773,
+  "implementation_sha256": "3b7a684fe3351a8f85f11b937e9dd7c8e40383ec587bba2dfddbb7ce9a11d8f0",
+  "source_binding": {
+    "source_contract_path": "configs/source_contract.json",
+    "source_contract_sha256": "17601c9d3f15cb19245f441024f553a52c10c55e051b60a84994a74087b29cbd",
+    "source_contract_id": "45322859e44305cc72a88867a7911407f918da50e9eb3f32f288d53cfa111566",
+    "complete_inventory_path": "state/source_contract_registry/4ca353d7814941782bb4c6640afe89b04371492868f57174bb10d632b6e7c9be/canonical_inventory.json",
+    "complete_inventory_sha256": "2238b264306f3267b31c7b879ba71d283b9ad2b6bda287789e596ba41fba2f85",
+    "complete_inventory_content_sha256": "a915573b797bd5dc2b0d34beb1d0591dd6ae8b3bb9e448f41e130824d5e94ced",
+    "complete_inventory_id": "7d4e7f570c6a79c33f717ed52344183d1c2b0d601eb355c9bff365b1f14bc928",
+    "complete_inventory_file_count": 11474,
+    "standard_roots": [
+      "ES", "NQ", "RTY", "YM", "CL", "NG", "RB", "HO", "GC", "SI", "HG", "PL", "SR3", "SR1", "ZQ", "TN", "ZT", "ZF", "ZN", "ZB", "UB", "6A", "6B", "6C", "6E", "6J", "6M", "6N", "6S", "ZC", "ZS", "ZL", "ZM", "ZW", "KE", "LE", "HE", "GF", "BTC", "ETH", "PA"
+    ],
+    "micro_roots": [
+      "M2K", "M6A", "M6B", "M6E", "MBT", "MCD", "MCL", "MES", "MET", "MGC", "MHG", "MJY", "MNG", "MNQ", "MSF", "MYM", "SIL"
+    ]
+  },
+  "limits": {
+    "maximum_billable_bytes": 5000000000,
+    "maximum_concurrent_ohlcv_1s": 2,
+    "maximum_host_runtime_seconds": 43200,
+    "maximum_metadata_attempts": 3260,
+    "maximum_metadata_calls": 815,
+    "maximum_parallel_downloads": 4,
+    "maximum_retries_per_request": 3,
+    "maximum_staged_bytes": 2000000000,
+    "maximum_timeseries_attempts": 1624,
+    "required_free_disk_bytes": 5000000000
+  },
+  "staging": {
+    "root": "state/provider_acquisition_staging/l0_cutoff_alignment_v1/{authorization_receipt_id}",
+    "raw_path_template": "raw/{family_directory}/{root}/2026/2026-07-14_2026-09-01.dbn.zst",
+    "adjacent_sidecar_suffix": ".manifest.json",
+    "create_only": true,
+    "automatic_same_receipt_resume": true,
+    "failed_partials_preserved": true
+  },
+  "publication": {
+    "state": "DEFERRED_NOT_IMPLEMENTED_REQUIRES_PROVIDER_FREE_SUCCESSOR_AND_SEPARATE_APPROVAL",
+    "data_dbn_changed": false,
+    "active_source_contract_changed": false
+  },
+  "forbidden": {
+    "active_data_mutation": true,
+    "alpha_feature_or_target_use": true,
+    "canonical_promotion": true,
+    "credential_log_stage_or_report": true,
+    "data_dbn_write": true,
+    "dbn_row_decode": true,
+    "holdout_or_forward_row_read": true,
+    "model_fit_prediction_or_evaluation": true,
+    "overwrite_existing_files": true,
+    "trading_or_order_access": true
+  },
+  "plan_id": "ffdad9559a1f75b4b0e42b272543844441ed5e28b012154b670952991784f1d1"
+}

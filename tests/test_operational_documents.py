@@ -135,8 +135,8 @@ def _assert_project_outline_heading_disposition_contract() -> None:
         "1. Purpose and authority",
         "2. Current status",
         "3. Full pipeline",
-        "4. Stage table",
-        "5. Next-stage requirements",
+        "4. Phase table",
+        "5. Next-phase requirements",
         "6. Universe, tiers, and time boundaries",
         "7. Core anti-bias rules",
         "8. Evidence and history",
@@ -568,12 +568,12 @@ def _assert_project_outline_is_concise_current_runbook() -> None:
         "docs/LEGACY_WORKFLOWS.md",
         "CURRENT_WORKFLOW.md` controls procedure and approvals",
         "Causal observation release",
-        "NOT BUILT",
+        "causal observation release is published",
         "Direct DBN use by features, models, WFA, or backtests is forbidden",
         "seven-market development canary ran once under consumed authority",
         "Final Sealed 252-Session Holdout",
-            "SEALED / AUTHORITY RESOLVED / ACCESS FORBIDDEN",
-        "NEXT CONTROLLED GATE: EXECUTION-DESIGN CONTRACT FREEZE (NO ROW READ)",
+        "SEALED_AUTHORITY_RESOLVED_ACCESS_FORBIDDEN",
+        "Missing readiness evidence or an invalid uncertainty method remains a block",
     ):
         assert required.lower() in lowered
 
@@ -669,6 +669,24 @@ def test_project_outline_is_current_runbook_not_historical_ledger() -> None:
 
 def test_project_outline_heading_dispositions_are_complete_and_resolved() -> None:
     _assert_project_outline_heading_disposition_contract()
+
+
+def test_discovery_map_separates_experiment_settings_from_shared_safeguards() -> None:
+    current = _text("CURRENT_WORKFLOW.md")
+    outline = _text("PROJECT_OUTLINE.md")
+    for layer in ("Research safeguards", "Shared infrastructure", "Experiment choices"):
+        assert layer in current and layer in outline
+    for required in (
+        "## Experiment board", "### Closed ES closing-momentum preparation: retained settings",
+        "this closed study; no replacement preparation is selected",
+        "Software availability", "Historical execution", "Scientific outcome",
+        "12:30:05", "12:31", "13:00", "Unresolved for a valid historical support claim",
+        "operations=[]", "five/seven-feature L0 design is one experiment definition",
+        "docs/DISCOVERY_WORKFLOW_AUDIT.md",
+    ):
+        assert required in current
+    assert "NINE-MARKET ACTIVE / FULL 41 NOT BUILT" not in outline
+    assert "Their feature libraries and economic\ncriteria are not default settings" in outline
 
 
 def test_current_workflow_names_one_certified_real_history_surface() -> None:
@@ -784,7 +802,7 @@ def test_micro_pipeline_map_distinguishes_design_from_implementation() -> None:
     }
     assert roles == {
         "ACTIVE_STANDARD_ALPHA_IDENTITY": "configs/active_alpha_research_ladder.json",
-        "ACTIVE_STANDARD_DATA_SELECTION": "data/active/catalog.json",
+        "ACTIVE_STANDARD_DATA_SELECTION": "data/causally_gated_normalized/_control/catalog.json",
         "ACTIVE_MICRO_SOURCE_SELECTION": "configs/active_micro_alpha_research_ladder.json",
         "ACTIVE_MICRO_DATA_SELECTION": "data/active/catalogs/apex_micro.json",
     }
@@ -893,3 +911,50 @@ def test_current_documents_describe_the_future_mechanism_ladder_without_overclai
     assert "automatic deployment list" in normalized
     assert "Final-252 authority is active" not in normalized
     assert "all 41 markets are live-trading eligible" not in normalized
+
+
+def test_current_pipeline_freezes_the_complete_protocol_before_wfa_execution() -> None:
+    outline = _text("PROJECT_OUTLINE.md")
+    ordered = (
+        "3. Research and Access Contract",
+        "4. Outcome/Target Foundation",
+        "5. Feature Library, Bounded Expansion, and Selection Procedure",
+        "6. Mechanism and Evaluation Protocol Freeze",
+        "7. Synthetic Mechanics Validation",
+        "8. Tier 0 — Nested Chronological WFA and ES Pilot",
+    )
+    positions = [outline.index(label) for label in ordered]
+    assert positions == sorted(positions)
+    assert "| Phase | Design status | Data/access status |" in outline
+    assert outline.count("Not applicable to the current contract") == 2
+    assert "Phases 1–9, then 12–15" in outline
+    assert "open-ended formula discovery" in outline
+    assert "selection actually occur in Phase 8" in outline
+    assert "One-Shot Development-Regime Stress Test" in outline
+    assert "whole-period decision plus report-only 2023, 2024, and 2025-to-cutoff slices" in outline
+    assert "configs/fixed_hour_model_comparison_v1.json" in outline
+    assert "separate execution-qualification pipeline" in outline
+    assert "no full-sample redundancy or feature selection" in outline.lower()
+    assert "data-driven transforms are refit" in outline.lower()
+
+    current = " ".join(_text("CURRENT_WORKFLOW.md").split()).lower()
+    assert "before synthetic testing or any outer wfa" in current
+    assert "applied unchanged to that fold's outer rows" in current
+    assert "it is not a holdout or confirmation" in current
+    assert "slices are not gates or selection inputs" in current
+    assert "eight 63-date outer folds" in current
+    assert "never authorizes trading" in current
+
+
+def test_model_comparison_light_audit_remediation_boundaries() -> None:
+    current = " ".join(_text("CURRENT_WORKFLOW.md").split())
+    discovery = " ".join(_text("docs/OHLCV_HYPOTHESIS_RESEARCH_PLAN.md").split())
+    assert "BLOCKED_CENSUS_RECOVERY_UNRESOLVED" in current
+    assert "Census readiness is a prerequisite to historical research" in current
+    assert "do not fabricate performance for unevaluated trials" in current
+    assert "not a waived DSR gate" in current
+    assert "Positive stress-net performance alone is insufficient" in current
+    assert "do not retrospectively promote Ridge as a fallback" in current
+    assert "does not emit correlation reports" in current
+    assert "does not generate new feature formulas" in discovery
+    assert "deferred, not implemented or answered" in discovery
